@@ -5,7 +5,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { MessageBoxProvider } from './components/MessageBox';
 import Layout from './components/Layout';
 import AuthPage from './pages/Auth';
-import RecruiterDashboard from './pages/RecruiterDashboard';
+import RecruiterDashboard, { RecruiterDashboardSkeleton } from './pages/RecruiterDashboard';
 import InterviewWizard from './pages/Interview';
 import InterviewReport from './pages/Report';
 import EditJob from './pages/EditJob';
@@ -27,6 +27,8 @@ import RecruiterInterviews from './pages/RecruiterInterviews';
 import InterviewAccess from './pages/InterviewAccess';
 import TestAccess from './pages/TestAccess';
 import InterviewResponses from './pages/InterviewResponses';
+import InterviewOverview from './pages/InterviewOverview';
+import InterviewCandidates from './pages/InterviewCandidates';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import SubmitReview from './pages/SubmitReview';
@@ -37,14 +39,20 @@ import CareerHub from './pages/CareerHub';
 import StatusPage from './pages/Status';
 import ClientView from './pages/ClientView';
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode; role?: 'recruiter' | 'admin' }> = ({ children, role }) => {
+const DefaultRouteLoader = () => (
+  <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
+    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+  </div>
+);
+
+const ProtectedRoute: React.FC<{
+  children: React.ReactNode;
+  role?: 'recruiter' | 'admin';
+  loadingFallback?: React.ReactNode;
+}> = ({ children, role, loadingFallback }) => {
   const { user, userProfile, loading } = useAuth();
 
-  if (loading || (user && !userProfile)) return (
-    <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-    </div>
-  );
+  if (loading || (user && !userProfile)) return <>{loadingFallback || <DefaultRouteLoader />}</>;
 
   if (!user) return <Navigate to="/" replace />;
 
@@ -190,9 +198,13 @@ const App: React.FC = () => {
               <Layout>
                 <Routes>
                   {/* Recruiter Routes */}
-                  <Route path="recruiter/jobs" element={<ProtectedRoute role="recruiter"><RecruiterDashboard /></ProtectedRoute>} />
+                  <Route path="recruiter/jobs" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterDashboardSkeleton />}><RecruiterDashboard /></ProtectedRoute>} />
                   <Route path="recruiter/interviews" element={<ProtectedRoute role="recruiter"><RecruiterInterviews /></ProtectedRoute>} />
                   <Route path="recruiter/invites" element={<ProtectedRoute role="recruiter"><InvitedCandidates /></ProtectedRoute>} />
+                  <Route path="recruiter/interview/:interviewId" element={<ProtectedRoute role="recruiter"><InterviewOverview /></ProtectedRoute>} />
+                  <Route path="recruiter/interview/:interviewId/overview" element={<ProtectedRoute role="recruiter"><InterviewOverview /></ProtectedRoute>} />
+                  <Route path="recruiter/interview/:interviewId/responses" element={<ProtectedRoute role="recruiter"><InterviewResponses /></ProtectedRoute>} />
+                  <Route path="recruiter/interview/:interviewId/candidates" element={<ProtectedRoute role="recruiter"><InterviewCandidates /></ProtectedRoute>} />
                   <Route path="recruiter/interview/responses/:interviewId" element={<ProtectedRoute role="recruiter"><InterviewResponses /></ProtectedRoute>} />
                   <Route path="recruiter/interview/create" element={<ProtectedRoute role="recruiter"><CreateInterview /></ProtectedRoute>} />
                   <Route path="recruiter/tests" element={<ProtectedRoute role="recruiter"><RecruiterTests /></ProtectedRoute>} />

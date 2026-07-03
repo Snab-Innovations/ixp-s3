@@ -406,9 +406,6 @@ const RecruiterInterviews: React.FC = () => {
           <p className="text-gray-600 dark:text-gray-400 mt-1">Manage all your scheduled interviews.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Link to="/recruiter/invites" className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 font-semibold rounded-full shadow-sm transition-all transform hover:-translate-y-0.5 active:translate-y-0 text-sm">
-            <i className="fas fa-address-book text-blue-500" title="Manage recruited candidates status roster"></i> <span>Candidate Hub</span>
-          </Link>
           <Link to="/recruiter/interview/create" className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white dark:text-black font-semibold rounded-full shadow-lg shadow-primary/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 text-sm">
             <i className="fas fa-plus" title="Create a new interview route link"></i> <span>Create New Interview</span>
           </Link>
@@ -536,6 +533,9 @@ const RecruiterInterviews: React.FC = () => {
         .custom-card-scrollbar::-webkit-scrollbar-thumb:hover {
           background: rgba(156, 163, 175, 0.45);
         }
+        .interview-list-card button {
+          display: none;
+        }
       `}</style>
 
       {interviews.length === 0 ? (
@@ -571,7 +571,7 @@ const RecruiterInterviews: React.FC = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {filteredInterviews.map(interview => (
-                <div key={interview.id} className="bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/5 shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-white/10 p-5 flex flex-col h-[510px] justify-between transition-all duration-300 transform hover:-translate-y-1">
+                <div key={interview.id} className="interview-list-card bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/5 shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-white/10 p-5 flex flex-col h-[510px] justify-between transition-all duration-300 transform hover:-translate-y-1">
                     
                     {/* Upper Half: Header & Job Description */}
                     <div>
@@ -582,75 +582,12 @@ const RecruiterInterviews: React.FC = () => {
                             </h3>
                         </div>
 
-                        {/* Subheader Row: Department & Utility Actions */}
+                        {/* Subheader Row */}
                         <div className="flex justify-between items-center gap-4 mb-3">
                             <p className="text-xs text-gray-400 dark:text-gray-500 font-semibold">
                                 {interview.department || "No Department"}
                             </p>
-                            
-                            {/* Utility Row of Management Actions */}
-                            <div className="flex items-center gap-1.5 shrink-0">
-                                {/* Open Link Tooltip */}
-                                <div className="relative group">
-                                    <Link 
-                                        to={`/interview/${interview.id}`} 
-                                        target="_blank" 
-                                        className="p-1.5 hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-full transition-all border border-transparent flex items-center justify-center"
-                                        title="Open Candidate Interview Portal (opens in a new tab)"
-                                    >
-                                        <i className="fas fa-external-link-alt text-xs"></i>
-                                    </Link>
-                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 dark:bg-zinc-800 text-white text-[9px] font-bold rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                                        Open Link
-                                    </div>
-                                </div>
-
-                                {/* Send Reminders Tooltip */}
-                                <div className="relative group">
-                                    <button 
-                                        type="button"
-                                        onClick={() => handleSendBulkReminders(interview)} 
-                                        disabled={remindingInterviewId === interview.id}
-                                        className="p-1.5 hover:bg-purple-50 dark:hover:bg-purple-950/20 text-purple-600 hover:text-purple-700 dark:text-purple-400 rounded-full transition-all border border-transparent flex items-center justify-center"
-                                        title="Send reminder emails to all pending candidates"
-                                    >
-                                        {remindingInterviewId === interview.id ? <i className="fas fa-spinner fa-spin text-xs"></i> : <i className="fas fa-bell text-xs"></i>}
-                                    </button>
-                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-zinc-900 dark:bg-zinc-800 text-white text-[9px] font-bold rounded border border-zinc-800 dark:border-zinc-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                                        Send Reminders
-                                    </div>
-                                </div>
-
-                                {/* Edit Detail Tooltip */}
-                                <div className="relative group">
-                                    <button 
-                                        type="button"
-                                        onClick={() => setEditingJobId(interview.id)} 
-                                        className="p-1.5 hover:bg-amber-50 dark:hover:bg-amber-950/20 text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 rounded-full transition-all border border-transparent flex items-center justify-center"
-                                        title="Edit interview details and parameters"
-                                    >
-                                        <i className="fas fa-pencil-alt text-xs"></i>
-                                    </button>
-                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-zinc-900 dark:bg-zinc-800 text-white text-[9px] font-bold rounded border border-zinc-800 dark:border-zinc-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                                        Edit Details
-                                    </div>
-                                </div>
-
-                                {/* Delete Route Tooltip */}
-                                <div className="relative group">
-                                    <button 
-                                        type="button"
-                                        onClick={() => handleDelete(interview.id)} 
-                                        className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/20 text-red-500 hover:text-red-600 dark:hover:text-red-400 rounded-full transition-all border border-transparent flex items-center justify-center"
-                                        title="Delete this interview permanently"
-                                    >
-                                        <i className="fas fa-trash text-xs"></i>
-                                    </button>
-                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-zinc-900 dark:bg-zinc-800 text-white text-[9px] font-bold rounded border border-zinc-800 dark:border-zinc-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                                        Delete Route
-                                    </div>
-                                </div>
-                            </div>
+                            <span className="text-[9px] font-mono text-gray-400 dark:text-gray-500">ID: #{interview.id.substring(0, 8)}</span>
                         </div>
  
                         {/* Metadata Badges with custom hovers */}
@@ -694,19 +631,6 @@ const RecruiterInterviews: React.FC = () => {
                                 <h4 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
                                     Job Description
                                 </h4>
-                                <div className="relative group">
-                                    <button
-                                        type="button"
-                                        onClick={() => setFullJdModal({ isOpen: true, title: interview.title, description: interview.description })}
-                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-0.5"
-                                        title="View full screen Job Description"
-                                    >
-                                        <i className="fas fa-expand-arrows-alt text-[9px]"></i>
-                                    </button>
-                                    <div className="absolute bottom-full right-0 mb-2 px-2 py-1 bg-gray-900 dark:bg-zinc-800 text-white text-[9px] font-bold rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                                        Fullscreen JD
-                                    </div>
-                                </div>
                             </div>
                             <div className="h-[75px] overflow-y-auto pr-1 text-xs text-gray-500 dark:text-gray-400 leading-relaxed custom-card-scrollbar">
                                 {interview.description || "No description provided."}
@@ -719,19 +643,6 @@ const RecruiterInterviews: React.FC = () => {
                         <div className="flex justify-between items-center mb-2">
                             <h4 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 flex items-center gap-1.5">
                                 <span>Track Roster</span>
-                                <div className="relative group">
-                                    <button
-                                        type="button"
-                                        onClick={() => setFullRosterModal({ isOpen: true, interview })}
-                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors p-0.5"
-                                        title="View full screen Track Roster with status search & invitation triggers"
-                                    >
-                                        <i className="fas fa-expand-arrows-alt text-[9px]"></i>
-                                    </button>
-                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 dark:bg-zinc-800 text-white text-[9px] font-bold rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                                        Fullscreen Roster
-                                    </div>
-                                </div>
                             </h4>
                             <span 
                                 className={submissionsMap[interview.id]?.length > 0 ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded-full text-[9px] font-extrabold border border-emerald-100 dark:border-emerald-900/20" : "text-gray-500 bg-gray-50 dark:bg-zinc-800 px-2 py-0.5 rounded-full text-[9px] font-extrabold border border-gray-100 dark:border-zinc-700/30"}
@@ -829,20 +740,12 @@ const RecruiterInterviews: React.FC = () => {
                     {/* Bottom: Divider & Call to Actions */}
                     <div className="border-t border-gray-100 dark:border-white/5 pt-3 mt-3">
                         <div className="flex items-center gap-2 mb-2">
-                            <button
-                                type="button"
-                                onClick={() => openInviteModal(interview)}
-                                className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition-all transform hover:-translate-y-0.5 active:translate-y-0"
-                            >
-                                <i className="fas fa-user-plus text-xs"></i>
-                                <span>Invite Candidates</span>
-                            </button>
                             <Link
-                                to={`/recruiter/interview/responses/${interview.id}`}
-                                className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition-all transform hover:-translate-y-0.5 active:translate-y-0 text-center"
+                                to={`/recruiter/interview/${interview.id}/overview`}
+                                className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition-all transform hover:-translate-y-0.5 active:translate-y-0 text-center"
                             >
-                                <i className="fas fa-eye text-xs"></i>
-                                <span>View Responses</span>
+                                <i className="fas fa-sliders-h text-xs"></i>
+                                <span>Manage</span>
                             </Link>
                         </div>
                         <div className="flex justify-between items-center text-[9px] text-gray-400 dark:text-gray-500 font-medium px-0.5">

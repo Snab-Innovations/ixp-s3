@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   collection,
-  deleteDoc,
-  doc,
   onSnapshot,
   query,
   where,
@@ -15,15 +13,16 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  Legend,
+  LineChart,
+  Line,
 } from 'recharts';
-import gsap from 'gsap';
-import { useMessageBox } from '../components/MessageBox';
-import EditJobModal from './EditJob';
+import { ArrowRight, ClipboardList, ListChecks, Video } from 'lucide-react';
+import {
+  ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from '../components/ui/line-chart';
 
 type TimestampLike =
   | {
@@ -127,8 +126,116 @@ const getLocalDayKey = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+const activityChartConfig = {
+  roles: {
+    label: 'Roles',
+    color: '#7c9cff',
+  },
+  assessments: {
+    label: 'Assessments',
+    color: '#71c38d',
+  },
+  responses: {
+    label: 'Responses',
+    color: '#f4b94f',
+  },
+} satisfies ChartConfig;
+
+const SkeletonBlock = ({
+  className = '',
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div className={`animate-pulse rounded-[6px] bg-white/[0.07] ${className}`} {...props} />
+);
+
+export const RecruiterDashboardSkeleton = () => (
+  <div className="w-full bg-[#000] text-white">
+    <section className="border-b border-white/[0.11]">
+      <div className="px-4 py-5 sm:px-6 lg:px-7">
+        <SkeletonBlock className="h-4 w-32" />
+        <SkeletonBlock className="mt-2 h-8 w-64 max-w-full" />
+      </div>
+
+      <div className="border-t border-white/[0.11]">
+        <div className="grid grid-cols-1 divide-y divide-white/[0.11] sm:grid-cols-2 xl:grid-cols-5 xl:divide-x xl:divide-y-0">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="min-h-[76px] px-4 py-4 sm:px-6 lg:px-7">
+              <SkeletonBlock className="h-4 w-20" />
+              <div className="mt-2 flex items-baseline gap-2.5">
+                <SkeletonBlock className="h-7 w-10" />
+                <SkeletonBlock className="h-4 w-24" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section className="grid grid-cols-1 border-b border-white/[0.11] lg:grid-cols-[minmax(0,2fr)_1px_minmax(260px,0.84fr)]">
+      <div className="px-4 py-5 sm:px-6 lg:pl-7 lg:pr-8">
+        <div className="flex h-full min-h-[276px] flex-col">
+          <SkeletonBlock className="h-5 w-40" />
+          <SkeletonBlock className="mt-1 h-4 w-64 max-w-full" />
+          <div className="mt-5 grid h-[174px] grid-cols-7 items-end gap-3">
+            {[42, 58, 35, 70, 46, 62, 82].map((height, index) => (
+              <SkeletonBlock key={index} className="w-full" style={{ height: `${height}%` } as React.CSSProperties} />
+            ))}
+          </div>
+          <div className="mt-3 flex gap-4">
+            <SkeletonBlock className="h-4 w-16" />
+            <SkeletonBlock className="h-4 w-24" />
+            <SkeletonBlock className="h-4 w-20" />
+          </div>
+        </div>
+      </div>
+
+      <div className="h-px bg-white/[0.11] lg:h-auto lg:w-px" />
+
+      <div className="px-4 py-5 sm:px-6 lg:pl-7 lg:pr-7">
+        <div className="flex h-full min-h-[276px] flex-col justify-center">
+          <SkeletonBlock className="h-5 w-28" />
+          <SkeletonBlock className="mt-1 h-4 w-64 max-w-full" />
+          <div className="mt-3 border border-white/[0.11]">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="flex items-center gap-3 border-b border-white/[0.11] px-3.5 py-3 last:border-b-0">
+                <SkeletonBlock className="h-8 w-8 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <SkeletonBlock className="h-4 w-32" />
+                  <SkeletonBlock className="mt-1 h-3 w-40" />
+                </div>
+                <SkeletonBlock className="h-3.5 w-3.5" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div className="border-b border-white/[0.11]">
+      <div className="px-4 py-5 sm:px-6 lg:px-7">
+        <SkeletonBlock className="h-5 w-36" />
+        <SkeletonBlock className="mt-1 h-4 w-80 max-w-full" />
+      </div>
+      <div className="border-t border-white/[0.11]">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="grid grid-cols-[minmax(180px,1.4fr)_0.7fr_0.7fr_0.7fr_0.5fr] gap-4 border-b border-white/[0.11] px-4 py-3 last:border-b-0 sm:px-6 lg:px-7">
+            <div>
+              <SkeletonBlock className="h-4 w-40" />
+              <SkeletonBlock className="mt-1 h-3 w-24" />
+            </div>
+            <SkeletonBlock className="h-5 w-20" />
+            <SkeletonBlock className="h-4 w-24" />
+            <SkeletonBlock className="h-4 w-20" />
+            <SkeletonBlock className="h-5 w-16" />
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
 const RecruiterDashboard: React.FC = () => {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [jobDocs, setJobDocs] = useState<RecruiterJobRecord[]>([]);
   const [interviews, setInterviews] = useState<RecruiterInterviewRecord[]>([]);
   const [tests, setTests] = useState<RecruiterTestRecord[]>([]);
@@ -137,49 +244,6 @@ const RecruiterDashboard: React.FC = () => {
   const [loadingInterviews, setLoadingInterviews] = useState(true);
   const [loadingTests, setLoadingTests] = useState(true);
   const [loadingAttempts, setLoadingAttempts] = useState(true);
-  const [editingJobId, setEditingJobId] = useState<string | null>(null);
-  const messageBox = useMessageBox();
-
-  useEffect(() => {
-    if (loadingJobs || loadingInterviews || loadingTests || loadingAttempts) return;
-
-    const ctx = gsap.context(() => {
-      gsap.from('.dashboard-header', {
-        y: -20,
-        opacity: 0,
-        duration: 0.6,
-        ease: 'power3.out',
-      });
-
-      gsap.from('.kpi-card', {
-        y: 20,
-        opacity: 0,
-        duration: 0.5,
-        stagger: 0.1,
-        delay: 0.2,
-        ease: 'power2.out',
-      });
-
-      gsap.from('.analytics-card', {
-        scale: 0.95,
-        opacity: 0,
-        duration: 0.6,
-        stagger: 0.15,
-        delay: 0.4,
-        ease: 'power2.out',
-      });
-
-      gsap.from('.jobs-table-section', {
-        y: 40,
-        opacity: 0,
-        duration: 0.8,
-        delay: 0.6,
-        ease: 'power3.out',
-      });
-    });
-
-    return () => ctx.revert();
-  }, [loadingJobs, loadingInterviews, loadingTests, loadingAttempts]);
 
   useEffect(() => {
     if (!user) {
@@ -393,10 +457,6 @@ const RecruiterDashboard: React.FC = () => {
     }, new Map<string, number>());
   }, [attempts]);
 
-  const totalInvites = useMemo(() => {
-    return interviews.reduce((total, interview) => total + (interview.candidateEmails?.length || 0), 0);
-  }, [interviews]);
-
   const pendingReviewCount = useMemo(() => {
     return interviews.reduce((total, interview) => {
       const invitedCount = interview.candidateEmails?.length || 0;
@@ -469,406 +529,311 @@ const RecruiterDashboard: React.FC = () => {
     };
   };
 
-  const handleDelete = (role: DashboardRoleEntry) => {
-    messageBox.showConfirm('Are you sure you want to delete this role?', async () => {
-      try {
-        const deletions: Promise<void>[] = [];
+  const activeJobPosts = dashboardRoles.filter((role) => getRoleStatus(role).label === 'Active');
+  const visibleJobPosts = activeJobPosts.slice(0, 4);
 
-        if (role.hasJobDoc) {
-          deletions.push(deleteDoc(doc(db, 'jobs', role.id)));
-        }
+  const recruiterName =
+    userProfile?.fullname ||
+    user?.displayName ||
+    user?.email?.split('@')[0] ||
+    'there';
 
-        if (role.hasInterviewDoc) {
-          deletions.push(deleteDoc(doc(db, 'interviews', role.id)));
-        }
-
-        await Promise.all(deletions);
-      } catch (error) {
-        console.error('Error deleting role:', error);
-        messageBox.showError('Error deleting role');
-      }
-    });
-  };
+  const quickActions = [
+    {
+      label: 'Create Interview',
+      description: 'Questions and invites.',
+      href: '/recruiter/interview/create',
+      icon: Video,
+    },
+    {
+      label: 'Create Assessment',
+      description: 'Screening test setup.',
+      href: '/recruiter/tests/create?type=aptitude',
+      icon: ClipboardList,
+    },
+    {
+      label: 'Manage Interviews',
+      description: 'Workflows and reports.',
+      href: '/recruiter/interviews',
+      icon: ListChecks,
+    },
+  ];
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <RecruiterDashboardSkeleton />;
   }
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-8 p-4 md:p-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-2 border-b border-gray-200 dark:border-white/5 dashboard-header">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">
-            Recruiter Dashboard
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Live overview of your recruiter-owned roles, invites, responses, and assessments.
+    <div className="w-full bg-[#000] text-white">
+      <section className="border-b border-white/[0.11]">
+        <div className="px-4 py-5 sm:px-6 lg:px-7">
+          <p className="geist-label uppercase text-[#6b7280]">
+            Recruiter Overview
           </p>
+          <h2 className="geist-page-title mt-2 text-white">
+            Welcome back, {recruiterName}
+          </h2>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            to="/recruiter/interview/create"
-            className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white dark:text-black font-semibold rounded-full shadow-lg shadow-primary/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 text-sm"
-          >
-            <i className="fas fa-video"></i> <span>Create Interview</span>
-          </Link>
-          <Link
-            to="/recruiter/tests/create"
-            className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 font-semibold rounded-full shadow-sm transition-all transform hover:-translate-y-0.5 active:translate-y-0 text-sm"
-          >
-            <i className="fas fa-clipboard-list text-blue-500"></i> <span>Create Assessment</span>
-          </Link>
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-        <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-white/5 hover:border-gray-300 dark:hover:border-white/10 transition-colors shadow-sm dark:shadow-none kpi-card">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Total Jobs</p>
-              <h3 className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
-                {dashboardRoles.length}
-              </h3>
+        <div className="border-t border-white/[0.11]">
+          <div className="grid grid-cols-1 divide-y divide-white/[0.11] sm:grid-cols-2 xl:grid-cols-5 xl:divide-x xl:divide-y-0">
+            <div className="min-h-[76px] px-4 py-4 sm:px-6 lg:px-7">
+              <p className="geist-label text-[#6b7280]">Jobs</p>
+              <div className="mt-2 flex items-baseline gap-2.5">
+                <span className="geist-metric text-white">{dashboardRoles.length}</span>
+                <span className="geist-caption text-[#6b7280]">{activeJobPosts.length} active</span>
+              </div>
             </div>
-            <div className="p-3 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
-              <i className="fas fa-briefcase"></i>
+
+            <div className="min-h-[76px] px-4 py-4 sm:px-6 lg:px-7">
+              <p className="geist-label text-[#6b7280]">Interviews</p>
+              <div className="mt-2 flex items-baseline gap-2.5">
+                <span className="geist-metric text-white">{interviews.length}</span>
+                <span className="geist-caption text-[#6b7280]">{attempts.length} reports</span>
+              </div>
+            </div>
+
+            <div className="min-h-[76px] px-4 py-4 sm:px-6 lg:px-7">
+              <p className="geist-label text-[#6b7280]">Pending</p>
+              <div className="mt-2 flex items-baseline gap-2.5">
+                <span className="geist-metric text-white">{pendingReviewCount}</span>
+                <span className="geist-caption text-[#6b7280]">awaiting review</span>
+              </div>
+            </div>
+
+            <Link to="/recruiter/tests" className="min-h-[76px] px-4 py-4 transition-colors hover:bg-white/[0.025] sm:px-6 lg:px-7">
+              <p className="geist-label text-[#6b7280]">Assessments</p>
+              <div className="mt-2 flex items-baseline gap-2.5">
+                <span className="geist-metric text-white">{tests.length}</span>
+                <span className="geist-caption text-[#6b7280]">screening tests</span>
+              </div>
+            </Link>
+
+            <div className="min-h-[76px] px-4 py-4 sm:px-6 lg:px-7">
+              <p className="geist-label text-[#6b7280]">Responses</p>
+              <div className="mt-2 flex items-baseline gap-2.5">
+                <span className="geist-metric text-white">{attempts.length}</span>
+                <span className="geist-caption text-[#6b7280]">submitted</span>
+              </div>
             </div>
           </div>
         </div>
+      </section>
 
-        <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-white/5 hover:border-gray-300 dark:hover:border-white/10 transition-colors shadow-sm dark:shadow-none kpi-card">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Total Interviews</p>
-              <h3 className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
-                {interviews.length}
-              </h3>
+      <section className="grid grid-cols-1 border-b border-white/[0.11] lg:grid-cols-[minmax(0,2fr)_1px_minmax(260px,0.84fr)]">
+        <div className="px-4 py-5 sm:px-6 lg:pl-7 lg:pr-8">
+          <div className="flex h-full min-h-[276px] flex-col">
+            <div className="mb-3 text-left">
+              <h3 className="geist-section-title text-white">Recruitment Activity</h3>
+              <p className="geist-small mt-0.5 text-[#8f8f8f]">
+                Live graph tracking roles created over time.
+              </p>
             </div>
-            <div className="p-3 bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-xl">
-              <i className="fas fa-users"></i>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-white/5 hover:border-gray-300 dark:hover:border-white/10 transition-colors shadow-sm dark:shadow-none kpi-card">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Pending Review</p>
-              <h3 className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
-                {pendingReviewCount}
-              </h3>
-            </div>
-            <div className="p-3 bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 rounded-xl">
-              <i className="fas fa-clock"></i>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-white/5 hover:border-gray-300 dark:hover:border-white/10 transition-colors shadow-sm dark:shadow-none kpi-card">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Reviewed Interviews</p>
-              <h3 className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
-                {attempts.length}
-              </h3>
-            </div>
-            <div className="p-3 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
-              <i className="fas fa-check-double"></i>
-            </div>
-          </div>
-        </div>
-
-        <Link
-          to="/recruiter/tests"
-          className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-white/5 hover:border-gray-300 dark:hover:border-white/10 transition-colors shadow-sm dark:shadow-none kpi-card"
-        >
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-gray-500 dark:text-gray-400 text-sm font-medium">Assessments</p>
-              <h3 className="text-3xl font-bold text-gray-900 dark:text-white mt-2">{tests.length}</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Open test manager</p>
-            </div>
-            <div className="p-3 bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 rounded-xl">
-              <i className="fas fa-clipboard-list"></i>
-            </div>
-          </div>
-        </Link>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-white/5 shadow-sm dark:shadow-none analytics-card">
-          <div className="mb-6">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Recruitment Activity</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Live graph of role creation, assessments, and candidate responses over the last 7 days.
-            </p>
-          </div>
-          <div className="h-[300px] w-full">
-            {hasActivity ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={activityData} margin={{ left: -16, right: 8, top: 12 }}>
-                  <defs>
-                    <linearGradient id="rolesGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="assessmentsGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="responsesGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#a855f7" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#a855f7" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="#e5e7eb"
-                    vertical={false}
-                    className="dark:stroke-[#333]"
-                  />
-                  <XAxis
-                    dataKey="date"
-                    stroke="#9ca3af"
-                    tick={{ fill: '#9ca3af', fontSize: 12 }}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="#9ca3af"
-                    tick={{ fill: '#9ca3af', fontSize: 12 }}
-                    tickLine={false}
-                    axisLine={false}
-                    allowDecimals={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--tooltip-bg, #111827)',
-                      border: '1px solid var(--tooltip-border, #374151)',
-                      borderRadius: '12px',
-                      color: 'var(--tooltip-text, #fff)',
-                    }}
-                    formatter={(value: number, name: string) => {
-                      const labels: Record<string, string> = {
-                        roles: 'Roles',
-                        assessments: 'Assessments',
-                        responses: 'Responses',
-                      };
-                      return [value, labels[name] || name];
-                    }}
-                    itemStyle={{ color: 'var(--tooltip-text, #fff)' }}
-                  />
-                  <Legend
-                    formatter={(value) => {
-                      const labels: Record<string, string> = {
-                        roles: 'Roles',
-                        assessments: 'Assessments',
-                        responses: 'Responses',
-                      };
-                      return labels[value] || value;
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="roles"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#rolesGradient)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="assessments"
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#assessmentsGradient)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="responses"
-                    stroke="#a855f7"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#responsesGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/[0.02] text-center px-6">
-                <div className="w-14 h-14 rounded-full bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-4">
-                  <i className="fas fa-chart-area text-xl"></i>
+            <div className="min-h-[210px] flex-1 w-full">
+              {hasActivity ? (
+                <div className="flex h-full min-h-[210px] flex-col">
+                  <ChartContainer config={activityChartConfig} className="h-[174px] w-full flex-none aspect-auto">
+                  <LineChart data={activityData} margin={{ left: -18, right: 10, top: 8, bottom: 0 }}>
+                    <CartesianGrid
+                      vertical={false}
+                      strokeDasharray="4 8"
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tickMargin={8}
+                      tick={{ fill: '#8f8f8f', fontSize: 12, fontFamily: 'var(--font-geist-mono, var(--font-mono))' }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      width={30}
+                      tick={{ fill: '#8f8f8f', fontSize: 12, fontFamily: 'var(--font-geist-mono, var(--font-mono))' }}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals={false}
+                    />
+                    <ChartTooltip
+                      cursor={false}
+                      content={<ChartTooltipContent hideLabel />}
+                    />
+                    <Line
+                      isAnimationActive={false}
+                      type="linear"
+                      dataKey="roles"
+                      stroke="var(--color-roles)"
+                      strokeWidth={2}
+                      strokeDasharray="4 4"
+                      dot={false}
+                      activeDot={{ r: 3, strokeWidth: 0 }}
+                    />
+                    <Line
+                      isAnimationActive={false}
+                      type="linear"
+                      dataKey="assessments"
+                      stroke="var(--color-assessments)"
+                      strokeWidth={2}
+                      strokeDasharray="4 4"
+                      dot={false}
+                      activeDot={{ r: 3, strokeWidth: 0 }}
+                    />
+                    <Line
+                      isAnimationActive={false}
+                      type="linear"
+                      dataKey="responses"
+                      stroke="var(--color-responses)"
+                      strokeWidth={2}
+                      strokeDasharray="4 4"
+                      dot={false}
+                      activeDot={{ r: 3, strokeWidth: 0 }}
+                    />
+                  </LineChart>
+                  </ChartContainer>
+                  <div className="geist-small mt-3 flex flex-wrap items-center gap-4 text-[#8f8f8f]">
+                    {Object.entries(activityChartConfig).map(([key, item]) => (
+                      <span key={key} className="inline-flex items-center gap-1.5">
+                        <span
+                          className="h-2 w-2 rounded-[2px]"
+                          style={{ backgroundColor: item.color }}
+                        />
+                        {item.label}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <p className="font-semibold text-gray-900 dark:text-white">No live activity yet</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 max-w-md">
-                  Create an interview, sync a job post, or publish an assessment and the graph will update here automatically.
-                </p>
-              </div>
-            )}
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-center px-6">
+                  <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#9ca3af]">
+                    <i className="fas fa-chart-area text-xl"></i>
+                  </div>
+                  <p className="geist-caption font-medium text-white">No live activity yet</p>
+                  <p className="geist-caption mt-2 max-w-md text-[#9ca3af]">
+                    New recruiter activity will appear here automatically as roles, assessments, and candidate responses come in.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#111] p-4 md:p-6 rounded-2xl border border-gray-200 dark:border-white/5 shadow-sm dark:shadow-none analytics-card overflow-hidden">
-          <div className="mb-6">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Live Pipeline</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Real-time view of your interview flow, invite backlog, and assessments.
-            </p>
-          </div>
-          <div className="space-y-4">
-            <Link
-              to="/recruiter/interviews"
-              className="flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm transition-colors hover:border-blue-300 hover:bg-blue-50 dark:border-white/5 dark:bg-white/[0.02] dark:hover:border-blue-500/30 dark:hover:bg-blue-500/10"
-            >
-              <div>
-                <p className="font-semibold text-gray-900 dark:text-white">Manage Interviews</p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {interviews.length} live workflow(s) and {attempts.length} response report(s).
-                </p>
-              </div>
-              <i className="fas fa-arrow-right text-gray-400"></i>
-            </Link>
-            <Link
-              to="/recruiter/invites"
-              className="flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm transition-colors hover:border-green-300 hover:bg-green-50 dark:border-white/5 dark:bg-white/[0.02] dark:hover:border-green-500/30 dark:hover:bg-green-500/10"
-            >
-              <div>
-                <p className="font-semibold text-gray-900 dark:text-white">Track Invites</p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {totalInvites} total invite(s), {pendingReviewCount} still awaiting candidate submission.
-                </p>
-              </div>
-              <i className="fas fa-arrow-right text-gray-400"></i>
-            </Link>
-            <Link
-              to="/recruiter/tests"
-              className="flex items-center justify-between rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-sm transition-colors hover:border-purple-300 hover:bg-purple-50 dark:border-white/5 dark:bg-white/[0.02] dark:hover:border-purple-500/30 dark:hover:bg-purple-500/10"
-            >
-              <div>
-                <p className="font-semibold text-gray-900 dark:text-white">Manage Assessments</p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {tests.length} assessment(s) with {tests.reduce((sum, test) => sum + (test.questions?.length || 0), 0)} total question(s).
-                </p>
-              </div>
-              <i className="fas fa-arrow-right text-gray-400"></i>
-            </Link>
+        <div className="h-px bg-white/[0.11] lg:h-auto lg:w-px" />
+
+        <div className="px-4 py-5 text-white sm:px-6 lg:pl-7 lg:pr-7">
+          <div className="flex h-full min-h-[276px] flex-col justify-center">
+            <div className="mb-3 text-left">
+              <h3 className="geist-section-title text-white">Quick Action</h3>
+              <p className="geist-small mt-0.5 text-[#8f8f8f]">
+                Start a new hiring workflow from one place.
+              </p>
+            </div>
+
+            <div className="border border-white/[0.11]">
+              {quickActions.map((action, index) => {
+                const ActionIcon = action.icon;
+                const iconClassName =
+                  index === 0
+                    ? 'border-white bg-white text-black'
+                    : index === 1
+                      ? 'border-[#2f6f4f] bg-[#092016] text-[#83d0a3]'
+                      : 'border-[#24415e] bg-[#071625] text-[#8bbde8]';
+
+                return (
+                  <Link
+                    key={action.label}
+                    to={action.href}
+                    className="group flex items-center gap-3 border-b border-white/[0.11] px-3.5 py-3 text-left transition-colors last:border-b-0 hover:bg-white/[0.025]"
+                  >
+                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center border ${iconClassName}`}>
+                      <ActionIcon size={14} strokeWidth={1.8} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="geist-caption block font-semibold text-white">{action.label}</span>
+                      <span className="geist-small block text-[#6b7280]">{action.description}</span>
+                    </span>
+                    <ArrowRight className="h-3.5 w-3.5 text-[#6b7280] transition-transform group-hover:translate-x-0.5 group-hover:text-white" strokeWidth={1.6} />
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="mt-8 jobs-table-section">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
+      <div className="border-b border-white/[0.11]">
+        <div className="flex flex-col gap-1.5 px-4 py-5 sm:px-6 lg:px-7 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Existing Job Posts</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            <h2 className="geist-section-title text-white">Existing Job Posts</h2>
+            <p className="geist-caption mt-0.5 text-[#9ca3af]">
               Interview-created roles and synced job posts appear here automatically.
             </p>
           </div>
         </div>
 
-        {dashboardRoles.length === 0 ? (
-          <div className="text-center py-16 bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/5 border-dashed">
-            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800/50 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-500">
-              <i className="fas fa-clipboard-list text-2xl"></i>
+        {visibleJobPosts.length === 0 ? (
+          <div className="border-t border-dashed border-white/[0.11] py-10 text-center">
+            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#6b7280]">
+              <i className="fas fa-clipboard-list text-base"></i>
             </div>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">
-              No recruiter-owned roles are live yet. New interviews and synced job posts will show up here in real time.
+            <p className="geist-caption mb-4 text-[#9ca3af]">
+              No active recruiter-owned roles are live yet.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-4">
-              <Link
-                to="/recruiter/interview/create"
-                className="text-primary font-medium hover:underline hover:text-primary-light transition-colors"
-              >
-                Create your first interview
-              </Link>
-              <Link
-                to="/recruiter/tests/create"
-                className="text-primary font-medium hover:underline hover:text-primary-light transition-colors"
-              >
-                Create your first assessment
-              </Link>
-            </div>
           </div>
         ) : (
-          <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm dark:shadow-none">
+          <div className="overflow-hidden border-t border-white/[0.11] bg-black">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-white/5">
-                <thead className="bg-gray-50 dark:bg-white/[0.02]">
+              <table className="min-w-full divide-y divide-white/[0.11]">
+                <thead className="bg-[#080808]">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Job Title
+                    <th className="geist-label px-4 py-2.5 text-left uppercase text-[#6b7280] sm:px-6 lg:px-7">
+                      Job title
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th className="geist-label px-4 py-2.5 text-left uppercase text-[#6b7280]">
                       Source
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Posted Date
+                    <th className="geist-label px-4 py-2.5 text-left uppercase text-[#6b7280]">
+                      Posted date
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th className="geist-label px-4 py-2.5 text-left uppercase text-[#6b7280]">
                       Deadline
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <th className="geist-label px-4 py-2.5 text-left uppercase text-[#6b7280]">
                       Status
-                    </th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-white/5">
-                  {dashboardRoles.map((role) => {
+                <tbody className="divide-y divide-white/[0.11]">
+                  {visibleJobPosts.map((role) => {
                     const roleStatus = getRoleStatus(role);
 
                     return (
                       <tr
                         key={role.id}
-                        className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors group"
+                        className="group hover:bg-white/[0.025]"
                       >
-                        <td className="px-6 py-4">
-                          <div className="text-sm font-bold text-gray-900 dark:text-white group-hover:text-primary transition-colors">
+                        <td className="px-4 py-3 sm:px-6 lg:px-7">
+                          <div className="geist-caption font-medium text-white">
                             {role.title}
                           </div>
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="geist-small mt-0.5 text-[#6b7280]">
                             {role.category || role.companyName || role.location}
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="px-2.5 py-0.5 inline-flex text-xs leading-5 font-medium rounded-full bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <span className="geist-small inline-flex rounded-[6px] border border-[#24364c] bg-[#06111f] px-2 py-0.5 font-medium text-[#8bbde8]">
                             {role.sourceLabel}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="geist-label whitespace-nowrap px-4 py-3 text-[#9ca3af]">
                           {formatDate(role.createdAt)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        <td className="geist-label whitespace-nowrap px-4 py-3 text-[#9ca3af]">
                           {role.deadline ? formatDate(role.deadline) : 'Open'}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="whitespace-nowrap px-4 py-3">
                           <span
-                            className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-medium rounded-full ${roleStatus.className}`}
+                            className={`geist-small inline-flex rounded-[6px] px-2 py-0.5 font-medium ${roleStatus.className}`}
                           >
                             {roleStatus.label}
                           </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-4">
-                          <button
-                            onClick={() => setEditingJobId(role.id)}
-                            className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                            title="Edit"
-                          >
-                            <i className="fas fa-edit"></i>
-                          </button>
-                          <button
-                            onClick={() => handleDelete(role)}
-                            className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                            title="Delete"
-                          >
-                            <i className="fas fa-trash"></i>
-                          </button>
                         </td>
                       </tr>
                     );
@@ -880,7 +845,6 @@ const RecruiterDashboard: React.FC = () => {
         )}
       </div>
 
-      {editingJobId && <EditJobModal jobId={editingJobId} onClose={() => setEditingJobId(null)} />}
     </div>
   );
 };

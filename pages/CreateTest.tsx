@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { addDoc, collection, serverTimestamp, query, getDocs, orderBy } from 'firebase/firestore';
 import { db, auth } from '../services/firebase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Sparkles, Save, ArrowLeft, Plus, Trash, Link as LinkIcon } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
@@ -9,7 +9,9 @@ import { useTheme } from '../context/ThemeContext';
 const CreateTest: React.FC = () => {
   const { isDark } = useTheme();
   const navigate = useNavigate();
-  const [type, setType] = useState<'aptitude' | 'coding'>('aptitude');
+  const [searchParams] = useSearchParams();
+  const initialType = searchParams.get('type') === 'coding' ? 'coding' : 'aptitude';
+  const [type, setType] = useState<'aptitude' | 'coding'>(initialType);
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState(10); // Default 10 minutes
   const [questions, setQuestions] = useState<any[]>([]);
@@ -25,6 +27,13 @@ const CreateTest: React.FC = () => {
   // Manual Question State
   const [manualQ, setManualQ] = useState({ question: '', options: ['', '', '', ''], correct: 0 });
   const [manualCodeQ, setManualCodeQ] = useState({ title: '', description: '', testCases: '' });
+
+  useEffect(() => {
+    const requestedType = searchParams.get('type');
+    if (requestedType === 'aptitude' || requestedType === 'coding') {
+      setType(requestedType);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const fetchInterviews = async () => {

@@ -3,6 +3,7 @@ import {
   BriefcaseBusiness,
   ClipboardList,
   LayoutDashboard,
+  Users,
   Video,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -37,7 +38,17 @@ const recruiterNavGroups: NavGroupData[] = [
         title: 'My Interviews',
         icon: Video,
         href: '/recruiter/interviews',
-        match: (path) => path === '/recruiter/interviews' || path.startsWith('/recruiter/interview/responses'),
+        match: (path) =>
+          path === '/recruiter/interviews' ||
+          path.startsWith('/recruiter/interview/responses') ||
+          (path.startsWith('/recruiter/interview/') && !path.startsWith('/recruiter/interview/create')),
+      },
+      {
+        id: 'candidate-hub',
+        title: 'Candidate Hub',
+        icon: Users,
+        href: '/recruiter/invites',
+        match: (path) => path === '/recruiter/invites',
       },
       {
         id: 'create-interview',
@@ -73,21 +84,21 @@ function NavItem({
       type="button"
       onClick={() => onNavigate(item.href)}
       className={cn(
-        'group flex w-full items-center justify-between rounded-[6px] px-2.5 py-[7px] text-left transition-all duration-200',
+        'group flex w-full items-center justify-between rounded-[6px] px-2 py-1.5 text-left transition-all duration-200',
         isActive
-          ? 'bg-muted text-foreground font-medium shadow-sm'
-          : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          ? 'bg-white/[0.07] text-white font-medium'
+          : 'text-[#8f8f8f] hover:bg-white/[0.04] hover:text-white'
       )}
     >
-      <span className="flex min-w-0 items-center gap-2.5">
+      <span className="flex min-w-0 items-center gap-2">
         <item.icon
           className={cn(
-            'size-4 shrink-0 transition-colors',
-            isActive ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'
+            'size-[15px] shrink-0 transition-colors',
+            isActive ? 'text-white' : 'text-[#6b7280] group-hover:text-white'
           )}
           strokeWidth={1.5}
         />
-        <span className="truncate text-[13px]">{item.title}</span>
+        <span className="geist-small truncate">{item.title}</span>
       </span>
 
       <span className="flex items-center gap-2">
@@ -97,7 +108,7 @@ function NavItem({
           </kbd>
         )}
         {item.badge && (
-          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-[10px] font-medium text-primary">
+          <span className="flex h-5 min-w-5 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.04] px-1.5 text-[10px] font-medium text-white">
             {item.badge}
           </span>
         )}
@@ -119,18 +130,56 @@ export function DashboardSidebar({
     onNavigate(href);
   };
 
+  const manageMatch = activePath.match(/^\/recruiter\/interview\/([^/]+)(?:\/(overview|responses|candidates))?$/);
+  const legacyResponsesMatch = activePath.match(/^\/recruiter\/interview\/responses\/([^/]+)$/);
+  const managedInterviewId = legacyResponsesMatch?.[1] || (manageMatch && !['create', 'responses'].includes(manageMatch[1]) ? manageMatch[1] : null);
+  const activeManageSection = legacyResponsesMatch ? 'responses' : manageMatch?.[2] || (managedInterviewId ? 'overview' : '');
+  const manageSubItems = managedInterviewId
+    ? [
+        { id: 'overview', title: 'Overview', href: `/recruiter/interview/${managedInterviewId}/overview` },
+        { id: 'responses', title: 'Responses', href: `/recruiter/interview/${managedInterviewId}/responses` },
+        { id: 'candidates', title: 'Candidates', href: `/recruiter/interview/${managedInterviewId}/candidates` },
+      ]
+    : [];
+
   return (
-      <aside className={cn('flex h-full w-[218px] flex-col border-r border-border bg-card/80 p-2.5 pt-5 font-sans', className)}>
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <aside className={cn('flex h-full w-[190px] flex-col border-r border-white/[0.11] bg-[#000] p-2 pt-3 font-sans text-white', className)}>
+        <div className="flex flex-1 flex-col gap-3 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {recruiterNavGroups.map((group, index) => (
             <div key={group.heading || index} className="flex flex-col gap-0.5">
               {group.heading && (
-                <span className="mb-1 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                <span className="geist-label mb-1 px-2 uppercase text-[#6b7280]">
                   {group.heading}
                 </span>
               )}
               {group.items.map((item) => (
-                <NavItem key={item.id} item={item} activePath={activePath} onNavigate={handleNavigate} />
+                <div key={item.id}>
+                  <NavItem item={item} activePath={activePath} onNavigate={handleNavigate} />
+                  {item.id === 'interviews' && manageSubItems.length > 0 && (
+                    <div className="ml-[17px] mt-1 border-l border-white/[0.13] pl-3">
+                      <div className="flex flex-col gap-0.5">
+                        {manageSubItems.map((subItem) => {
+                          const isActive = activeManageSection === subItem.id;
+                          return (
+                            <button
+                              key={subItem.id}
+                              type="button"
+                              onClick={() => handleNavigate(subItem.href)}
+                              className={cn(
+                                'group flex w-full items-center rounded-[6px] px-2 py-1.5 text-left transition-colors',
+                                isActive
+                                  ? 'bg-white/[0.07] text-white font-medium'
+                                  : 'text-[#8f8f8f] hover:bg-white/[0.04] hover:text-white'
+                              )}
+                            >
+                              <span className="geist-small truncate">{subItem.title}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           ))}

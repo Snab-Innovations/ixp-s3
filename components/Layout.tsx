@@ -13,7 +13,7 @@ import DashboardSidebar from './ui/dashboard-sidebar';
 
 
 const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
@@ -33,7 +33,9 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   // Ideally for "Black Dignity" we default to dark or design the light mode to be very minimal too.
 
   const isActive = (path: string) => location.pathname === path;
-  const showRecruiterSidebar = Boolean(user && userProfile?.role === 'recruiter');
+  const isRecruiterPath = location.pathname.startsWith('/recruiter/');
+  const showRecruiterSidebar = isRecruiterPath || Boolean(user && userProfile?.role === 'recruiter');
+  const isRecruiterDashboard = location.pathname === '/recruiter/jobs';
   const navigateFromSidebar = (href: string) => {
     navigate(href);
     setIsMobileMenuOpen(false);
@@ -52,18 +54,26 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         }}>
       </div>
 
-      <nav className="bg-background/80 dark:bg-background/90 backdrop-blur-xl border-b border-border sticky top-0 z-40 transition-all duration-300">
-        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
+      <nav className={`sticky top-0 z-40 border-b backdrop-blur-xl transition-colors duration-300 ${showRecruiterSidebar ? 'border-white/[0.11] bg-[#000]/95 text-white' : 'border-border bg-background/90'}`}>
+        <div className="w-full mx-auto px-3 sm:px-4 lg:px-5">
+          <div className="relative flex h-14 items-center justify-between">
 
             {/* Logo Area */}
             <div className="flex-shrink-0 flex items-center">
               <Link to="/" className="flex items-center group">
-                <div className="w-[132px] sm:w-[164px] flex items-center justify-center transition-all duration-300">
+                <div className="w-[118px] sm:w-[140px] flex items-center justify-center transition-all duration-300">
                   <Logo className="w-full h-auto" />
                 </div>
               </Link>
             </div>
+
+            {showRecruiterSidebar && location.pathname === '/recruiter/jobs' && (
+              <div className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 sm:block">
+                <h1 className="geist-caption font-medium text-white">
+                  Recruiter Dashboard
+                </h1>
+              </div>
+            )}
 
             {/* Centered Navigation */}
             <div className={showRecruiterSidebar ? 'hidden' : 'hidden xl:flex items-center justify-center flex-1 px-2'}>
@@ -96,30 +106,42 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             </div>
 
             {/* Right Side Actions */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {user ? (
                 <>
 
 
                   <NotificationCenter />
                 </>
-              ) : (
-                <Link to="/auth" className="saas-btn-primary inline-flex items-center justify-center px-5 py-2 rounded-full font-bold text-sm">
+              ) : !authLoading ? (
+                <Link to="/auth" className="geist-caption saas-btn-primary inline-flex items-center justify-center rounded-[6px] px-3 py-1.5 font-medium">
                   Sign In
                 </Link>
+              ) : (
+                <div className="h-8 w-8" aria-hidden="true" />
               )}
 
               {/* ConnectionStatus moved to dropdown */}
 
               {/* Profile Dropdown */}
-              {user && (
-                <div className="hidden md:flex relative group items-center gap-3 pl-3 ml-1 h-9 border-l border-white/10">
-                  <div className="flex items-center gap-3 cursor-pointer">
+              {user && !userProfile && showRecruiterSidebar && (
+                <div className="hidden md:flex h-8 items-center gap-2 border-l border-white/10 pl-2">
+                  <div className="hidden space-y-1 lg:block">
+                    <div className="h-3 w-20 animate-pulse rounded-[3px] bg-white/[0.14]" />
+                    <div className="ml-auto h-2.5 w-12 animate-pulse rounded-[3px] bg-white/[0.1]" />
+                  </div>
+                  <div className="h-8 w-8 animate-pulse rounded-full border border-white/20 bg-white/[0.08]" />
+                </div>
+              )}
+
+              {user && userProfile && (
+                <div className="hidden md:flex relative group h-8 items-center gap-2 border-l border-white/10 pl-2">
+                  <div className="flex items-center gap-2 cursor-pointer">
                     <div className="text-right hidden lg:block">
-                      <p className="text-sm font-semibold text-gray-700 dark:text-white leading-none">{userProfile?.fullname || 'User'}</p>
-                      <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider mt-0.5">{userProfile?.role || 'Guest'}</p>
+                    <p className={`geist-caption font-medium leading-none ${showRecruiterSidebar ? 'text-white' : 'text-gray-700 dark:text-white'}`}>{userProfile?.fullname || 'User'}</p>
+                      <p className="geist-label mt-0.5 text-[10px] uppercase text-gray-500">{userProfile?.role || 'Guest'}</p>
                     </div>
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 border border-white/20 p-0.5 flex items-center justify-center group-hover:border-primary/50 transition-colors">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 bg-[#111] p-0.5 transition-colors group-hover:border-white/40">
                       <img
                         src={userProfile?.profilePhotoURL || `https://ui-avatars.com/api/?name=${userProfile?.fullname?.replace(/\s/g, '+') || 'User'}&background=random&color=fff`}
                         alt="Avatar"
@@ -187,9 +209,9 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <div className="flex xl:hidden items-center">
                 <button
                   onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                  className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 focus:outline-none transition-colors"
+                  className="inline-flex items-center justify-center rounded-[6px] p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none dark:hover:bg-white/5 dark:hover:text-white"
                 >
-                  <Menu size={24} />
+                  <Menu size={20} />
                 </button>
               </div>
             </div>
@@ -199,7 +221,7 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       <div className="flex w-full flex-1">
         {showRecruiterSidebar && (
-          <div className="sticky top-16 hidden h-[calc(100vh-4rem)] shrink-0 xl:flex">
+          <div className="sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 xl:flex">
             <DashboardSidebar
               activePath={location.pathname}
               onNavigate={navigateFromSidebar}
@@ -208,35 +230,35 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <main className={`workspace-card flex-grow w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 relative ${showRecruiterSidebar ? 'max-w-none' : 'max-w-7xl'}`}>
+          <main className={`workspace-card flex-grow w-full mx-auto relative ${isRecruiterDashboard ? 'max-w-none p-0' : `px-4 sm:px-6 lg:px-8 py-8 ${showRecruiterSidebar ? 'max-w-none' : 'max-w-7xl'}`}`}>
             {children}
           </main>
 
-          <footer className="border-t border-border bg-background/80 backdrop-blur-sm py-8 mt-auto z-10">
-            <div className={`${showRecruiterSidebar ? 'w-full' : 'max-w-7xl mx-auto'} px-4 sm:px-6 lg:px-8`}>
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-2 opacity-60 hover:opacity-100 transition-opacity">
-              <Logo className="w-[124px] sm:w-[148px] h-auto" />
+          <footer className={`z-10 mt-auto border-t backdrop-blur-sm ${showRecruiterSidebar ? 'border-white/[0.11] bg-[#000] text-white' : 'border-border bg-background/90'}`}>
+            <div className={`${showRecruiterSidebar ? 'w-full' : 'max-w-7xl mx-auto'} px-3 sm:px-4 lg:px-5`}>
+          <div className="flex min-h-14 flex-col items-center justify-between gap-3 py-3 md:flex-row">
+            <div className="flex items-center gap-2 opacity-70 transition-opacity hover:opacity-100">
+              <Logo className="w-[108px] sm:w-[124px] h-auto" />
             </div>
 
-            <div className="flex items-center gap-3">
-              <Link to="/contact" className="group flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-white/5 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-all border border-gray-200 dark:border-white/10 hover:border-blue-200 dark:hover:border-blue-800 shadow-sm hover:shadow-md">
-                <Mail size={14} className="group-hover:scale-110 transition-transform" />
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              <Link to="/contact" className={`geist-small group inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-2.5 font-medium transition-colors ${showRecruiterSidebar ? 'border-white/[0.11] bg-transparent text-[#8f8f8f] hover:bg-white/[0.05] hover:text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-white'}`}>
+                <Mail size={13} />
                 <span>Contact Us</span>
               </Link>
-              <Link to="/report-bug" className="group flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-white/5 hover:bg-red-50 dark:hover:bg-red-900/20 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-all border border-gray-200 dark:border-white/10 hover:border-red-200 dark:hover:border-red-800 shadow-sm hover:shadow-md">
-                <Bug size={14} className="group-hover:scale-110 transition-transform" />
+              <Link to="/report-bug" className={`geist-small group inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-2.5 font-medium transition-colors ${showRecruiterSidebar ? 'border-white/[0.11] bg-transparent text-[#8f8f8f] hover:bg-white/[0.05] hover:text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-white'}`}>
+                <Bug size={13} />
                 <span>Report Bug</span>
               </Link>
-              <Link to="/reviews" className="group flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-white/5 hover:bg-purple-50 dark:hover:bg-purple-900/20 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-all border border-gray-200 dark:border-white/10 hover:border-purple-200 dark:hover:border-purple-800 shadow-sm hover:shadow-md">
-                <MessageSquare size={14} className="group-hover:scale-110 transition-transform" />
+              <Link to="/reviews" className={`geist-small group inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-2.5 font-medium transition-colors ${showRecruiterSidebar ? 'border-white/[0.11] bg-transparent text-[#8f8f8f] hover:bg-white/[0.05] hover:text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-white'}`}>
+                <MessageSquare size={13} />
                 <span>Reviews</span>
               </Link>
             </div>
 
-            <div className="text-xs text-gray-400 dark:text-gray-600 font-medium text-center md:text-right">
+            <div className={`geist-small text-center font-medium md:text-right ${showRecruiterSidebar ? 'text-[#6b7280]' : 'text-gray-400 dark:text-gray-600'}`}>
               <div>&copy; 2026 InterviewXpert Inc.</div>
-              <div className="text-[10px] opacity-75 mt-0.5">Developed by <a href="https://snab.co.in" target="_blank" rel="noopener noreferrer" className="hover:underline text-primary">SNAB Innovations</a></div>
+              <div className="text-[10px] opacity-75">Developed by <a href="https://snab.co.in" target="_blank" rel="noopener noreferrer" className={showRecruiterSidebar ? 'text-[#a1a1a1] hover:text-white' : 'text-primary hover:underline'}>SNAB Innovations</a></div>
             </div>
           </div>
             </div>
@@ -255,9 +277,9 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
           {/* Sidebar */}
           {showRecruiterSidebar ? (
-            <div className="fixed inset-y-0 left-0 flex w-[238px] flex-col bg-popover text-popover-foreground shadow-2xl">
+            <div className="fixed inset-y-0 left-0 flex w-[220px] flex-col border-r border-white/[0.11] bg-[#000] text-white shadow-2xl">
               <DashboardSidebar
-                className="w-[238px] border-none bg-popover"
+                className="w-[220px] border-none bg-[#000]"
                 activePath={location.pathname}
                 onNavigate={navigateFromSidebar}
               />

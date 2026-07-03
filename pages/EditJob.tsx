@@ -261,14 +261,89 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
   };
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col border border-gray-200 dark:border-slate-800">
-        <div className="p-6 border-b border-gray-200 dark:border-slate-800 flex justify-between items-center">
-          <h2 className="text-xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
-            <i className="fas fa-edit text-primary"></i> Edit Job
-          </h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors">
-            <i className="fas fa-times text-gray-500 dark:text-slate-400"></i>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <style>{`
+        .geist-edit-modal {
+          font-family: var(--font-geist-sans, ui-sans-serif, system-ui, sans-serif);
+        }
+        .geist-edit-modal label {
+          display: block;
+          margin-bottom: 6px;
+          color: #a1a1aa !important;
+          font-family: var(--font-geist-sans, ui-sans-serif, system-ui, sans-serif);
+          font-size: 12px !important;
+          line-height: 16px !important;
+          font-weight: 500 !important;
+        }
+        .geist-edit-modal input:not([type="file"]),
+        .geist-edit-modal select,
+        .geist-edit-modal textarea {
+          width: 100%;
+          min-height: 36px;
+          border-radius: 6px !important;
+          border: 1px solid rgba(255, 255, 255, 0.11) !important;
+          background: #050505 !important;
+          color: #ededed !important;
+          padding: 8px 10px !important;
+          font-size: 13px !important;
+          line-height: 18px !important;
+          outline: none !important;
+          box-shadow: none !important;
+          color-scheme: dark;
+        }
+        .geist-edit-modal textarea {
+          min-height: 116px;
+          resize: vertical;
+        }
+        .geist-edit-modal input:focus,
+        .geist-edit-modal select:focus,
+        .geist-edit-modal textarea:focus {
+          border-color: rgba(255, 255, 255, 0.28) !important;
+          box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16) !important;
+        }
+        .geist-edit-modal input::placeholder,
+        .geist-edit-modal textarea::placeholder {
+          color: #6b7280 !important;
+        }
+        .geist-edit-modal .rounded-xl,
+        .geist-edit-modal .rounded-2xl,
+        .geist-edit-modal .rounded-full,
+        .geist-edit-modal .rounded-lg {
+          border-radius: 6px !important;
+        }
+        .geist-edit-modal .form-panel {
+          border: 1px solid rgba(255, 255, 255, 0.11) !important;
+          background: rgba(255, 255, 255, 0.025) !important;
+        }
+        .geist-edit-modal form button {
+          min-height: 32px;
+          border-radius: 6px !important;
+          font-size: 13px !important;
+          line-height: 18px !important;
+          font-weight: 500 !important;
+        }
+        .geist-edit-modal .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+        .geist-edit-modal .custom-scrollbar::-webkit-scrollbar-track {
+          background: #000;
+        }
+        .geist-edit-modal .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #333;
+          border-radius: 999px;
+          border: 2px solid #000;
+        }
+      `}</style>
+      <div className="geist-edit-modal bg-[#000] text-white rounded-[8px] shadow-2xl w-full max-w-5xl max-h-[88vh] flex flex-col border border-white/[0.11] overflow-hidden">
+        <div className="px-5 py-4 border-b border-white/[0.11] flex justify-between items-center bg-[#050505]">
+          <div>
+            <p className="geist-label uppercase text-[#6b7280]">Interview setup</p>
+            <h2 className="geist-section-title mt-1 text-white flex items-center gap-2">
+              Edit job
+            </h2>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] text-[#8f8f8f] hover:bg-white/[0.06] hover:text-white transition-colors">
+            <i className="fas fa-times text-xs"></i>
           </button>
         </div>
 
@@ -276,7 +351,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
           <div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div></div>
         ) : (
           <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
-            <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
+            <div className="p-5 space-y-5 overflow-y-auto custom-scrollbar bg-[#000]">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Job Title</label>
@@ -456,7 +531,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
             </div>
         </div>
 
-        <div className="space-y-4 p-4 bg-gray-50/50 dark:bg-gray-800/20 border border-gray-100 dark:border-white/10 rounded-2xl">
+        <div className="form-panel space-y-4 p-4 bg-gray-50/50 dark:bg-gray-800/20 border border-gray-100 dark:border-white/10 rounded-2xl">
             <div>
                 <label className="text-sm font-semibold text-gray-900 dark:text-white">Custom Fields</label>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Add other relevant info (e.g., Salary Range).</p>
@@ -541,7 +616,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         </div>
 
         {/* Manual Questions */}
-        <div className="space-y-4 p-4 bg-blue-50/50 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/20 rounded-2xl">
+        <div className="form-panel space-y-4 p-4 bg-blue-50/50 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/20 rounded-2xl">
             <div>
               <label className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                 <i className="fa-solid fa-clipboard-question text-blue-500"></i>
@@ -566,7 +641,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         </div>
 
         {/* Candidate Emails */}
-        <div className="space-y-4 p-4 bg-green-50/50 dark:bg-green-500/5 border border-green-100 dark:border-green-500/20 rounded-2xl">
+        <div className="form-panel space-y-4 p-4 bg-green-50/50 dark:bg-green-500/5 border border-green-100 dark:border-green-500/20 rounded-2xl">
             <div>
               <label className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                 <i className="fa-solid fa-envelope text-green-500"></i>
@@ -591,18 +666,18 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         </div>
 
             </div>
-            <div className="flex gap-4 p-6 border-t border-gray-200 dark:border-slate-800 bg-gray-50 dark:bg-slate-900/50 rounded-b-2xl mt-auto">
+            <div className="flex gap-3 p-4 border-t border-white/[0.11] bg-[#050505] mt-auto">
             <button 
               type="button"
               onClick={onClose}
-              className="w-1/3 border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-300 font-bold py-3 px-4 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+              className="w-1/3 border border-white/[0.11] bg-transparent text-[#d4d4d4] font-medium py-2 px-4 rounded-[6px] hover:bg-white/[0.06] hover:text-white transition-colors"
             >
               Cancel
             </button>
             <button 
               type="submit" 
               disabled={saving}
-              className="w-2/3 bg-primary hover:bg-primary-dark text-white dark:text-black font-bold py-3 px-4 rounded-xl transition-colors disabled:opacity-50"
+              className="w-2/3 border border-white bg-white hover:bg-[#ededed] text-black font-medium py-2 px-4 rounded-[6px] transition-colors disabled:opacity-50"
             >
               {saving ? 'Saving...' : 'Update Job'}
             </button>
