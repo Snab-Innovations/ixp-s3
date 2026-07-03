@@ -56,7 +56,7 @@ const RecruiterInterviews: React.FC = () => {
 
   const messageBox = useMessageBox();
   const navigate = useNavigate();
-  const actionButtonClass = 'inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-white dark:hover:bg-gray-800 transition-colors';
+  const actionButtonClass = 'geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white';
 
   useEffect(() => {
     if (!user) {
@@ -351,8 +351,72 @@ const RecruiterInterviews: React.FC = () => {
 
 
   if (loading) return (
-    <div className="flex items-center justify-center min-h-[50vh]">
-      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+    <div className="-mx-4 -my-8 min-h-[calc(100vh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8 animate-pulse">
+      {/* Sticky Header Skeleton */}
+      <section className="border-b border-white/[0.11] bg-[#000]">
+        <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-7 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <div className="h-8 w-24 rounded-[6px] bg-white/[0.04]" />
+            <div className="h-7 w-48 rounded-[6px] bg-white/[0.04] mt-3" />
+            <div className="h-4 w-64 rounded-[6px] bg-white/[0.04] mt-2" />
+          </div>
+          <div className="h-8 w-32 rounded-[6px] bg-white/[0.04]" />
+        </div>
+      </section>
+
+      {/* Stats Strip Skeleton */}
+      <section className="grid grid-cols-2 border-b border-white/[0.11] lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="border-r border-white/[0.11] px-4 py-4 last:border-r-0 sm:px-6 lg:px-7">
+            <div className="h-3 w-12 rounded bg-white/[0.04]" />
+            <div className="h-6 w-16 rounded bg-white/[0.04] mt-2" />
+          </div>
+        ))}
+      </section>
+
+      {/* Search & Filter Bar Skeleton */}
+      <section className="border-b border-white/[0.11]">
+        <div className="flex flex-col gap-3 px-4 py-3 sm:px-6 lg:px-7 xl:flex-row xl:items-center xl:justify-between">
+          <div className="h-9 w-full xl:max-w-xs rounded-[6px] bg-white/[0.04]" />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="h-9 w-28 rounded-[6px] bg-white/[0.04]" />
+            <div className="h-9 w-48 rounded-[6px] bg-white/[0.04]" />
+          </div>
+        </div>
+      </section>
+
+      {/* Content Table Skeleton */}
+      <section>
+        {/* Table Header Skeleton */}
+        <div className="hidden items-center gap-4 border-b border-white/[0.11] px-4 py-3 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:px-7">
+          <div className="h-3 w-16 rounded bg-white/[0.04]" />
+          <div className="h-3 w-12 rounded bg-white/[0.04] mx-auto" />
+          <div className="h-3 w-16 rounded bg-white/[0.04] mx-auto" />
+          <div className="h-3 w-16 rounded bg-white/[0.04] mx-auto" />
+          <div className="h-3 w-12 rounded bg-white/[0.04] mx-auto" />
+          <div className="h-3 w-12 rounded bg-white/[0.04] mx-auto" />
+          <div className="h-3 w-12 rounded bg-white/[0.04] ml-auto" />
+        </div>
+
+        {/* Rows Skeleton */}
+        {[...Array(5)].map((_, idx) => (
+          <div 
+            key={idx} 
+            className="grid gap-3 border-b border-white/[0.08] px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:items-center lg:gap-4 lg:px-7"
+          >
+            <div className="space-y-2">
+              <div className="h-4 w-40 rounded bg-white/[0.04]" />
+              <div className="h-3 w-20 rounded bg-white/[0.04]" />
+            </div>
+            <div className="h-4 w-12 rounded bg-white/[0.04] mx-auto" />
+            <div className="h-5 w-16 rounded bg-white/[0.04] mx-auto" />
+            <div className="h-4 w-16 rounded bg-white/[0.04] mx-auto" />
+            <div className="h-4 w-16 rounded bg-white/[0.04] mx-auto" />
+            <div className="h-4 w-12 rounded bg-white/[0.04] mx-auto" />
+            <div className="h-8 w-20 rounded bg-white/[0.04] ml-auto" />
+          </div>
+        ))}
+      </section>
     </div>
   );
 
@@ -399,367 +463,228 @@ const RecruiterInterviews: React.FC = () => {
   });
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-8 p-4 md:p-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-2 border-b border-gray-200 dark:border-white/5">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">My Interviews</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">Manage all your scheduled interviews.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <Link to="/recruiter/interview/create" className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-white dark:text-black font-semibold rounded-full shadow-lg shadow-primary/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 text-sm">
-            <i className="fas fa-plus" title="Create a new interview route link"></i> <span>Create New Interview</span>
-          </Link>
-        </div>
-      </div>
+    <div className="-mx-4 -my-8 min-h-[calc(100vh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8">
 
-      {/* Search & Filter Controls */}
-      <div className="bg-white dark:bg-[#111] p-4 rounded-2xl border border-gray-200 dark:border-white/5 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
-          {/* Search bar */}
-          <div className="relative w-full md:max-w-xs">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 dark:text-gray-500 pointer-events-none">
-                  <i className="fas fa-search text-xs"></i>
-              </span>
-              <input 
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search interviews or JDs..."
-                  className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-zinc-800 rounded-xl bg-gray-50 dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-200 text-xs font-semibold outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                  title="Type keywords to filter interviews by title, department, or JD description"
-              />
+      {/* Sticky Header */}
+      <section className="sticky top-14 z-20 border-b border-white/[0.11] bg-[#000]">
+        <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-7 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <Link to="/recruiter/dashboard" className="geist-caption inline-flex h-8 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white">
+              <i className="fas fa-arrow-left text-[11px]"></i>
+              <span>Dashboard</span>
+            </Link>
+            <h1 className="geist-page-title mt-2 text-white">My Interviews</h1>
+            <p className="geist-small mt-1 text-[#8f8f8f]">Manage all your scheduled interviews.</p>
           </div>
-
-          {/* Filters row */}
-          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-              {/* Dynamic Department Selector */}
-              <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 tracking-wider">Dept:</span>
-                  <select
-                      value={selectedDept}
-                      onChange={(e) => setSelectedDept(e.target.value)}
-                      className="px-2.5 py-1.5 border border-gray-200 dark:border-zinc-800 rounded-xl bg-gray-50 dark:bg-[#1a1a1a] text-gray-700 dark:text-gray-200 text-xs font-semibold outline-none focus:ring-1 focus:ring-primary"
-                      title="Filter interviews by specific department"
-                  >
-                      {departments.map(dept => (
-                          <option key={dept} value={dept}>{dept}</option>
-                      ))}
-                  </select>
-              </div>
-
-              {/* Date Mode Toggle & Inputs */}
-              <div className="flex items-center gap-2 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-zinc-800 rounded-xl px-2.5 py-1 flex-wrap">
-                  {/* Mode Selector Toggle */}
-                  <div className="flex bg-gray-200 dark:bg-zinc-800 rounded-lg p-0.5 mr-1 shrink-0">
-                      <button
-                          type="button"
-                          onClick={() => setDateMode('range')}
-                          className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-all ${dateMode === 'range' ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
-                      >
-                          Range
-                      </button>
-                      <button
-                          type="button"
-                          onClick={() => setDateMode('specific')}
-                          className={`px-2 py-0.5 text-[9px] font-bold rounded-md transition-all ${dateMode === 'specific' ? 'bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
-                      >
-                          Specific
-                      </button>
-                  </div>
-
-                  {dateMode === 'specific' ? (
-                      <div className="flex items-center gap-1.5 shrink-0 animate-in fade-in duration-200">
-                          <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 tracking-wider">On Date:</span>
-                          <input
-                              type="date"
-                              value={specificDate}
-                              onChange={(e) => setSpecificDate(e.target.value)}
-                              className="bg-transparent text-gray-700 dark:text-gray-200 text-xs font-semibold focus:outline-none dark:[color-scheme:dark]"
-                              title="Select a specific date to filter"
-                          />
-                      </div>
-                  ) : (
-                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap animate-in fade-in duration-200">
-                          <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500 tracking-wider">From:</span>
-                          <input
-                              type="date"
-                              value={startDate}
-                              onChange={(e) => setStartDate(e.target.value)}
-                              className="bg-transparent text-gray-700 dark:text-gray-200 text-xs font-semibold focus:outline-none dark:[color-scheme:dark]"
-                              title="Select start date to filter"
-                          />
-                          <span className="text-gray-400 text-xs font-semibold">to</span>
-                          <input
-                              type="date"
-                              value={endDate}
-                              onChange={(e) => setEndDate(e.target.value)}
-                              className="bg-transparent text-gray-700 dark:text-gray-200 text-xs font-semibold focus:outline-none dark:[color-scheme:dark]"
-                              title="Select end date to filter"
-                          />
-                      </div>
-                  )}
-              </div>
-
-              {/* Clear Filters Button */}
-              {(searchQuery || selectedDept !== 'All' || startDate || endDate || specificDate) && (
-                  <button
-                      onClick={() => {
-                          setSearchQuery('');
-                          setSelectedDept('All');
-                          setStartDate('');
-                          setEndDate('');
-                          setSpecificDate('');
-                      }}
-                      className="px-2.5 py-1.5 text-xs text-red-500 hover:text-red-600 font-bold transition-colors flex items-center gap-1"
-                      title="Reset all search queries and active filters to default state"
-                  >
-                      <i className="fas fa-undo-alt"></i> Clear
-                  </button>
-              )}
+          <div className="flex items-center gap-2">
+            <Link to="/recruiter/interview/create" className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea]">
+              <i className="fas fa-plus text-[11px]"></i>
+              <span>Create Interview</span>
+            </Link>
           </div>
-      </div>
+        </div>
+      </section>
 
-      <style>{`
-        .custom-card-scrollbar::-webkit-scrollbar {
-          width: 4px;
-          height: 4px;
-        }
-        .custom-card-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-card-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(156, 163, 175, 0.25);
-          border-radius: 9999px;
-        }
-        .custom-card-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(156, 163, 175, 0.45);
-        }
-        .interview-list-card button {
-          display: none;
-        }
-      `}</style>
+      {/* Stats Strip */}
+      <section className="grid grid-cols-2 border-b border-white/[0.11] lg:grid-cols-4">
+        <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
+          <p className="geist-label uppercase text-[#6b7280]">Total</p>
+          <p className="geist-metric mt-2 tabular-nums text-white">{interviews.length}</p>
+        </div>
+        <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
+          <p className="geist-label uppercase text-[#6b7280]">Ready</p>
+          <p className="geist-metric mt-2 tabular-nums text-[#83d0a3]">{interviews.filter(i => (i.candidateEmails || []).length > 0).length}</p>
+        </div>
+        <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
+          <p className="geist-label uppercase text-[#6b7280]">Draft</p>
+          <p className="geist-metric mt-2 tabular-nums text-[#f5c76b]">{interviews.filter(i => (i.candidateEmails || []).length === 0).length}</p>
+        </div>
+        <div className="px-4 py-4 sm:px-6 lg:px-7">
+          <p className="geist-label uppercase text-[#6b7280]">Responses</p>
+          <p className="geist-metric mt-2 tabular-nums text-white">{Object.values(submissionsMap).reduce((sum, arr) => sum + arr.length, 0)}</p>
+        </div>
+      </section>
 
-      {interviews.length === 0 ? (
-        <div className="text-center py-16 bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/5 border-dashed">
-            <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800/50 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-500">
-                <i className="fas fa-video text-2xl"></i>
+      {/* Search & Filter Bar */}
+      <section className="border-b border-white/[0.11]">
+        <div className="flex flex-col gap-3 px-4 py-3 sm:px-6 lg:px-7 xl:flex-row xl:items-center xl:justify-between">
+          <div className="relative w-full xl:max-w-xs">
+            <i className="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-[#6b7280]"></i>
+            <input 
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search interviews..."
+              className="geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] pl-9 pr-3 text-white outline-none transition-colors placeholder:text-[#6b7280] focus:border-white/[0.28] focus:bg-white/[0.05]"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <span className="geist-label uppercase text-[#6b7280]">Dept</span>
+              <select
+                value={selectedDept}
+                onChange={(e) => setSelectedDept(e.target.value)}
+                className="geist-caption h-9 rounded-[6px] border border-white/[0.11] bg-[#050505] px-3 text-[#d4d4d4] outline-none transition-colors focus:border-white/[0.28]"
+              >
+                {departments.map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
             </div>
-            <p className="text-gray-500 dark:text-gray-400 mb-6">You haven't created any interviews yet.</p>
-            <Link to="/recruiter/interview/create" className="text-primary font-medium hover:underline hover:text-primary-light transition-colors">Create your first interview</Link>
+            <div className="flex items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1">
+              <div className="flex rounded-[4px] bg-white/[0.03] p-0.5">
+                <button type="button" onClick={() => setDateMode('range')} className={`geist-caption px-2 py-0.5 rounded-[4px] font-medium transition-colors ${dateMode === 'range' ? 'bg-white/[0.08] text-white' : 'text-[#6b7280] hover:text-[#d4d4d4]'}`}>Range</button>
+                <button type="button" onClick={() => setDateMode('specific')} className={`geist-caption px-2 py-0.5 rounded-[4px] font-medium transition-colors ${dateMode === 'specific' ? 'bg-white/[0.08] text-white' : 'text-[#6b7280] hover:text-[#d4d4d4]'}`}>Specific</button>
+              </div>
+              {dateMode === 'specific' ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="geist-label uppercase text-[#6b7280]">On</span>
+                  <input type="date" value={specificDate} onChange={(e) => setSpecificDate(e.target.value)} className="geist-caption bg-transparent text-[#d4d4d4] outline-none [color-scheme:dark]" />
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="geist-label uppercase text-[#6b7280]">From</span>
+                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="geist-caption bg-transparent text-[#d4d4d4] outline-none [color-scheme:dark]" />
+                  <span className="geist-small text-[#6b7280]">to</span>
+                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="geist-caption bg-transparent text-[#d4d4d4] outline-none [color-scheme:dark]" />
+                </div>
+              )}
+            </div>
+            {(searchQuery || selectedDept !== 'All' || startDate || endDate || specificDate) && (
+              <button
+                onClick={() => { setSearchQuery(''); setSelectedDept('All'); setStartDate(''); setEndDate(''); setSpecificDate(''); }}
+                className="geist-caption inline-flex h-8 items-center justify-center gap-1 rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-3 font-medium text-[#ff8f8f] transition-colors hover:bg-[#260b0b]"
+              >
+                <i className="fas fa-undo-alt text-[10px]"></i>
+                <span>Clear</span>
+              </button>
+            )}
+          </div>
         </div>
+      </section>
+
+      {/* Content */}
+      {interviews.length === 0 ? (
+        <section className="border-b border-dashed border-white/[0.11] px-4 py-16 text-center sm:px-6 lg:px-7">
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f]">
+            <i className="fas fa-video"></i>
+          </div>
+          <p className="geist-caption mt-4 text-[#d4d4d4]">You haven't created any interviews yet.</p>
+          <Link to="/recruiter/interview/create" className="geist-caption mt-3 inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea]">
+            <i className="fas fa-plus text-[11px]"></i>
+            <span>Create your first interview</span>
+          </Link>
+        </section>
       ) : (
         <>
           {filteredInterviews.length === 0 ? (
-            <div className="text-center py-16 bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/5 shadow-sm">
-                <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800/50 rounded-full flex items-center justify-center mx-auto mb-3 text-gray-400">
-                    <i className="fas fa-search text-base"></i>
-                </div>
-                <p className="text-gray-500 dark:text-gray-400 text-sm font-semibold">No interviews match your filters.</p>
-                <button
-                    onClick={() => {
-                        setSearchQuery('');
-                        setSelectedDept('All');
-                        setStartDate('');
-                        setEndDate('');
-                        setSpecificDate('');
-                    }}
-                    className="mt-3 text-xs font-bold text-primary hover:underline"
-                    title="Clear filters to view all interviews"
-                >
-                    Reset Filters
-                </button>
-            </div>
+            <section className="border-b border-dashed border-white/[0.11] px-4 py-16 text-center sm:px-6 lg:px-7">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f]">
+                <i className="fas fa-search"></i>
+              </div>
+              <p className="geist-caption mt-4 text-[#d4d4d4]">No interviews match your filters.</p>
+              <button
+                onClick={() => { setSearchQuery(''); setSelectedDept('All'); setStartDate(''); setEndDate(''); setSpecificDate(''); }}
+                className="geist-caption mt-3 inline-flex h-8 items-center justify-center rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-3 font-medium text-[#ff8f8f] transition-colors hover:bg-[#260b0b]"
+              >
+                Reset Filters
+              </button>
+            </section>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {filteredInterviews.map(interview => (
-                <div key={interview.id} className="interview-list-card bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/5 shadow-sm hover:shadow-md hover:border-gray-300 dark:hover:border-white/10 p-5 flex flex-col h-[510px] justify-between transition-all duration-300 transform hover:-translate-y-1">
-                    
-                    {/* Upper Half: Header & Job Description */}
-                    <div>
-                        {/* Title Block */}
-                        <div className="mb-2">
-                            <h3 className="text-base font-extrabold text-gray-900 dark:text-white leading-snug line-clamp-2" title={interview.title}>
-                                {interview.title}
-                            </h3>
-                        </div>
+            <section>
+              {/* Column Headers */}
+              <div className="hidden items-center gap-4 border-b border-white/[0.11] px-4 py-2 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:px-7">
+                <span className="geist-label uppercase text-[#6b7280]">Name</span>
+                <span className="geist-label uppercase text-[#6b7280] text-center">Status</span>
+                <span className="geist-label uppercase text-[#6b7280] text-center">Department</span>
+                <span className="geist-label uppercase text-[#6b7280] text-center">Difficulty</span>
+                <span className="geist-label uppercase text-[#6b7280] text-center">ID</span>
+                <span className="geist-label uppercase text-[#6b7280] text-center">Created</span>
+                <span className="geist-label uppercase text-[#6b7280] text-right">Actions</span>
+              </div>
 
-                        {/* Subheader Row */}
-                        <div className="flex justify-between items-center gap-4 mb-3">
-                            <p className="text-xs text-gray-400 dark:text-gray-500 font-semibold">
-                                {interview.department || "No Department"}
-                            </p>
-                            <span className="text-[9px] font-mono text-gray-400 dark:text-gray-500">ID: #{interview.id.substring(0, 8)}</span>
-                        </div>
- 
-                        {/* Metadata Badges with custom hovers */}
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                            {/* Questions Count Badge */}
-                            <div className="relative group">
-                                <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded border border-blue-100/50 dark:border-blue-900/20 flex items-center gap-1 shrink-0">
-                                    <i className="fas fa-question-circle"></i> {interview.questions?.length || (((interview as any).manualQuestions?.length || 0) + ((interview as any).numQuestions || 5))} Qs
-                                </span>
-                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-zinc-900 dark:bg-zinc-800 text-white text-[9px] font-bold rounded border border-zinc-800 dark:border-zinc-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                                    Questions: {interview.questions?.length || (((interview as any).manualQuestions?.length || 0) + ((interview as any).numQuestions || 5))}
-                                </div>
-                            </div>
+              {/* List Rows */}
+              {filteredInterviews.map(interview => {
+                const isReady = (interview.candidateEmails || []).length > 0;
+                const statusText = isReady ? "Ready" : "Draft";
+                const shortId = interview.id.substring(0, 7);
+                const dateText = interview.createdAt?.toDate 
+                  ? interview.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) 
+                  : 'N/A';
 
-                            {/* Level Badge */}
-                            <div className="relative group">
-                                <span className="px-2 py-0.5 bg-purple-50 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 text-[10px] font-bold rounded border border-purple-100/50 dark:border-purple-900/20 flex items-center gap-1 shrink-0" title="Assessment challenge difficulty level">
-                                    <i className="fas fa-brain"></i> {interview.difficulty || "Medium"}
-                                </span>
-                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-zinc-900 dark:bg-zinc-800 text-white text-[9px] font-bold rounded border border-zinc-800 dark:border-zinc-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                                    Difficulty: {interview.difficulty || "Medium"}
-                                </div>
-                            </div>
-
-                            {/* Strictness Badge */}
-                            {interview.strictness && (
-                                <div className="relative group">
-                                    <span className="px-2 py-0.5 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 text-[10px] font-bold rounded border border-red-100/50 dark:border-red-900/20 flex items-center gap-1 shrink-0" title="AI Proctoring monitoring level active">
-                                        <i className="fas fa-shield-alt"></i> {interview.strictness}
-                                    </span>
-                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-zinc-900 dark:bg-zinc-800 text-white text-[9px] font-bold rounded border border-zinc-800 dark:border-zinc-700 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                                        Proctoring: {interview.strictness}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
- 
-                        {/* Job Description (JD) with Scrollbar */}
-                        <div className="mt-4">
-                            <div className="flex justify-between items-center mb-1">
-                                <h4 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                                    Job Description
-                                </h4>
-                            </div>
-                            <div className="h-[75px] overflow-y-auto pr-1 text-xs text-gray-500 dark:text-gray-400 leading-relaxed custom-card-scrollbar">
-                                {interview.description || "No description provided."}
-                            </div>
-                        </div>
-                    </div>
- 
-                    {/* Middle: Candidate List */}
-                    <div className="flex-grow flex flex-col min-h-0 mt-3 pt-3 border-t border-gray-100 dark:border-white/5">
-                        <div className="flex justify-between items-center mb-2">
-                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 flex items-center gap-1.5">
-                                <span>Track Roster</span>
-                            </h4>
-                            <span 
-                                className={submissionsMap[interview.id]?.length > 0 ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded-full text-[9px] font-extrabold border border-emerald-100 dark:border-emerald-900/20" : "text-gray-500 bg-gray-50 dark:bg-zinc-800 px-2 py-0.5 rounded-full text-[9px] font-extrabold border border-gray-100 dark:border-zinc-700/30"}
-                                title="Total candidate submissions received for this interview"
-                            >
-                                {submissionsMap[interview.id]?.length || 0} Responses
-                            </span>
-                        </div>
-                        <div className="flex-grow overflow-y-auto pr-1 space-y-1.5 custom-card-scrollbar max-h-[140px]">
-                            {(() => {
-                                const explicitEmails = (interview.candidateEmails || []).map(e => e.toLowerCase());
-                                const submissions = submissionsMap[interview.id] || [];
-                                const unifiedList: {email: string, hasSubmitted: boolean, attemptId?: string, allowReattempt?: boolean}[] = [];
-                                
-                                // 1. Add all actual submissions (invited or uninvited)
-                                submissions.forEach(sub => {
-                                    unifiedList.push({ 
-                                        email: sub.candidateInfo?.email || 'N/A', 
-                                        hasSubmitted: true,
-                                        attemptId: sub.id,
-                                        allowReattempt: sub.allowReattempt || false
-                                    });
-                                });
-
-                                // 2. Add explicitly invited members who haven't submitted yet
-                                explicitEmails.forEach(email => {
-                                    const hasSubmitted = submissions.some(sub => (sub.candidateInfo?.email || '').toLowerCase() === email);
-                                    if (!hasSubmitted && !unifiedList.some(u => u.email.toLowerCase() === email)) {
-                                        unifiedList.push({ email, hasSubmitted: false });
-                                    }
-                                });
-
-                                if (unifiedList.length === 0) {
-                                    return <p className="text-[11px] text-gray-400 italic block py-4 text-center">No candidates invited yet.</p>;
-                                }
-
-                                return unifiedList.map((cand, idx) => (
-                                    <div key={idx} className="flex justify-between items-center bg-gray-50 dark:bg-black/20 text-[11px] rounded-lg px-2.5 py-1.5 border border-gray-100 dark:border-white/5">
-                                        <span className="font-medium text-gray-700 dark:text-gray-300 truncate max-w-[120px] lg:max-w-[140px]" title={cand.email}>
-                                            {cand.email}
-                                        </span>
-                                        {cand.hasSubmitted ? (
-                                            <div className="flex items-center gap-1.5 shrink-0">
-                                                <span className="text-green-600 dark:text-green-400 font-bold flex items-center gap-1">
-                                                    <i className="fas fa-check-circle"></i> Submitted
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleAllowReattempt(interview.id, cand.attemptId!, cand.allowReattempt || false)}
-                                                    className={`inline-flex items-center gap-0.5 px-1 py-0.5 border rounded text-[9px] font-bold transition-all ${
-                                                        cand.allowReattempt 
-                                                            ? 'bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 border-purple-300 dark:border-purple-800/50' 
-                                                            : 'bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-zinc-700'
-                                                    }`}
-                                                    title={cand.allowReattempt ? "Remove Reattempt Chance" : "Give Reattempt Chance"}
-                                                >
-                                                    <i className="fas fa-redo text-[8px]"></i>
-                                                    <span>{cand.allowReattempt ? 'Allowed' : 'Reattempt'}</span>
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center gap-1.5 shrink-0">
-                                                <span className="text-yellow-600 dark:text-yellow-500 font-semibold flex items-center gap-1">
-                                                    <i className="fas fa-clock"></i> Pending
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const candData = (interview as any).candidateData?.find((c: any) => c.email?.toLowerCase() === cand.email?.toLowerCase());
-                                                        const phone = candData?.phone || '';
-                                                        const link = `${window.location.origin}/#/interview/${interview.id}`;
-                                                        const msg = `👋 Hi there!\n\nWe're actively hiring for the *${interview.title}* role and we'd love to invite you to take our AI-powered interview to fast-track your application! 🌟\n\n🚀 *Start your interview here:* \n${link}\n\n🔑 *Your Access Code:* \n${interview.accessCode}\n\nIt only takes a few minutes and you can complete it whenever you're ready. Best of luck! 🎉`;
-                                                        setWhatsappModal({
-                                                            isOpen: true,
-                                                            email: cand.email,
-                                                            phone: phone === 'N/A' ? '' : phone,
-                                                            message: msg,
-                                                            interview: interview
-                                                        });
-                                                    }}
-                                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40 rounded text-[9px] font-extrabold transition-all"
-                                                    title="Invite via WhatsApp Web"
-                                                >
-                                                    <i className="fab fa-whatsapp"></i>
-                                                    <span>Invite</span>
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                ));
-                            })()}
-                        </div>
+                return (
+                  <article 
+                    key={interview.id} 
+                    className="grid gap-3 border-b border-white/[0.08] px-4 py-3 transition-colors hover:bg-white/[0.025] sm:px-6 lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:items-center lg:gap-4 lg:px-7"
+                  >
+                    {/* Name */}
+                    <div className="min-w-0">
+                      <Link 
+                        to={`/recruiter/interview/${interview.id}/overview`}
+                        className="geist-caption block truncate font-semibold text-white hover:underline"
+                        title={interview.title}
+                      >
+                        {interview.title}
+                      </Link>
+                      <p className="geist-small mt-0.5 text-[#8f8f8f]">
+                        {isReady ? `${(interview.candidateEmails || []).length} candidates` : 'No candidates invited'}
+                      </p>
                     </div>
 
-                    {/* Bottom: Divider & Call to Actions */}
-                    <div className="border-t border-gray-100 dark:border-white/5 pt-3 mt-3">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Link
-                                to={`/recruiter/interview/${interview.id}/overview`}
-                                className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-3 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition-all transform hover:-translate-y-0.5 active:translate-y-0 text-center"
-                            >
-                                <i className="fas fa-sliders-h text-xs"></i>
-                                <span>Manage</span>
-                            </Link>
-                        </div>
-                        <div className="flex justify-between items-center text-[9px] text-gray-400 dark:text-gray-500 font-medium px-0.5">
-                            <span>Created: {interview.createdAt?.toDate ? interview.createdAt.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}</span>
-                            <span className="font-mono">ID: #{interview.id.substring(0, 8)}</span>
-                        </div>
+                    {/* Status */}
+                    <div className="flex justify-start lg:justify-center">
+                      <span className="geist-label mb-1 block uppercase text-[#6b7280] lg:hidden">Status</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`h-1.5 w-1.5 rounded-full ${isReady ? 'bg-[#50e3c2]' : 'bg-[#f5a623]'}`} />
+                        <span className={`geist-small ${isReady ? 'text-[#50e3c2]' : 'text-[#f5a623]'} font-mono`}>
+                          {statusText}
+                        </span>
+                      </div>
                     </div>
 
-                </div>
-            ))}
-            </div>
+                    {/* Department */}
+                    <div className="flex justify-start lg:justify-center">
+                      <span className="geist-label mb-1 block uppercase text-[#6b7280] lg:hidden">Department</span>
+                      <span className="geist-small inline-block rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1 font-medium text-[#d4d4d4]">
+                        {interview.department || "General"}
+                      </span>
+                    </div>
+
+                    {/* Difficulty */}
+                    <div className="flex justify-start lg:justify-center">
+                      <span className="geist-label mb-1 block uppercase text-[#6b7280] lg:hidden">Difficulty</span>
+                      <span className="geist-small text-[#8f8f8f]">{interview.difficulty || "Medium"}</span>
+                    </div>
+
+                    {/* ID */}
+                    <div className="flex justify-start lg:justify-center">
+                      <span className="geist-label mb-1 block uppercase text-[#6b7280] lg:hidden">ID</span>
+                      <span className="geist-label text-[#6b7280]">{shortId}</span>
+                    </div>
+
+                    {/* Created */}
+                    <div className="flex justify-start lg:justify-center">
+                      <span className="geist-label mb-1 block uppercase text-[#6b7280] lg:hidden">Created</span>
+                      <span className="geist-small text-[#8f8f8f]">{dateText}</span>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-end">
+                      <Link
+                        to={`/recruiter/interview/${interview.id}/overview`}
+                        className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
+                      >
+                        Manage
+                      </Link>
+                    </div>
+                  </article>
+                );
+              })}
+            </section>
           )}
         </>
       )}
+
 
     {isInviteModalOpen && selectedInterview && createPortal(
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
