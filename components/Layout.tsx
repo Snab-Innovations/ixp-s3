@@ -8,6 +8,7 @@ import { useTheme } from '../context/ThemeContext';
 import { Sun, Moon, Menu, X, Monitor, Mail, Bug, MessageSquare } from 'lucide-react';
 import ConnectionStatus from './ConnectionStatus';
 import Logo from './Logo';
+import DashboardSidebar from './ui/dashboard-sidebar';
 
 
 
@@ -32,6 +33,11 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   // Ideally for "Black Dignity" we default to dark or design the light mode to be very minimal too.
 
   const isActive = (path: string) => location.pathname === path;
+  const showRecruiterSidebar = Boolean(user && userProfile?.role === 'recruiter');
+  const navigateFromSidebar = (href: string) => {
+    navigate(href);
+    setIsMobileMenuOpen(false);
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20 selection:text-foreground flex flex-col transition-colors duration-300">
@@ -60,7 +66,7 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             </div>
 
             {/* Centered Navigation */}
-            <div className="hidden xl:flex items-center justify-center flex-1 px-2">
+            <div className={showRecruiterSidebar ? 'hidden' : 'hidden xl:flex items-center justify-center flex-1 px-2'}>
               <div className="flex items-center bg-muted/70 rounded-full px-2 py-1.5 border border-border backdrop-blur-sm">
                 {user && userProfile?.role === 'admin' ? (
                   <Link to="/admin" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${isActive('/admin') ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5'}`}>
@@ -191,12 +197,23 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         </div>
       </nav>
 
-      <main className="workspace-card flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
-        {children}
-      </main>
+      <div className="flex w-full flex-1">
+        {showRecruiterSidebar && (
+          <div className="sticky top-16 hidden h-[calc(100vh-4rem)] shrink-0 xl:flex">
+            <DashboardSidebar
+              activePath={location.pathname}
+              onNavigate={navigateFromSidebar}
+            />
+          </div>
+        )}
 
-      <footer className="border-t border-border bg-background/80 backdrop-blur-sm py-8 mt-auto z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <main className={`workspace-card flex-grow w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 relative ${showRecruiterSidebar ? 'max-w-none' : 'max-w-7xl'}`}>
+            {children}
+          </main>
+
+          <footer className="border-t border-border bg-background/80 backdrop-blur-sm py-8 mt-auto z-10">
+            <div className={`${showRecruiterSidebar ? 'w-full' : 'max-w-7xl mx-auto'} px-4 sm:px-6 lg:px-8`}>
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-2 opacity-60 hover:opacity-100 transition-opacity">
               <Logo className="w-[124px] sm:w-[148px] h-auto" />
@@ -222,8 +239,10 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <div className="text-[10px] opacity-75 mt-0.5">Developed by <a href="https://snab.co.in" target="_blank" rel="noopener noreferrer" className="hover:underline text-primary">SNAB Innovations</a></div>
             </div>
           </div>
+            </div>
+          </footer>
         </div>
-      </footer>
+      </div>
 
       {/* Mobile Menu Overlay & Sidebar */}
       {isMobileMenuOpen && (
@@ -235,6 +254,15 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           />
 
           {/* Sidebar */}
+          {showRecruiterSidebar ? (
+            <div className="fixed inset-y-0 left-0 flex w-[238px] flex-col bg-popover text-popover-foreground shadow-2xl">
+              <DashboardSidebar
+                className="w-[238px] border-none bg-popover"
+                activePath={location.pathname}
+                onNavigate={navigateFromSidebar}
+              />
+            </div>
+          ) : (
           <div className="fixed inset-y-0 right-0 w-[280px] bg-popover text-popover-foreground border-l border-border shadow-2xl transform transition-transform duration-300 ease-in-out animate-in slide-in-from-right flex flex-col">
 
             {/* Header */}
@@ -315,6 +343,7 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               </div>
             )}
           </div>
+          )}
         </div>
       )}
     </div>
