@@ -305,6 +305,10 @@ const InvitedCandidates: React.FC = () => {
         );
     }, [interviews, jobSearchTerm]);
 
+    const selectedInterview = interviews.find(i => i.id === selectedInterviewId);
+    const submittedCount = filteredCandidates.filter(c => c.hasSubmitted).length;
+    const pendingCount = Math.max(filteredCandidates.length - submittedCount, 0);
+
     const exportToCSV = () => {
         const headers = ["Candidate Name", "Email", "Phone", "Invited Role", "Status", "Overall Score", "Resume Score", "Q&A Score", "Resume Link", "Report Link"];
         
@@ -338,223 +342,277 @@ const InvitedCandidates: React.FC = () => {
     };
 
     if (loading) return (
-        <div className="flex items-center justify-center min-h-[50vh]">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+        <div className="-mx-4 -my-8 min-h-[calc(100vh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8 animate-pulse">
+            <section className="border-b border-white/[0.11] px-4 py-5 sm:px-6 lg:px-7">
+                <div className="h-4 w-28 rounded-[6px] bg-white/[0.05]" />
+                <div className="mt-2 h-8 w-72 max-w-full rounded-[6px] bg-white/[0.05]" />
+                <div className="mt-2 h-4 w-96 max-w-full rounded-[6px] bg-white/[0.04]" />
+            </section>
+            <section className="grid grid-cols-1 border-b border-white/[0.11] lg:grid-cols-[minmax(0,1fr)_1px_minmax(300px,0.7fr)]">
+                <div className="px-4 py-5 sm:px-6 lg:px-7">
+                    <div className="grid gap-4 lg:grid-cols-3">
+                        {Array.from({ length: 3 }).map((_, index) => (
+                            <div key={index} className="h-40 rounded-[6px] border border-white/[0.11] bg-white/[0.03]" />
+                        ))}
+                    </div>
+                </div>
+                <div className="hidden bg-white/[0.11] lg:block" />
+                <div className="px-4 py-5 sm:px-6 lg:px-7">
+                    <div className="h-48 rounded-[6px] border border-white/[0.11] bg-white/[0.03]" />
+                </div>
+            </section>
+            <section>
+                {Array.from({ length: 5 }).map((_, index) => (
+                    <div key={index} className="grid gap-4 border-b border-white/[0.08] px-4 py-4 sm:px-6 lg:grid-cols-[minmax(220px,1.2fr)_minmax(180px,0.8fr)_110px_90px_120px] lg:px-7">
+                        <div className="h-4 w-56 rounded bg-white/[0.04]" />
+                        <div className="h-4 w-44 rounded bg-white/[0.04]" />
+                        <div className="h-5 w-20 rounded bg-white/[0.04]" />
+                        <div className="h-4 w-10 rounded bg-white/[0.04]" />
+                        <div className="h-8 w-24 rounded bg-white/[0.04] lg:ml-auto" />
+                    </div>
+                ))}
+            </section>
         </div>
     );
 
     return (
-        <div className="max-w-[1600px] mx-auto space-y-8 p-4 md:p-8">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-2 border-b border-gray-200 dark:border-white/5">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">Invited Candidates Hub</h1>
-                    <p className="text-gray-600 dark:text-gray-400 mt-1">Cross-platform roster and invitation engine.</p>
+        <div className="-mx-4 -my-8 min-h-[calc(100vh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8">
+            <section className="border-b border-white/[0.11] bg-[#000]">
+                <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-7 xl:flex-row xl:items-start xl:justify-between">
+                    <div>
+                        <Link to="/recruiter/jobs" className="geist-caption inline-flex h-8 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white">
+                            <i className="fas fa-arrow-left text-[11px]"></i>
+                            <span>Dashboard</span>
+                        </Link>
+                        <h1 className="geist-page-title mt-2 text-white">Candidate Hub</h1>
+                        <p className="geist-small mt-1 max-w-2xl text-[#8f8f8f]">Parse resumes, route candidates to an interview, and track every invite from one workspace.</p>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 py-2">
+                        <span className="h-2 w-2 rounded-full bg-[#50e3c2]"></span>
+                        <span className="geist-label text-[#9ca3af]">{selectedInterview ? selectedInterview.title : 'No route selected'}</span>
+                    </div>
                 </div>
-            </div>
+            </section>
 
-            {/* Global Invite Widget */}
-            <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/5 shadow-sm p-6">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4"><i className="fas fa-paper-plane text-primary mr-2"></i> Mass Invitation Engine</h2>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
-                    {/* Step 1: Select Interview */}
-                    <div className="space-y-2 lg:border-r border-gray-200 dark:border-white/5 lg:pr-6">
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">1. Select Interview Route</label>
-                        <input
-                            type="text"
-                            placeholder="Search active jobs..."
-                            value={jobSearchTerm}
-                            onChange={(e) => setJobSearchTerm(e.target.value)}
-                            className="w-full p-2 mb-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-1 focus:ring-primary focus:border-transparent bg-white dark:bg-black transition-all"
-                        />
-                        <select 
-                            value={selectedInterviewId}
-                            onChange={(e) => setSelectedInterviewId(e.target.value)}
-                            className="w-full p-3 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent bg-gray-50 dark:bg-black/50 dark:text-white"
-                        >
-                            <option value="">-- Choose Active Interview --</option>
-                            {filteredInterviews.map(inv => (
-                                <option key={inv.id} value={inv.id}>{inv.title} ({inv.department || 'General'})</option>
-                            ))}
-                        </select>
-                        {selectedInterviewId && (() => {
-                            const selectedInterview = interviews.find(i => i.id === selectedInterviewId);
-                            if (!selectedInterview) return null;
-                            const link = window.location.origin + '/#/interview/' + selectedInterview.id;
-                            const template = `👋 Hi there!\n\nWe're actively hiring for the *${selectedInterview.title}* role and your profile caught our eye! 🌟\n\nWe'd love to invite you to take our next-gen AI-powered interview to fast-track your application. It only takes a few minutes and you can complete it whenever you're ready!\n\n🚀 *Start your interview here:* \n${link}\n\n🔑 *Your Access Code:* \n${selectedInterview.accessCode}\n\nBest of luck, and we can't wait to see your skills in action! 🎉`;
-                            return (
-                                <button
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(template);
-                                        messageBox.showSuccess('WhatsApp template copied to clipboard!');
-                                    }}
-                                    className="w-full mt-3 p-2.5 bg-[#25D366]/10 text-[#128C7E] dark:text-[#25D366] hover:bg-[#25D366]/20 border border-[#25D366]/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm"
-                                    title="Copy Invite Template for WhatsApp"
-                                >
-                                    <i className="fab fa-whatsapp text-base"></i> Copy WP Invite Msg
-                                </button>
-                            );
-                        })()}
-                    </div>
-
-                    {/* Step 2: Extract from Resumes */}
-                    <div className="space-y-2 lg:border-r border-gray-200 dark:border-white/5 lg:px-6">
-                         <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">2. Smart Parse Resumes</label>
-                         <label className="flex flex-col items-center justify-center gap-2 px-4 py-6 bg-gray-50 dark:bg-black/50 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors h-[100px]">
-                            <i className={`fas fa-cloud-upload-alt text-2xl text-gray-400 ${parsingResumes ? 'fa-spin text-primary' : ''}`}></i>
-                            <span className="font-medium text-xs text-gray-500 whitespace-nowrap">{parsingResumes ? 'Scanning Documents...' : 'Drop PDFs/TXTs Here'}</span>
-                            <input type="file" multiple accept=".pdf,.txt" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
-                        </label>
-                    </div>
-
-                    {/* Step 3: Manual Entry */}
-                    <div className="space-y-2 lg:border-r border-gray-200 dark:border-white/5 lg:px-6">
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">Or Add Manually</label>
-                        <input type="email" value={manualEmail} onChange={e=>setManualEmail(e.target.value)} placeholder="Email Address" className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-t-lg focus:ring-primary bg-white dark:bg-black text-sm" />
-                        <div className="flex">
-                            <input type="text" value={manualPhone} onChange={e=>setManualPhone(e.target.value)} placeholder="Phone Number (Optional)" className="w-full p-2 border-b border-l border-r border-gray-200 dark:border-gray-700 rounded-bl-lg focus:ring-primary bg-white dark:bg-black text-sm" />
-                            <button onClick={handleManualAdd} className="bg-gray-200 dark:bg-gray-700 px-4 rounded-br-lg text-sm font-semibold hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Add</button>
+            <section className="grid grid-cols-1 border-b border-white/[0.11] lg:grid-cols-[minmax(0,1fr)_1px_minmax(360px,0.58fr)]">
+                <div className="px-4 py-5 sm:px-6 lg:px-7">
+                    <div className="mb-4 flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                            <h2 className="geist-section-title text-white">Mass Invitation Engine</h2>
+                            <p className="geist-small mt-0.5 text-[#8f8f8f]">Choose a route, add candidates, then dispatch email invites.</p>
                         </div>
                     </div>
 
-                    {/* Deployment Zone */}
-                    <div className="space-y-2 lg:pl-6">
-                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">Deploy Invites</label>
-                        <div className="bg-gray-50 dark:bg-black/50 rounded-xl p-3 max-h-[160px] overflow-y-auto border border-gray-200 dark:border-white/5 mb-3">
-                            {newCandidates.length === 0 ? (
-                                <p className="text-xs text-center text-gray-400 italic py-2">Queue is empty.</p>
-                            ) : (
-                                <div className="space-y-1">
-                                    {newCandidates.map(c => {
-                                        let ScoreBadge = null;
-                                        if (selectedInterviewId && c.scores && c.scores[selectedInterviewId]) {
-                                            const numScore = parseFloat(c.scores[selectedInterviewId]);
-                                            let badgeColor = 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
-                                            if (!isNaN(numScore)) {
-                                                if (numScore >= 75) badgeColor = 'bg-green-100 text-green-800 dark:bg-green-900/60 dark:text-green-300 border border-green-200 dark:border-green-800/50';
-                                                else if (numScore >= 50) badgeColor = 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/60 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800/50';
-                                                else badgeColor = 'bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-300 border border-red-200 dark:border-red-800/50';
-                                            }
-                                            ScoreBadge = (
-                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ml-2 ${badgeColor}`} title="AI Match for Selected Role">
-                                                    Match: {c.scores[selectedInterviewId]}%
-                                                </span>
-                                            );
-                                        }
+                    <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,0.95fr)_minmax(0,1.1fr)]">
+                        <div className="min-w-0 rounded-[6px] border border-[#2e2e2e] bg-[#000] p-4">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                                <p className="geist-label uppercase text-[#6b7280]">Route</p>
+                                <span className="geist-small rounded-[6px] border border-[#2e2e2e] bg-[#1a1a1a] px-2 py-0.5 text-[#a0a0a0]">Step 1</span>
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Search active interviews..."
+                                value={jobSearchTerm}
+                                onChange={(e) => setJobSearchTerm(e.target.value)}
+                                className="geist-caption mb-2 h-10 w-full rounded-[6px] border border-[#2e2e2e] bg-[#000] px-3 text-[#ededed] outline-none transition-colors placeholder:text-[#878787] focus:border-[#878787]"
+                            />
+                            <select 
+                                value={selectedInterviewId}
+                                onChange={(e) => setSelectedInterviewId(e.target.value)}
+                                className="geist-caption h-10 w-full rounded-[6px] border border-[#2e2e2e] bg-[#000] px-3 text-[#ededed] outline-none transition-colors focus:border-[#878787]"
+                            >
+                                <option value="">Choose Active Interview</option>
+                                {filteredInterviews.map(inv => (
+                                    <option key={inv.id} value={inv.id}>{inv.title} ({inv.department || 'General'})</option>
+                                ))}
+                            </select>
+                            {selectedInterview && (() => {
+                                const link = window.location.origin + '/#/interview/' + selectedInterview.id;
+                                const template = `👋 Hi there!\n\nWe're actively hiring for the *${selectedInterview.title}* role and your profile caught our eye! 🌟\n\nWe'd love to invite you to take our next-gen AI-powered interview to fast-track your application. It only takes a few minutes and you can complete it whenever you're ready!\n\n🚀 *Start your interview here:* \n${link}\n\n🔑 *Your Access Code:* \n${selectedInterview.accessCode}\n\nBest of luck, and we can't wait to see your skills in action! 🎉`;
+                                return (
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(template);
+                                            messageBox.showSuccess('WhatsApp template copied to clipboard!');
+                                        }}
+                                        className="geist-caption mt-3 inline-flex h-8 w-full items-center justify-center gap-2 rounded-[6px] border border-[#004615] bg-[#002608] px-3 font-medium text-[#00ca50] transition-colors hover:bg-[#00320b]"
+                                        title="Copy Invite Template for WhatsApp"
+                                    >
+                                        <i className="fab fa-whatsapp text-[13px]"></i>
+                                        <span>Copy WhatsApp Template</span>
+                                    </button>
+                                );
+                            })()}
+                        </div>
 
-                                        return (
-                                            <div key={c.email} className="flex justify-between items-center text-xs bg-white dark:bg-gray-800 px-2 py-1.5 rounded border border-gray-100 dark:border-gray-700">
-                                                <div className="truncate flex items-center">
-                                                    <span className="truncate max-w-[100px]" title={c.email}>{c.email}</span>
-                                                    {ScoreBadge}
-                                                </div>
-                                                <button onClick={()=>handleRemoveCandidate(c.email)} className="text-red-500 hover:text-red-700 font-bold px-1">&times;</button>
-                                            </div>
-                                        );
-                                    })}
+                        <div className="min-w-0 rounded-[6px] border border-[#2e2e2e] bg-[#000] p-4">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                                <p className="geist-label uppercase text-[#6b7280]">Parse</p>
+                                <span className="geist-small rounded-[6px] border border-[#2e2e2e] bg-[#1a1a1a] px-2 py-0.5 text-[#a0a0a0]">Step 2</span>
+                            </div>
+                            <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-[6px] border border-dashed border-[#454545] bg-[#000] px-4 py-5 text-center transition-colors hover:bg-[#1a1a1a]">
+                                <i className={`fas fa-cloud-upload-alt text-lg text-[#8f8f8f] ${parsingResumes ? 'fa-spin text-white' : ''}`}></i>
+                                <span className="geist-caption font-medium text-[#d4d4d4]">{parsingResumes ? 'Scanning documents...' : 'Upload PDFs or TXTs'}</span>
+                                <span className="geist-small text-[#6b7280]">Emails, phone numbers, and match scores are extracted automatically.</span>
+                                <input type="file" multiple accept=".pdf,.txt" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
+                            </label>
+                        </div>
+
+                        <div className="min-w-0 rounded-[6px] border border-[#2e2e2e] bg-[#000] p-4">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                                <p className="geist-label uppercase text-[#6b7280]">Manual Add</p>
+                                <span className="geist-small rounded-[6px] border border-[#2e2e2e] bg-[#1a1a1a] px-2 py-0.5 text-[#a0a0a0]">Optional</span>
+                            </div>
+                            <div className="grid gap-2">
+                                <input type="email" value={manualEmail} onChange={e=>setManualEmail(e.target.value)} placeholder="Candidate email" className="geist-caption h-10 w-full rounded-[6px] border border-[#2e2e2e] bg-[#000] px-3 text-[#ededed] outline-none transition-colors placeholder:text-[#878787] focus:border-[#878787]" />
+                                <div className="flex min-w-0 gap-2">
+                                    <input type="text" value={manualPhone} onChange={e=>setManualPhone(e.target.value)} placeholder="Phone optional" className="geist-caption h-10 min-w-0 flex-1 rounded-[6px] border border-[#2e2e2e] bg-[#000] px-3 text-[#ededed] outline-none transition-colors placeholder:text-[#878787] focus:border-[#878787]" />
+                                    <button onClick={handleManualAdd} className="geist-caption inline-flex h-10 shrink-0 items-center justify-center rounded-[6px] border border-[#2e2e2e] bg-[#000] px-3 font-medium text-[#ededed] transition-colors hover:bg-[#1a1a1a]">Add</button>
                                 </div>
-                            )}
-                        </div>
-                        <button 
-                            onClick={handleSendGlobalInvites}
-                            disabled={sendingEmails || newCandidates.length === 0}
-                            className="w-full bg-primary hover:bg-primary-dark text-white p-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20 transition-all"
-                        >
-                             {sendingEmails ? <><i className="fas fa-circle-notch fa-spin"></i> Dispatching...</> : <><i className="fas fa-paper-plane"></i> Dispatch {newCandidates.length} Invites</>}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Global Roster Table */}
-            {selectedInterviewId ? (
-                <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/5 shadow-sm overflow-hidden">
-                    <div className="p-4 border-b border-gray-200 dark:border-white/5 flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50 dark:bg-black/20 rounded-t-2xl">
-                        <div className="flex items-center gap-4">
-                            <h3 className="font-bold text-lg text-gray-900 dark:text-white">Active Candidates Tracking</h3>
-                            <div className="hidden sm:flex items-center gap-2">
-                                <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold border border-primary/20 shadow-sm">
-                                    {filteredCandidates.filter(c => c.hasSubmitted).length} Responses
-                                </span>
-                                <span className="bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-3 py-1 rounded-full text-xs font-bold border border-gray-300 dark:border-gray-700 shadow-sm">
-                                    {filteredCandidates.length} Tracked
-                                </span>
                             </div>
                         </div>
-                        <div className="flex gap-2 w-full sm:w-auto">
-                            <div className="relative w-full sm:w-64">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <i className="fas fa-search text-gray-400"></i>
-                                </div>
+                    </div>
+                </div>
+
+                <div className="hidden bg-white/[0.11] lg:block" />
+
+                <aside className="px-4 py-5 sm:px-6 lg:px-7">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                            <h2 className="geist-section-title text-white">Invite Queue</h2>
+                            <p className="geist-small mt-0.5 text-[#8f8f8f]">Candidates pending dispatch.</p>
+                        </div>
+                        <span className="geist-label rounded-[6px] border border-[#2e2e2e] bg-[#1a1a1a] px-2 py-1 text-[#a0a0a0]">{newCandidates.length}</span>
+                    </div>
+                    <div className="max-h-[190px] overflow-y-auto rounded-[6px] border border-[#2e2e2e] bg-[#000] p-2">
+                        {newCandidates.length === 0 ? (
+                            <div className="flex min-h-24 flex-col items-center justify-center text-center">
+                                <i className="fas fa-inbox text-[#6b7280]"></i>
+                                <p className="geist-caption mt-2 text-[#6b7280]">Queue is empty.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-1.5">
+                                {newCandidates.map(c => {
+                                    let ScoreBadge = null;
+                                    if (selectedInterviewId && c.scores && c.scores[selectedInterviewId]) {
+                                        const numScore = parseFloat(c.scores[selectedInterviewId]);
+                                        let badgeColor = 'border-[#2e2e2e] bg-[#1a1a1a] text-[#a0a0a0]';
+                                        if (!isNaN(numScore)) {
+                                            if (numScore >= 75) badgeColor = 'border-[#123b2a] bg-[#071a12] text-[#83d0a3]';
+                                            else if (numScore >= 50) badgeColor = 'border-[#42320f] bg-[#1d1605] text-[#f5c76b]';
+                                            else badgeColor = 'border-[#3f1d1d] bg-[#180707] text-[#ff8f8f]';
+                                        }
+                                        ScoreBadge = (
+                                            <span className={`geist-small ml-2 rounded-[6px] border px-1.5 py-0.5 ${badgeColor}`} title="AI Match for Selected Role">
+                                                {c.scores[selectedInterviewId]}%
+                                            </span>
+                                        );
+                                    }
+
+                                    return (
+                                        <div key={c.email} className="flex items-center justify-between gap-3 rounded-[6px] border border-[#2e2e2e] bg-[#1a1a1a] px-2.5 py-2">
+                                            <div className="flex min-w-0 items-center">
+                                                <span className="geist-small truncate text-[#d4d4d4]" title={c.email}>{c.email}</span>
+                                                {ScoreBadge}
+                                            </div>
+                                            <button onClick={()=>handleRemoveCandidate(c.email)} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-[#6b7280] transition-colors hover:bg-[#180707] hover:text-[#ff8f8f]" title="Remove candidate">&times;</button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                    <button 
+                        onClick={handleSendGlobalInvites}
+                        disabled={sendingEmails || newCandidates.length === 0}
+                        className="geist-caption mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea] disabled:border-[#2e2e2e] disabled:bg-[#1a1a1a] disabled:text-[#878787] disabled:cursor-not-allowed disabled:opacity-100"
+                    >
+                        {sendingEmails ? <><i className="fas fa-circle-notch fa-spin"></i> Dispatching...</> : <><i className="fas fa-paper-plane text-[11px]"></i> Dispatch {newCandidates.length} Invites</>}
+                    </button>
+                </aside>
+            </section>
+
+            {selectedInterviewId ? (
+                <section>
+                    <div className="flex flex-col gap-3 border-b border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7 xl:flex-row xl:items-center xl:justify-between">
+                        <div>
+                            <h2 className="geist-section-title text-white">Active Candidates Tracking</h2>
+                            <p className="geist-small mt-0.5 text-[#8f8f8f]">{filteredCandidates.length} tracked, {submittedCount} submitted, {pendingCount} pending.</p>
+                        </div>
+                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                            <div className="relative w-full sm:w-72">
+                                <i className="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-[#6b7280]"></i>
                                 <input
                                     type="text"
                                     placeholder="Search email or phone..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-1 focus:ring-primary focus:border-transparent bg-gray-50 dark:bg-black transition-all"
+                                    className="geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] pl-9 pr-3 text-white outline-none transition-colors placeholder:text-[#6b7280] focus:border-white/[0.28]"
                                 />
                             </div>
                             <button
                                 onClick={exportToCSV}
-                                className="flex-shrink-0 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold flex items-center gap-2 transition-colors focus:ring-2 focus:ring-green-500 shadow-sm"
+                                className="geist-caption inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
                             >
-                                 <i className="fas fa-file-excel"></i> <span className="hidden sm:inline">Export CSV</span>
+                                <i className="fas fa-file-excel text-[11px]"></i>
+                                <span>Export CSV</span>
                             </button>
                         </div>
                     </div>
-                    
+
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm text-gray-600 dark:text-gray-400">
-                            <thead className="bg-gray-50 dark:bg-black/30 text-xs uppercase font-semibold text-gray-500 dark:text-gray-500">
+                        <table className="min-w-full divide-y divide-white/[0.11] text-left">
+                            <thead className="bg-[#080808]">
                                 <tr>
-                                    <th className="px-6 py-4">Candidate Identity</th>
-                                    <th className="px-6 py-4">Invited Role</th>
-                                    <th className="px-6 py-4 text-center">Status</th>
-                                    <th className="px-6 py-4 text-center">Score</th>
-                                    <th className="px-6 py-4 text-right">Action</th>
+                                    <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[#6b7280] sm:px-6 lg:px-7">Candidate</th>
+                                    <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[#6b7280]">Invited Role</th>
+                                    <th className="geist-label whitespace-nowrap px-4 py-2.5 text-center uppercase text-[#6b7280]">Status</th>
+                                    <th className="geist-label whitespace-nowrap px-4 py-2.5 text-center uppercase text-[#6b7280]">Score</th>
+                                    <th className="geist-label whitespace-nowrap px-4 py-2.5 text-right uppercase text-[#6b7280]">Action</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                            <tbody className="divide-y divide-white/[0.08]">
                                 {filteredCandidates.length === 0 ? (
                                     <tr>
-                                        <td colSpan={5} className="px-6 py-12 text-center">
-                                            <div className="flex flex-col items-center">
-                                                <i className="fas fa-users-slash text-4xl text-gray-300 dark:text-gray-600 mb-3"></i>
-                                                <p className="text-gray-500 dark:text-gray-400 text-base">No tracked candidates found in system.</p>
+                                        <td colSpan={5} className="px-4 py-14 text-center sm:px-6 lg:px-7">
+                                            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#6b7280]">
+                                                <i className="fas fa-users-slash"></i>
                                             </div>
+                                            <p className="geist-caption mt-4 text-[#d4d4d4]">No tracked candidates found.</p>
+                                            <p className="geist-small mt-1 text-[#6b7280]">Upload resumes or add candidates manually to begin tracking.</p>
                                         </td>
                                     </tr>
                                 ) : (
                                     filteredCandidates.map((candidate, idx) => (
-                                        <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-                                            <td className="px-6 py-4">
-                                                <div className="font-medium text-gray-900 dark:text-gray-200">{candidate.email}</div>
-                                                {candidate.phone !== 'N/A' && <div className="text-xs text-blue-500 dark:text-blue-400 font-mono mt-1"><i className="fas fa-phone-alt opacity-70 mr-1"></i>{candidate.phone}</div>}
+                                        <tr key={idx} className="transition-colors hover:bg-white/[0.025]">
+                                            <td className="px-4 py-3 sm:px-6 lg:px-7">
+                                                <div className="geist-caption font-medium text-white">{candidate.email}</div>
+                                                {candidate.phone !== 'N/A' && <div className="geist-label mt-0.5 text-[#8bbde8]"><i className="fas fa-phone-alt mr-1 text-[10px] opacity-70"></i>{candidate.phone}</div>}
                                             </td>
-                                            <td className="px-6 py-4">
-                                                <span className="bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full text-xs font-medium border border-gray-200 dark:border-gray-700">{candidate.interviewTitle}</span>
+                                            <td className="px-4 py-3">
+                                                <span className="geist-small inline-flex max-w-[240px] truncate rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1 font-medium text-[#d4d4d4]" title={candidate.interviewTitle}>{candidate.interviewTitle}</span>
                                             </td>
-                                            <td className="px-6 py-4 text-center">
+                                            <td className="px-4 py-3 text-center">
                                                 {candidate.hasSubmitted ? (
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-100/50 dark:bg-green-500/10 text-green-700 dark:text-green-400 text-xs font-bold border border-green-200 dark:border-green-500/20">
-                                                        <i className="fas fa-check-circle"></i> Submitted
+                                                    <span className="geist-small inline-flex items-center gap-1.5 rounded-[6px] border border-[#123b2a] bg-[#071a12] px-2 py-1 font-medium text-[#83d0a3]">
+                                                        <i className="fas fa-check-circle text-[10px]"></i> Submitted
                                                     </span>
                                                 ) : (
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-100/50 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-500 text-xs font-bold border border-yellow-200 dark:border-yellow-500/20">
-                                                        <i className="fas fa-clock"></i> Pending
+                                                    <span className="geist-small inline-flex items-center gap-1.5 rounded-[6px] border border-[#42320f] bg-[#1d1605] px-2 py-1 font-medium text-[#f5c76b]">
+                                                        <i className="fas fa-clock text-[10px]"></i> Pending
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="px-6 py-4 text-center">
+                                            <td className="px-4 py-3 text-center">
                                                 {candidate.hasSubmitted ? (
-                                                    <span className="font-bold text-gray-900 dark:text-white">{candidate.score?.toFixed(0)}<span className="text-[10px] text-gray-400 ml-0.5">/10</span></span>
-                                                ) : <span className="text-gray-400">-</span>}
+                                                    <span className="geist-label tabular-nums text-white">{candidate.score?.toFixed(0)}<span className="text-[#6b7280]">/10</span></span>
+                                                ) : <span className="geist-label text-[#6b7280]">-</span>}
                                             </td>
-                                            <td className="px-6 py-4 text-right">
+                                            <td className="px-4 py-3 text-right">
                                                 {candidate.hasSubmitted ? (
-                                                     <Link to={`/report/${candidate.interviewId}/${candidate.submissionId}`} target="_blank" className="text-primary hover:text-primary-dark font-medium text-xs bg-primary/10 px-3 py-1.5 rounded-lg transition-colors">View Report</Link>
+                                                     <Link to={`/report/${candidate.interviewId}/${candidate.submissionId}`} target="_blank" className="geist-caption inline-flex h-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white">View Report</Link>
                                                 ) : (
-                                                     <div className="flex justify-end items-center gap-3">
+                                                     <div className="flex justify-end items-center gap-1.5">
                                                          <button 
                                                              onClick={() => {
                                                                  const selectedInterview = interviews.find(i => i.id === candidate.interviewId);
@@ -569,17 +627,17 @@ const InvitedCandidates: React.FC = () => {
                                                                      interview: selectedInterview
                                                                  });
                                                              }}
-                                                             className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors" 
+                                                             className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#123b2a] bg-[#071a12] text-[#83d0a3] transition-colors hover:bg-[#0b2419]" 
                                                              title="Invite via WhatsApp Web"
                                                          >
-                                                             <i className="fab fa-whatsapp text-base"></i>
+                                                             <i className="fab fa-whatsapp text-[13px]"></i>
                                                          </button>
                                                          <button 
                                                              onClick={() => handleResendFromHub(candidate.email, candidate.interviewId)}
-                                                             className="text-gray-400 hover:text-blue-500 transition-colors" 
+                                                             className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white" 
                                                              title="Re-send Email Invitation"
                                                          >
-                                                             <i className="fas fa-redo-alt"></i>
+                                                             <i className="fas fa-redo-alt text-[11px]"></i>
                                                          </button>
                                                      </div>
                                                 )}
@@ -590,15 +648,15 @@ const InvitedCandidates: React.FC = () => {
                             </tbody>
                         </table>
                     </div>
-                </div>
+                </section>
             ) : (
-                <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/5 border-dashed shadow-sm p-16 text-center transition-all">
-                    <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6 text-primary">
-                        <i className="fas fa-hand-pointer text-3xl"></i>
+                <section className="border-b border-dashed border-white/[0.11] px-4 py-16 text-center sm:px-6 lg:px-7">
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f]">
+                        <i className="fas fa-hand-pointer"></i>
                     </div>
-                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Select an Interview Route</h3>
-                    <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">Please select a specific interview from the dropdown above to view the associated candidates, track their progress, and export their reports.</p>
-                </div>
+                    <h3 className="geist-section-title mt-4 text-white">Select an Interview Route</h3>
+                    <p className="geist-caption mx-auto mt-2 max-w-md text-[#8f8f8f]">Choose an interview above to view associated candidates, track submissions, and export reports.</p>
+                </section>
             )}
 
             {whatsappModal && whatsappModal.isOpen && createPortal(

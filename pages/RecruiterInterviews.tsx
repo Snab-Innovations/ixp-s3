@@ -16,6 +16,65 @@ import { evaluateResumeMatch } from '../services/api';
 // Setup PDF.js worker to enable PDF parsing
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
+type TimestampLike =
+  | {
+      toDate?: () => Date;
+      toMillis?: () => number;
+      seconds?: number;
+    }
+  | Date
+  | string
+  | null
+  | undefined;
+
+const toMillis = (value: TimestampLike): number => {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === 'string') {
+    const dateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateOnlyMatch) {
+      const [, year, month, day] = dateOnlyMatch;
+      return new Date(Number(year), Number(month) - 1, Number(day)).getTime();
+    }
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  if (typeof value.toMillis === 'function') return value.toMillis();
+  if (typeof value.toDate === 'function') return value.toDate().getTime();
+  if (typeof value.seconds === 'number') return value.seconds * 1000;
+  return 0;
+};
+
+const formatDate = (value: TimestampLike, options?: Intl.DateTimeFormatOptions): string => {
+  const millis = toMillis(value);
+  if (!millis) return 'Open';
+  return new Date(millis).toLocaleDateString('en-US', options || { month: 'short', day: 'numeric' });
+};
+
+const getInterviewDeadline = (interview: Interview): TimestampLike => {
+  const job = interview as Interview & { deadline?: TimestampLike; applyDeadline?: TimestampLike };
+  return job.deadline || job.applyDeadline;
+};
+
+const getInterviewStatus = (interview: Interview) => {
+  const deadlineMillis = toMillis(getInterviewDeadline(interview));
+  const deadlineEnd = deadlineMillis ? new Date(deadlineMillis) : null;
+  if (deadlineEnd) deadlineEnd.setHours(23, 59, 59, 999);
+  const isExpired = deadlineEnd ? deadlineEnd.getTime() < Date.now() : false;
+
+  return isExpired
+    ? {
+        label: 'Expired',
+        dotClass: 'bg-[#ff6b6b]',
+        pillClass: 'border-[#3f1d1d] bg-[#180707] text-[#ff8f8f]',
+      }
+    : {
+        label: 'Active',
+        dotClass: 'bg-[#50e3c2]',
+        pillClass: 'border-[#123b2a] bg-[#071a12] text-[#83d0a3]',
+      };
+};
+
 const RecruiterInterviews: React.FC = () => {
   const { user } = useAuth();
   const [interviews, setInterviews] = useState<Interview[]>([]);
@@ -351,9 +410,9 @@ const RecruiterInterviews: React.FC = () => {
 
 
   if (loading) return (
-    <div className="-mx-4 -my-8 min-h-[calc(100vh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8 animate-pulse">
+    <div className="-mx-4 -my-8 flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-hidden bg-[#000] text-white sm:-mx-6 lg:-mx-8 animate-pulse">
       {/* Sticky Header Skeleton */}
-      <section className="border-b border-white/[0.11] bg-[#000]">
+      <section className="shrink-0 border-b border-white/[0.11] bg-[#000]">
         <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-7 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="h-8 w-24 rounded-[6px] bg-white/[0.04]" />
@@ -365,7 +424,7 @@ const RecruiterInterviews: React.FC = () => {
       </section>
 
       {/* Stats Strip Skeleton */}
-      <section className="grid grid-cols-2 border-b border-white/[0.11] lg:grid-cols-4">
+      <section className="grid shrink-0 grid-cols-2 border-b border-white/[0.11] lg:grid-cols-4">
         {[...Array(4)].map((_, i) => (
           <div key={i} className="border-r border-white/[0.11] px-4 py-4 last:border-r-0 sm:px-6 lg:px-7">
             <div className="h-3 w-12 rounded bg-white/[0.04]" />
@@ -375,7 +434,7 @@ const RecruiterInterviews: React.FC = () => {
       </section>
 
       {/* Search & Filter Bar Skeleton */}
-      <section className="border-b border-white/[0.11]">
+      <section className="shrink-0 border-b border-white/[0.11]">
         <div className="flex flex-col gap-3 px-4 py-3 sm:px-6 lg:px-7 xl:flex-row xl:items-center xl:justify-between">
           <div className="h-9 w-full xl:max-w-xs rounded-[6px] bg-white/[0.04]" />
           <div className="flex flex-wrap items-center gap-2">
@@ -386,9 +445,9 @@ const RecruiterInterviews: React.FC = () => {
       </section>
 
       {/* Content Table Skeleton */}
-      <section>
+      <section className="flex min-h-0 flex-1 flex-col">
         {/* Table Header Skeleton */}
-        <div className="hidden items-center gap-4 border-b border-white/[0.11] px-4 py-3 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:px-7">
+        <div className="hidden shrink-0 items-center gap-4 border-b border-white/[0.11] px-4 py-3 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:px-7">
           <div className="h-3 w-16 rounded bg-white/[0.04]" />
           <div className="h-3 w-12 rounded bg-white/[0.04] mx-auto" />
           <div className="h-3 w-16 rounded bg-white/[0.04] mx-auto" />
@@ -399,23 +458,25 @@ const RecruiterInterviews: React.FC = () => {
         </div>
 
         {/* Rows Skeleton */}
-        {[...Array(5)].map((_, idx) => (
-          <div 
-            key={idx} 
-            className="grid gap-3 border-b border-white/[0.08] px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:items-center lg:gap-4 lg:px-7"
-          >
-            <div className="space-y-2">
-              <div className="h-4 w-40 rounded bg-white/[0.04]" />
-              <div className="h-3 w-20 rounded bg-white/[0.04]" />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {[...Array(8)].map((_, idx) => (
+            <div 
+              key={idx} 
+              className="grid gap-3 border-b border-white/[0.08] px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:items-center lg:gap-4 lg:px-7"
+            >
+              <div className="space-y-2">
+                <div className="h-4 w-40 rounded bg-white/[0.04]" />
+                <div className="h-3 w-20 rounded bg-white/[0.04]" />
+              </div>
+              <div className="h-4 w-12 rounded bg-white/[0.04] mx-auto" />
+              <div className="h-5 w-16 rounded bg-white/[0.04] mx-auto" />
+              <div className="h-4 w-16 rounded bg-white/[0.04] mx-auto" />
+              <div className="h-4 w-16 rounded bg-white/[0.04] mx-auto" />
+              <div className="h-4 w-12 rounded bg-white/[0.04] mx-auto" />
+              <div className="h-8 w-20 rounded bg-white/[0.04] ml-auto" />
             </div>
-            <div className="h-4 w-12 rounded bg-white/[0.04] mx-auto" />
-            <div className="h-5 w-16 rounded bg-white/[0.04] mx-auto" />
-            <div className="h-4 w-16 rounded bg-white/[0.04] mx-auto" />
-            <div className="h-4 w-16 rounded bg-white/[0.04] mx-auto" />
-            <div className="h-4 w-12 rounded bg-white/[0.04] mx-auto" />
-            <div className="h-8 w-20 rounded bg-white/[0.04] ml-auto" />
-          </div>
-        ))}
+          ))}
+        </div>
       </section>
     </div>
   );
@@ -462,11 +523,15 @@ const RecruiterInterviews: React.FC = () => {
     return matchesSearch && matchesDept && matchesDate;
   });
 
-  return (
-    <div className="-mx-4 -my-8 min-h-[calc(100vh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8">
+  const activeInterviews = interviews.filter(interview => getInterviewStatus(interview).label === 'Active').length;
+  const expiredInterviews = interviews.length - activeInterviews;
+  const totalResponses = Object.values(submissionsMap).reduce((sum, arr) => sum + arr.length, 0);
 
-      {/* Sticky Header */}
-      <section className="sticky top-14 z-20 border-b border-white/[0.11] bg-[#000]">
+  return (
+    <div className="-mx-4 -my-8 flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-hidden bg-[#000] text-white sm:-mx-6 lg:-mx-8">
+
+      {/* Header */}
+      <section className="shrink-0 border-b border-white/[0.11] bg-[#000]">
         <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-7 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <Link to="/recruiter/dashboard" className="geist-caption inline-flex h-8 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white">
@@ -486,27 +551,27 @@ const RecruiterInterviews: React.FC = () => {
       </section>
 
       {/* Stats Strip */}
-      <section className="grid grid-cols-2 border-b border-white/[0.11] lg:grid-cols-4">
+      <section className="grid shrink-0 grid-cols-2 border-b border-white/[0.11] lg:grid-cols-4">
         <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
           <p className="geist-label uppercase text-[#6b7280]">Total</p>
           <p className="geist-metric mt-2 tabular-nums text-white">{interviews.length}</p>
         </div>
         <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
-          <p className="geist-label uppercase text-[#6b7280]">Ready</p>
-          <p className="geist-metric mt-2 tabular-nums text-[#83d0a3]">{interviews.filter(i => (i.candidateEmails || []).length > 0).length}</p>
+          <p className="geist-label uppercase text-[#6b7280]">Active</p>
+          <p className="geist-metric mt-2 tabular-nums text-[#83d0a3]">{activeInterviews}</p>
         </div>
         <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
-          <p className="geist-label uppercase text-[#6b7280]">Draft</p>
-          <p className="geist-metric mt-2 tabular-nums text-[#f5c76b]">{interviews.filter(i => (i.candidateEmails || []).length === 0).length}</p>
+          <p className="geist-label uppercase text-[#6b7280]">Expired</p>
+          <p className="geist-metric mt-2 tabular-nums text-[#ff8f8f]">{expiredInterviews}</p>
         </div>
         <div className="px-4 py-4 sm:px-6 lg:px-7">
           <p className="geist-label uppercase text-[#6b7280]">Responses</p>
-          <p className="geist-metric mt-2 tabular-nums text-white">{Object.values(submissionsMap).reduce((sum, arr) => sum + arr.length, 0)}</p>
+          <p className="geist-metric mt-2 tabular-nums text-white">{totalResponses}</p>
         </div>
       </section>
 
       {/* Search & Filter Bar */}
-      <section className="border-b border-white/[0.11]">
+      <section className="shrink-0 border-b border-white/[0.11]">
         <div className="flex flex-col gap-3 px-4 py-3 sm:px-6 lg:px-7 xl:flex-row xl:items-center xl:justify-between">
           <div className="relative w-full xl:max-w-xs">
             <i className="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-[#6b7280]"></i>
@@ -564,21 +629,23 @@ const RecruiterInterviews: React.FC = () => {
       </section>
 
       {/* Content */}
-      {interviews.length === 0 ? (
-        <section className="border-b border-dashed border-white/[0.11] px-4 py-16 text-center sm:px-6 lg:px-7">
-          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f]">
-            <i className="fas fa-video"></i>
+      <section className="flex min-h-0 flex-1 flex-col">
+        {interviews.length === 0 ? (
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto border-b border-dashed border-white/[0.11] px-4 py-16 text-center sm:px-6 lg:px-7">
+            <div>
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f]">
+                <i className="fas fa-video"></i>
+              </div>
+              <p className="geist-caption mt-4 text-[#d4d4d4]">You haven't created any interviews yet.</p>
+              <Link to="/recruiter/interview/create" className="geist-caption mt-3 inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea]">
+                <i className="fas fa-plus text-[11px]"></i>
+                <span>Create your first interview</span>
+              </Link>
+            </div>
           </div>
-          <p className="geist-caption mt-4 text-[#d4d4d4]">You haven't created any interviews yet.</p>
-          <Link to="/recruiter/interview/create" className="geist-caption mt-3 inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea]">
-            <i className="fas fa-plus text-[11px]"></i>
-            <span>Create your first interview</span>
-          </Link>
-        </section>
-      ) : (
-        <>
-          {filteredInterviews.length === 0 ? (
-            <section className="border-b border-dashed border-white/[0.11] px-4 py-16 text-center sm:px-6 lg:px-7">
+        ) : filteredInterviews.length === 0 ? (
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto border-b border-dashed border-white/[0.11] px-4 py-16 text-center sm:px-6 lg:px-7">
+            <div>
               <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f]">
                 <i className="fas fa-search"></i>
               </div>
@@ -589,28 +656,28 @@ const RecruiterInterviews: React.FC = () => {
               >
                 Reset Filters
               </button>
-            </section>
-          ) : (
-            <section>
-              {/* Column Headers */}
-              <div className="hidden items-center gap-4 border-b border-white/[0.11] px-4 py-2 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:px-7">
-                <span className="geist-label uppercase text-[#6b7280]">Name</span>
-                <span className="geist-label uppercase text-[#6b7280] text-center">Status</span>
-                <span className="geist-label uppercase text-[#6b7280] text-center">Department</span>
-                <span className="geist-label uppercase text-[#6b7280] text-center">Difficulty</span>
-                <span className="geist-label uppercase text-[#6b7280] text-center">ID</span>
-                <span className="geist-label uppercase text-[#6b7280] text-center">Created</span>
-                <span className="geist-label uppercase text-[#6b7280] text-right">Actions</span>
-              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Column Headers */}
+            <div className="hidden shrink-0 items-center gap-4 border-b border-white/[0.11] bg-[#000] px-4 py-2 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:px-7">
+              <span className="geist-label uppercase text-[#6b7280]">Name</span>
+              <span className="geist-label text-center uppercase text-[#6b7280]">Status</span>
+              <span className="geist-label text-center uppercase text-[#6b7280]">Department</span>
+              <span className="geist-label text-center uppercase text-[#6b7280]">Difficulty</span>
+              <span className="geist-label text-center uppercase text-[#6b7280]">ID</span>
+              <span className="geist-label text-center uppercase text-[#6b7280]">Deadline</span>
+              <span className="geist-label text-right uppercase text-[#6b7280]">Actions</span>
+            </div>
 
-              {/* List Rows */}
+            {/* List Rows */}
+            <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-color:#27272a_#000] [scrollbar-width:thin]">
               {filteredInterviews.map(interview => {
-                const isReady = (interview.candidateEmails || []).length > 0;
-                const statusText = isReady ? "Ready" : "Draft";
+                const candidateCount = (interview.candidateEmails || []).length;
+                const status = getInterviewStatus(interview);
                 const shortId = interview.id.substring(0, 7);
-                const dateText = interview.createdAt?.toDate 
-                  ? interview.createdAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) 
-                  : 'N/A';
+                const deadlineText = formatDate(getInterviewDeadline(interview));
 
                 return (
                   <article 
@@ -627,45 +694,43 @@ const RecruiterInterviews: React.FC = () => {
                         {interview.title}
                       </Link>
                       <p className="geist-small mt-0.5 text-[#8f8f8f]">
-                        {isReady ? `${(interview.candidateEmails || []).length} candidates` : 'No candidates invited'}
+                        {candidateCount > 0 ? `${candidateCount} candidates` : 'No candidates invited'}
                       </p>
                     </div>
 
                     {/* Status */}
-                    <div className="flex justify-start lg:justify-center">
-                      <span className="geist-label mb-1 block uppercase text-[#6b7280] lg:hidden">Status</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className={`h-1.5 w-1.5 rounded-full ${isReady ? 'bg-[#50e3c2]' : 'bg-[#f5a623]'}`} />
-                        <span className={`geist-small ${isReady ? 'text-[#50e3c2]' : 'text-[#f5a623]'} font-mono`}>
-                          {statusText}
-                        </span>
-                      </div>
+                    <div className="flex items-center justify-between gap-3 lg:justify-center">
+                      <span className="geist-label uppercase text-[#6b7280] lg:hidden">Status</span>
+                      <span className={`geist-small inline-flex items-center gap-1.5 rounded-[6px] border px-2 py-1 font-mono ${status.pillClass}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${status.dotClass}`} />
+                        {status.label}
+                      </span>
                     </div>
 
                     {/* Department */}
-                    <div className="flex justify-start lg:justify-center">
-                      <span className="geist-label mb-1 block uppercase text-[#6b7280] lg:hidden">Department</span>
+                    <div className="flex items-center justify-between gap-3 lg:justify-center">
+                      <span className="geist-label uppercase text-[#6b7280] lg:hidden">Department</span>
                       <span className="geist-small inline-block rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1 font-medium text-[#d4d4d4]">
                         {interview.department || "General"}
                       </span>
                     </div>
 
                     {/* Difficulty */}
-                    <div className="flex justify-start lg:justify-center">
-                      <span className="geist-label mb-1 block uppercase text-[#6b7280] lg:hidden">Difficulty</span>
+                    <div className="flex items-center justify-between gap-3 lg:justify-center">
+                      <span className="geist-label uppercase text-[#6b7280] lg:hidden">Difficulty</span>
                       <span className="geist-small text-[#8f8f8f]">{interview.difficulty || "Medium"}</span>
                     </div>
 
                     {/* ID */}
-                    <div className="flex justify-start lg:justify-center">
-                      <span className="geist-label mb-1 block uppercase text-[#6b7280] lg:hidden">ID</span>
+                    <div className="flex items-center justify-between gap-3 lg:justify-center">
+                      <span className="geist-label uppercase text-[#6b7280] lg:hidden">ID</span>
                       <span className="geist-label text-[#6b7280]">{shortId}</span>
                     </div>
 
-                    {/* Created */}
-                    <div className="flex justify-start lg:justify-center">
-                      <span className="geist-label mb-1 block uppercase text-[#6b7280] lg:hidden">Created</span>
-                      <span className="geist-small text-[#8f8f8f]">{dateText}</span>
+                    {/* Deadline */}
+                    <div className="flex items-center justify-between gap-3 lg:justify-center">
+                      <span className="geist-label uppercase text-[#6b7280] lg:hidden">Deadline</span>
+                      <span className="geist-small text-[#8f8f8f]">{deadlineText}</span>
                     </div>
 
                     {/* Actions */}
@@ -680,10 +745,10 @@ const RecruiterInterviews: React.FC = () => {
                   </article>
                 );
               })}
-            </section>
-          )}
-        </>
-      )}
+            </div>
+          </>
+        )}
+      </section>
 
 
     {isInviteModalOpen && selectedInterview && createPortal(

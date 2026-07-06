@@ -142,6 +142,16 @@ export function DashboardSidebar({
       ]
     : [];
 
+  const assessmentResultsMatch = activePath.match(/^\/recruiter\/tests\/([^/]+)\/results$/);
+  const activeAssessmentSection = activePath === '/recruiter/tests/create' ? 'create' : assessmentResultsMatch ? 'results' : activePath.startsWith('/recruiter/tests') ? 'overview' : '';
+  const assessmentSubItems = activePath.startsWith('/recruiter/tests')
+    ? [
+        { id: 'overview', title: 'Overview', href: '/recruiter/tests' },
+        { id: 'create', title: 'Create', href: '/recruiter/tests/create' },
+        ...(assessmentResultsMatch ? [{ id: 'results', title: 'Results', href: `/recruiter/tests/${assessmentResultsMatch[1]}/results` }] : []),
+      ]
+    : [];
+
   return (
       <aside className={cn('flex h-full w-[190px] flex-col border-r border-white/[0.11] bg-[#000] p-2 pt-3 font-sans text-white', className)}>
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -160,6 +170,30 @@ export function DashboardSidebar({
                       <div className="flex flex-col gap-0.5">
                         {manageSubItems.map((subItem) => {
                           const isActive = activeManageSection === subItem.id;
+                          return (
+                            <button
+                              key={subItem.id}
+                              type="button"
+                              onClick={() => handleNavigate(subItem.href)}
+                              className={cn(
+                                'group flex w-full items-center rounded-[6px] px-2 py-1.5 text-left transition-colors',
+                                isActive
+                                  ? 'bg-white/[0.07] text-white font-medium'
+                                  : 'text-[#8f8f8f] hover:bg-white/[0.04] hover:text-white'
+                              )}
+                            >
+                              <span className="geist-small truncate">{subItem.title}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {item.id === 'assessments' && assessmentSubItems.length > 0 && (
+                    <div className="ml-[17px] mt-1 border-l border-white/[0.13] pl-3">
+                      <div className="flex flex-col gap-0.5">
+                        {assessmentSubItems.map((subItem) => {
+                          const isActive = activeAssessmentSection === subItem.id;
                           return (
                             <button
                               key={subItem.id}

@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { collection, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import gsap from 'gsap';
 import { SKILL_OPTIONS } from './Profile';
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -44,36 +43,6 @@ const CreateInterview: React.FC = () => {
     difficulty: 'Medium',
     strictness: 'Medium',
   });
-
-  useEffect(() => {
-    const ctx = gsap.context(() => {
-      gsap.from('.create-interview-header', {
-        y: -30,
-        opacity: 0,
-        duration: 0.8,
-        ease: 'power3.out'
-      });
-
-      gsap.from('.create-interview-form', {
-        y: 30,
-        opacity: 0,
-        duration: 0.8,
-        delay: 0.2,
-        ease: 'power3.out'
-      });
-
-      gsap.from('.form-field', {
-        y: 20,
-        opacity: 0,
-        duration: 0.5,
-        stagger: 0.1,
-        delay: 0.4,
-        ease: 'power2.out'
-      });
-    });
-
-    return () => ctx.revert();
-  }, []);
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -340,148 +309,155 @@ const CreateInterview: React.FC = () => {
     }
   };
 
-  return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="text-center mb-8 create-interview-header">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">Create a New Interview</h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">Schedule an interview and send invitations to candidates.</p>
-      </div>
+  const inputClass = "geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-[#050505] px-3 text-white outline-none transition-colors placeholder:text-[#6b7280] focus:border-white/[0.28] focus:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50 [color-scheme:dark]";
+  const textareaClass = "geist-caption min-h-[132px] w-full resize-y rounded-[6px] border border-white/[0.11] bg-[#050505] px-3 py-2.5 text-white outline-none transition-colors placeholder:text-[#6b7280] focus:border-white/[0.28] focus:bg-white/[0.04]";
+  const selectClass = `${inputClass} appearance-none`;
+  const labelClass = "geist-label mb-1.5 block text-[#a1a1aa]";
+  const secondaryButtonClass = "geist-caption inline-flex h-9 shrink-0 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
+  const primaryButtonClass = "geist-caption inline-flex h-10 items-center justify-center rounded-[6px] border border-white bg-white px-4 font-medium text-black transition-colors hover:bg-[#eaeaea] disabled:cursor-not-allowed disabled:opacity-50";
+  const panelHeaderClass = "geist-label uppercase text-[#6b7280]";
+  const panelTitleClass = "geist-section-title mt-1 text-white";
+  const helperTextClass = "geist-small mt-1 max-w-2xl text-[#8f8f8f]";
+  const SkeletonBlock = ({ className = '' }: { className?: string }) => (
+    <span className={`block animate-pulse rounded-[4px] bg-white/[0.12] ${className}`} aria-hidden="true" />
+  );
 
-      <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/5 p-8 shadow-xl dark:shadow-none create-interview-form">
-        <div className="p-4 bg-indigo-50 dark:bg-indigo-900/10 rounded-xl border border-indigo-200 dark:border-indigo-800/50 mb-6 form-field">
-            <h4 className="font-bold text-indigo-800 dark:text-indigo-300 mb-2 flex items-center gap-2">
-                <i className="fas fa-magic"></i> AI Autofill
-            </h4>
-            <p className="text-sm text-indigo-600 dark:text-indigo-400 mb-4">
-                Save time by uploading a Job Description (PDF/TXT). The AI will automatically fill out the form for you.
+  return (
+    <div className="-mx-4 -my-8 min-h-[calc(100dvh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8">
+      <header className="border-b border-white/[0.11]">
+        <div className="px-4 py-5 sm:px-6 lg:px-7">
+          <p className="geist-label uppercase text-[#6b7280]">Interview setup</p>
+          <h1 className="geist-page-title mt-2 text-white">Create interview</h1>
+          <p className="geist-small mt-1 max-w-2xl text-[#8f8f8f]">
+            Build a structured interview brief, tune the question rules, and prepare candidate invitations from one focused workspace.
+          </p>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,0.42fr)_1px_minmax(0,1fr)]">
+        <aside className="border-b border-white/[0.11] bg-[#020202] px-4 py-5 sm:px-6 lg:border-b-0 lg:px-7">
+          <div className="lg:sticky lg:top-[5.25rem]">
+            <p className={panelHeaderClass}>Source</p>
+            <h2 className={panelTitleClass}>Start from a job description</h2>
+            <p className={helperTextClass}>
+              Upload a PDF or TXT brief to fill role details faster, then review each field before creating the interview.
             </p>
-            <label htmlFor="jd-upload" className={`w-full flex items-center justify-center gap-2 px-6 py-3 bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border-2 border-dashed border-indigo-300 dark:border-indigo-700 rounded-xl cursor-pointer hover:bg-indigo-50/50 dark:hover:bg-indigo-900/30 transition-colors ${parsingJd ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                {parsingJd ? (
-                    <>
-                        <i className="fa-solid fa-circle-notch fa-spin text-xs"></i>
-                        Parsing JD...
-                    </>
-                ) : (
-                    <>
-                        <i className="fa-solid fa-file-upload"></i>
-                        Upload Job Description
-                    </>
-                )}
+
+            <label
+              htmlFor="jd-upload"
+              className={`geist-caption mt-5 flex min-h-28 cursor-pointer flex-col justify-center rounded-[6px] border border-dashed border-white/[0.18] bg-white/[0.025] px-4 py-4 text-[#d4d4d4] transition-colors hover:border-white/[0.3] hover:bg-white/[0.045] ${parsingJd ? 'cursor-not-allowed opacity-50' : ''}`}
+            >
+              {parsingJd ? (
+                <span className="flex flex-col gap-2" role="status" aria-label="Parsing job description">
+                  <SkeletonBlock className="h-4 w-44" />
+                  <SkeletonBlock className="h-3 w-64 max-w-full bg-white/[0.08]" />
+                  <SkeletonBlock className="h-3 w-36 bg-white/[0.08]" />
+                </span>
+              ) : (
+                <>
+                  <span className="font-medium text-white">Upload job description</span>
+                  <span className="geist-small mt-1 text-[#8f8f8f]">PDF or TXT. The form remains editable after import.</span>
+                </>
+              )}
             </label>
             <input id="jd-upload" type="file" accept=".pdf,.txt" className="hidden" onChange={handleJDUpload} disabled={parsingJd} />
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2 form-field">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Job Title / Role</label>
-            <input name="title"
-              type="text" required 
-              className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
-              value={formData.title}
-              onChange={handleFormChange}
-              placeholder="e.g. Senior Frontend Engineer"
-            />
-          </div>
 
-          <div className="space-y-2 form-field">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Job Description</label>
-            <textarea name="description"
-              required rows={5} 
-              className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
-              value={formData.description}
-              onChange={handleFormChange}
-              placeholder="Describe the role, responsibilities, and what you'''re looking for..."
-            />
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2 form-field">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Company Department</label>
-              <input name="department"
-                type="text" required 
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
-                value={formData.department}
-                onChange={handleFormChange}
-                placeholder="e.g. Engineering, Marketing, Sales"
-              />
-            </div>
-            <div className="space-y-2 form-field">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Employment Type</label>
-              <select name="employmentType"
-                required 
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
-                value={formData.employmentType}
-                onChange={handleFormChange}
-              >
-                <option value="">Select...</option>
-                <option value="Full-time">Full-time</option>
-                <option value="Part-time">Part-time</option>
-                <option value="Contract">Contract</option>
-                <option value="Internship">Internship</option>
-              </select>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2 form-field">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Required Experience (Years)</label>
-              <div className="flex items-center gap-3">
-                <input
-                  name="minExperience"
-                  type="number"
-                  min="0"
-                  required
-                  placeholder="Min Years"
-                  className="w-1/2 px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all text-sm"
-                  value={formData.minExperience}
-                  onChange={handleFormChange}
-                />
-                <span className="text-gray-400 dark:text-gray-500 font-medium">to</span>
-                <input
-                  name="maxExperience"
-                  type="number"
-                  min="0"
-                  required
-                  placeholder="Max Years"
-                  className="w-1/2 px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all text-sm"
-                  value={formData.maxExperience}
-                  onChange={handleFormChange}
-                />
+            <div className="mt-7 border-t border-white/[0.11] pt-5">
+              <p className={panelHeaderClass}>Flow</p>
+              <div className="mt-3 divide-y divide-white/[0.11] border border-white/[0.11]">
+                {[
+                  ['Brief', 'Role details and requirements'],
+                  ['Questions', 'Difficulty and manual prompts'],
+                  ['Invites', 'Candidate emails and resume parsing'],
+                ].map(([title, copy]) => (
+                  <div key={title} className="px-3 py-3">
+                    <p className="geist-caption font-medium text-white">{title}</p>
+                    <p className="geist-small mt-0.5 text-[#8f8f8f]">{copy}</p>
+                  </div>
+                ))}
               </div>
             </div>
-            
-            <div className="space-y-2 form-field">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Minimum Education Level</label>
-              <div className="flex flex-wrap gap-2 mb-2 min-h-[44px] p-2 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl">
-                {formData.education ? formData.education.split(',').map(e => e.trim()).filter(e => e).map(edu => (
-                  <span key={edu} className="px-3 py-1 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 rounded-lg text-sm flex items-center gap-2 animate-in fade-in zoom-in duration-200">
-                    {edu}
-                    <button type="button" onClick={() => toggleEducation(edu)} className="hover:text-black dark:hover:text-white transition-colors">&times;</button>
-                  </span>
-                )) : <span className="text-gray-400 dark:text-gray-500 text-sm p-1.5 italic">No education level selected</span>}
+          </div>
+        </aside>
+
+        <div className="hidden bg-white/[0.11] lg:block" />
+
+        <form onSubmit={handleSubmit} className="min-w-0">
+          <section className="border-b border-white/[0.11] px-4 py-5 sm:px-6 lg:px-7">
+            <p className={panelHeaderClass}>Brief</p>
+            <h2 className={panelTitleClass}>Role details</h2>
+            <p className={helperTextClass}>Keep the requirements specific so the generated interview stays relevant.</p>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <div>
+                <label className={labelClass}>Job title / role</label>
+                <input name="title" type="text" required className={inputClass} value={formData.title} onChange={handleFormChange} placeholder="Senior Frontend Engineer" />
               </div>
 
-              <div className="flex flex-col gap-2">
-                <select
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all text-sm"
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      toggleEducation(e.target.value);
-                      e.target.value = "";
-                    }
-                  }}
-                >
-                  <option value="">-- Select Predefined Level --</option>
-                  {["High School", "Bachelor's", "Master's", "PhD"].map(edu => (
-                    <option key={edu} value={edu}>{edu}</option>
-                  ))}
+              <div>
+                <label className={labelClass}>Company department</label>
+                <input name="department" type="text" required className={inputClass} value={formData.department} onChange={handleFormChange} placeholder="Engineering" />
+              </div>
+
+              <div className="xl:col-span-2">
+                <label className={labelClass}>Job description</label>
+                <textarea name="description" required rows={5} className={textareaClass} value={formData.description} onChange={handleFormChange} placeholder="Describe the role, responsibilities, and what you are looking for." />
+              </div>
+
+              <div>
+                <label className={labelClass}>Employment type</label>
+                <select name="employmentType" required className={selectClass} value={formData.employmentType} onChange={handleFormChange}>
+                  <option value="">Select type</option>
+                  <option value="Full-time">Full-time</option>
+                  <option value="Part-time">Part-time</option>
+                  <option value="Contract">Contract</option>
+                  <option value="Internship">Internship</option>
                 </select>
+              </div>
 
-                <div className="flex gap-2">
+              <div>
+                <label className={labelClass}>Required experience</label>
+                <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+                  <input name="minExperience" type="number" min="0" required placeholder="Min" className={inputClass} value={formData.minExperience} onChange={handleFormChange} />
+                  <span className="geist-small text-[#6b7280]">to</span>
+                  <input name="maxExperience" type="number" min="0" required placeholder="Max" className={inputClass} value={formData.maxExperience} onChange={handleFormChange} />
+                </div>
+              </div>
+
+              <div className="xl:col-span-2">
+                <label className={labelClass}>Minimum education level</label>
+                <div className="min-h-10 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-2">
+                  <div className="flex flex-wrap gap-2">
+                    {formData.education ? formData.education.split(',').map(e => e.trim()).filter(e => e).map(edu => (
+                      <span key={edu} className="geist-small inline-flex h-7 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.05] px-2.5 text-[#d4d4d4]">
+                        {edu}
+                        <button type="button" onClick={() => toggleEducation(edu)} className="text-[#8f8f8f] transition-colors hover:text-white">&times;</button>
+                      </span>
+                    )) : <span className="geist-caption text-[#6b7280]">No education level selected</span>}
+                  </div>
+                </div>
+
+                <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)_auto]">
+                  <select
+                    className={selectClass}
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        toggleEducation(e.target.value);
+                        e.target.value = "";
+                      }
+                    }}
+                  >
+                    <option value="">Select predefined level</option>
+                    {["High School", "Bachelor's", "Master's", "PhD"].map(edu => (
+                      <option key={edu} value={edu}>{edu}</option>
+                    ))}
+                  </select>
+
                   <input
                     type="text"
-                    className="flex-1 min-w-0 px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all text-sm"
-                    placeholder="Or type custom education..."
+                    className={inputClass}
+                    placeholder="Or type custom education"
                     value={eduInput}
                     onChange={e => setEduInput(e.target.value)}
                     onKeyDown={e => {
@@ -502,31 +478,36 @@ const CreateInterview: React.FC = () => {
                         setEduInput('');
                       }
                     }}
-                    className="px-4 py-3 bg-gray-100 dark:bg-white/5 text-gray-900 dark:text-white border border-gray-200 dark:border-white/10 rounded-xl hover:bg-gray-200 dark:hover:bg-white/10 transition-colors font-medium text-sm shrink-0"
+                    className={secondaryButtonClass}
                   >
                     Add
                   </button>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          <div className="space-y-2 form-field">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Required Skills</label>
-            <div className="flex flex-wrap gap-2 mb-2 min-h-[44px] p-2 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl">
-              {formData.skills ? formData.skills.split(',').map(s => s.trim()).filter(s => s).map(skill => (
-                <span key={skill} className="px-3 py-1 bg-primary/20 text-primary-dark dark:text-primary-light border border-primary/20 rounded-lg text-sm flex items-center gap-2 animate-in fade-in zoom-in duration-200">
-                  {skill}
-                  <button type="button" onClick={() => toggleSkill(skill)} className="hover:text-black dark:hover:text-white transition-colors">&times;</button>
-                </span>
-              )) : <span className="text-gray-400 dark:text-gray-500 text-sm p-1.5 italic">No skills selected</span>}
+          <section className="border-b border-white/[0.11] px-4 py-5 sm:px-6 lg:px-7">
+            <p className={panelHeaderClass}>Skills</p>
+            <h2 className={panelTitleClass}>Required capabilities</h2>
+            <p className={helperTextClass}>Select existing skills or add a custom requirement.</p>
+
+            <div className="mt-5 min-h-10 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-2">
+              <div className="flex flex-wrap gap-2">
+                {formData.skills ? formData.skills.split(',').map(s => s.trim()).filter(s => s).map(skill => (
+                  <span key={skill} className="geist-small inline-flex h-7 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.05] px-2.5 text-[#d4d4d4]">
+                    {skill}
+                    <button type="button" onClick={() => toggleSkill(skill)} className="text-[#8f8f8f] transition-colors hover:text-white">&times;</button>
+                  </span>
+                )) : <span className="geist-caption text-[#6b7280]">No skills selected</span>}
+              </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
               <input
                 type="text"
-                className="flex-1 px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
-                placeholder="Search or add custom skill..."
+                className={inputClass}
+                placeholder="Search or add custom skill"
                 value={skillSearch}
                 onChange={e => setSkillSearch(e.target.value)}
                 onKeyDown={e => {
@@ -547,13 +528,13 @@ const CreateInterview: React.FC = () => {
                     setSkillSearch('');
                   }
                 }}
-                className="px-6 py-3 bg-gray-100 dark:bg-white/5 text-gray-900 dark:text-white border border-gray-200 dark:border-white/10 rounded-xl hover:bg-gray-200 dark:hover:bg-white/10 transition-colors font-medium"
+                className={secondaryButtonClass}
               >
                 Add
               </button>
             </div>
 
-            <div className="mt-2 border border-gray-200 dark:border-white/10 rounded-xl p-3 max-h-40 overflow-y-auto bg-gray-50 dark:bg-[#1a1a1a] custom-scrollbar">
+            <div className="mt-3 max-h-44 overflow-y-auto rounded-[6px] border border-white/[0.11] bg-[#050505] p-2 custom-scrollbar">
               <div className="flex flex-wrap gap-2">
                 {SKILL_OPTIONS.filter(s => s.toLowerCase().includes(skillSearch.toLowerCase())).map(skill => {
                   const isSelected = formData.skills.split(',').map(s => s.trim()).includes(skill);
@@ -562,269 +543,185 @@ const CreateInterview: React.FC = () => {
                       key={skill}
                       type="button"
                       onClick={() => toggleSkill(skill)}
-                      className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${isSelected
-                        ? 'bg-primary/20 border-primary/50 text-gray-900 dark:text-white font-medium'
-                        : 'bg-white dark:bg-white/5 border-gray-200 dark:border-white/5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white'
+                      className={`geist-small inline-flex h-7 items-center rounded-[6px] border px-2.5 transition-colors ${isSelected
+                        ? 'border-white/[0.28] bg-white text-black'
+                        : 'border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] hover:bg-white/[0.06] hover:text-white'
                         }`}
                     >
-                      {skill} {isSelected && '✓'}
+                      {skill}{isSelected && ' ✓'}
                     </button>
                   );
                 })}
               </div>
             </div>
-          </div>
+          </section>
 
-          <div className="space-y-4 form-field p-6 bg-blue-50/50 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/20 rounded-2xl">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <section className="border-b border-white/[0.11] px-4 py-5 sm:px-6 lg:px-7">
+            <p className={panelHeaderClass}>Questions</p>
+            <h2 className={panelTitleClass}>Interview rules</h2>
+            <p className={helperTextClass}>Set the generated question count, report behavior, and any manual prompts.</p>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
               <div>
-                <label className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <i className="fa-solid fa-robot text-blue-500"></i>
-                  Number of AI-Generated Questions
-                </label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Specify how many questions the AI should create based on the job description.</p>
+                <label className={labelClass}>AI-generated questions</label>
+                <div className="flex h-9 items-center rounded-[6px] border border-white/[0.11] bg-[#050505]">
+                  <button type="button" disabled={formData.numQuestions <= 1} onClick={() => setFormData(prev => ({ ...prev, numQuestions: Math.max(1, prev.numQuestions - 1) }))} className="h-full w-10 border-r border-white/[0.11] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">-</button>
+                  <input name="numQuestions" type="number" min="1" max="25" className="geist-caption h-full min-w-0 flex-1 border-none bg-transparent px-3 text-center font-medium text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" value={formData.numQuestions} onChange={handleFormChange} />
+                  <button type="button" disabled={formData.numQuestions >= 25} onClick={() => setFormData(prev => ({ ...prev, numQuestions: Math.min(25, prev.numQuestions + 1) }))} className="h-full w-10 border-l border-white/[0.11] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">+</button>
+                </div>
               </div>
-              
-              <div className="flex items-center gap-3 bg-white dark:bg-[#1a1a1a] p-1.5 rounded-xl border border-gray-200 dark:border-white/10 shadow-sm self-start md:self-center">
-                <button
-                  type="button"
-                  disabled={formData.numQuestions <= 1}
-                  onClick={() => setFormData(prev => ({ ...prev, numQuestions: Math.max(1, prev.numQuestions - 1) }))}
-                  className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:bg-blue-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all border border-gray-100 dark:border-white/5"
-                >
-                  <i className="fa-solid fa-minus text-xs"></i>
-                </button>
-                <input name="numQuestions"
-                  type="number" min="1" max="25" 
-                  className="w-12 text-center bg-transparent border-none text-lg font-bold text-gray-900 dark:text-white focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  value={formData.numQuestions}
-                  onChange={handleFormChange}
+
+              <div>
+                <label className={labelClass}>Difficulty level</label>
+                <select name="difficulty" value={formData.difficulty} onChange={handleFormChange} className={selectClass}>
+                  <option value="Easy">Easy</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Hard">Hard</option>
+                </select>
+              </div>
+
+              <div>
+                <label className={labelClass}>Report check strictness</label>
+                <select name="strictness" value={formData.strictness} onChange={handleFormChange} className={selectClass}>
+                  <option value="Low">Low (Ignore minor issues)</option>
+                  <option value="Medium">Medium (Balanced)</option>
+                  <option value="Hard">Hard (Strict feedback)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
+              <label className={labelClass}>Manual interview questions</label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="text"
+                  className={inputClass}
+                  placeholder="Tell us about your experience with React"
+                  value={currentManualQuestion}
+                  onChange={e => setCurrentManualQuestion(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddManualQuestion();
+                    }
+                  }}
                 />
-                
-                <button
-                  type="button"
-                  disabled={formData.numQuestions >= 25}
-                  onClick={() => setFormData(prev => ({ ...prev, numQuestions: Math.min(25, prev.numQuestions + 1) }))}
-                  className="w-10 h-10 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:bg-blue-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all border border-gray-100 dark:border-white/5"
-                >
-                  <i className="fa-solid fa-plus text-xs"></i>
-                </button>
+                <button type="button" onClick={handleAddManualQuestion} className={secondaryButtonClass}>Add</button>
               </div>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2 form-field">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Difficulty Level</label>
-              <select 
-                name="difficulty" 
-                value={formData.difficulty} 
-                onChange={handleFormChange} 
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white appearance-none focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
-              >
-                <option value="Easy">Easy</option>
-                <option value="Medium">Medium</option>
-                <option value="Hard">Hard</option>
-              </select>
-            </div>
-            
-            <div className="space-y-2 form-field">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                Report Check Strictness
-              </label>
-              <select 
-                name="strictness" 
-                value={formData.strictness} 
-                onChange={handleFormChange} 
-                className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white appearance-none focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
-              >
-                <option value="Low">Low (Ignore minor issues)</option>
-                <option value="Medium">Medium (Balanced)</option>
-                <option value="Hard">Hard (Strict feedback)</option>
-              </select>
-            </div>
-          </div>
 
-          <div className="space-y-4 form-field p-6 bg-blue-50/50 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/20 rounded-2xl">
-            <div>
-              <label className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <i className="fa-solid fa-clipboard-question text-blue-500"></i>
-                Manual Interview Questions (Optional)
-              </label>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Add specific questions you want the AI to ask during the interview.</p>
-            </div>
-
-            <div className="flex gap-2">
-              <input
-                type="text"
-                className="flex-1 px-4 py-3 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all"
-                placeholder="e.g. Tell us about your experience with React..."
-                value={currentManualQuestion}
-                onChange={e => setCurrentManualQuestion(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAddManualQuestion();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleAddManualQuestion}
-                className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-all font-medium flex items-center gap-2 shadow-lg shadow-blue-500/20"
-              >
-                <i className="fa-solid fa-plus text-xs"></i>
-                Add
-              </button>
-            </div>
-
-            {manualQuestions.length > 0 && (
-              <div className="space-y-2 mt-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                {manualQuestions.map((q, index) => (
-                  <div key={index} className="flex items-start justify-between p-3.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl animate-in fade-in slide-in-from-left-2 duration-300">
-                    <div className="flex gap-3">
-                      <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-bold flex items-center justify-center">
-                        {index + 1}
-                      </span>
-                      <p className="text-sm text-gray-700 dark:text-gray-300 mt-0.5">{q}</p>
+              {manualQuestions.length > 0 && (
+                <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                  {manualQuestions.map((q, index) => (
+                    <div key={index} className="flex items-start justify-between gap-3 rounded-[6px] border border-white/[0.11] bg-[#050505] px-3 py-2.5">
+                      <p className="geist-caption min-w-0 text-[#d4d4d4]">{q}</p>
+                      <button type="button" onClick={() => handleRemoveManualQuestion(index)} className="geist-small shrink-0 text-[#8f8f8f] transition-colors hover:text-white">Remove</button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveManualQuestion(index)}
-                      className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                    >
-                      <i className="fa-solid fa-trash-can text-sm"></i>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
-          <div className="space-y-4 form-field p-6 bg-gray-50/50 dark:bg-gray-800/20 border border-gray-100 dark:border-white/10 rounded-2xl">
-              <div>
-                  <label className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                      <i className="fa-solid fa-plus-circle text-gray-500"></i>
-                      Custom Fields (Optional)
-                  </label>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Add any other relevant information for the job.</p>
-              </div>
-
-              <div className="flex gap-2">
-                  <input
-                      type="text"
-                      className="flex-1 px-4 py-3 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-sm"
-                      placeholder="Field Name (e.g., Salary Range)"
-                      value={tempCustomField.key}
-                      onChange={e => setTempCustomField({ ...tempCustomField, key: e.target.value })}
-                  />
-                  <input
-                      type="text"
-                      className="flex-1 px-4 py-3 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-sm"
-                      placeholder="Field Value (e.g., $80k - $120k)"
-                      value={tempCustomField.value}
-                      onChange={e => setTempCustomField({ ...tempCustomField, value: e.target.value })}
-                  />
-                  <button type="button" onClick={handleAddCustomField} className="px-6 py-3 bg-gray-100 dark:bg-white/5 text-gray-900 dark:text-white border border-gray-200 dark:border-white/10 rounded-xl hover:bg-gray-200 dark:hover:bg-white/10 transition-colors font-medium text-sm">Add</button>
+            <div className="mt-4 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
+              <label className={labelClass}>Custom fields</label>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                <input type="text" className={inputClass} placeholder="Field name, e.g. Salary range" value={tempCustomField.key} onChange={e => setTempCustomField({ ...tempCustomField, key: e.target.value })} />
+                <input type="text" className={inputClass} placeholder="Field value, e.g. $80k - $120k" value={tempCustomField.value} onChange={e => setTempCustomField({ ...tempCustomField, value: e.target.value })} />
+                <button type="button" onClick={handleAddCustomField} className={secondaryButtonClass}>Add</button>
               </div>
 
               {customFields.length > 0 && (
-                  <div className="space-y-2 mt-4 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                      {customFields.map((field) => (
-                          <div key={field.id} className="flex items-center justify-between p-3 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl animate-in fade-in">
-                              <div className="flex gap-2 text-sm">
-                                  <strong className="text-gray-800 dark:text-gray-200">{field.key}:</strong>
-                                  <span className="text-gray-600 dark:text-gray-400">{field.value}</span>
-                              </div>
-                              <button type="button" onClick={() => handleRemoveCustomField(field.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1">
-                                  <i className="fa-solid fa-trash-can text-xs"></i>
-                              </button>
-                          </div>
-                      ))}
-                  </div>
+                <div className="mt-3 max-h-44 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                  {customFields.map((field) => (
+                    <div key={field.id} className="flex items-center justify-between gap-3 rounded-[6px] border border-white/[0.11] bg-[#050505] px-3 py-2.5">
+                      <p className="geist-caption min-w-0 truncate text-[#d4d4d4]"><span className="font-medium text-white">{field.key}:</span> {field.value}</p>
+                      <button type="button" onClick={() => handleRemoveCustomField(field.id)} className="geist-small shrink-0 text-[#8f8f8f] transition-colors hover:text-white">Remove</button>
+                    </div>
+                  ))}
+                </div>
               )}
-          </div>
+            </div>
+          </section>
 
-          <div className="space-y-2 form-field">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Application Deadline</label>
-            <input name="deadline"
-              type="date" 
-              className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all dark:[color-scheme:dark]"
-              value={formData.deadline}
-              onChange={handleFormChange}
-            />
-          </div>
-          
-          <div className="space-y-2 form-field">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Candidate Emails</label>
-            <div className="flex items-center gap-2">
-                <input
+          <section className="px-4 py-5 sm:px-6 lg:px-7">
+            <p className={panelHeaderClass}>Invites</p>
+            <h2 className={panelTitleClass}>Candidate access</h2>
+            <p className={helperTextClass}>Add candidate emails directly or extract them from uploaded resumes.</p>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <div>
+                <label className={labelClass}>Application deadline</label>
+                <input name="deadline" type="date" className={inputClass} value={formData.deadline} onChange={handleFormChange} />
+              </div>
+
+              <div>
+                <label className={labelClass}>Candidate emails</label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
                     type="email"
                     value={currentEmail}
                     onChange={(e) => setCurrentEmail(e.target.value)}
-                    placeholder="Enter candidate email and press Enter or click Add"
-                    className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
-                />
-                <button type="button" onClick={handleAddEmail} className="px-6 py-3 bg-gray-100 dark:bg-white/5 text-gray-900 dark:text-white border border-gray-200 dark:border-white/10 rounded-xl hover:bg-gray-200 dark:hover:bg-white/10 transition-colors font-medium">Add</button>
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddEmail();
+                      }
+                    }}
+                    placeholder="candidate@company.com"
+                    className={inputClass}
+                  />
+                  <button type="button" onClick={handleAddEmail} className={secondaryButtonClass}>Add</button>
+                </div>
+              </div>
             </div>
-             <div className="flex flex-wrap gap-2 mt-2">
+
+            {candidateEmails.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
                 {candidateEmails.map(email => (
-                    <div key={email} className="flex items-center gap-2 bg-gray-200 dark:bg-gray-700 rounded-full px-3 py-1 text-sm">
-                        {email}
-                        <button type="button" onClick={() => handleRemoveEmail(email)} className="text-red-500 hover:text-red-700">
-                            &times;
-                        </button>
-                    </div>
+                  <span key={email} className="geist-small inline-flex h-7 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.05] px-2.5 text-[#d4d4d4]">
+                    {email}
+                    <button type="button" onClick={() => handleRemoveEmail(email)} className="text-[#8f8f8f] transition-colors hover:text-white">&times;</button>
+                  </span>
                 ))}
+              </div>
+            )}
+
+            <div className="mt-5 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
+              <label
+                htmlFor="resume-upload"
+                className={`geist-caption flex cursor-pointer items-center justify-between gap-3 rounded-[6px] border border-dashed border-white/[0.18] bg-[#050505] px-3 py-3 text-[#d4d4d4] transition-colors hover:border-white/[0.3] hover:bg-white/[0.045] ${parsingResumes ? 'cursor-not-allowed opacity-50' : ''}`}
+              >
+                {parsingResumes ? (
+                  <span className="flex w-full items-center justify-between gap-3" role="status" aria-label="Parsing resumes">
+                    <span className="flex min-w-0 flex-1 flex-col gap-2">
+                      <SkeletonBlock className="h-4 w-48 max-w-full" />
+                      <SkeletonBlock className="h-3 w-28 bg-white/[0.08]" />
+                    </span>
+                    <SkeletonBlock className="h-3 w-16 bg-white/[0.08]" />
+                  </span>
+                ) : (
+                  <>
+                    <span className="font-medium text-white">Upload resumes to find emails</span>
+                    <span className="geist-small text-[#8f8f8f]">PDF or TXT</span>
+                  </>
+                )}
+              </label>
+              <input id="resume-upload" type="file" multiple accept=".pdf,.txt" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
+              <p className="geist-small mt-2 text-[#8f8f8f]">Extracted emails are added to the invite queue for review before sending.</p>
             </div>
+          </section>
 
-            <div className="relative flex py-2 items-center form-field">
-                <div className="flex-grow border-t border-gray-200 dark:border-white/10"></div>
-                <span className="flex-shrink mx-4 text-gray-400 dark:text-gray-500 text-xs">OR</span>
-                <div className="flex-grow border-t border-gray-200 dark:border-white/10"></div>
+          <div className="sticky bottom-0 border-t border-white/[0.11] bg-[#000]/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-7">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="geist-small text-[#8f8f8f]">Access codes are generated when the interview is created.</p>
+              <button type="submit" disabled={loading || sendingEmails} className={primaryButtonClass}>
+                {loading || sendingEmails ? (
+                  <span className="flex w-56 max-w-full flex-col items-center gap-1.5" role="status" aria-label={loading ? 'Saving interview' : 'Sending invitations'}>
+                    <SkeletonBlock className="h-3.5 w-40 bg-black/[0.18]" />
+                    <SkeletonBlock className="h-2.5 w-28 bg-black/[0.12]" />
+                  </span>
+                ) : 'Create interview and send invitations'}
+              </button>
             </div>
-
-            <div className="form-field">
-                <label htmlFor="resume-upload" className={`w-full flex items-center justify-center gap-2 px-6 py-3 bg-gray-100 dark:bg-white/5 text-gray-900 dark:text-white border border-gray-200 dark:border-white/10 rounded-xl hover:bg-gray-200 dark:hover:bg-white/10 transition-colors font-medium cursor-pointer ${parsingResumes ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                    {parsingResumes ? (
-                        <>
-                            <i className="fa-solid fa-circle-notch fa-spin text-xs"></i>
-                            Parsing Resumes...
-                        </>
-                    ) : (
-                        <>
-                            <i className="fa-solid fa-file-upload"></i>
-                            Upload Resumes to Find Emails
-                        </>
-                    )}
-                </label>
-                <input id="resume-upload" type="file" multiple accept=".pdf,.txt" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
-                <p className="text-xs text-center text-gray-400 dark:text-gray-500 mt-2">Upload one or more PDF/TXT resumes to automatically extract emails.</p>
-            </div>
-
-          </div>
-
-          <div className="pt-4 form-field">
-            <button
-              type="submit"
-              disabled={loading || sendingEmails}
-              className="w-full bg-primary hover:bg-primary-dark text-white dark:text-black font-bold py-4 px-4 rounded-xl shadow-lg shadow-primary/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-            >
-              {loading || sendingEmails ? (
-                <>
-                  <i className="fa-solid fa-circle-notch fa-spin"></i>
-                  {loading ? 'Saving Interview...' : `Sending Invitations...`}
-                </>
-              ) : (
-                <>
-                  <i className="fa-solid fa-paper-plane text-sm"></i>
-                  Create Interview & Send Invitations
-                </>
-              )}
-            </button>
-            <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-3 italic">
-              This will generate access codes and notify listed candidates automatically.
-            </p>
           </div>
         </form>
       </div>
