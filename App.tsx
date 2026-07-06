@@ -22,7 +22,7 @@ import TakeTest from './pages/TakeTest';
 import TestResults from './pages/TestResults';
 import ContactUs from './pages/ContactUs';
 import ReportBug from './pages/ReportBug';
-import CreateInterview from './pages/CreateInterview';
+import CreateInterview, { CreateInterviewSkeleton } from './pages/CreateInterview';
 import RecruiterInterviews from './pages/RecruiterInterviews';
 import InterviewAccess from './pages/InterviewAccess';
 import TestAccess from './pages/TestAccess';
@@ -206,7 +206,7 @@ const App: React.FC = () => {
                   <Route path="recruiter/interview/:interviewId/responses" element={<ProtectedRoute role="recruiter"><InterviewResponses /></ProtectedRoute>} />
                   <Route path="recruiter/interview/:interviewId/candidates" element={<ProtectedRoute role="recruiter"><InterviewCandidates /></ProtectedRoute>} />
                   <Route path="recruiter/interview/responses/:interviewId" element={<ProtectedRoute role="recruiter"><InterviewResponses /></ProtectedRoute>} />
-                  <Route path="recruiter/interview/create" element={<ProtectedRoute role="recruiter"><CreateInterview /></ProtectedRoute>} />
+                  <Route path="recruiter/interview/create" element={<ProtectedRoute role="recruiter" loadingFallback={<CreateInterviewSkeleton />}><CreateInterview /></ProtectedRoute>} />
                   <Route path="recruiter/tests" element={<ProtectedRoute role="recruiter"><RecruiterTests /></ProtectedRoute>} />
                   <Route path="recruiter/tests/create" element={<ProtectedRoute role="recruiter"><CreateTest /></ProtectedRoute>} />
                   <Route path="recruiter/tests/:testId/results" element={<ProtectedRoute role="recruiter"><TestResults /></ProtectedRoute>} />

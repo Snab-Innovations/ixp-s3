@@ -11,6 +11,79 @@ import { sendInterviewInvitations } from '../services/brevoService';
 // Setup PDF.js worker to enable PDF parsing
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
+const SkeletonBlock = ({ className = '' }: { className?: string }) => (
+  <span className={`block animate-pulse rounded-[4px] bg-white/[0.12] ${className}`} aria-hidden="true" />
+);
+
+export const CreateInterviewSkeleton = () => (
+  <div className="-mx-4 -my-8 min-h-[calc(100dvh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8">
+    <header className="border-b border-white/[0.11]">
+      <div className="px-4 py-5 sm:px-6 lg:px-7">
+        <SkeletonBlock className="h-4 w-32 bg-white/[0.08]" />
+        <SkeletonBlock className="mt-2 h-8 w-56" />
+        <SkeletonBlock className="mt-2 h-4 w-[32rem] max-w-full bg-white/[0.08]" />
+      </div>
+    </header>
+
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,0.42fr)_1px_minmax(0,1fr)]">
+      <aside className="border-b border-white/[0.11] bg-[#020202] px-4 py-5 sm:px-6 lg:min-h-[calc(100dvh-8.5rem)] lg:border-b-0 lg:px-7">
+        <SkeletonBlock className="h-4 w-20 bg-white/[0.08]" />
+        <SkeletonBlock className="mt-2 h-6 w-64 max-w-full" />
+        <SkeletonBlock className="mt-2 h-4 w-full bg-white/[0.08]" />
+        <SkeletonBlock className="mt-1.5 h-4 w-4/5 bg-white/[0.08]" />
+        <div className="mt-5 min-h-28 rounded-[6px] border border-dashed border-white/[0.18] bg-white/[0.025] px-4 py-4">
+          <SkeletonBlock className="h-4 w-44" />
+          <SkeletonBlock className="mt-2 h-3 w-64 max-w-full bg-white/[0.08]" />
+          <SkeletonBlock className="mt-2 h-3 w-36 bg-white/[0.08]" />
+        </div>
+        <div className="mt-7 border-t border-white/[0.11] pt-5">
+          <SkeletonBlock className="h-4 w-16 bg-white/[0.08]" />
+          <div className="mt-3 divide-y divide-white/[0.11] border border-white/[0.11]">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="px-3 py-3">
+                <SkeletonBlock className="h-4 w-24" />
+                <SkeletonBlock className="mt-2 h-3 w-44 bg-white/[0.08]" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </aside>
+
+      <div className="hidden bg-white/[0.11] lg:block" />
+
+      <div className="min-w-0">
+        {[0, 1, 2].map((section) => (
+          <section key={section} className="border-b border-white/[0.11] px-4 py-5 sm:px-6 lg:px-7">
+            <SkeletonBlock className="h-4 w-20 bg-white/[0.08]" />
+            <SkeletonBlock className="mt-2 h-6 w-40" />
+            <SkeletonBlock className="mt-2 h-4 w-[28rem] max-w-full bg-white/[0.08]" />
+            <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <div>
+                <SkeletonBlock className="h-3 w-28 bg-white/[0.08]" />
+                <SkeletonBlock className="mt-2 h-9 w-full" />
+              </div>
+              <div>
+                <SkeletonBlock className="h-3 w-32 bg-white/[0.08]" />
+                <SkeletonBlock className="mt-2 h-9 w-full" />
+              </div>
+              <div className="xl:col-span-2">
+                <SkeletonBlock className="h-3 w-24 bg-white/[0.08]" />
+                <SkeletonBlock className="mt-2 h-28 w-full" />
+              </div>
+            </div>
+          </section>
+        ))}
+        <div className="sticky bottom-0 border-t border-white/[0.11] bg-[#000]/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-7">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <SkeletonBlock className="h-3 w-64 max-w-full bg-white/[0.08]" />
+            <SkeletonBlock className="h-10 w-64 bg-white/[0.9]" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
 const CreateInterview: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -318,9 +391,6 @@ const CreateInterview: React.FC = () => {
   const panelHeaderClass = "geist-label uppercase text-[#6b7280]";
   const panelTitleClass = "geist-section-title mt-1 text-white";
   const helperTextClass = "geist-small mt-1 max-w-2xl text-[#8f8f8f]";
-  const SkeletonBlock = ({ className = '' }: { className?: string }) => (
-    <span className={`block animate-pulse rounded-[4px] bg-white/[0.12] ${className}`} aria-hidden="true" />
-  );
 
   return (
     <div className="-mx-4 -my-8 min-h-[calc(100dvh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8">
@@ -345,7 +415,7 @@ const CreateInterview: React.FC = () => {
 
             <label
               htmlFor="jd-upload"
-              className={`geist-caption mt-5 flex min-h-28 cursor-pointer flex-col justify-center rounded-[6px] border border-dashed border-white/[0.18] bg-white/[0.025] px-4 py-4 text-[#d4d4d4] transition-colors hover:border-white/[0.3] hover:bg-white/[0.045] ${parsingJd ? 'cursor-not-allowed opacity-50' : ''}`}
+              className={`geist-caption mt-5 flex min-h-28 cursor-pointer flex-col justify-center rounded-[6px] border border-dashed bg-white/[0.025] px-4 py-4 text-[#d4d4d4] transition-colors hover:border-white/[0.3] hover:bg-white/[0.045] ${parsingJd ? 'cursor-not-allowed border-white/[0.12]' : 'border-white/[0.18]'}`}
             >
               {parsingJd ? (
                 <span className="flex flex-col gap-2" role="status" aria-label="Parsing job description">
@@ -688,7 +758,7 @@ const CreateInterview: React.FC = () => {
             <div className="mt-5 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
               <label
                 htmlFor="resume-upload"
-                className={`geist-caption flex cursor-pointer items-center justify-between gap-3 rounded-[6px] border border-dashed border-white/[0.18] bg-[#050505] px-3 py-3 text-[#d4d4d4] transition-colors hover:border-white/[0.3] hover:bg-white/[0.045] ${parsingResumes ? 'cursor-not-allowed opacity-50' : ''}`}
+                className={`geist-caption flex cursor-pointer items-center justify-between gap-3 rounded-[6px] border border-dashed bg-[#050505] px-3 py-3 text-[#d4d4d4] transition-colors hover:border-white/[0.3] hover:bg-white/[0.045] ${parsingResumes ? 'cursor-not-allowed border-white/[0.12]' : 'border-white/[0.18]'}`}
               >
                 {parsingResumes ? (
                   <span className="flex w-full items-center justify-between gap-3" role="status" aria-label="Parsing resumes">

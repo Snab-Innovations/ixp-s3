@@ -127,122 +127,134 @@ const CreateTest: React.FC = () => {
     }
   };
 
+  const fieldClass = "w-full rounded-[8px] border border-black/[0.08] bg-white px-3 py-2.5 text-sm outline-none transition-colors placeholder:text-gray-400 focus:border-black/30 focus:ring-4 focus:ring-black/[0.04] dark:border-white/[0.11] dark:bg-[#050505] dark:placeholder:text-[#666] dark:focus:border-white/30 dark:focus:ring-white/[0.06]";
+  const labelClass = "mb-2 block text-xs font-medium text-gray-600 dark:text-[#a1a1a1]";
+  const sectionClass = "rounded-[12px] border border-black/[0.08] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.11] dark:bg-[#0a0a0a]";
+
   return (
-    <div className={`min-h-screen p-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-      <div className="max-w-4xl mx-auto">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-500 hover:text-blue-500 mb-6">
+    <div className={`min-h-screen bg-white text-[#111] dark:bg-[#050505] ${isDark ? 'dark' : ''}`}>
+      <div className="mx-auto max-w-5xl py-2 sm:py-4">
+        <button onClick={() => navigate(-1)} className="mb-6 inline-flex h-9 items-center gap-2 rounded-[6px] border border-black/[0.08] px-3 text-sm font-medium text-gray-600 transition-colors hover:bg-black/[0.03] hover:text-black dark:border-white/[0.11] dark:text-[#a1a1a1] dark:hover:bg-white/[0.05] dark:hover:text-white">
           <ArrowLeft size={18} /> Back
         </button>
 
-        <h1 className="text-3xl font-bold mb-8">Create Assessment</h1>
+        <div className="mb-8 border-b border-black/[0.08] pb-6 dark:border-white/[0.11]">
+          <div className="mb-3 inline-flex h-7 items-center gap-2 rounded-full border border-black/[0.08] bg-black/[0.03] px-3 text-xs font-medium text-gray-600 dark:border-white/[0.11] dark:bg-white/[0.05] dark:text-[#a1a1a1]">
+            <Sparkles size={13} /> Build workflow
+          </div>
+          <h1 className="text-3xl font-semibold tracking-[-0.04em] md:text-5xl">Create Assessment</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-500 dark:text-[#8f8f8f]">Configure the test, generate or add questions, and optionally connect passing candidates to the next interview round.</p>
+        </div>
 
-        <div className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div className="space-y-6">
+          <div className={sectionClass}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
-              <label className="block text-sm font-bold mb-2">Test Title</label>
-              <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 outline-none" placeholder="e.g. Frontend React Quiz" />
+              <label className={labelClass}>Assessment title</label>
+              <input type="text" value={title} onChange={e => setTitle(e.target.value)} className={fieldClass} placeholder="e.g. Frontend React Quiz" />
             </div>
             <div>
-              <label className="block text-sm font-bold mb-2">Test Type</label>
-              <select value={type} onChange={(e: any) => { setType(e.target.value); setQuestions([]); }} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 outline-none">
+              <label className={labelClass}>Assessment type</label>
+              <select value={type} onChange={(e: any) => { setType(e.target.value); setQuestions([]); }} className={fieldClass}>
                 <option value="aptitude">Aptitude (MCQ)</option>
                 <option value="coding">Coding Challenge</option>
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-bold mb-2">Duration (minutes)</label>
+              <label className={labelClass}>Duration (minutes)</label>
               <input type="number" value={duration} onChange={e => setDuration(Number(e.target.value))} min="1"
-                className="w-full p-3 rounded-xl bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 outline-none" placeholder="e.g. 15" />
+                className={fieldClass} placeholder="e.g. 15" />
             </div>
+          </div>
           </div>
 
           {/* Automation Settings */}
-          <div className="md:col-span-2 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800">
-            <h3 className="font-bold text-blue-700 dark:text-blue-400 flex items-center gap-2 mb-3">
+          <div className={sectionClass}>
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-black dark:text-white">
               <LinkIcon size={18} /> Automation Settings (Optional)
             </h3>
             <div className="mb-4">
-                <label className="block text-sm font-bold mb-2">Passing Score (%)</label>
+                <label className={labelClass}>Passing Score (%)</label>
                 <input type="number" value={passingScore} onChange={e => setPassingScore(Number(e.target.value))} min="0" max="100"
-                  className="w-full md:w-1/2 p-3 rounded-xl bg-white dark:bg-[#050505] border border-blue-200 dark:border-blue-800 outline-none" placeholder="e.g. 75" />
+                  className={`${fieldClass} md:w-1/2`} placeholder="e.g. 75" />
             </div>
 
-            <div className="flex bg-blue-100 dark:bg-blue-900/20 p-1 rounded-lg mb-4">
-                <button type="button" onClick={() => setAutomationType('internal')} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${automationType === 'internal' ? 'bg-white dark:bg-blue-800 text-blue-700 dark:text-white shadow' : 'text-blue-600 dark:text-blue-300'}`}>
+            <div className="mb-4 flex rounded-[8px] border border-black/[0.08] bg-black/[0.03] p-1 dark:border-white/[0.11] dark:bg-white/[0.05]">
+                <button type="button" onClick={() => setAutomationType('internal')} className={`flex-1 rounded-[6px] py-2 text-sm font-medium transition-all ${automationType === 'internal' ? 'bg-white text-black shadow-sm dark:bg-[#1a1a1a] dark:text-white' : 'text-gray-500 dark:text-[#8f8f8f]'}`}>
                     Link to Internal AI Interview
                 </button>
-                <button type="button" onClick={() => setAutomationType('external')} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${automationType === 'external' ? 'bg-white dark:bg-blue-800 text-blue-700 dark:text-white shadow' : 'text-blue-600 dark:text-blue-300'}`}>
+                <button type="button" onClick={() => setAutomationType('external')} className={`flex-1 rounded-[6px] py-2 text-sm font-medium transition-all ${automationType === 'external' ? 'bg-white text-black shadow-sm dark:bg-[#1a1a1a] dark:text-white' : 'text-gray-500 dark:text-[#8f8f8f]'}`}>
                     Link to External URL
                 </button>
             </div>
 
             {automationType === 'internal' && (
               <div className="animate-in fade-in duration-300">
-                  <label className="block text-sm font-bold mb-2">Next Round Interview</label>
+                  <label className={labelClass}>Next Round Interview</label>
                   <select value={nextInterviewId} onChange={e => setNextInterviewId(e.target.value)}
-                    className="w-full p-3 rounded-xl bg-white dark:bg-[#050505] border border-blue-200 dark:border-blue-800 outline-none">
+                    className={fieldClass}>
                     <option value="">Select an interview to link...</option>
                     {recruiterInterviews.map(interview => (<option key={interview.id} value={interview.id}>{interview.title}</option>))}
                   </select>
-                  <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">If a candidate passes, they will be automatically emailed a unique, secure link to the selected AI interview.</p>
+                  <p className="mt-2 text-xs text-gray-500 dark:text-[#8f8f8f]">If a candidate passes, they will be automatically emailed a unique, secure link to the selected AI interview.</p>
               </div>
             )}
 
             {automationType === 'external' && (
               <div className="space-y-4 animate-in fade-in duration-300">
                   <div>
-                      <label className="block text-sm font-bold mb-2">External Interview Link</label>
-                      <input type="url" value={externalLink} onChange={e => setExternalLink(e.target.value)} className="w-full p-3 rounded-xl bg-white dark:bg-[#050505] border border-blue-200 dark:border-blue-800 outline-none" placeholder="https://zoom.us/j/..." />
+                      <label className={labelClass}>External Interview Link</label>
+                      <input type="url" value={externalLink} onChange={e => setExternalLink(e.target.value)} className={fieldClass} placeholder="https://zoom.us/j/..." />
                   </div>
                   <div>
-                      <label className="block text-sm font-bold mb-2">Access Code (Optional)</label>
-                      <input type="text" value={externalAccessCode} onChange={e => setExternalAccessCode(e.target.value)} className="w-full p-3 rounded-xl bg-white dark:bg-[#050505] border border-blue-200 dark:border-blue-800 outline-none" placeholder="e.g. 123456" />
+                      <label className={labelClass}>Access Code (Optional)</label>
+                      <input type="text" value={externalAccessCode} onChange={e => setExternalAccessCode(e.target.value)} className={fieldClass} placeholder="e.g. 123456" />
                   </div>
-                  <p className="text-xs text-blue-600 dark:text-blue-500 mt-1">If a candidate passes, they will be automatically emailed this link and access code.</p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-[#8f8f8f]">If a candidate passes, they will be automatically emailed this link and access code.</p>
               </div>
             )}
           </div>
 
           {/* AI Generator */}
-          <div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800 mb-8">
-            <h3 className="font-bold text-blue-700 dark:text-blue-400 flex items-center gap-2 mb-3">
+          <div className={sectionClass}>
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-black dark:text-white">
               <Sparkles size={18} /> AI Generator
             </h3>
             <div className="flex gap-2">
-              <input type="text" value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} placeholder={`Enter topic for ${type} questions...`} className="flex-1 p-3 rounded-xl bg-white dark:bg-[#050505] border border-blue-200 dark:border-blue-800 outline-none" />
-              <button onClick={handleAiGenerate} disabled={loading} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50">
+              <input type="text" value={aiPrompt} onChange={e => setAiPrompt(e.target.value)} placeholder={`Enter topic for ${type} questions...`} className={`${fieldClass} flex-1`} />
+              <button onClick={handleAiGenerate} disabled={loading} className="rounded-[6px] bg-black px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#333] disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-[#eaeaea]">
                 {loading ? 'Generating...' : 'Generate'}
               </button>
             </div>
           </div>
 
           {/* Manual Entry */}
-          <div className="mb-8 border-t border-gray-100 dark:border-white/5 pt-6">
-            <h3 className="font-bold mb-4">Add Manually</h3>
+          <div className={sectionClass}>
+            <h3 className="mb-4 text-sm font-semibold">Add Manually</h3>
             {type === 'aptitude' ? (
               <div className="space-y-3">
-                <input type="text" placeholder="Question" value={manualQ.question} onChange={e => setManualQ({ ...manualQ, question: e.target.value })} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10" />
+                <input type="text" placeholder="Question" value={manualQ.question} onChange={e => setManualQ({ ...manualQ, question: e.target.value })} className={fieldClass} />
                 <div className="grid grid-cols-2 gap-3">
                   {manualQ.options.map((opt, i) => (
                     <input key={i} type="text" placeholder={`Option ${i + 1}`} value={opt} onChange={e => {
                       const newOpts = [...manualQ.options]; newOpts[i] = e.target.value;
                       setManualQ({ ...manualQ, options: newOpts });
-                    }} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10" />
+                    }} className={fieldClass} />
                   ))}
                 </div>
-                <select value={manualQ.correct} onChange={e => setManualQ({ ...manualQ, correct: Number(e.target.value) })} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10">
+                <select value={manualQ.correct} onChange={e => setManualQ({ ...manualQ, correct: Number(e.target.value) })} className={fieldClass}>
                   {manualQ.options.map((_, i) => <option key={i} value={i}>Correct Option: {i + 1}</option>)}
                 </select>
-                <button onClick={addManualQuestion} className="w-full py-3 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-xl font-bold flex items-center justify-center gap-2">
+                <button onClick={addManualQuestion} className="flex w-full items-center justify-center gap-2 rounded-[6px] border border-black/[0.08] bg-black/[0.03] py-2.5 text-sm font-medium transition-colors hover:bg-black/[0.06] dark:border-white/[0.11] dark:bg-white/[0.05] dark:hover:bg-white/[0.09]">
                   <Plus size={18} /> Add Question
                 </button>
               </div>
             ) : (
               <div className="space-y-3">
-                <input type="text" placeholder="Problem Title" value={manualCodeQ.title} onChange={e => setManualCodeQ({ ...manualCodeQ, title: e.target.value })} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10" />
-                <textarea placeholder="Problem Description" value={manualCodeQ.description} onChange={e => setManualCodeQ({ ...manualCodeQ, description: e.target.value })} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 h-32" />
-                <textarea placeholder="Test Cases (e.g. Input: 1 2, Output: 3)" value={manualCodeQ.testCases} onChange={e => setManualCodeQ({ ...manualCodeQ, testCases: e.target.value })} className="w-full p-3 rounded-xl bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 h-24" />
-                <button onClick={addManualQuestion} className="w-full py-3 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-xl font-bold flex items-center justify-center gap-2">
+                <input type="text" placeholder="Problem Title" value={manualCodeQ.title} onChange={e => setManualCodeQ({ ...manualCodeQ, title: e.target.value })} className={fieldClass} />
+                <textarea placeholder="Problem Description" value={manualCodeQ.description} onChange={e => setManualCodeQ({ ...manualCodeQ, description: e.target.value })} className={`${fieldClass} h-32`} />
+                <textarea placeholder="Test Cases (e.g. Input: 1 2, Output: 3)" value={manualCodeQ.testCases} onChange={e => setManualCodeQ({ ...manualCodeQ, testCases: e.target.value })} className={`${fieldClass} h-24`} />
+                <button onClick={addManualQuestion} className="flex w-full items-center justify-center gap-2 rounded-[6px] border border-black/[0.08] bg-black/[0.03] py-2.5 text-sm font-medium transition-colors hover:bg-black/[0.06] dark:border-white/[0.11] dark:bg-white/[0.05] dark:hover:bg-white/[0.09]">
                   <Plus size={18} /> Add Problem
                 </button>
               </div>
@@ -250,12 +262,12 @@ const CreateTest: React.FC = () => {
           </div>
 
           {/* Preview */}
-          <div>
-            <h3 className="font-bold mb-4">Questions ({questions.length})</h3>
+          <div className={sectionClass}>
+            <h3 className="mb-4 text-sm font-semibold">Questions ({questions.length})</h3>
             <div className="space-y-4">
               {questions.map((q, i) => (
-                <div key={i} className="p-4 rounded-xl bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/5 relative group">
-                  <button onClick={() => setQuestions(questions.filter((_, idx) => idx !== i))} className="absolute top-4 right-4 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div key={i} className="group relative rounded-[10px] border border-black/[0.08] bg-black/[0.02] p-4 dark:border-white/[0.08] dark:bg-white/[0.04]">
+                  <button onClick={() => setQuestions(questions.filter((_, idx) => idx !== i))} className="absolute right-4 top-4 text-gray-400 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100">
                     <Trash size={18} />
                   </button>
                   {type === 'aptitude' ? (
@@ -263,7 +275,7 @@ const CreateTest: React.FC = () => {
                       <p className="font-bold mb-2">{i + 1}. {q.question}</p>
                       <div className="grid grid-cols-2 gap-2 text-sm">
                         {q.options.map((opt: string, idx: number) => (
-                          <div key={idx} className={`p-2 rounded ${idx === q.correctIndex ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 dark:bg-white/5'}`}>
+                          <div key={idx} className={`rounded-[6px] border p-2 ${idx === q.correctIndex ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'border-black/[0.06] bg-white dark:border-white/[0.08] dark:bg-[#0a0a0a]'}`}>
                             {opt}
                           </div>
                         ))}
@@ -272,7 +284,7 @@ const CreateTest: React.FC = () => {
                   ) : (
                     <>
                       <p className="font-bold mb-1">{i + 1}. {q.title}</p>
-                      <p className="text-sm text-gray-500 line-clamp-2">{q.description}</p>
+                      <p className="line-clamp-2 text-sm text-gray-500 dark:text-[#8f8f8f]">{q.description}</p>
                     </>
                   )}
                 </div>
@@ -281,7 +293,7 @@ const CreateTest: React.FC = () => {
           </div>
         </div>
 
-        <button onClick={handleSave} disabled={loading || questions.length === 0} className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 disabled:opacity-50">
+        <button onClick={handleSave} disabled={loading || questions.length === 0} className="mt-6 flex w-full items-center justify-center gap-2 rounded-[6px] bg-black py-3 text-sm font-medium text-white transition-colors hover:bg-[#333] disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-[#eaeaea]">
           <Save size={20} /> Save Assessment
         </button>
       </div>

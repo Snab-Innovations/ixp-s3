@@ -1,15 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, deleteDoc, doc, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db, auth } from '../services/firebase';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, FileText, Code, Eye, Clock, Sparkles } from 'lucide-react';
-import { useTheme } from '../context/ThemeContext';
+import { Plus, Trash2, FileText, Code, Eye, Clock, Sparkles, Copy, BarChart3 } from 'lucide-react';
 
 const RecruiterTests: React.FC = () => {
   const [tests, setTests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const { isDark } = useTheme();
 
   useEffect(() => {
     const fetchTests = async () => {
@@ -43,71 +41,90 @@ const RecruiterTests: React.FC = () => {
     }
   };
 
+  const codingCount = tests.filter(test => test.type === 'coding').length;
+  const aptitudeCount = tests.filter(test => test.type !== 'coding').length;
+  const automatedCount = tests.filter(test => test.nextInterviewId || test.externalInterviewLink).length;
+
   return (
-    <div className={`min-h-screen p-6 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+    <div className="min-h-screen bg-white text-[#111] dark:bg-[#050505] dark:text-white px-0 py-2 sm:py-4">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-8 flex flex-col gap-5 border-b border-black/[0.08] pb-6 dark:border-white/[0.11] md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Assessments</h1>
-            <p className="text-gray-500 dark:text-gray-400 mt-1">Manage aptitude and coding tests for candidates.</p>
+            <div className="mb-3 inline-flex h-7 items-center gap-2 rounded-full border border-black/[0.08] bg-black/[0.03] px-3 text-xs font-medium text-gray-600 dark:border-white/[0.11] dark:bg-white/[0.05] dark:text-[#a1a1a1]">
+              <BarChart3 size={13} /> Assessment workspace
+            </div>
+            <h1 className="text-3xl font-semibold tracking-[-0.04em] md:text-5xl">Assessments</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-500 dark:text-[#8f8f8f]">Create, manage, and review aptitude or coding assessments with secure access codes and next-round automation.</p>
           </div>
-          <Link to="/recruiter/tests/create" className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg transition-all">
-            <Plus size={20} /> Create New Test
+          <Link to="/recruiter/tests/create" className="inline-flex h-10 items-center justify-center gap-2 rounded-[6px] bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-[#333] dark:bg-white dark:text-black dark:hover:bg-[#eaeaea]">
+            <Plus size={16} /> Create Assessment
           </Link>
         </div>
 
+        <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-4">
+          {[
+            ['Total', tests.length],
+            ['Aptitude', aptitudeCount],
+            ['Coding', codingCount],
+            ['Automated', automatedCount],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-[10px] border border-black/[0.08] bg-white p-4 dark:border-white/[0.11] dark:bg-[#0a0a0a]">
+              <p className="text-xs font-medium text-gray-500 dark:text-[#8f8f8f]">{label}</p>
+              <p className="mt-2 font-mono text-2xl font-semibold tabular-nums">{value}</p>
+            </div>
+          ))}
+        </div>
+
         {loading ? (
-          <div className="text-center py-20 opacity-50">Loading assessments...</div>
+          <div className="rounded-[10px] border border-black/[0.08] py-20 text-center text-sm text-gray-500 dark:border-white/[0.11] dark:text-[#8f8f8f]">Loading assessments...</div>
         ) : tests.length === 0 ? (
-          <div className="text-center py-20 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-2xl">
-            <p className="text-gray-500 mb-4">No tests created yet.</p>
-            <Link to="/recruiter/tests/create" className="text-blue-600 hover:underline">Create your first assessment</Link>
+          <div className="rounded-[12px] border border-dashed border-black/[0.16] bg-black/[0.02] py-20 text-center dark:border-white/[0.18] dark:bg-white/[0.03]">
+            <p className="mb-4 text-sm text-gray-500 dark:text-[#8f8f8f]">No assessments created yet.</p>
+            <Link to="/recruiter/tests/create" className="inline-flex h-9 items-center justify-center rounded-[6px] border border-black/[0.12] bg-white px-3 text-sm font-medium hover:bg-gray-50 dark:border-white/[0.14] dark:bg-[#0a0a0a] dark:hover:bg-white/[0.06]">Create your first assessment</Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {tests.map(test => (
-              <div key={test.id} className="bg-white dark:bg-[#111] p-6 rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm hover:shadow-md transition-all">
+              <div key={test.id} className="group rounded-[12px] border border-black/[0.08] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all hover:-translate-y-0.5 hover:border-black/[0.18] dark:border-white/[0.11] dark:bg-[#0a0a0a] dark:hover:border-white/[0.24]">
                 <div className="flex justify-between items-start mb-4">
-                  <div className={`p-3 rounded-xl ${test.type === 'coding' ? 'bg-purple-100 dark:bg-purple-900/20 text-purple-600' : 'bg-blue-100 dark:bg-blue-900/20 text-blue-600'}`}>
-                    {test.type === 'coding' ? <Code size={24} /> : <FileText size={24} />}
+                  <div className="flex h-10 w-10 items-center justify-center rounded-[8px] border border-black/[0.08] bg-black/[0.03] text-black dark:border-white/[0.11] dark:bg-white/[0.06] dark:text-white">
+                    {test.type === 'coding' ? <Code size={18} /> : <FileText size={18} />}
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => navigate(`/recruiter/tests/${test.id}/results`)} className="p-2 text-gray-400 hover:text-blue-500 transition-colors" title="View Results">
+                    <button onClick={() => navigate(`/recruiter/tests/${test.id}/results`)} className="rounded-[6px] border border-transparent p-2 text-gray-500 transition-colors hover:border-black/[0.08] hover:bg-black/[0.03] hover:text-black dark:hover:border-white/[0.11] dark:hover:bg-white/[0.06] dark:hover:text-white" title="View Results">
                       <Eye size={18} />
                     </button>
-                    <button onClick={() => handleDelete(test.id)} className="p-2 text-gray-400 hover:text-red-500 transition-colors" title="Delete">
+                    <button onClick={() => handleDelete(test.id)} className="rounded-[6px] border border-transparent p-2 text-gray-500 transition-colors hover:border-red-500/20 hover:bg-red-500/10 hover:text-red-500" title="Delete">
                       <Trash2 size={18} />
                     </button>
                   </div>
                 </div>
-                <h3 className="text-xl font-bold mb-2">{test.title}</h3>
-                <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  <span className="capitalize">{test.type} Test</span>
-                  <span>•</span>
+                <h3 className="mb-2 line-clamp-2 text-lg font-semibold tracking-[-0.02em]">{test.title}</h3>
+                <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-[#8f8f8f]">
+                  <span className="rounded-full border border-black/[0.08] px-2 py-1 capitalize dark:border-white/[0.11]">{test.type} Test</span>
                   <span>{test.questions?.length || 0} Questions</span>
                   {test.nextInterviewId && (
-                    <span className="flex items-center gap-1 text-blue-500"><Sparkles size={14} /> Automation</span>
+                    <span className="flex items-center gap-1 text-gray-900 dark:text-white"><Sparkles size={14} /> Automation</span>
                   )}
-                  <span>•</span>
                   <span className="flex items-center gap-1"><Clock size={14} /> {test.duration || 'N/A'} min</span>
                 </div>
-                <div className="mb-4 bg-gray-50 dark:bg-black/20 p-3 rounded-lg flex justify-between items-center border border-gray-100 dark:border-white/5">
+                <div className="mb-4 flex items-center justify-between rounded-[8px] border border-black/[0.08] bg-black/[0.02] p-3 dark:border-white/[0.11] dark:bg-white/[0.04]">
                   <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wider font-bold mb-1">Access Code</p>
-                    <p className="font-mono text-lg tracking-widest text-blue-600 dark:text-blue-400 font-bold">{test.accessCode || 'N/A'}</p>
+                    <p className="mb-1 font-mono text-[11px] uppercase tracking-[0.12em] text-gray-500 dark:text-[#8f8f8f]">Access Code</p>
+                    <p className="font-mono text-lg font-semibold tracking-[0.22em] text-black dark:text-white">{test.accessCode || 'N/A'}</p>
                   </div>
                   {test.accessCode && (
-                    <button onClick={() => navigator.clipboard.writeText(test.accessCode)} className="text-sm font-medium text-gray-500 hover:text-blue-500 transition-colors">
-                      Copy Code
+                    <button onClick={() => navigator.clipboard.writeText(test.accessCode)} className="inline-flex items-center gap-1.5 rounded-[6px] border border-black/[0.08] bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:text-black dark:border-white/[0.11] dark:bg-[#0a0a0a] dark:text-[#a1a1a1] dark:hover:text-white">
+                      <Copy size={13} /> Copy
                     </button>
                   )}
                 </div>
-                <div className="pt-4 border-t border-gray-100 dark:border-white/5 flex justify-between items-center">
-                  <span className="text-xs text-gray-400">Created {test.createdAt?.toDate().toLocaleDateString()}</span>
+                <div className="flex items-center justify-between border-t border-black/[0.08] pt-4 dark:border-white/[0.08]">
+                  <span className="text-xs text-gray-400">Created {test.createdAt?.toDate().toLocaleDateString() || 'recently'}</span>
                   <button onClick={() => {
                     navigator.clipboard.writeText(`${window.location.origin}/#/test/${test.id}`);
                     alert("Assessment link copied to clipboard!");
-                  }} className="text-sm font-bold text-blue-600 hover:underline">Copy Test Link</button>
+                  }} className="text-sm font-medium text-black underline-offset-4 hover:underline dark:text-white">Copy Link</button>
                 </div>
               </div>
             ))}
