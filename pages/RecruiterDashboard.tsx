@@ -658,7 +658,7 @@ const RecruiterDashboard: React.FC = () => {
                     />
                     <Line
                       isAnimationActive={false}
-                      type="linear"
+                      type="monotone"
                       dataKey="roles"
                       stroke="var(--color-roles)"
                       strokeWidth={2}
@@ -668,7 +668,7 @@ const RecruiterDashboard: React.FC = () => {
                     />
                     <Line
                       isAnimationActive={false}
-                      type="linear"
+                      type="monotone"
                       dataKey="assessments"
                       stroke="var(--color-assessments)"
                       strokeWidth={2}
@@ -678,7 +678,7 @@ const RecruiterDashboard: React.FC = () => {
                     />
                     <Line
                       isAnimationActive={false}
-                      type="linear"
+                      type="monotone"
                       dataKey="responses"
                       stroke="var(--color-responses)"
                       strokeWidth={2}

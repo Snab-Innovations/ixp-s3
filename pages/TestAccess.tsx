@@ -90,26 +90,28 @@ const TestAccess: React.FC = () => {
   ];
 
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center p-4 ${isDark ? 'bg-[#0a0a0f]' : 'bg-gray-50'}`}>
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-white p-4 text-[#111] dark:bg-[#050505] dark:text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(0,0,0,0.06),transparent_32rem)] dark:bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.08),transparent_32rem)]" />
       <div className="absolute top-6 left-6">
         <Logo className="w-[118px] sm:w-[140px] h-auto" isDark={isDark} />
       </div>
       
-      <div ref={containerRef} className="access-container w-full max-w-lg p-6 md:p-10 space-y-6 bg-white dark:bg-[#111] rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10">
+      <div ref={containerRef} className="access-container relative w-full max-w-lg space-y-6 rounded-[14px] border border-black/[0.08] bg-white p-6 shadow-[0_24px_80px_rgba(0,0,0,0.08)] dark:border-white/[0.11] dark:bg-[#0a0a0a] md:p-10">
         <div className="text-center">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2">Assessment Access</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm">
-            You are about to start the assessment for: <strong className="text-blue-600 dark:text-blue-400">{testDetails?.title || '...'}</strong>
+          <div className="mx-auto mb-4 inline-flex h-7 items-center rounded-full border border-black/[0.08] bg-black/[0.03] px-3 text-xs font-medium text-gray-600 dark:border-white/[0.11] dark:bg-white/[0.05] dark:text-[#a1a1a1]">Secure assessment</div>
+          <h1 className="mb-2 text-3xl font-semibold tracking-[-0.04em] text-gray-900 dark:text-white md:text-4xl">Assessment Access</h1>
+          <p className="text-sm leading-6 text-gray-500 dark:text-[#8f8f8f]">
+            You are about to start: <strong className="font-medium text-black dark:text-white">{testDetails?.title || '...'}</strong>
           </p>
         </div>
 
         {/* Rules Section */}
-        <div className="p-5 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-200 dark:border-white/10">
-          <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4 uppercase tracking-wider">Rules of the Assessment</h3>
+        <div className="rounded-[10px] border border-black/[0.08] bg-black/[0.02] p-5 dark:border-white/[0.11] dark:bg-white/[0.04]">
+          <h3 className="mb-4 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500 dark:text-[#8f8f8f]">Rules of the Assessment</h3>
           <ul className="space-y-3">
             {rules.map((rule, index) => (
-              <li key={index} className="flex items-start gap-3 text-sm text-gray-600 dark:text-gray-400">
-                <rule.icon className="w-4 h-4 mt-0.5 text-blue-500 flex-shrink-0" />
+              <li key={index} className="flex items-start gap-3 text-sm text-gray-600 dark:text-[#a1a1a1]">
+                <rule.icon className="mt-0.5 h-4 w-4 flex-shrink-0 text-black dark:text-white" />
                 <span>{rule.text}</span>
               </li>
             ))}
@@ -117,23 +119,23 @@ const TestAccess: React.FC = () => {
         </div>
         
         {error && (
-          <p className="text-red-500 bg-red-100 dark:bg-red-900/20 p-3 rounded-lg text-sm font-medium">{error}</p>
+          <p className="rounded-[8px] border border-red-500/20 bg-red-500/10 p-3 text-sm font-medium text-red-600 dark:text-red-400">{error}</p>
         )}
 
         {testDetails ? (
-          <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-white/10">
-            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 text-center">Enter Access Code</label>
+          <div className="space-y-4 border-t border-black/[0.08] pt-4 dark:border-white/[0.11]">
+            <label className="block text-center text-sm font-medium text-gray-700 dark:text-[#a1a1a1]">Enter Access Code</label>
             <input
               type="text"
               placeholder="••••••"
               value={accessCode}
               onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
-              className="w-full px-4 py-4 bg-gray-50 dark:bg-[#1a1a1a] border-2 border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all text-center text-2xl tracking-[0.5em] font-mono"
+              className="w-full rounded-[10px] border border-black/[0.08] bg-white px-4 py-4 text-center font-mono text-2xl tracking-[0.5em] text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-black/30 focus:ring-4 focus:ring-black/[0.04] dark:border-white/[0.11] dark:bg-[#050505] dark:text-white dark:placeholder:text-[#666] dark:focus:border-white/30 dark:focus:ring-white/[0.06]"
             />
             <button 
               onClick={handleStartTest}
               disabled={isLoading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-xl shadow-lg shadow-blue-500/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="flex w-full items-center justify-center gap-2 rounded-[6px] bg-black px-4 py-3.5 text-sm font-medium text-white transition-colors hover:bg-[#333] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-[#eaeaea]"
             >
               {isLoading ? (
                 <>

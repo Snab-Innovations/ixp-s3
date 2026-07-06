@@ -13,14 +13,17 @@ const TestInfoForm: React.FC<{ onSubmit: (info: {name: string, email: string}) =
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-[#050505] p-6">
-      <div className="max-w-md w-full bg-white dark:bg-[#111] p-8 rounded-2xl shadow-xl border border-gray-200 dark:border-white/10">
-        <h2 className="text-2xl font-bold text-center mb-2 dark:text-white">Candidate Information</h2>
-        <p className="text-center text-gray-500 dark:text-gray-400 mb-6">Please provide your details to begin the assessment.</p>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-white p-6 text-[#111] dark:bg-[#050505] dark:text-white">
+      <div className="w-full max-w-md rounded-[14px] border border-black/[0.08] bg-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] dark:border-white/[0.11] dark:bg-[#0a0a0a]">
+        <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full border border-black/[0.08] bg-black text-white dark:border-white/[0.11] dark:bg-white dark:text-black">
+          <CheckCircle size={18} />
+        </div>
+        <h2 className="mb-2 text-center text-3xl font-semibold tracking-[-0.04em] dark:text-white">Candidate Information</h2>
+        <p className="mb-6 text-center text-sm leading-6 text-gray-500 dark:text-[#8f8f8f]">Please provide your details to begin the assessment.</p>
         <form onSubmit={(e) => { e.preventDefault(); onSubmit({name, email}); }} className="space-y-4">
-          <input type="text" placeholder="Full Name" required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 border rounded-xl dark:bg-[#1a1a1a] dark:text-white dark:border-white/10 outline-none focus:border-blue-500" />
-          <input type="email" placeholder="Email Address" required value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 border rounded-xl dark:bg-[#1a1a1a] dark:text-white dark:border-white/10 outline-none focus:border-blue-500" />
-          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white p-3.5 rounded-xl font-bold shadow-lg transition-all">Start Assessment</button>
+          <input type="text" placeholder="Full Name" required value={name} onChange={e => setName(e.target.value)} className="w-full rounded-[8px] border border-black/[0.08] bg-white px-3 py-2.5 text-sm outline-none transition-colors placeholder:text-gray-400 focus:border-black/30 focus:ring-4 focus:ring-black/[0.04] dark:border-white/[0.11] dark:bg-[#050505] dark:text-white dark:placeholder:text-[#666] dark:focus:border-white/30 dark:focus:ring-white/[0.06]" />
+          <input type="email" placeholder="Email Address" required value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-[8px] border border-black/[0.08] bg-white px-3 py-2.5 text-sm outline-none transition-colors placeholder:text-gray-400 focus:border-black/30 focus:ring-4 focus:ring-black/[0.04] dark:border-white/[0.11] dark:bg-[#050505] dark:text-white dark:placeholder:text-[#666] dark:focus:border-white/30 dark:focus:ring-white/[0.06]" />
+          <button type="submit" className="w-full rounded-[6px] bg-black p-3 text-sm font-medium text-white transition-colors hover:bg-[#333] dark:bg-white dark:text-black dark:hover:bg-[#eaeaea]">Start Assessment</button>
         </form>
       </div>
     </div>
@@ -635,11 +638,11 @@ const TakeTest: React.FC = () => {
     if (step === 'test' && !isFullscreen && !isTerminated && !submitting && !resultData) {
       return createPortal(
         <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center p-6 text-white text-center">
-          <div className="max-w-md p-8 bg-[#111] rounded-2xl border border-red-500/30 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-yellow-500"></div>
+          <div className="relative max-w-md overflow-hidden rounded-[14px] border border-white/[0.11] bg-[#0a0a0a] p-8 shadow-2xl">
+            <div className="absolute left-0 top-0 h-px w-full bg-white/20"></div>
             <AlertTriangle size={48} className="mx-auto text-yellow-500 mb-4 animate-pulse" />
-            <h2 className="text-2xl font-bold mb-4">Fullscreen Required</h2>
-            <p className="text-gray-300 mb-6 font-medium text-sm leading-relaxed">
+            <h2 className="mb-4 text-2xl font-semibold tracking-[-0.03em]">Fullscreen Required</h2>
+            <p className="mb-6 text-sm font-medium leading-relaxed text-[#a1a1a1]">
               {hasEnteredFullscreenRef.current 
                 ? `You have exited fullscreen mode. The timer is paused. You have ${3 - fullscreenEscapes} escape(s) remaining before automatic termination.`
                 : "This assessment must be taken in fullscreen mode to ensure a secure environment. Please enter fullscreen to start."}
@@ -668,7 +671,7 @@ const TakeTest: React.FC = () => {
                   hasEnteredFullscreenRef.current = true;
                 }
               }}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl transition-all shadow-lg hover:shadow-blue-500/20 active:scale-95 flex items-center justify-center gap-2"
+              className="flex w-full items-center justify-center gap-2 rounded-[6px] bg-white px-6 py-3.5 text-sm font-medium text-black transition-colors hover:bg-[#eaeaea] active:scale-95"
             >
               <Terminal size={18} />
               {hasEnteredFullscreenRef.current ? "Return to Fullscreen" : "Enter Fullscreen & Start"}
@@ -683,20 +686,20 @@ const TakeTest: React.FC = () => {
 
   if (resultData || step === 'finish') {
     return (
-      <div className={`min-h-screen flex flex-col items-center justify-center p-6 ${isDark ? 'bg-[#050505] text-white' : 'bg-gray-50 text-gray-900'}`}>
-        <div className="max-w-3xl w-full bg-white dark:bg-[#111] rounded-2xl shadow-xl p-8 border border-gray-200 dark:border-white/10">
+      <div className={`flex min-h-screen flex-col items-center justify-center bg-white p-6 text-[#111] dark:bg-[#050505] dark:text-white ${isDark ? 'dark' : ''}`}>
+        <div className="w-full max-w-3xl rounded-[14px] border border-black/[0.08] bg-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] dark:border-white/[0.11] dark:bg-[#0a0a0a]">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 mb-4">
+            <div className="mb-4 inline-flex h-20 w-20 items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <CheckCircle size={40} />
             </div>
-            <h2 className="text-3xl font-bold mb-2">Assessment Completed</h2>
-            <p className="text-gray-500 dark:text-gray-400">You scored <span className="text-blue-600 dark:text-blue-400 font-black text-xl">{resultData.score}%</span></p>
+            <h2 className="mb-2 text-4xl font-semibold tracking-[-0.04em]">Assessment Completed</h2>
+            <p className="text-sm text-gray-500 dark:text-[#8f8f8f]">You scored <span className="font-mono text-2xl font-semibold text-black dark:text-white">{resultData.score}%</span></p>
             {resultData.status === 'terminated' ? (
-              <div className="mt-4 text-lg font-bold text-red-600 dark:text-red-500 bg-red-50 dark:bg-red-900/10 p-4 rounded-xl border border-red-200 dark:border-red-900/30">
+              <div className="mt-4 rounded-[10px] border border-red-500/20 bg-red-500/10 p-4 text-sm font-medium text-red-600 dark:text-red-400">
                 Assessment terminated due to security rule violations (left fullscreen).
               </div>
             ) : resultData.passingScore && (
-              <div className={`mt-4 text-lg font-bold ${resultData.status === 'passed' ? 'text-green-500' : 'text-red-500'}`}>
+              <div className={`mt-4 rounded-[10px] border p-4 text-sm font-medium ${resultData.status === 'passed' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400'}`}>
                 {resultData.status === 'passed' 
                   ? `Congratulations, you passed! (Passing score: ${resultData.passingScore}%)`
                   : `You did not meet the passing score of ${resultData.passingScore}%.`
@@ -704,31 +707,31 @@ const TakeTest: React.FC = () => {
               </div>
             )}
             {resultData.status === 'passed' && (
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">An email with instructions for the next round has been sent to you.</p>
+              <p className="mt-3 text-sm text-gray-500 dark:text-[#8f8f8f]">An email with instructions for the next round has been sent to you.</p>
             )}
           </div>
 
           {resultData.type === 'coding' && resultData.feedback && (
-            <div className="bg-blue-50 dark:bg-blue-900/10 p-6 rounded-xl border border-blue-100 dark:border-blue-800/30 mb-8">
-              <h3 className="font-bold text-blue-700 dark:text-blue-300 mb-2">AI Feedback</h3>
-              <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">{resultData.feedback}</p>
+            <div className="mb-8 rounded-[10px] border border-black/[0.08] bg-black/[0.02] p-6 dark:border-white/[0.11] dark:bg-white/[0.04]">
+              <h3 className="mb-2 text-sm font-semibold text-black dark:text-white">AI Feedback</h3>
+              <p className="text-sm leading-relaxed text-gray-700 dark:text-[#d4d4d4]">{resultData.feedback}</p>
             </div>
           )}
 
           {resultData.type === 'aptitude' && (
             <div className="space-y-4 mb-8 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
-              <h3 className="font-bold border-b border-gray-200 dark:border-white/10 pb-2">Answer Key</h3>
+              <h3 className="border-b border-black/[0.08] pb-2 text-sm font-semibold dark:border-white/[0.11]">Answer Key</h3>
               {resultData.questions.map((q: any, i: number) => {
                 const isCorrect = resultData.userAnswers[i] === q.correctIndex;
                 return (
-                  <div key={i} className={`p-4 rounded-xl border ${isCorrect ? 'border-green-200 bg-green-50 dark:bg-green-900/10 dark:border-green-800' : 'border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-800'}`}>
+                  <div key={i} className={`rounded-[10px] border p-4 ${isCorrect ? 'border-emerald-500/20 bg-emerald-500/10' : 'border-red-500/20 bg-red-500/10'}`}>
                     <p className="font-medium mb-2 text-sm"><span className="opacity-50 mr-2">Q{i + 1}.</span> {q.question}</p>
                     <div className="flex flex-col sm:flex-row sm:justify-between text-xs gap-2">
-                      <span className={`font-bold ${isCorrect ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+                      <span className={`font-medium ${isCorrect ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                         Your Answer: {q.options[resultData.userAnswers[i]] || 'Skipped'}
                       </span>
                       {!isCorrect && (
-                        <span className="text-gray-500 dark:text-gray-400">Correct: {q.options[q.correctIndex]}</span>
+                        <span className="text-gray-500 dark:text-[#8f8f8f]">Correct: {q.options[q.correctIndex]}</span>
                       )}
                     </div>
                   </div>
@@ -738,7 +741,7 @@ const TakeTest: React.FC = () => {
           )}
 
           <div className="flex justify-center mt-6">
-            <button onClick={() => navigate('/')} className="px-8 py-3 bg-gray-900 dark:bg-white text-white dark:text-black rounded-xl font-bold hover:opacity-90 transition-opacity shadow-lg">
+            <button onClick={() => navigate('/')} className="rounded-[6px] bg-black px-8 py-3 text-sm font-medium text-white transition-colors hover:bg-[#333] dark:bg-white dark:text-black dark:hover:bg-[#eaeaea]">
               Return to Portal
             </button>
           </div>
@@ -746,36 +749,32 @@ const TakeTest: React.FC = () => {
           {/* Promotional Popup for the main platform */}
           {showPromoPopup && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-[fadeIn_0.5s_ease-out]">
-              <div className="bg-white dark:bg-[#111] border border-blue-500/30 rounded-3xl p-8 max-w-md w-full shadow-2xl relative overflow-hidden transform animate-[slideInUp_0.4s_ease-out]">
-                {/* Glow effects */}
-                <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-500/20 blur-3xl rounded-full"></div>
-                <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-purple-500/20 blur-3xl rounded-full"></div>
-                
+              <div className="relative w-full max-w-md transform overflow-hidden rounded-[14px] border border-black/[0.08] bg-white p-8 shadow-2xl animate-[slideInUp_0.4s_ease-out] dark:border-white/[0.11] dark:bg-[#0a0a0a]">
                 <div className="relative z-10 text-center">
-                  <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 text-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-500/30 transform rotate-3">
+                  <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-black text-white dark:bg-white dark:text-black">
                     <i className="fa-solid fa-rocket text-2xl"></i>
                   </div>
-                  <h3 className="text-2xl font-black text-gray-900 dark:text-white mb-3">Assessment Submitted</h3>
-                  <p className="text-gray-600 dark:text-gray-300 text-sm mb-6 leading-relaxed">
+                  <h3 className="mb-3 text-2xl font-semibold tracking-[-0.03em] text-gray-900 dark:text-white">Assessment Submitted</h3>
+                  <p className="mb-6 text-sm leading-relaxed text-gray-600 dark:text-[#a1a1a1]">
                     Your response has been recorded. If this assessment qualifies you for a next round, the recruiter will contact you using the details you provided.
                   </p>
                   
                   <div className="flex flex-col gap-3">
                     <button 
                       onClick={() => navigate('/')}
-                      className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl font-bold shadow-lg transform transition-all hover:-translate-y-0.5"
+                      className="w-full rounded-[6px] bg-black py-3.5 text-sm font-medium text-white transition-colors hover:bg-[#333] dark:bg-white dark:text-black dark:hover:bg-[#eaeaea]"
                     >
                       Return to Portal
                     </button>
                     <button 
                       onClick={() => navigate('/submit-review')}
-                      className="w-full py-3.5 bg-gradient-to-r from-pink-500 to-orange-400 hover:from-pink-600 hover:to-orange-500 text-white rounded-xl font-bold shadow-lg transform transition-all hover:-translate-y-0.5 flex justify-center items-center gap-2"
+                      className="flex w-full items-center justify-center gap-2 rounded-[6px] border border-black/[0.08] bg-white py-3.5 text-sm font-medium text-black transition-colors hover:bg-black/[0.03] dark:border-white/[0.11] dark:bg-[#050505] dark:text-white dark:hover:bg-white/[0.06]"
                     >
-                      <i className="fa-solid fa-star text-yellow-300 drop-shadow-md"></i> Give Review
+                      <i className="fa-solid fa-star"></i> Give Review
                     </button>
                     <button 
                       onClick={() => setShowPromoPopup(false)}
-                      className="w-full py-3 bg-gray-100 hover:bg-gray-200 dark:bg-[#1a1a1a] dark:hover:bg-[#222] text-gray-700 dark:text-gray-300 rounded-xl font-bold transition-colors"
+                      className="w-full rounded-[6px] py-3 text-sm font-medium text-gray-500 transition-colors hover:bg-black/[0.03] hover:text-black dark:text-[#8f8f8f] dark:hover:bg-white/[0.05] dark:hover:text-white"
                     >
                       Maybe Later
                     </button>
@@ -792,7 +791,7 @@ const TakeTest: React.FC = () => {
 
   if (!test) return (
     <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-[#050505] text-white' : 'bg-gray-50 text-gray-900'}`}>
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="h-12 w-12 animate-spin rounded-full border-2 border-black/10 border-t-black dark:border-white/10 dark:border-t-white"></div>
     </div>
   );
 
@@ -800,7 +799,7 @@ const TakeTest: React.FC = () => {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center ${isDark ? 'bg-[#050505] text-white' : 'bg-gray-50 text-gray-900'}`}>
         <p className="text-xl mb-4">This test has no questions.</p>
-        <button onClick={() => navigate('/')} className="text-blue-500 hover:underline">Go Back</button>
+        <button onClick={() => navigate('/')} className="text-black underline-offset-4 hover:underline dark:text-white">Go Back</button>
       </div>
     );
   }
@@ -811,7 +810,7 @@ const TakeTest: React.FC = () => {
     return (
       <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-[#050505] text-white' : 'bg-gray-50 text-gray-900'}`}>
         <p>Error loading question.</p>
-        <button onClick={() => navigate('/')} className="ml-4 text-blue-500 hover:underline">Go Back</button>
+        <button onClick={() => navigate('/')} className="ml-4 text-black underline-offset-4 hover:underline dark:text-white">Go Back</button>
       </div>
     );
   }
@@ -824,28 +823,28 @@ const TakeTest: React.FC = () => {
 
   return (
     <div 
-      className={`min-h-screen flex flex-col select-none ${isDark ? 'bg-[#050505] text-white' : 'bg-gray-50 text-gray-900'}`}
+      className={`min-h-screen select-none bg-white text-[#111] dark:bg-[#050505] dark:text-white ${isDark ? 'dark' : ''} flex flex-col`}
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
     >
       {renderFullscreenOverlay()}
       {showCalculator && <Calculator onClose={() => setShowCalculator(false)} />}
 
       {/* Header */}
-      <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#111] flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div className="flex flex-col items-center justify-between gap-4 border-b border-black/[0.08] bg-white p-4 dark:border-white/[0.11] dark:bg-[#050505] sm:flex-row sm:p-5">
         <div className="text-center sm:text-left">
-          <h1 className="text-lg sm:text-xl font-bold">{test.title}</h1>
-          <p className="text-sm text-gray-500">Question {currentQ + 1} of {test.questions.length}</p>
+          <h1 className="text-lg font-semibold tracking-[-0.02em] sm:text-xl">{test.title}</h1>
+          <p className="text-sm text-gray-500 dark:text-[#8f8f8f]">Question {currentQ + 1} of {test.questions.length}</p>
         </div>
         <div className="flex items-center flex-wrap justify-center gap-2 sm:gap-4">
           {timeLeft !== null && (
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold ${timeLeft < 60 ? 'text-red-600 bg-red-50 dark:bg-red-900/20' : 'text-gray-600 bg-gray-50 dark:bg-gray-700/20'}`}>
+            <div className={`flex items-center gap-2 rounded-[6px] border px-3 py-1.5 text-xs font-medium sm:text-sm ${timeLeft < 60 ? 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400' : 'border-black/[0.08] bg-black/[0.03] text-gray-600 dark:border-white/[0.11] dark:bg-white/[0.05] dark:text-[#d4d4d4]'}`}>
               <Clock size={16} /> <span className="hidden sm:inline">Time:</span> {formatTime(timeLeft)}
             </div>
           )}
-          <div className="hidden md:flex items-center gap-2 text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold">
+          <div className="hidden items-center gap-2 rounded-[6px] border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 md:flex sm:text-sm">
             <AlertTriangle size={16} /> No Copy Paste
           </div>
-          <button onClick={() => setShowCalculator(true)} className="flex items-center gap-2 text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold cursor-pointer">
+          <button onClick={() => setShowCalculator(true)} className="flex cursor-pointer items-center gap-2 rounded-[6px] border border-black/[0.08] bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-black/[0.03] hover:text-black dark:border-white/[0.11] dark:bg-[#0a0a0a] dark:text-[#d4d4d4] dark:hover:bg-white/[0.06] dark:hover:text-white sm:text-sm">
             <CalculatorIcon size={16} /> <span className="hidden sm:inline">Calculator</span>
           </button>
         </div>
@@ -863,16 +862,16 @@ const TakeTest: React.FC = () => {
         {/* Main Question Area */}
         <div className="lg:col-span-9 flex flex-col min-h-0">
           {test.type === 'aptitude' ? ( // APTITUDE VIEW
-            <div className="bg-white dark:bg-[#111] p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-white/10">
-              <h2 className="text-xl font-bold mb-6">{question.question || 'Question text missing'}</h2>
+            <div className="rounded-[12px] border border-black/[0.08] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.11] dark:bg-[#0a0a0a] md:p-8">
+              <h2 className="mb-6 text-xl font-semibold tracking-[-0.02em]">{question.question || 'Question text missing'}</h2>
               <div className="space-y-3">
                 {question.options?.map((opt: string, i: number) => (
                   <button
                     key={i}
                     onClick={() => handleAnswer(i)}
-                    className={`w-full text-left p-4 rounded-xl border transition-all ${answers[currentQ] === i
-                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 dark:text-blue-300'
-                      : 'bg-gray-50 dark:bg-[#1a1a1a] border-transparent hover:bg-gray-100 dark:hover:bg-white/5'
+                    className={`w-full rounded-[10px] border p-4 text-left text-sm transition-all ${answers[currentQ] === i
+                      ? 'border-black bg-black text-white dark:border-white dark:bg-white dark:text-black'
+                      : 'border-black/[0.08] bg-black/[0.02] hover:bg-black/[0.05] dark:border-white/[0.08] dark:bg-white/[0.04] dark:hover:bg-white/[0.08]'
                       }`}
                   >
                     {opt}
@@ -885,10 +884,10 @@ const TakeTest: React.FC = () => {
               {/* Desktop Grid View */}
               <div className="hidden lg:grid grid-cols-5 gap-6 h-full min-h-0">
                 <div className="lg:col-span-2 h-full">
-                  <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/10 flex flex-col overflow-hidden shadow-sm h-full">
-                    <div className="p-4 border-b border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#161616] flex items-center gap-2">
-                      <FileCode size={18} className="text-blue-500" />
-                      <h2 className="font-bold text-gray-800 dark:text-white">Problem Description</h2>
+                  <div className="flex h-full flex-col overflow-hidden rounded-[12px] border border-black/[0.08] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.11] dark:bg-[#0a0a0a]">
+                    <div className="flex items-center gap-2 border-b border-black/[0.08] bg-black/[0.02] p-4 dark:border-white/[0.11] dark:bg-white/[0.04]">
+                      <FileCode size={18} className="text-black dark:text-white" />
+                      <h2 className="font-semibold text-gray-800 dark:text-white">Problem Description</h2>
                     </div>
                     <div className="p-6 overflow-y-auto flex-1 prose dark:prose-invert max-w-none">
                       <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">{question.title || 'Problem Title'}</h3>
@@ -896,8 +895,8 @@ const TakeTest: React.FC = () => {
                         {question.description || 'No description provided.'}
                       </div>
                       <div className="mt-6">
-                        <h4 className="text-sm font-bold uppercase text-gray-500 dark:text-gray-400 mb-3 tracking-wider">Test Cases</h4>
-                        <div className="bg-gray-50 dark:bg-[#1a1a1a] p-4 rounded-xl border border-gray-200 dark:border-white/5 font-mono text-sm text-gray-700 dark:text-gray-300">
+                        <h4 className="mb-3 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500 dark:text-[#8f8f8f]">Test Cases</h4>
+                        <div className="rounded-[8px] border border-black/[0.08] bg-black/[0.02] p-4 font-mono text-sm text-gray-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-gray-300">
                           {question.testCases || 'No test cases provided.'}
                         </div>
                       </div>
@@ -905,20 +904,20 @@ const TakeTest: React.FC = () => {
                   </div>
                 </div>
                 <div className="lg:col-span-3 h-full">
-                  <div className="flex flex-col bg-[#1e1e1e] rounded-2xl overflow-hidden border border-gray-700 shadow-2xl h-full">
-                    <div className="flex items-center justify-between px-4 py-2 bg-[#252526] border-b border-[#333]">
+                  <div className="flex h-full flex-col overflow-hidden rounded-[12px] border border-white/[0.11] bg-[#0a0a0a] shadow-2xl">
+                    <div className="flex items-center justify-between border-b border-white/[0.11] bg-[#111] px-4 py-2">
                       <div className="flex items-center gap-4">
-                        <select value={codeLang} onChange={e => setCodeLang(e.target.value)} className="bg-[#333] text-gray-200 text-xs rounded px-2 py-1 border border-[#444] focus:outline-none focus:border-blue-500 hover:bg-[#3c3c3c] transition-colors cursor-pointer">
+                        <select value={codeLang} onChange={e => setCodeLang(e.target.value)} className="cursor-pointer rounded-[6px] border border-white/[0.11] bg-white/[0.06] px-2 py-1 text-xs text-gray-200 outline-none transition-colors hover:bg-white/[0.1]">
                           <option value="javascript">JavaScript</option>
                           <option value="python">Python</option>
                           <option value="java">Java</option>
                           <option value="cpp">C++</option>
                         </select>
                       </div>
-                      <button className="p-1.5 hover:bg-[#333] rounded text-gray-400 hover:text-white transition-colors" title="Settings"><Settings size={14} /></button>
+                      <button className="rounded-[6px] p-1.5 text-gray-400 transition-colors hover:bg-white/[0.08] hover:text-white" title="Settings"><Settings size={14} /></button>
                     </div>
-                    <div className="flex-1 relative"><textarea value={answers[currentQ] || ''} onChange={e => handleAnswer(e.target.value)} onPaste={e => e.preventDefault()} className="w-full h-full p-4 bg-[#1e1e1e] text-gray-300 font-mono text-sm resize-none outline-none leading-6" placeholder={`// Write your ${codeLang} solution here...`} spellCheck={false} style={{ tabSize: 2 }} /></div>
-                    <div className="bg-[#252526] border-t border-[#333]"><div className="flex items-center justify-between px-4 py-2"><div className="flex items-center gap-2 text-xs text-gray-400"><Terminal size={12} /><span>Console</span></div><button className="flex items-center gap-2 px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded transition-colors"><Play size={12} /> Run</button></div></div>
+                    <div className="relative flex-1"><textarea value={answers[currentQ] || ''} onChange={e => handleAnswer(e.target.value)} onPaste={e => e.preventDefault()} className="h-full w-full resize-none bg-[#0a0a0a] p-4 font-mono text-sm leading-6 text-gray-300 outline-none" placeholder={`// Write your ${codeLang} solution here...`} spellCheck={false} style={{ tabSize: 2 }} /></div>
+                    <div className="border-t border-white/[0.11] bg-[#111]"><div className="flex items-center justify-between px-4 py-2"><div className="flex items-center gap-2 text-xs text-gray-400"><Terminal size={12} /><span>Console</span></div><button className="flex items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white px-4 py-1.5 text-xs font-medium text-black transition-colors hover:bg-[#eaeaea]"><Play size={12} /> Run</button></div></div>
                   </div>
                 </div>
               </div>
@@ -926,33 +925,33 @@ const TakeTest: React.FC = () => {
               {/* Mobile Tab View */}
               <div className="lg:hidden flex flex-col h-full">
                 <div className="flex-shrink-0">
-                  <div className="flex border-b border-gray-200 dark:border-white/10">
-                    <button onClick={() => setActiveCodeTab('problem')} className={`px-4 py-2 font-bold text-sm ${activeCodeTab === 'problem' ? 'border-b-2 border-blue-500 text-blue-500' : 'text-gray-500'}`}>Problem</button>
-                    <button onClick={() => setActiveCodeTab('code')} className={`px-4 py-2 font-bold text-sm ${activeCodeTab === 'code' ? 'border-b-2 border-blue-500 text-blue-500' : 'text-gray-500'}`}>Code</button>
+                  <div className="flex border-b border-black/[0.08] dark:border-white/[0.11]">
+                    <button onClick={() => setActiveCodeTab('problem')} className={`px-4 py-2 text-sm font-medium ${activeCodeTab === 'problem' ? 'border-b-2 border-black text-black dark:border-white dark:text-white' : 'text-gray-500'}`}>Problem</button>
+                    <button onClick={() => setActiveCodeTab('code')} className={`px-4 py-2 text-sm font-medium ${activeCodeTab === 'code' ? 'border-b-2 border-black text-black dark:border-white dark:text-white' : 'text-gray-500'}`}>Code</button>
                   </div>
                 </div>
                 <div className="flex-1 min-h-0 py-4">
                   {activeCodeTab === 'problem' ? (
-                    <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/10 flex flex-col overflow-hidden shadow-sm h-full">
+                    <div className="flex h-full flex-col overflow-hidden rounded-[12px] border border-black/[0.08] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.11] dark:bg-[#0a0a0a]">
                       <div className="p-4 overflow-y-auto flex-1 prose dark:prose-invert max-w-none">
                         <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-white">{question.title || 'Problem Title'}</h3>
                         <div className="text-gray-600 dark:text-gray-300 whitespace-pre-wrap mb-4 text-sm leading-relaxed">{question.description || 'No description provided.'}</div>
-                        <h4 className="text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-2 tracking-wider">Test Cases</h4>
-                        <div className="bg-gray-50 dark:bg-[#1a1a1a] p-3 rounded-xl border border-gray-200 dark:border-white/5 font-mono text-xs text-gray-700 dark:text-gray-300">{question.testCases || 'No test cases provided.'}</div>
+                        <h4 className="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500 dark:text-[#8f8f8f]">Test Cases</h4>
+                        <div className="rounded-[8px] border border-black/[0.08] bg-black/[0.02] p-3 font-mono text-xs text-gray-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-gray-300">{question.testCases || 'No test cases provided.'}</div>
                       </div>
                     </div>
                   ) : (
-                    <div className="flex flex-col bg-[#1e1e1e] rounded-2xl overflow-hidden border border-gray-700 shadow-2xl h-full">
-                      <div className="flex items-center justify-between px-4 py-2 bg-[#252526] border-b border-[#333]">
-                        <select value={codeLang} onChange={e => setCodeLang(e.target.value)} className="bg-[#333] text-gray-200 text-xs rounded px-2 py-1 border border-[#444] focus:outline-none focus:border-blue-500 hover:bg-[#3c3c3c] transition-colors cursor-pointer">
+                    <div className="flex h-full flex-col overflow-hidden rounded-[12px] border border-white/[0.11] bg-[#0a0a0a] shadow-2xl">
+                      <div className="flex items-center justify-between border-b border-white/[0.11] bg-[#111] px-4 py-2">
+                        <select value={codeLang} onChange={e => setCodeLang(e.target.value)} className="cursor-pointer rounded-[6px] border border-white/[0.11] bg-white/[0.06] px-2 py-1 text-xs text-gray-200 outline-none transition-colors hover:bg-white/[0.1]">
                           <option value="javascript">JavaScript</option>
                           <option value="python">Python</option>
                           <option value="java">Java</option>
                           <option value="cpp">C++</option>
                         </select>
-                        <button className="flex items-center gap-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded transition-colors"><Play size={12} /> Run</button>
+                        <button className="flex items-center gap-2 rounded-[6px] bg-white px-3 py-1 text-xs font-medium text-black transition-colors hover:bg-[#eaeaea]"><Play size={12} /> Run</button>
                       </div>
-                      <div className="flex-1 relative"><textarea value={answers[currentQ] || ''} onChange={e => handleAnswer(e.target.value)} onPaste={e => e.preventDefault()} className="w-full h-full p-4 bg-[#1e1e1e] text-gray-300 font-mono text-sm resize-none outline-none leading-6" placeholder={`// Write your ${codeLang} solution here...`} spellCheck={false} style={{ tabSize: 2 }} /></div>
+                      <div className="relative flex-1"><textarea value={answers[currentQ] || ''} onChange={e => handleAnswer(e.target.value)} onPaste={e => e.preventDefault()} className="h-full w-full resize-none bg-[#0a0a0a] p-4 font-mono text-sm leading-6 text-gray-300 outline-none" placeholder={`// Write your ${codeLang} solution here...`} spellCheck={false} style={{ tabSize: 2 }} /></div>
                     </div>
                   )}
                 </div>
@@ -962,23 +961,23 @@ const TakeTest: React.FC = () => {
         </div>
 
         {/* Question Palette */}
-        <div className="lg:col-span-3 bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm p-4 flex flex-col">
-          <h3 className="font-bold mb-4 text-center">Question Palette</h3>
+        <div className="flex flex-col rounded-[12px] border border-black/[0.08] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/[0.11] dark:bg-[#0a0a0a] lg:col-span-3">
+          <h3 className="mb-4 text-center text-sm font-semibold">Question Palette</h3>
           <div className="grid grid-cols-6 sm:grid-cols-5 gap-2 flex-1">
             {test.questions.map((_: any, i: number) => {
               const isAnswered = answers[i] !== undefined && answers[i] !== '';
               const isMarked = markedQuestions[i];
               const isCurrent = currentQ === i;
 
-              let statusClass = 'bg-gray-100 dark:bg-[#1a1a1a] text-gray-500 dark:text-gray-400 border-transparent';
-              if (isCurrent) statusClass = 'bg-blue-500 text-white border-blue-700 ring-2 ring-blue-300';
-              else if (isAnswered) statusClass = 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/50';
+              let statusClass = 'border-black/[0.08] bg-black/[0.02] text-gray-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-[#8f8f8f]';
+              if (isCurrent) statusClass = 'border-black bg-black text-white ring-2 ring-black/10 dark:border-white dark:bg-white dark:text-black dark:ring-white/20';
+              else if (isAnswered) statusClass = 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
 
               return (
                 <button
                   key={i}
                   onClick={() => setCurrentQ(i)}
-                  className={`relative w-full aspect-square rounded-lg border text-sm font-bold flex items-center justify-center transition-all ${statusClass}`}
+                  className={`relative flex aspect-square w-full items-center justify-center rounded-[8px] border text-sm font-medium transition-all ${statusClass}`}
                 >
                   {i + 1}
                   {isMarked && <Flag size={10} className="absolute -top-1 -right-1 text-red-500" fill="currentColor" />}
@@ -986,26 +985,26 @@ const TakeTest: React.FC = () => {
               );
             })}
           </div>
-          <div className="mt-4 text-xs text-gray-500 space-y-1">
-            <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-100 border border-green-200"></div> Answered</div>
-            <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-gray-100 border border-gray-200"></div> Not Answered</div>
+          <div className="mt-4 space-y-1 text-xs text-gray-500 dark:text-[#8f8f8f]">
+            <div className="flex items-center gap-2"><div className="h-3 w-3 rounded-full border border-emerald-500/20 bg-emerald-500/10"></div> Answered</div>
+            <div className="flex items-center gap-2"><div className="h-3 w-3 rounded-full border border-black/[0.08] bg-black/[0.02] dark:border-white/[0.08] dark:bg-white/[0.04]"></div> Not Answered</div>
             <div className="flex items-center gap-2"><Flag size={10} className="text-red-500" fill="currentColor" /> Marked for Review</div>
           </div>
         </div>
       </div>
 
       {/* Footer */}
-      <div className="p-4 md:p-6 border-t border-gray-200 dark:border-white/10 bg-white dark:bg-[#111] flex flex-wrap items-center justify-center md:justify-end gap-4">
-        <button onClick={handleMarkForReview} className={`order-last md:order-first px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors ${markedQuestions[currentQ] ? 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5'}`}>
+      <div className="flex flex-wrap items-center justify-center gap-4 border-t border-black/[0.08] bg-white p-4 dark:border-white/[0.11] dark:bg-[#050505] md:justify-end md:p-5">
+        <button onClick={handleMarkForReview} className={`order-last flex items-center gap-2 rounded-[6px] px-6 py-2.5 text-sm font-medium transition-colors md:order-first ${markedQuestions[currentQ] ? 'border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'text-gray-500 hover:bg-black/[0.03] hover:text-black dark:hover:bg-white/[0.05] dark:hover:text-white'}`}>
           <Flag size={16} /> Mark for Review
         </button>
         <div className="flex-grow md:flex-grow-0"></div>
         <div className="flex items-center gap-3">
-          {currentQ > 0 && <button onClick={() => setCurrentQ(c => c - 1)} className="px-6 py-2.5 rounded-xl font-bold text-gray-500 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10">Previous</button>}
+          {currentQ > 0 && <button onClick={() => setCurrentQ(c => c - 1)} className="rounded-[6px] border border-black/[0.08] bg-white px-6 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-black/[0.03] hover:text-black dark:border-white/[0.11] dark:bg-[#0a0a0a] dark:text-[#d4d4d4] dark:hover:bg-white/[0.06] dark:hover:text-white">Previous</button>}
           {currentQ < test.questions.length - 1 ? (
-            <button onClick={() => setCurrentQ(c => c + 1)} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700">Next</button>
+            <button onClick={() => setCurrentQ(c => c + 1)} className="rounded-[6px] bg-black px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#333] dark:bg-white dark:text-black dark:hover:bg-[#eaeaea]">Next</button>
           ) : (
-            <button onClick={() => handleSubmit()} disabled={submitting} className="px-8 py-2.5 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 disabled:opacity-50">{submitting ? 'Submitting...' : 'Submit Test'}</button>
+            <button onClick={() => handleSubmit()} disabled={submitting} className="rounded-[6px] bg-black px-8 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#333] disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-[#eaeaea]">{submitting ? 'Submitting...' : 'Submit Test'}</button>
           )}
         </div>
       </div>
