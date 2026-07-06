@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Sparkles, Save, ArrowLeft, Plus, Trash, Link as LinkIcon } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { grokGenerateJson } from '../services/grokService';
 
 const CreateTest: React.FC = () => {
   const { isDark } = useTheme();
@@ -53,30 +54,18 @@ const CreateTest: React.FC = () => {
     if (!aiPrompt) return;
     setLoading(true);
     try {
-      const xaiKey = import.meta.env.VITE_XAI_API_KEY;
-      if (!xaiKey) throw new Error('XAI API key missing');
       const prompt = type === 'aptitude'
-        ? `Generate 5 aptitude multiple choice questions about "${aiPrompt}". Return ONLY a raw JSON array. Schema: [{"question": "string", "options": ["string", "string", "string", "string"], "correctIndex": number}]`
-        : `Generate 1 coding problem about "${aiPrompt}". Return ONLY a raw JSON array. Schema: [{"title": "string", "description": "string", "testCases": "string"}]`;
+        ? `Generate 5 aptitude multiple choice questions about "${aiPrompt}". Return ONLY a JSON object. Schema: {"questions":[{"question": "string", "options": ["string", "string", "string", "string"], "correctIndex": number}]}`
+        : `Generate 1 coding problem about "${aiPrompt}". Return ONLY a JSON object. Schema: {"questions":[{"title": "string", "description": "string", "testCases": "string"}]}`;
 
-      const res = await fetch('https://api.x.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${xaiKey}` },
-        body: JSON.stringify({
-          model: 'grok-4-1-fast-non-reasoning',
-          messages: [
-            { role: 'system', content: 'You are an expert assessment generator. Return only valid JSON.' },
-            { role: 'user', content: prompt }
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.6,
-        }),
-      });
-      const aiData = await res.json();
-      const rawText = aiData.choices?.[0]?.message?.content || '';
-      if (!rawText) throw new Error('No response from Grok');
-      let parsed = JSON.parse(rawText);
-      const generated: any[] = Array.isArray(parsed) ? parsed : (parsed.questions || parsed.problems || Object.values(parsed)[0] as any[]);
+      const parsed = await grokGenerateJson<{ questions?: any[]; problems?: any[] }>(
+        'You are an expert assessment generator. Return only valid JSON.',
+        prompt,
+        0.6,
+        type === 'aptitude' ? 1200 : 800
+      );
+      const generated: any[] = parsed.questions || parsed.problems || [];
+      if (!Array.isArray(generated) || generated.length === 0) throw new Error('No questions returned from Grok');
       setQuestions([...questions, ...generated]);
     } catch (error) {
       console.error('AI Error:', error);

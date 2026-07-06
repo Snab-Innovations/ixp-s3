@@ -259,7 +259,10 @@ async function playNativeTTS(text: string, voiceLang: string, options: SpeakOpti
     };
 
     utter.onerror = (e) => {
-      console.warn('[TTS] Native speech error on chunk:', e);
+      const errorName = 'error' in e ? e.error : 'unknown';
+      if (errorName !== 'interrupted' && errorName !== 'canceled' && errorName !== 'not-allowed') {
+        console.warn(`[TTS] Native speech skipped chunk (${errorName}):`, e);
+      }
       currentIndex++;
       playNextChunk();
     };

@@ -7,6 +7,7 @@ import { SKILL_OPTIONS } from './Profile';
 import * as pdfjsLib from 'pdfjs-dist';
 
 import { sendInterviewInvitations } from '../services/brevoService';
+import { grokGenerateJson } from '../services/grokService';
 
 // Setup PDF.js worker to enable PDF parsing
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -221,27 +222,17 @@ const CreateInterview: React.FC = () => {
         return;
       }
 
-      const xaiKey = import.meta.env.VITE_XAI_API_KEY;
-      if (!xaiKey) throw new Error('XAI API key missing');
-      const prompt = `You are an expert HR assistant. Parse the following job description text and extract the fields into a raw JSON object. Schema: {"title": "string", "description": "string", "department": "string", "employmentType": "string", "experience": "number", "skills": "string", "education": "string"}. Return ONLY valid JSON. Text: --- ${text} ---`;
+      const prompt = `Parse the following job description text and extract the fields into a raw JSON object. Schema: {"title": "string", "description": "string", "department": "string", "employmentType": "string", "experience": "number", "skills": "string", "education": "string"}. Return ONLY valid JSON. Text: --- ${text} ---`;
 
-      const res = await fetch('https://api.x.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${xaiKey}` },
-        body: JSON.stringify({
-          model: 'grok-4-1-fast-non-reasoning',
-          messages: [
-            { role: 'system', content: 'You are an expert HR assistant. Return only valid JSON.' },
-            { role: 'user', content: prompt }
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.2,
-        }),
-      });
-      const aiData = await res.json();
-      const aiResponseText = aiData.choices?.[0]?.message?.content || '';
-      if (!aiResponseText) throw new Error('Grok did not return a response.');
-      const parsedData = JSON.parse(aiResponseText);
+      const parsedData = await grokGenerateJson<{
+        title?: string;
+        description?: string;
+        department?: string;
+        employmentType?: string;
+        experience?: number;
+        skills?: string;
+        education?: string;
+      }>('You are an expert HR assistant. Return only valid JSON.', prompt, 0.2, 800);
 
       setFormData(prev => ({
         ...prev,

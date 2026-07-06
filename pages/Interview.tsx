@@ -1836,8 +1836,8 @@ const CandidateInterviewFlow: React.FC = () => {
             }
         } catch (e) {
             // If parsing fails, use the original message if it's not too long/complex
-            if (err.message && typeof err.message === 'string' && err.message.length < 100) {
-                displayError = err.message;
+            if (err.message && typeof err.message === 'string') {
+                displayError = err.message.length > 220 ? `${err.message.slice(0, 220)}...` : err.message;
             }
         }
         setErrorMsg(displayError);

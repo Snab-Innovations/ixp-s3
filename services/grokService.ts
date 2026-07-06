@@ -1,10 +1,11 @@
 // ── Grok AI Service ──────────────────────────────────────────────────────────
-// Model: grok-4-1-fast-non-reasoning (text-only, no vision)
+// Model: grok-4.3 (text/image capable; used here for text)
 // Base URL: https://api.x.ai/v1
 // Auth: VITE_XAI_API_KEY
 
 const GROK_BASE_URL = "https://api.x.ai/v1";
-const GROK_MODEL = "grok-4-1-fast-non-reasoning";
+const GROK_MODEL = import.meta.env.VITE_XAI_MODEL || "grok-4.3";
+const GROK_REASONING_EFFORT = import.meta.env.VITE_XAI_REASONING_EFFORT || "none";
 
 // ── Token budgets ─────────────────────────────────────────────────────────────
 // Hard ceiling on output tokens to prevent runaway costs.
@@ -29,12 +30,19 @@ const getApiKey = (): string => {
 async function callGrok(
   messages: { role: "system" | "user" | "assistant"; content: string }[],
   temperature = 0.5,
-  maxTokens?: number
+  maxTokens?: number,
+  responseFormat?: { type: "json_object" | "text" }
 ): Promise<string> {
   const apiKey = getApiKey();
 
-  const body: any = { model: GROK_MODEL, messages, temperature };
+  const body: any = {
+    model: GROK_MODEL,
+    messages,
+    temperature,
+    reasoning_effort: GROK_REASONING_EFFORT,
+  };
   if (maxTokens) body.max_tokens = maxTokens;
+  if (responseFormat) body.response_format = responseFormat;
 
   const res = await fetch(`${GROK_BASE_URL}/chat/completions`, {
     method: "POST",
@@ -47,15 +55,46 @@ async function callGrok(
 
   if (!res.ok) {
     let errMsg = `Grok API error: ${res.status}`;
+    let rawError = "";
     try {
-      const errBody = await res.json();
-      errMsg = errBody?.error?.message || errMsg;
-    } catch { /* ignore */ }
+      rawError = await res.text();
+      const errBody = rawError ? JSON.parse(rawError) : {};
+      const serverMessage = errBody?.error?.message || errBody?.error || errBody?.message;
+      if (serverMessage) {
+        errMsg = typeof serverMessage === "string" ? serverMessage : JSON.stringify(serverMessage);
+      } else if (rawError) {
+        errMsg = rawError;
+      }
+    } catch {
+      if (rawError) errMsg = rawError;
+    }
     throw new Error(errMsg);
   }
 
   const data = await res.json();
   return data.choices?.[0]?.message?.content ?? "";
+}
+
+const stripMarkdownJson = (text: string): string =>
+  text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+export async function grokGenerateJson<T>(
+  systemPrompt: string,
+  userPrompt: string,
+  temperature = 0.2,
+  maxTokens?: number
+): Promise<T> {
+  const text = await callGrok(
+    [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+    temperature,
+    maxTokens,
+    { type: "json_object" }
+  );
+
+  return JSON.parse(stripMarkdownJson(text)) as T;
 }
 
 // ── Resume extractor ──────────────────────────────────────────────────────────
@@ -135,6 +174,33 @@ export async function grokGenerateWithResume(
     temperature,
     maxTokens
   );
+}
+
+export async function grokGenerateWithResumeJson<T>(
+  systemPrompt: string,
+  textPrompt: string,
+  base64Resume: string,
+  mimeType: string,
+  temperature = 0.2,
+  maxTokens?: number,
+  resumeTextContent?: string
+): Promise<T> {
+  const resumeText = resumeTextContent || extractResumeText(base64Resume, mimeType);
+  const fullUserMessage = resumeText
+    ? `${textPrompt}\n\n[Resume]\n${resumeText}`
+    : textPrompt;
+
+  const text = await callGrok(
+    [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: fullUserMessage },
+    ],
+    temperature,
+    maxTokens,
+    { type: "json_object" }
+  );
+
+  return JSON.parse(stripMarkdownJson(text)) as T;
 }
 
 /** Multi-turn chat — used by AIAgent & CareerBot. */

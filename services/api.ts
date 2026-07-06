@@ -1,4 +1,4 @@
-import { grokGenerateWithResume, grokGenerateText, BUDGET } from "./grokService";
+import { grokGenerateWithResume, grokGenerateWithResumeJson, grokGenerateText, BUDGET } from "./grokService";
 
 // Config Constants (loaded from environment variables)
 const ASSEMBLYAI_API_KEY = import.meta.env.VITE_ASSEMBLYAI_API_KEY;
@@ -79,7 +79,7 @@ IMPORTANT: Use simple, everyday Hindi that common people speak. Do NOT use heavy
 Rules:
 - Ask short, clear, straight-to-the-point questions.
 - No difficult or fancy language.
-- Output ONLY a valid JSON array of strings, nothing else. Example: ["Question 1", "Question 2"]`;
+- Output ONLY a valid JSON object, nothing else. Example: {"questions":["Question 1", "Question 2"]}`;
 
   const prompt =
 `Role: "${jobTitle}"
@@ -101,18 +101,18 @@ How to generate questions:
 6. The candidate should feel like you have actually read their resume.`;
 
   try {
-    const text = await grokGenerateWithResume(sys, prompt, base64Resume, mimeType, 0.5, BUDGET.QUESTIONS, resumeTextContent);
-    // Remove markdown code blocks if the AI includes them
-    const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    let parsedQuestions: string[];
-    try {
-      parsedQuestions = JSON.parse(cleanJson);
-      if (!Array.isArray(parsedQuestions)) throw new Error("Parsed result is not an array");
-    } catch (parseError) {
-      console.warn("Failed to parse JSON, falling back to line split:", text);
-      const cleanLine = text.replace(/^\s*[\d\.\-\*\+]+\s*/gm, '').replace(/\*\*/g, '').trim();
-      parsedQuestions = cleanLine.split('\n').map(q => q.trim()).filter(q => q && q.length > 5);
+    const parsed = await grokGenerateWithResumeJson<{ questions?: string[] }>(
+      sys,
+      prompt,
+      base64Resume,
+      mimeType,
+      0.5,
+      BUDGET.QUESTIONS,
+      resumeTextContent
+    );
+    const parsedQuestions = Array.isArray(parsed.questions) ? parsed.questions : [];
+    if (parsedQuestions.length === 0) {
+      throw new Error("Grok did not return any interview questions.");
     }
 
     return parsedQuestions.slice(0, numQuestions);
