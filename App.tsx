@@ -29,6 +29,7 @@ import TestAccess from './pages/TestAccess';
 import InterviewResponses from './pages/InterviewResponses';
 import InterviewOverview from './pages/InterviewOverview';
 import InterviewCandidates from './pages/InterviewCandidates';
+import ResumeDump, { ResumeDumpSkeleton } from './pages/ResumeDump';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import SubmitReview from './pages/SubmitReview';
@@ -201,6 +202,7 @@ const App: React.FC = () => {
                   <Route path="recruiter/jobs" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterDashboardSkeleton />}><RecruiterDashboard /></ProtectedRoute>} />
                   <Route path="recruiter/interviews" element={<ProtectedRoute role="recruiter"><RecruiterInterviews /></ProtectedRoute>} />
                   <Route path="recruiter/invites" element={<ProtectedRoute role="recruiter"><InvitedCandidates /></ProtectedRoute>} />
+                  <Route path="recruiter/resume-dump" element={<ProtectedRoute role="recruiter" loadingFallback={<ResumeDumpSkeleton />}><ResumeDump /></ProtectedRoute>} />
                   <Route path="recruiter/interview/:interviewId" element={<ProtectedRoute role="recruiter"><InterviewOverview /></ProtectedRoute>} />
                   <Route path="recruiter/interview/:interviewId/overview" element={<ProtectedRoute role="recruiter"><InterviewOverview /></ProtectedRoute>} />
                   <Route path="recruiter/interview/:interviewId/responses" element={<ProtectedRoute role="recruiter"><InterviewResponses /></ProtectedRoute>} />

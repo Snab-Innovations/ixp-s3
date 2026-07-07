@@ -3,6 +3,7 @@ import {
   BriefcaseBusiness,
   ClipboardList,
   LayoutDashboard,
+  Archive,
   Users,
   Video,
 } from 'lucide-react';
@@ -49,6 +50,13 @@ const recruiterNavGroups: NavGroupData[] = [
         icon: Users,
         href: '/recruiter/invites',
         match: (path) => path === '/recruiter/invites',
+      },
+      {
+        id: 'resume-dump',
+        title: 'Resume Dump',
+        icon: Archive,
+        href: '/recruiter/resume-dump',
+        match: (path) => path === '/recruiter/resume-dump',
       },
       {
         id: 'create-interview',

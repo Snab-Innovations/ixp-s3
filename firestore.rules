@@ -140,6 +140,20 @@ service cloud.firestore {
       allow update: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
+    // --- Recruiter Resume Dump ---
+    match /resumeDumpCandidates/{candidateId} {
+      allow read, write: if request.auth != null 
+                          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+
+      allow create: if request.auth != null
+                    && request.resource.data.recruiterUID == request.auth.uid
+                    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter';
+
+      allow read, update, delete: if request.auth != null
+                                  && resource.data.recruiterUID == request.auth.uid
+                                  && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter';
+    }
+
     // --- Transactions Collection Rules ---
     match /transactions/{transactionId} {
       // Allow authenticated users to create transaction records (e.g. after payment)

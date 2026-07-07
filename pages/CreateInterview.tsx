@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { collection, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import React, { useEffect, useMemo, useState } from 'react';
+import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { SKILL_OPTIONS } from './Profile';
 import * as pdfjsLib from 'pdfjs-dist';
+import { ExternalLink } from 'lucide-react';
 
 import { sendInterviewInvitations } from '../services/brevoService';
 import { grokGenerateJson } from '../services/grokService';
@@ -15,6 +16,76 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.vers
 const SkeletonBlock = ({ className = '' }: { className?: string }) => (
   <span className={`block animate-pulse rounded-[4px] bg-white/[0.12] ${className}`} aria-hidden="true" />
 );
+
+interface ResumeDumpCandidate {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  skills: string[];
+  resumeUrl: string;
+  resumeFileName?: string;
+  resumeText?: string;
+}
+
+interface CandidateSuggestion extends ResumeDumpCandidate {
+  matchScore: number;
+  matchedSkills: string[];
+}
+
+const splitCommaList = (value: string) => value.split(',').map((item) => item.trim()).filter(Boolean);
+
+const normalizeSearchText = (value: string) => (
+  value
+    .toLowerCase()
+    .replace(/\.js\b/g, 'js')
+    .replace(/[^a-z0-9+#]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+);
+
+const uniqueByNormalized = (items: string[]) => {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = normalizeSearchText(item);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const textContainsSkill = (text: string, skill: string) => {
+  const normalizedText = ` ${normalizeSearchText(text)} `;
+  const normalizedSkill = ` ${normalizeSearchText(skill)} `;
+  return normalizedSkill.trim().length > 1 && normalizedText.includes(normalizedSkill);
+};
+
+const scoreCandidateForRole = (candidate: ResumeDumpCandidate, requiredSkills: string[]): CandidateSuggestion | null => {
+  if (requiredSkills.length === 0) return null;
+
+  const candidateSkills = candidate.skills || [];
+  const normalizedCandidateSkills = candidateSkills.map(normalizeSearchText).filter(Boolean);
+  const resumeSearchText = normalizeSearchText(`${candidate.resumeText || ''} ${candidateSkills.join(' ')}`);
+
+  const matchedSkills = requiredSkills.filter((skill) => {
+    const normalizedSkill = normalizeSearchText(skill);
+    if (!normalizedSkill) return false;
+
+    return normalizedCandidateSkills.some((candidateSkill) => (
+      candidateSkill === normalizedSkill ||
+      candidateSkill.includes(normalizedSkill) ||
+      normalizedSkill.includes(candidateSkill)
+    )) || resumeSearchText.includes(normalizedSkill);
+  });
+
+  if (matchedSkills.length === 0) return null;
+
+  return {
+    ...candidate,
+    matchedSkills,
+    matchScore: Math.max(1, Math.min(99, Math.round((matchedSkills.length / requiredSkills.length) * 100))),
+  };
+};
 
 export const CreateInterviewSkeleton = () => (
   <div className="-mx-4 -my-8 min-h-[calc(100dvh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8">
@@ -92,6 +163,8 @@ const CreateInterview: React.FC = () => {
   const [skillSearch, setSkillSearch] = useState('');
   const [candidateEmails, setCandidateEmails] = useState<string[]>([]);
   const [currentEmail, setCurrentEmail] = useState('');
+  const [resumeDumpCandidates, setResumeDumpCandidates] = useState<ResumeDumpCandidate[]>([]);
+  const [loadingResumeDumpCandidates, setLoadingResumeDumpCandidates] = useState(false);
   const [parsingJd, setParsingJd] = useState(false);
   const [parsingResumes, setParsingResumes] = useState(false);
   const [sendingEmails, setSendingEmails] = useState(false);
@@ -117,6 +190,61 @@ const CreateInterview: React.FC = () => {
     difficulty: 'Medium',
     strictness: 'Medium',
   });
+
+  useEffect(() => {
+    if (!user) {
+      setResumeDumpCandidates([]);
+      setLoadingResumeDumpCandidates(false);
+      return;
+    }
+
+    setLoadingResumeDumpCandidates(true);
+    const resumeDumpQuery = query(
+      collection(db, 'resumeDumpCandidates'),
+      where('recruiterUID', '==', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(
+      resumeDumpQuery,
+      (snapshot) => {
+        setResumeDumpCandidates(snapshot.docs.map((candidateDoc) => {
+          const data = candidateDoc.data();
+          return {
+            id: candidateDoc.id,
+            name: typeof data.name === 'string' ? data.name : '',
+            email: typeof data.email === 'string' ? data.email : '',
+            phone: typeof data.phone === 'string' ? data.phone : '',
+            skills: Array.isArray(data.skills) ? data.skills.filter((skill: unknown): skill is string => typeof skill === 'string' && skill.trim().length > 0) : [],
+            resumeUrl: typeof data.resumeUrl === 'string' ? data.resumeUrl : '',
+            resumeFileName: typeof data.resumeFileName === 'string' ? data.resumeFileName : '',
+            resumeText: typeof data.resumeText === 'string' ? data.resumeText : '',
+          };
+        }));
+        setLoadingResumeDumpCandidates(false);
+      },
+      (error) => {
+        console.error('Failed to load resume dump candidates:', error);
+        setLoadingResumeDumpCandidates(false);
+      }
+    );
+
+    return unsubscribe;
+  }, [user]);
+
+  const requiredSkillSignals = useMemo(() => {
+    const explicitSkills = splitCommaList(formData.skills);
+    const roleText = `${formData.title} ${formData.description} ${formData.skills}`;
+    const detectedSkills = SKILL_OPTIONS.filter((skill) => textContainsSkill(roleText, skill));
+    return uniqueByNormalized([...explicitSkills, ...detectedSkills]);
+  }, [formData.description, formData.skills, formData.title]);
+
+  const suggestedCandidates = useMemo(() => (
+    resumeDumpCandidates
+      .map((candidate) => scoreCandidateForRole(candidate, requiredSkillSignals))
+      .filter((candidate): candidate is CandidateSuggestion => Boolean(candidate))
+      .sort((a, b) => b.matchScore - a.matchScore || b.matchedSkills.length - a.matchedSkills.length)
+      .slice(0, 6)
+  ), [requiredSkillSignals, resumeDumpCandidates]);
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -182,9 +310,19 @@ const CreateInterview: React.FC = () => {
     setCustomFields(customFields.filter(field => field.id !== id));
   };
 
+  const addCandidateEmail = (email: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return;
+
+    setCandidateEmails((prev) => {
+      if (prev.some((existingEmail) => existingEmail.toLowerCase() === normalizedEmail)) return prev;
+      return [...prev, normalizedEmail];
+    });
+  };
+
   const handleAddEmail = () => {
-    if (currentEmail && !candidateEmails.includes(currentEmail)) {
-      setCandidateEmails([...candidateEmails, currentEmail]);
+    if (currentEmail) {
+      addCandidateEmail(currentEmail);
       setCurrentEmail('');
     }
   };
@@ -298,7 +436,13 @@ const CreateInterview: React.FC = () => {
       }
     }
 
-    if (newEmailsFound.length > 0) setCandidateEmails(prev => [...prev, ...newEmailsFound]);
+    if (newEmailsFound.length > 0) {
+      setCandidateEmails((prev) => {
+        const existingEmails = new Set(prev.map((email) => email.toLowerCase()));
+        const uniqueNewEmails = newEmailsFound.filter((email) => !existingEmails.has(email.toLowerCase()));
+        return [...prev, ...uniqueNewEmails];
+      });
+    }
     alert(`Processed ${filesProcessed} file(s). Found ${newEmailsFound.length} new email(s). ${filesWithErrors > 0 ? `Failed to parse ${filesWithErrors} file(s).` : ''}`);
     setParsingResumes(false);
     e.target.value = ''; // Reset file input to allow re-uploading the same file
@@ -745,6 +889,112 @@ const CreateInterview: React.FC = () => {
                 ))}
               </div>
             )}
+
+            <div className="mt-5 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <label className={labelClass}>Suggested candidates</label>
+                  <p className="geist-small text-[#8f8f8f]">Matched from Resume Dump using this role's description and required skills.</p>
+                </div>
+                {requiredSkillSignals.length > 0 && (
+                  <span className="geist-small rounded-[6px] border border-white/[0.11] bg-[#050505] px-2 py-1 text-[#8f8f8f]">
+                    {requiredSkillSignals.length} signal{requiredSkillSignals.length === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+
+              {loadingResumeDumpCandidates ? (
+                <div className="mt-3 grid gap-2 xl:grid-cols-2">
+                  {[0, 1].map((item) => (
+                    <div key={item} className="rounded-[6px] border border-white/[0.11] bg-[#050505] p-3">
+                      <SkeletonBlock className="h-4 w-36" />
+                      <SkeletonBlock className="mt-2 h-3 w-48 max-w-full bg-white/[0.08]" />
+                      <div className="mt-3 flex gap-2">
+                        <SkeletonBlock className="h-6 w-16 bg-white/[0.08]" />
+                        <SkeletonBlock className="h-6 w-20 bg-white/[0.08]" />
+                        <SkeletonBlock className="h-6 w-14 bg-white/[0.08]" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : suggestedCandidates.length > 0 ? (
+                <div className="mt-3 grid gap-2 xl:grid-cols-2">
+                  {suggestedCandidates.map((candidate) => {
+                    const candidateEmail = candidate.email.trim().toLowerCase();
+                    const candidateEmailAdded = candidateEmail && candidateEmails.some((email) => email.toLowerCase() === candidateEmail);
+
+                    return (
+                      <div key={candidate.id} className="rounded-[6px] border border-white/[0.11] bg-[#050505] p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="geist-caption truncate font-semibold text-white" title={candidate.name}>
+                              {candidate.name || 'Unknown Candidate'}
+                            </p>
+                            <p className="geist-small mt-0.5 truncate text-[#8bbde8]" title={candidate.email}>
+                              {candidate.email || 'Email not found'}
+                            </p>
+                          </div>
+                          <span className="geist-small shrink-0 rounded-[6px] border border-white/[0.14] bg-white/[0.05] px-2 py-1 text-[#d4d4d4]">
+                            {candidate.matchScore}% match
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {candidate.matchedSkills.slice(0, 5).map((skill) => (
+                            <span key={skill} className="geist-small rounded-[6px] border border-white/[0.11] bg-white/[0.04] px-2 py-0.5 text-[#d4d4d4]">
+                              {skill}
+                            </span>
+                          ))}
+                          {candidate.matchedSkills.length > 5 && (
+                            <span className="geist-small rounded-[6px] border border-white/[0.11] bg-white/[0.04] px-2 py-0.5 text-[#8f8f8f]">
+                              +{candidate.matchedSkills.length - 5}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                          {candidate.resumeUrl ? (
+                            <a
+                              href={candidate.resumeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="geist-small inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2.5 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
+                            >
+                              <ExternalLink size={13} strokeWidth={1.8} />
+                              Open resume
+                            </a>
+                          ) : (
+                            <span className="geist-small text-[#6b7280]">No resume link</span>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => addCandidateEmail(candidate.email)}
+                            disabled={!candidateEmail || Boolean(candidateEmailAdded)}
+                            className={secondaryButtonClass}
+                          >
+                            {candidateEmailAdded ? 'Added' : candidateEmail ? 'Add to invite' : 'No email'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="mt-3 rounded-[6px] border border-dashed border-white/[0.12] bg-[#050505] px-3 py-4 text-center">
+                  <p className="geist-caption text-white">
+                    {requiredSkillSignals.length === 0
+                      ? 'Add job skills or a job description to see matching candidates.'
+                      : resumeDumpCandidates.length === 0
+                        ? 'No Resume Dump candidates saved yet.'
+                        : 'No saved candidates match this role yet.'}
+                  </p>
+                  <p className="geist-small mt-1 text-[#8f8f8f]">
+                    Suggestions update automatically as you edit the role.
+                  </p>
+                </div>
+              )}
+            </div>
 
             <div className="mt-5 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
               <label
