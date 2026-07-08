@@ -1,4 +1,4 @@
-# InterviewXpert
+# InterviewXpert.
 
 AI-powered interview preparation and recruitment platform.
 
