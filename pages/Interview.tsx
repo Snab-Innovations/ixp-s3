@@ -14,6 +14,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { getCandidateRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus, recordCandidateSubmission } from '../services/rateLimitService';
 import { analyzeResumeText, readResumeText, saveResumeDumpCandidate } from '../services/resumeService';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
+import { saveCandidateConsent } from '../services/candidateConsent';
 
 // Setup PDF.js worker to enable PDF parsing
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -1698,6 +1699,12 @@ const CandidateInterviewFlow: React.FC = () => {
     setLoadingMsg("Processing your information...");
 
     try {
+      setLoadingMsg("Saving your interview consent...");
+      await saveCandidateConsent(interviewId!, {
+        name: submittedInfo.name,
+        email: submittedInfo.email,
+      });
+
       setLoadingMsg("Verifying attempt eligibility...");
       const attemptsRef = collection(db, 'interviews', interviewId!, 'attempts');
       

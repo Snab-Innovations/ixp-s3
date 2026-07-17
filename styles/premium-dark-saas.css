@@ -312,6 +312,10 @@ label.saas-ui-mono {
   letter-spacing: 0;
 }
 
+.recruiter-sidebar .geist-small {
+  font-size: 14px;
+}
+
 .geist-metric {
   font-family: var(--font-geist-mono);
   font-size: 24px;

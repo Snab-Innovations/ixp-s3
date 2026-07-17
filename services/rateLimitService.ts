@@ -179,14 +179,21 @@ export const recordCandidateSubmission = async (
         usageBaseline: status.usageBaseline,
         lastCandidateSubmissionAt: serverTimestamp(),
       }, { merge: true });
-    });
+    }, { maxAttempts: 1 });
   } catch (error: any) {
-    // Older deployed rules may permit the candidate submission but not the new
-    // company counter. Preserve the report; the admin page reconciles counters
-    // from the actual candidate submission documents on its next load.
-    if (error?.code === 'permission-denied') {
+    const recoverableCounterError = [
+      'permission-denied',
+      'resource-exhausted',
+      'unavailable',
+      'deadline-exceeded',
+      'aborted',
+    ].includes(error?.code) || /quota exceeded/i.test(String(error?.message || ''));
+
+    // Preserve the interview report when the optional company counter cannot
+    // be read or updated. The admin page reconciles usage from actual reports.
+    if (recoverableCounterError) {
       await setDoc(submissionRef, submissionData);
-      console.warn('Candidate submission saved; rate-limit counter will be reconciled by an administrator.', error);
+      console.warn('Candidate submission saved without updating the rate-limit counter; an administrator can reconcile it later.');
       return;
     }
     throw error;

@@ -149,7 +149,7 @@ export interface InterviewSubmission {
   videoURLs?: Array<string | null>;
   transcriptTexts?: Array<string | null>;
   candidateResumeURL?: string;
-  status?: 'Shortlist' | 'Reject' | 'Hold';
+  status?: 'Completed' | 'Terminated' | 'Shortlist' | 'Reject' | 'Hold';
   visibilitySettings?: {
     hiddenVideos?: Record<string, boolean>;
     hiddenQuestions?: Record<string, boolean>;

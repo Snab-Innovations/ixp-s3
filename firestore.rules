@@ -40,6 +40,66 @@ service cloud.firestore {
                           && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    // --- Candidate Consent Receipts ---
+    match /candidateConsents/{consentId} {
+      function isValidCandidateConsent(data) {
+        return data.keys().hasOnly([
+                 'interviewId',
+                 'interviewTitle',
+                 'candidateName',
+                 'candidateEmail',
+                 'ipAddress',
+                 'acceptedItemIds',
+                 'acceptedAll',
+                 'consentVersion',
+                 'consentMethod',
+                 'status',
+                 'acceptedAt',
+                 'createdAt'
+               ])
+               && data.interviewId is string
+               && data.interviewId.size() > 0
+               && data.interviewId.size() <= 128
+               && exists(/databases/$(database)/documents/interviews/$(data.interviewId))
+               && data.interviewTitle is string
+               && data.interviewTitle.size() <= 300
+               && data.candidateName is string
+               && data.candidateName.size() > 0
+               && data.candidateName.size() <= 200
+               && data.candidateEmail is string
+               && data.candidateEmail.size() > 2
+               && data.candidateEmail.size() <= 320
+               && data.candidateEmail.matches('.*@.*')
+               && (data.ipAddress == null || (
+                    data.ipAddress is string
+                    && data.ipAddress.matches('^[0-9A-Fa-f:.]{2,64}$')
+                  ))
+               && data.acceptedItemIds is list
+               && data.acceptedItemIds.hasOnly([
+                    'continuous_recording',
+                    'ai_processing',
+                    'recruiting_company_sharing'
+                  ])
+               && data.acceptedItemIds.hasAll([
+                    'continuous_recording',
+                    'ai_processing',
+                    'recruiting_company_sharing'
+                  ])
+               && data.acceptedAll == true
+               && data.consentVersion == '2026-07-17'
+               && data.consentMethod == 'web_checkboxes'
+               && data.status == 'accepted'
+               && data.acceptedAt is timestamp
+               && data.acceptedAt <= request.time
+               && data.acceptedAt > request.time - duration.value(1, 'd')
+               && data.createdAt == request.time;
+      }
+
+      allow create: if isValidCandidateConsent(request.resource.data);
+      allow read: if request.auth != null
+                  && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // --- Profiles Collection Rules ---
     match /profiles/{userId} {
       // Admin Permission
@@ -96,6 +156,7 @@ service cloud.firestore {
                               request.auth != null
                               && get(/databases/$(database)/documents/interviews/$(interviewId)).data.recruiterUID == request.auth.uid
                               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'allowReattempt'])
+                              && (resource.data.status != 'Shortlist' || request.resource.data.status == 'Shortlist')
                             ) || (
                               request.resource.data.diff(resource.data).affectedKeys().hasOnly(['allowReattempt'])
                               && resource.data.allowReattempt == true
@@ -111,6 +172,7 @@ service cloud.firestore {
       allow read: if request.auth != null
                   && (
                        request.auth.uid == resource.data.candidateUID
+                       || request.auth.uid == resource.data.recruiterUID
                        || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
                      );
     }

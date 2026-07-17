@@ -1,12 +1,18 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { collection, query, onSnapshot, orderBy, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, doc, getDoc, runTransaction, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { InterviewSubmission } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { useTheme } from '../context/ThemeContext';
 import { InterviewResponsesSkeleton } from '../components/ui/interview-loading-skeleton';
+
+type CandidateDecisionStatus = 'Hold' | 'Shortlist' | 'Reject';
+
+const getCandidateDecisionStatus = (status?: InterviewSubmission['status']): CandidateDecisionStatus => (
+  status === 'Shortlist' || status === 'Reject' || status === 'Hold' ? status : 'Hold'
+);
 
 const InterviewResponses: React.FC = () => {
   const messageBox = useMessageBox();
@@ -320,15 +326,34 @@ const InterviewResponses: React.FC = () => {
     }
   };
 
-  const handleStatusChange = async (submissionId: string, newStatus: string) => {
+  const handleStatusChange = async (submissionId: string, newStatus: CandidateDecisionStatus) => {
     if (!interviewId) return;
     try {
       const submissionRef = doc(db, 'interviews', interviewId, 'attempts', submissionId);
-      await updateDoc(submissionRef, { status: newStatus });
-      messageBox.showSuccess(`Candidate status updated to ${newStatus}`);
+      await runTransaction(db, async (transaction) => {
+        const submissionSnapshot = await transaction.get(submissionRef);
+        if (!submissionSnapshot.exists()) throw new Error('Candidate response no longer exists.');
+
+        if (submissionSnapshot.data().status === 'Shortlist' && newStatus !== 'Shortlist') {
+          throw new Error('A shortlisted candidate is permanent and cannot be changed.');
+        }
+
+        transaction.update(submissionRef, { status: newStatus });
+      });
+
+      messageBox.showSuccess(
+        newStatus === 'Shortlist'
+          ? 'Candidate shortlisted permanently and removed from future interview suggestions.'
+          : `Candidate status updated to ${newStatus === 'Reject' ? 'Rejected' : 'Hold'}.`
+      );
     } catch (err) {
       console.error("Error updating status:", err);
-      messageBox.showError("Failed to update candidate status.");
+      const message = err instanceof Error ? err.message : '';
+      messageBox.showError(
+        message.includes('permanent')
+          ? message
+          : 'Failed to update candidate status.'
+      );
     }
   };
 
@@ -362,9 +387,9 @@ const InterviewResponses: React.FC = () => {
   const averageScore = totalResponses
     ? submissions.reduce((sum, submission) => sum + getScoreValue(submission.score), 0) / totalResponses
     : 0;
-  const shortlistedCount = submissions.filter(submission => submission.status === 'Shortlist').length;
-  const holdCount = submissions.filter(submission => (submission.status || 'Hold') === 'Hold').length;
-  const rejectedCount = submissions.filter(submission => submission.status === 'Reject').length;
+  const shortlistedCount = submissions.filter(submission => getCandidateDecisionStatus(submission.status) === 'Shortlist').length;
+  const holdCount = submissions.filter(submission => getCandidateDecisionStatus(submission.status) === 'Hold').length;
+  const rejectedCount = submissions.filter(submission => getCandidateDecisionStatus(submission.status) === 'Reject').length;
   const activeExpiry = getExpirationDate(globalExpiry);
   const actionButtonClass = "geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
   const primaryButtonClass = "geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea] disabled:cursor-not-allowed disabled:opacity-40";
@@ -549,7 +574,8 @@ const InterviewResponses: React.FC = () => {
 
           {filteredAndSortedSubmissions.map(submission => {
             const isSelected = selectedSubmissions.includes(submission.id);
-            const status = submission.status || 'Hold';
+            const status = getCandidateDecisionStatus(submission.status);
+            const isPermanentlyShortlisted = status === 'Shortlist';
             const feedback = parseFeedback(submission.feedback);
             const feedbackPreview = feedback.overallEvaluation !== 'N/A'
               ? feedback.overallEvaluation
@@ -596,8 +622,22 @@ const InterviewResponses: React.FC = () => {
                   <p className="geist-label uppercase text-[#6b7280] lg:hidden">Status</p>
                   <select
                     value={status}
-                    onChange={(e) => handleStatusChange(submission.id, e.target.value)}
-                    className={`geist-caption h-8 w-full rounded-[6px] border bg-[#050505] px-3 font-medium outline-none transition-colors focus:border-white/[0.28] ${
+                    disabled={isPermanentlyShortlisted}
+                    title={isPermanentlyShortlisted ? 'Shortlisted candidates are permanent' : 'Update candidate status'}
+                    onChange={(e) => {
+                      const newStatus = e.target.value as CandidateDecisionStatus;
+                      if (newStatus === 'Shortlist') {
+                        e.currentTarget.value = status;
+                        messageBox.showConfirm(
+                          'Shortlisting is permanent. This candidate will be excluded from future interview suggestions and the status cannot be changed later.',
+                          () => { void handleStatusChange(submission.id, newStatus); },
+                          'Permanently shortlist candidate?'
+                        );
+                        return;
+                      }
+                      void handleStatusChange(submission.id, newStatus);
+                    }}
+                    className={`geist-caption h-8 w-full rounded-[6px] border bg-[#050505] px-3 font-medium outline-none transition-colors focus:border-white/[0.28] disabled:cursor-not-allowed disabled:opacity-80 ${
                       status === 'Shortlist'
                         ? 'border-[#173d25] text-[#7ee787]'
                         : status === 'Reject'
@@ -606,9 +646,15 @@ const InterviewResponses: React.FC = () => {
                     }`}
                   >
                     <option value="Hold">Hold</option>
-                    <option value="Shortlist">Shortlist</option>
-                    <option value="Reject">Reject</option>
+                    <option value="Shortlist">Shortlisted</option>
+                    <option value="Reject">Rejected</option>
                   </select>
+                  {isPermanentlyShortlisted && (
+                    <p className="geist-small mt-1 flex items-center gap-1 text-[#7ee787]">
+                      <i className="fas fa-lock text-[9px]" aria-hidden="true"></i>
+                      Permanent
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end lg:whitespace-nowrap">

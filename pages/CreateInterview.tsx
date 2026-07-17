@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { collection, collectionGroup, doc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -8,6 +8,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { ExternalLink } from 'lucide-react';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rateLimitService';
+import { getCandidateIdentityKeys, isCandidateIdentityInSet } from '../services/candidateIdentity';
 
 import { sendInterviewInvitations } from '../services/brevoService';
 import { grokGenerateJson } from '../services/grokService';
@@ -136,8 +137,11 @@ const CreateInterview: React.FC = () => {
   const [candidateEmails, setCandidateEmails] = useState<string[]>([]);
   const [currentEmail, setCurrentEmail] = useState('');
   const [resumeDumpCandidates, setResumeDumpCandidates] = useState<ResumeDumpCandidate[]>([]);
+  const [shortlistedCandidateIdentityKeys, setShortlistedCandidateIdentityKeys] = useState<Set<string>>(() => new Set());
   const [uploadedResumeCandidateIds, setUploadedResumeCandidateIds] = useState<string[]>([]);
   const [loadingResumeDumpCandidates, setLoadingResumeDumpCandidates] = useState(false);
+  const [loadingShortlistedCandidates, setLoadingShortlistedCandidates] = useState(false);
+  const [shortlistedCandidatesError, setShortlistedCandidatesError] = useState(false);
   const [parsingJd, setParsingJd] = useState(false);
   const [parsingResumes, setParsingResumes] = useState(false);
   const [sendingEmails, setSendingEmails] = useState(false);
@@ -218,6 +222,44 @@ const CreateInterview: React.FC = () => {
     return unsubscribe;
   }, [user]);
 
+  useEffect(() => {
+    if (!user) {
+      setShortlistedCandidateIdentityKeys(new Set());
+      setLoadingShortlistedCandidates(false);
+      setShortlistedCandidatesError(false);
+      return;
+    }
+
+    setLoadingShortlistedCandidates(true);
+    setShortlistedCandidatesError(false);
+    const shortlistedCandidatesQuery = query(
+      collectionGroup(db, 'attempts'),
+      where('recruiterUID', '==', user.uid),
+      where('status', '==', 'Shortlist')
+    );
+
+    const unsubscribe = onSnapshot(
+      shortlistedCandidatesQuery,
+      (snapshot) => {
+        const identityKeys = new Set<string>();
+        snapshot.docs.forEach((attemptDoc) => {
+          const candidateInfo = attemptDoc.data().candidateInfo;
+          getCandidateIdentityKeys(candidateInfo).forEach((key) => identityKeys.add(key));
+        });
+        setShortlistedCandidateIdentityKeys(identityKeys);
+        setLoadingShortlistedCandidates(false);
+      },
+      (error) => {
+        console.error('Failed to load permanently shortlisted candidates:', error);
+        setShortlistedCandidateIdentityKeys(new Set());
+        setShortlistedCandidatesError(true);
+        setLoadingShortlistedCandidates(false);
+      }
+    );
+
+    return unsubscribe;
+  }, [user]);
+
   const requiredSkillSignals = useMemo(() => {
     const explicitSkills = splitCommaList(formData.skills);
     const roleText = `${formData.title} ${formData.description} ${formData.skills}`;
@@ -226,7 +268,10 @@ const CreateInterview: React.FC = () => {
   }, [formData.description, formData.skills, formData.title]);
 
   const suggestedCandidates = useMemo(() => (
-    resumeDumpCandidates
+    shortlistedCandidatesError
+      ? []
+      : resumeDumpCandidates
+      .filter((candidate) => !isCandidateIdentityInSet(candidate, shortlistedCandidateIdentityKeys))
       .map((candidate) => scoreCandidateForRoleAdvanced(candidate, {
         title: formData.title,
         description: formData.description,
@@ -237,7 +282,11 @@ const CreateInterview: React.FC = () => {
       .filter((candidate): candidate is CandidateSuggestion => Boolean(candidate))
       .sort((a, b) => b.matchScore - a.matchScore || b.matchedSkills.length - a.matchedSkills.length)
       .slice(0, 6)
-  ), [formData.description, formData.maxExperience, formData.minExperience, formData.title, requiredSkillSignals, resumeDumpCandidates]);
+  ), [formData.description, formData.maxExperience, formData.minExperience, formData.title, requiredSkillSignals, resumeDumpCandidates, shortlistedCandidateIdentityKeys, shortlistedCandidatesError]);
+
+  const excludedShortlistedCandidateCount = useMemo(() => (
+    resumeDumpCandidates.filter((candidate) => isCandidateIdentityInSet(candidate, shortlistedCandidateIdentityKeys)).length
+  ), [resumeDumpCandidates, shortlistedCandidateIdentityKeys]);
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -906,7 +955,7 @@ const CreateInterview: React.FC = () => {
               <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <label className={labelClass}>Suggested candidates</label>
-                  <p className="geist-small text-[#8f8f8f]">Matched from Resume Dump using this role's description and required skills.</p>
+                  <p className="geist-small text-[#8f8f8f]">Matched from Resume Dump using this role's description and required skills. Permanently shortlisted candidates are excluded.</p>
                 </div>
                 {requiredSkillSignals.length > 0 && (
                   <span className="geist-small rounded-[6px] border border-white/[0.11] bg-[#050505] px-2 py-1 text-[#8f8f8f]">
@@ -915,7 +964,7 @@ const CreateInterview: React.FC = () => {
                 )}
               </div>
 
-              {loadingResumeDumpCandidates ? (
+              {loadingResumeDumpCandidates || loadingShortlistedCandidates ? (
                 <div className="mt-3 grid gap-2 xl:grid-cols-2">
                   {[0, 1].map((item) => (
                     <div key={item} className="rounded-[6px] border border-white/[0.11] bg-[#050505] p-3">
@@ -1008,15 +1057,21 @@ const CreateInterview: React.FC = () => {
                 </div>
               ) : (
                 <div className="mt-3 rounded-[6px] border border-dashed border-white/[0.12] bg-[#050505] px-3 py-4 text-center">
-                  <p className="geist-caption text-white">
-                    {requiredSkillSignals.length === 0
+                  <p className={`geist-caption ${shortlistedCandidatesError ? 'text-[#ff8f8f]' : 'text-white'}`}>
+                    {shortlistedCandidatesError
+                      ? 'Candidate eligibility could not be verified, so suggestions are temporarily hidden.'
+                      : requiredSkillSignals.length === 0
                       ? 'Add job skills or a job description to see matching candidates.'
                       : resumeDumpCandidates.length === 0
                         ? 'No Resume Dump candidates saved yet.'
+                        : excludedShortlistedCandidateCount === resumeDumpCandidates.length
+                          ? 'All Resume Dump candidates are already permanently shortlisted.'
                         : 'No saved candidates match this role yet.'}
                   </p>
                   <p className="geist-small mt-1 text-[#8f8f8f]">
-                    Suggestions update automatically as you edit the role.
+                    {shortlistedCandidatesError
+                      ? 'Refresh the page to retry the shortlist eligibility check.'
+                      : 'Suggestions update automatically as you edit the role.'}
                   </p>
                 </div>
               )}

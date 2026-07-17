@@ -7,7 +7,7 @@ import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { db, auth } from '../services/firebase';
 import { RevenueAreaChart, UserPieChart, JobBarChart } from '../components/AdminCharts';
 import { GShapeAnimation } from '../components/AdminAnimations';
-import { Users, FileText, DollarSign, UserPlus, Briefcase, CheckCircle, XCircle, Trash2, Bell, Sun, Moon, Monitor, Video, Menu, X, Search, ShieldCheck, ShieldX, BookOpen, MessageSquare as MessageSquareIcon, Bug, Star, Activity, Database, Key, Globe, Copy, Check, Code, Server, TrendingUp, Gauge } from 'lucide-react';
+import { Users, FileText, DollarSign, UserPlus, Briefcase, CheckCircle, XCircle, Trash2, Bell, Sun, Moon, Monitor, Video, Menu, X, Search, ShieldCheck, ShieldX, BookOpen, MessageSquare as MessageSquareIcon, Bug, Star, Activity, Database, Key, Globe, Copy, Check, Code, Server, TrendingUp, Gauge, Download } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useMessageBox } from '../components/MessageBox';
 import Logo from '../components/Logo';
@@ -25,10 +25,11 @@ const AdminDashboard: React.FC = () => {
   const [adminData, setAdminData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [allAttempts, setAllAttempts] = useState<any[]>([]);
+  const [candidateConsents, setCandidateConsents] = useState<any[]>([]);
   const [perInterviewPrice, setPerInterviewPrice] = useState<number>(150);
 
   // UI State
-  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'users' | 'jobs' | 'transactions' | 'submissions' | 'reviews' | 'api' | 'dbAccess'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'users' | 'jobs' | 'consents' | 'transactions' | 'submissions' | 'reviews' | 'api' | 'dbAccess'>('overview');
   const [dbSubTab, setDbSubTab] = useState<'submissions' | 'interviews' | 'users'>('submissions');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -123,6 +124,13 @@ const AdminDashboard: React.FC = () => {
       }
     });
 
+    const qConsents = query(collection(db, 'candidateConsents'), orderBy('createdAt', 'desc'));
+    const unsubConsents = onSnapshot(qConsents, (snap) => {
+      setCandidateConsents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error('Error loading candidate consents:', error);
+    });
+
     return () => {
       unsubRequests();
       unsubUsers();
@@ -134,6 +142,7 @@ const AdminDashboard: React.FC = () => {
       unsubBugs();
       unsubReviews();
       unsubPricing();
+      unsubConsents();
     };
   }, []);
 
@@ -459,6 +468,12 @@ const AdminDashboard: React.FC = () => {
       case 'requests': return requests.filter(r => r.fullname?.toLowerCase().includes(term) || r.email?.toLowerCase().includes(term));
       case 'users': return users.filter(u => (u.fullname?.toLowerCase().includes(term) || u.email?.toLowerCase().includes(term)) && (userFilter === 'all' || u.role === userFilter));
       case 'jobs': return jobs.filter(j => j.title?.toLowerCase().includes(term) || (j.department || j.category || '').toLowerCase().includes(term));
+      case 'consents': return candidateConsents.filter(consent =>
+        consent.candidateName?.toLowerCase().includes(term) ||
+        consent.candidateEmail?.toLowerCase().includes(term) ||
+        consent.ipAddress?.toLowerCase().includes(term) ||
+        consent.interviewTitle?.toLowerCase().includes(term)
+      );
       case 'transactions': return transactions.filter(t => t.userName?.toLowerCase().includes(term) || t.paymentId?.toLowerCase().includes(term));
       case 'submissions':
         const filteredContacts = contactSubmissions.filter(c => c.status !== 'read' && (c.name?.toLowerCase().includes(term) || c.email?.toLowerCase().includes(term) || c.subject?.toLowerCase().includes(term) || c.phone?.includes(term)));
@@ -549,6 +564,48 @@ const AdminDashboard: React.FC = () => {
   const getInterviewTitle = (id: string) => {
     const matching = jobs.find(j => j.id === id);
     return matching ? matching.title : `Interview ID: ${id}`;
+  };
+
+  const escapeCsvCell = (value: unknown) => {
+    let text = value == null ? '' : String(value);
+    if (/^[=+\-@]/.test(text)) text = `'${text}`;
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+
+  const exportCandidateConsentsCSV = () => {
+    const headers = [
+      'Consent ID',
+      'Candidate Name',
+      'Candidate Email',
+      'IP Address',
+      'Interview',
+      'Interview ID',
+      'All Consents Accepted',
+      'Accepted Consent Items',
+      'Consent Version',
+      'Status',
+      'Accepted At',
+      'Recorded At',
+    ];
+    const rows = candidateConsents.map(consent => [
+      consent.id,
+      consent.candidateName,
+      consent.candidateEmail,
+      consent.ipAddress || 'Unavailable',
+      consent.interviewTitle || 'Interview',
+      consent.interviewId,
+      consent.acceptedAll === true ? 'Yes' : 'No',
+      Array.isArray(consent.acceptedItemIds) ? consent.acceptedItemIds.join('; ') : '',
+      consent.consentVersion,
+      consent.status,
+      consent.acceptedAt?.toDate ? consent.acceptedAt.toDate().toISOString() : '',
+      consent.createdAt?.toDate ? consent.createdAt.toDate().toISOString() : '',
+    ]);
+    const content = [headers, ...rows]
+      .map(row => row.map(escapeCsvCell).join(','))
+      .join('\r\n');
+
+    downloadCSV(`Candidate_Consent_${new Date().toISOString().slice(0, 10)}.csv`, `\uFEFF${content}`);
   };
 
   const exportUsersCSV = () => {
@@ -763,6 +820,7 @@ const AdminDashboard: React.FC = () => {
               { id: 'requests', label: 'Requests', icon: UserPlus, count: requests.length },
               { id: 'users', label: 'Users', icon: Users, count: users.length },
               { id: 'jobs', label: 'Interviews', icon: FileText, count: jobs.length },
+              { id: 'consents', label: 'Candidate Consent', icon: ShieldCheck, count: candidateConsents.length },
               { id: 'transactions', label: 'Transactions', icon: DollarSign },
               { id: 'reviews', label: 'Reviews', icon: Star, count: allReviews.filter(r => !r.approved).length },
               { id: 'submissions', label: 'Inbox', icon: MessageSquareIcon, count: contactSubmissions.length + bugReports.length },
@@ -807,6 +865,7 @@ const AdminDashboard: React.FC = () => {
             { id: 'requests', label: 'Requests', icon: UserPlus, count: requests.length },
             { id: 'users', label: 'Users', icon: Users, count: users.length },
             { id: 'jobs', label: 'Interviews', icon: FileText, count: jobs.length },
+            { id: 'consents', label: 'Candidate Consent', icon: ShieldCheck, count: candidateConsents.length },
             { id: 'transactions', label: 'Transactions', icon: DollarSign },
             { id: 'reviews', label: 'Reviews', icon: Star, count: allReviews.filter(r => !r.approved).length },
             { id: 'submissions', label: 'Inbox', icon: MessageSquareIcon, count: contactSubmissions.length + bugReports.length },
@@ -1269,6 +1328,91 @@ const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'consents' && (
+            <div className="space-y-5 sm:space-y-6">
+              <div className="animated-item flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <div className="mb-2 flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                    <ShieldCheck className="size-5" />
+                    <span className="text-xs font-bold uppercase tracking-widest">Consent records</span>
+                  </div>
+                  <h2 className="text-xl font-bold sm:text-2xl">Candidate Consent</h2>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Candidates who accepted every interview consent item and completed their onboarding details.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={exportCandidateConsentsCSV}
+                  disabled={candidateConsents.length === 0}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:text-black sm:w-auto"
+                >
+                  <Download className="size-4" />
+                  Export CSV
+                </button>
+              </div>
+
+              <div className="animated-item relative">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="search"
+                  placeholder="Search by name, email, IP address, or interview..."
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-white/10 dark:bg-zinc-900"
+                />
+              </div>
+
+              <div className="animated-item overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-900">
+                <div className="overflow-x-auto">
+                  <table className="min-w-[850px] w-full text-left text-sm">
+                    <thead className="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500 dark:border-white/10 dark:bg-black/20">
+                      <tr>
+                        <th className="px-4 py-3 font-semibold">Candidate</th>
+                        <th className="px-4 py-3 font-semibold">IP address</th>
+                        <th className="px-4 py-3 font-semibold">Interview</th>
+                        <th className="px-4 py-3 font-semibold">Consent</th>
+                        <th className="px-4 py-3 font-semibold">Accepted at</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                      {(filteredData() as any[]).map((consent) => (
+                        <tr key={consent.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.03]">
+                          <td className="px-4 py-4">
+                            <p className="font-semibold text-gray-900 dark:text-white">{consent.candidateName}</p>
+                            <p className="mt-0.5 text-xs text-gray-500">{consent.candidateEmail}</p>
+                          </td>
+                          <td className="px-4 py-4 font-mono text-xs text-gray-600 dark:text-gray-300">
+                            {consent.ipAddress || 'Unavailable'}
+                          </td>
+                          <td className="px-4 py-4">
+                            <p className="font-medium">{consent.interviewTitle || 'Interview'}</p>
+                          </td>
+                          <td className="px-4 py-4">
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                              <CheckCircle className="size-3.5" />
+                              All accepted
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-gray-600 dark:text-gray-300">
+                            {consent.acceptedAt?.toDate ? consent.acceptedAt.toDate().toLocaleString() : 'Unavailable'}
+                          </td>
+                        </tr>
+                      ))}
+                      {(filteredData() as any[]).length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
+                            {candidateConsents.length === 0 ? 'No candidate consent records yet.' : 'No matching consent records.'}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
