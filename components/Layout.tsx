@@ -50,7 +50,7 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   };
 
   React.useEffect(() => {
-    if (showRecruiterSidebar && theme === 'light') {
+    if (showRecruiterSidebar && theme !== 'dark') {
       setTheme('dark');
     }
   }, [showRecruiterSidebar, setTheme, theme]);
