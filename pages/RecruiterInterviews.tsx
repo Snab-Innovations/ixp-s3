@@ -808,8 +808,17 @@ const RecruiterInterviews: React.FC = () => {
                     <div>
                         <label className="block text-sm font-medium mb-2">Upload Resume to Find Email</label>
                         <label className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-50 dark:bg-gray-700 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-                            <i className={`fas fa-cloud-upload-alt ${parsingResumes ? 'fa-spin' : ''}`}></i>
-                            <span className="font-medium text-sm">{parsingResumes ? 'Parsing Resumes...' : 'Upload Resumes (PDF/DOCX/TXT)'}</span>
+                            {parsingResumes ? (
+                              <>
+                                <ButtonBusySkeleton className="w-5 bg-gray-400/40 dark:bg-white/30" />
+                                <ButtonBusySkeleton className="w-40 bg-gray-400/40 dark:bg-white/30" />
+                              </>
+                            ) : (
+                              <>
+                                <i className="fas fa-cloud-upload-alt"></i>
+                                <span className="font-medium text-sm">Upload Resumes (PDF/DOCX/TXT)</span>
+                              </>
+                            )}
                             <input type="file" multiple accept=".pdf,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
                         </label>
                     </div>
@@ -923,7 +932,7 @@ const RecruiterInterviews: React.FC = () => {
                                                         disabled={resendingEmail !== null}
                                                         className="bg-green-500 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-green-600 disabled:opacity-50 flex items-center gap-1 shrink-0"
                                                     >
-                                                        {isResending ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-save"></i>} Save
+                                                        {isResending ? <ButtonBusySkeleton className="w-12 bg-white/45" /> : <><i className="fas fa-save"></i> Save</>}
                                                     </button>
                                                     <button 
                                                         onClick={() => setEditingCandidateEmail(null)}
@@ -951,7 +960,7 @@ const RecruiterInterviews: React.FC = () => {
                                                             className="text-gray-500 hover:text-green-500 transition-colors p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-1" 
                                                             title="Resend Invitation"
                                                         >
-                                                            {isResending ? <i className="fas fa-spinner fa-spin text-xs"></i> : <i className="fas fa-paper-plane text-xs"></i>}
+                                                            {isResending ? <ButtonBusySkeleton className="w-5 bg-gray-400/40 dark:bg-white/30" /> : <i className="fas fa-paper-plane text-xs"></i>}
                                                         </button>
                                                     </div>
                                                 </>
@@ -971,10 +980,7 @@ const RecruiterInterviews: React.FC = () => {
                         className="bg-green-500 text-white px-4 py-2 rounded flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {sendingEmails ? (
-                            <>
-                                <i className="fa-solid fa-circle-notch fa-spin text-xs"></i>
-                                Sending...
-                            </>
+                            <ButtonBusySkeleton className="w-20 bg-white/45" />
                         ) : 'Send Invites'}
                     </button>
                 </div>
