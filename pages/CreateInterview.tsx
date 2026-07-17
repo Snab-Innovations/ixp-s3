@@ -6,9 +6,19 @@ import { useNavigate } from 'react-router-dom';
 import { SKILL_OPTIONS } from './Profile';
 import * as pdfjsLib from 'pdfjs-dist';
 import { ExternalLink } from 'lucide-react';
+import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
+import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rateLimitService';
 
 import { sendInterviewInvitations } from '../services/brevoService';
 import { grokGenerateJson } from '../services/grokService';
+import {
+  extractSkillSignals,
+  ingestResumeFile,
+  saveResumeDumpCandidate,
+  scoreCandidateForRole as scoreCandidateForRoleAdvanced,
+  type CandidateMatch,
+  type ResumeDumpRecord,
+} from '../services/resumeService';
 
 // Setup PDF.js worker to enable PDF parsing
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -17,21 +27,8 @@ const SkeletonBlock = ({ className = '' }: { className?: string }) => (
   <span className={`block animate-pulse rounded-[4px] bg-white/[0.12] ${className}`} aria-hidden="true" />
 );
 
-interface ResumeDumpCandidate {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  skills: string[];
-  resumeUrl: string;
-  resumeFileName?: string;
-  resumeText?: string;
-}
-
-interface CandidateSuggestion extends ResumeDumpCandidate {
-  matchScore: number;
-  matchedSkills: string[];
-}
+type ResumeDumpCandidate = ResumeDumpRecord;
+type CandidateSuggestion = CandidateMatch;
 
 const splitCommaList = (value: string) => value.split(',').map((item) => item.trim()).filter(Boolean);
 
@@ -58,33 +55,6 @@ const textContainsSkill = (text: string, skill: string) => {
   const normalizedText = ` ${normalizeSearchText(text)} `;
   const normalizedSkill = ` ${normalizeSearchText(skill)} `;
   return normalizedSkill.trim().length > 1 && normalizedText.includes(normalizedSkill);
-};
-
-const scoreCandidateForRole = (candidate: ResumeDumpCandidate, requiredSkills: string[]): CandidateSuggestion | null => {
-  if (requiredSkills.length === 0) return null;
-
-  const candidateSkills = candidate.skills || [];
-  const normalizedCandidateSkills = candidateSkills.map(normalizeSearchText).filter(Boolean);
-  const resumeSearchText = normalizeSearchText(`${candidate.resumeText || ''} ${candidateSkills.join(' ')}`);
-
-  const matchedSkills = requiredSkills.filter((skill) => {
-    const normalizedSkill = normalizeSearchText(skill);
-    if (!normalizedSkill) return false;
-
-    return normalizedCandidateSkills.some((candidateSkill) => (
-      candidateSkill === normalizedSkill ||
-      candidateSkill.includes(normalizedSkill) ||
-      normalizedSkill.includes(candidateSkill)
-    )) || resumeSearchText.includes(normalizedSkill);
-  });
-
-  if (matchedSkills.length === 0) return null;
-
-  return {
-    ...candidate,
-    matchedSkills,
-    matchScore: Math.max(1, Math.min(99, Math.round((matchedSkills.length / requiredSkills.length) * 100))),
-  };
 };
 
 export const CreateInterviewSkeleton = () => (
@@ -159,11 +129,14 @@ export const CreateInterviewSkeleton = () => (
 const CreateInterview: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { status: rateLimitStatus, loading: rateLimitLoading, refresh: refreshRateLimit } = useCompanyRateLimits();
+  const interviewLimitReached = isRateLimitReached(rateLimitStatus, 'interviews');
   const [loading, setLoading] = useState(false);
   const [skillSearch, setSkillSearch] = useState('');
   const [candidateEmails, setCandidateEmails] = useState<string[]>([]);
   const [currentEmail, setCurrentEmail] = useState('');
   const [resumeDumpCandidates, setResumeDumpCandidates] = useState<ResumeDumpCandidate[]>([]);
+  const [uploadedResumeCandidateIds, setUploadedResumeCandidateIds] = useState<string[]>([]);
   const [loadingResumeDumpCandidates, setLoadingResumeDumpCandidates] = useState(false);
   const [parsingJd, setParsingJd] = useState(false);
   const [parsingResumes, setParsingResumes] = useState(false);
@@ -211,10 +184,24 @@ const CreateInterview: React.FC = () => {
           const data = candidateDoc.data();
           return {
             id: candidateDoc.id,
+            recruiterUID: typeof data.recruiterUID === 'string' ? data.recruiterUID : user.uid,
             name: typeof data.name === 'string' ? data.name : '',
             email: typeof data.email === 'string' ? data.email : '',
             phone: typeof data.phone === 'string' ? data.phone : '',
+            location: typeof data.location === 'string' ? data.location : '',
+            currentTitle: typeof data.currentTitle === 'string' ? data.currentTitle : '',
+            summary: typeof data.summary === 'string' ? data.summary : '',
+            totalExperienceYears: typeof data.totalExperienceYears === 'number' ? data.totalExperienceYears : 0,
             skills: Array.isArray(data.skills) ? data.skills.filter((skill: unknown): skill is string => typeof skill === 'string' && skill.trim().length > 0) : [],
+            experience: Array.isArray(data.experience) ? data.experience : [],
+            education: Array.isArray(data.education) ? data.education : [],
+            certifications: Array.isArray(data.certifications) ? data.certifications : [],
+            languages: Array.isArray(data.languages) ? data.languages : [],
+            keywords: Array.isArray(data.keywords) ? data.keywords : [],
+            linkedinUrl: typeof data.linkedinUrl === 'string' ? data.linkedinUrl : '',
+            portfolioUrl: typeof data.portfolioUrl === 'string' ? data.portfolioUrl : '',
+            parsingMethod: data.parsingMethod === 'hybrid' ? 'hybrid' : 'deterministic',
+            parserVersion: typeof data.parserVersion === 'number' ? data.parserVersion : 1,
             resumeUrl: typeof data.resumeUrl === 'string' ? data.resumeUrl : '',
             resumeFileName: typeof data.resumeFileName === 'string' ? data.resumeFileName : '',
             resumeText: typeof data.resumeText === 'string' ? data.resumeText : '',
@@ -235,16 +222,22 @@ const CreateInterview: React.FC = () => {
     const explicitSkills = splitCommaList(formData.skills);
     const roleText = `${formData.title} ${formData.description} ${formData.skills}`;
     const detectedSkills = SKILL_OPTIONS.filter((skill) => textContainsSkill(roleText, skill));
-    return uniqueByNormalized([...explicitSkills, ...detectedSkills]);
+    return uniqueByNormalized([...explicitSkills, ...detectedSkills, ...extractSkillSignals(roleText)]);
   }, [formData.description, formData.skills, formData.title]);
 
   const suggestedCandidates = useMemo(() => (
     resumeDumpCandidates
-      .map((candidate) => scoreCandidateForRole(candidate, requiredSkillSignals))
+      .map((candidate) => scoreCandidateForRoleAdvanced(candidate, {
+        title: formData.title,
+        description: formData.description,
+        requiredSkills: requiredSkillSignals,
+        minExperience: formData.minExperience,
+        maxExperience: formData.maxExperience,
+      }))
       .filter((candidate): candidate is CandidateSuggestion => Boolean(candidate))
       .sort((a, b) => b.matchScore - a.matchScore || b.matchedSkills.length - a.matchedSkills.length)
       .slice(0, 6)
-  ), [requiredSkillSignals, resumeDumpCandidates]);
+  ), [formData.description, formData.maxExperience, formData.minExperience, formData.title, requiredSkillSignals, resumeDumpCandidates]);
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -393,48 +386,36 @@ const CreateInterview: React.FC = () => {
   };
 
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    const files = Array.from(e.target.files || []) as File[];
+    if (!user || files.length === 0) return;
 
     setParsingResumes(true);
-    const newEmailsFound: string[] = [];
-    let filesProcessed = 0;
-    let filesWithErrors = 0;
-
-    for (const file of Array.from(files) as File[]) {
-      let text = '';
+    const results = await Promise.all(files.map(async (file) => {
       try {
-        if (file.type === 'application/pdf') {
-          const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            text += textContent.items.map((item: any) => item.str).join(' ');
-          }
-        } else if (file.type === 'text/plain') {
-          text = await file.text();
-        } else {
-          continue; // Skip unsupported file types
-        }
-
-        const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/gi;
-        const foundEmails = text.match(emailRegex);
-
-        if (foundEmails) {
-          foundEmails.forEach(email => {
-            const lowerEmail = email.toLowerCase();
-            if (!candidateEmails.includes(lowerEmail) && !newEmailsFound.includes(lowerEmail)) {
-              newEmailsFound.push(lowerEmail);
-            }
-          });
-        }
-        filesProcessed++;
+        const ingested = await ingestResumeFile(file);
+        const candidateId = await saveResumeDumpCandidate({
+          recruiterUID: user.uid,
+          profile: ingested.profile,
+          resumeText: ingested.resumeText,
+          resumeUrl: ingested.resumeUrl,
+          fileName: file.name,
+          mimeType: file.type,
+          fileSize: file.size,
+          source: 'interview_creation',
+          sourceJobTitle: formData.title,
+        });
+        return { candidateId, email: ingested.profile.email, fileName: file.name, ok: true };
       } catch (error) {
-        console.error(`Error parsing ${file.name}:`, error);
-        filesWithErrors++;
+        console.error(`Error ingesting ${file.name}:`, error);
+        return { candidateId: '', email: '', fileName: file.name, ok: false };
       }
-    }
+    }));
+
+    const newEmailsFound = uniqueByNormalized(results.map((result) => result.email).filter(Boolean));
+    const savedCandidateIds = results.map((result) => result.candidateId).filter(Boolean);
+    setUploadedResumeCandidateIds((current) => Array.from(new Set([...current, ...savedCandidateIds])));
+    const filesProcessed = results.filter((result) => result.ok).length;
+    const filesWithErrors = results.length - filesProcessed;
 
     if (newEmailsFound.length > 0) {
       setCandidateEmails((prev) => {
@@ -443,7 +424,7 @@ const CreateInterview: React.FC = () => {
         return [...prev, ...uniqueNewEmails];
       });
     }
-    alert(`Processed ${filesProcessed} file(s). Found ${newEmailsFound.length} new email(s). ${filesWithErrors > 0 ? `Failed to parse ${filesWithErrors} file(s).` : ''}`);
+    alert(`Saved ${filesProcessed} resume${filesProcessed === 1 ? '' : 's'} to Resume Dump and added ${newEmailsFound.length} new email${newEmailsFound.length === 1 ? '' : 's'} to invitations.${filesWithErrors > 0 ? ` ${filesWithErrors} file(s) could not be processed.` : ''}`);
     setParsingResumes(false);
     e.target.value = ''; // Reset file input to allow re-uploading the same file
   };
@@ -452,6 +433,16 @@ const CreateInterview: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+
+    const latestRateLimit = await refreshRateLimit();
+    if (!latestRateLimit) {
+      alert('Unable to verify the company interview limit. Please try again.');
+      return;
+    }
+    if (isRateLimitReached(latestRateLimit, 'interviews')) {
+      alert(getRateLimitReachedMessage('interviews'));
+      return;
+    }
 
     if (formData.maxExperience < formData.minExperience) {
       alert("❌ Maximum experience cannot be less than minimum experience.");
@@ -478,6 +469,22 @@ const CreateInterview: React.FC = () => {
         createdAt: serverTimestamp(),
         isMock: false,
       });
+
+      if (uploadedResumeCandidateIds.length > 0) {
+        try {
+          await Promise.all(uploadedResumeCandidateIds.map((candidateId) => setDoc(
+            doc(db, 'resumeDumpCandidates', candidateId),
+            {
+              sourceInterviewId: newRand,
+              sourceJobTitle: formData.title,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          )));
+        } catch (resumeLinkError) {
+          console.error('Interview created, but one or more Resume Dump source links could not be updated:', resumeLinkError);
+        }
+      }
 
       // 3. Send invitation emails if candidates are present
       if (candidateEmails.length > 0) {
@@ -537,6 +544,11 @@ const CreateInterview: React.FC = () => {
             Build a structured interview brief, tune the question rules, and prepare candidate invitations from one focused workspace.
           </p>
         </div>
+        {interviewLimitReached && (
+          <div className="border-t border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-400 sm:px-6 lg:px-7">
+            {getRateLimitReachedMessage('interviews')}
+          </div>
+        )}
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,0.42fr)_1px_minmax(0,1fr)]">
@@ -933,6 +945,11 @@ const CreateInterview: React.FC = () => {
                             <p className="geist-small mt-0.5 truncate text-[#8bbde8]" title={candidate.email}>
                               {candidate.email || 'Email not found'}
                             </p>
+                            {(candidate.currentTitle || candidate.totalExperienceYears > 0) && (
+                              <p className="geist-small mt-1 truncate text-[#6b7280]">
+                                {[candidate.currentTitle, candidate.totalExperienceYears > 0 ? `${candidate.totalExperienceYears} yrs` : ''].filter(Boolean).join(' · ')}
+                              </p>
+                            )}
                           </div>
                           <span className="geist-small shrink-0 rounded-[6px] border border-white/[0.14] bg-white/[0.05] px-2 py-1 text-[#d4d4d4]">
                             {candidate.matchScore}% match
@@ -949,6 +966,15 @@ const CreateInterview: React.FC = () => {
                             <span className="geist-small rounded-[6px] border border-white/[0.11] bg-white/[0.04] px-2 py-0.5 text-[#8f8f8f]">
                               +{candidate.matchedSkills.length - 5}
                             </span>
+                          )}
+                        </div>
+
+                        <div className="mt-2 space-y-1">
+                          {candidate.matchReasons.slice(0, 2).map((reason) => (
+                            <p key={reason} className="geist-small text-[#a1a1aa]">✓ {reason}</p>
+                          ))}
+                          {candidate.missingSkills.length > 0 && (
+                            <p className="geist-small text-[#8f8f8f]">Missing signals: {candidate.missingSkills.slice(0, 3).join(', ')}{candidate.missingSkills.length > 3 ? ` +${candidate.missingSkills.length - 3}` : ''}</p>
                           )}
                         </div>
 
@@ -1011,26 +1037,26 @@ const CreateInterview: React.FC = () => {
                   </span>
                 ) : (
                   <>
-                    <span className="font-medium text-white">Upload resumes to find emails</span>
-                    <span className="geist-small text-[#8f8f8f]">PDF or TXT</span>
+                    <span className="font-medium text-white">Upload resumes to parse and save candidates</span>
+                    <span className="geist-small text-[#8f8f8f]">PDF, DOCX, or TXT</span>
                   </>
                 )}
               </label>
-              <input id="resume-upload" type="file" multiple accept=".pdf,.txt" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
-              <p className="geist-small mt-2 text-[#8f8f8f]">Extracted emails are added to the invite queue for review before sending.</p>
+              <input id="resume-upload" type="file" multiple accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
+              <p className="geist-small mt-2 text-[#8f8f8f]">Each resume is added to Resume Dump with structured experience, education, skills, and source details. Extracted emails are also queued for review.</p>
             </div>
           </section>
 
           <div className="sticky bottom-0 border-t border-white/[0.11] bg-[#000]/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-7">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="geist-small text-[#8f8f8f]">Access codes are generated when the interview is created.</p>
-              <button type="submit" disabled={loading || sendingEmails} className={primaryButtonClass}>
+              <button type="submit" disabled={loading || sendingEmails || rateLimitLoading || interviewLimitReached} className={primaryButtonClass}>
                 {loading || sendingEmails ? (
                   <span className="flex w-56 max-w-full flex-col items-center gap-1.5" role="status" aria-label={loading ? 'Saving interview' : 'Sending invitations'}>
                     <SkeletonBlock className="h-3.5 w-40 bg-black/[0.18]" />
                     <SkeletonBlock className="h-2.5 w-28 bg-black/[0.12]" />
                   </span>
-                ) : 'Create interview and send invitations'}
+                ) : interviewLimitReached ? 'Interview limit reached' : 'Create interview and send invitations'}
               </button>
             </div>
           </div>

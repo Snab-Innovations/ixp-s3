@@ -105,9 +105,14 @@ service cloud.firestore {
     }
 
     // --- Collection Group Rules ---
-    // Allow users to query their own interview attempts across all jobs
+    // Allow candidates to query their own attempts and admins to reconcile
+    // company-wide candidate usage across every interview.
     match /{path=**}/attempts/{attemptId} {
-      allow read: if request.auth != null && request.auth.uid == resource.data.candidateUID;
+      allow read: if request.auth != null
+                  && (
+                       request.auth.uid == resource.data.candidateUID
+                       || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+                     );
     }
 
     // --- Interview Requests Collection Rules ---
@@ -142,12 +147,41 @@ service cloud.firestore {
 
     // --- Recruiter Resume Dump ---
     match /resumeDumpCandidates/{candidateId} {
+      function isValidCandidateInterviewResume(data) {
+        return data.keys().hasOnly([
+                 'name', 'email', 'phone', 'location', 'currentTitle', 'summary',
+                 'totalExperienceYears', 'skills', 'experience', 'education',
+                 'certifications', 'languages', 'keywords', 'linkedinUrl',
+                 'portfolioUrl', 'parsingMethod', 'parserVersion', 'recruiterUID',
+                 'resumeUrl', 'resumeFileName', 'resumeMimeType', 'resumeSize',
+                 'resumeText', 'source', 'sourceInterviewId', 'sourceJobTitle',
+                 'createdAt', 'updatedAt'
+               ])
+               && data.source == 'candidate_interview'
+               && data.sourceInterviewId is string
+               && data.recruiterUID is string
+               && data.name is string && data.name.size() <= 200
+               && data.email is string && data.email.size() <= 320
+               && data.phone is string && data.phone.size() <= 80
+               && data.resumeUrl is string && data.resumeUrl.size() <= 5000
+               && data.resumeText is string && data.resumeText.size() <= 25000
+               && data.skills is list && data.skills.size() <= 50
+               && data.experience is list && data.experience.size() <= 12
+               && data.education is list && data.education.size() <= 10
+               && data.totalExperienceYears is number
+               && data.totalExperienceYears >= 0 && data.totalExperienceYears <= 60
+               && exists(/databases/$(database)/documents/interviews/$(data.sourceInterviewId))
+               && get(/databases/$(database)/documents/interviews/$(data.sourceInterviewId)).data.recruiterUID == data.recruiterUID;
+      }
+
       allow read, write: if request.auth != null 
                           && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
 
-      allow create: if request.auth != null
-                    && request.resource.data.recruiterUID == request.auth.uid
-                    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter';
+      allow create: if (
+                      request.auth != null
+                      && request.resource.data.recruiterUID == request.auth.uid
+                      && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter'
+                    ) || isValidCandidateInterviewResume(request.resource.data);
 
       allow read, update, delete: if request.auth != null
                                   && resource.data.recruiterUID == request.auth.uid
@@ -240,6 +274,85 @@ service cloud.firestore {
       // Admin Permission: Admins can read/write universal pricing or configuration settings
       allow read, write: if request.auth != null 
                           && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // --- Shared Company Rate Limits ---
+    match /rateLimits/{rateLimitId} {
+      function isAdmin() {
+        return request.auth != null
+               && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      }
+
+      function hasValidLimits(data) {
+        return data.interviews is int && data.interviews >= 0
+               && data.assessments is int && data.assessments >= 0
+               && data.codingAssessments is int && data.codingAssessments >= 0;
+      }
+
+      function hasValidUsage(data) {
+        return data.usage.interviews is int && data.usage.interviews >= 0
+               && data.usage.assessments is int && data.usage.assessments >= 0
+               && data.usage.codingAssessments is int && data.usage.codingAssessments >= 0;
+      }
+
+      function hasValidUsageBaseline(data) {
+        return data.usageBaseline.interviews is int && data.usageBaseline.interviews >= 0
+               && data.usageBaseline.assessments is int && data.usageBaseline.assessments >= 0
+               && data.usageBaseline.codingAssessments is int && data.usageBaseline.codingAssessments >= 0;
+      }
+
+      function isInitialPublicConsumption() {
+        return request.resource.data.scope == 'company'
+               && request.resource.data.interviews == 2500
+               && request.resource.data.assessments == 5
+               && request.resource.data.codingAssessments == 2
+               && request.resource.data.topUps.interviews == 0
+               && request.resource.data.topUps.assessments == 0
+               && request.resource.data.topUps.codingAssessments == 0
+               && request.resource.data.usageBaseline.interviews == 0
+               && request.resource.data.usageBaseline.assessments == 0
+               && request.resource.data.usageBaseline.codingAssessments == 0
+               && hasValidUsage(request.resource.data)
+               && hasValidUsageBaseline(request.resource.data)
+               && request.resource.data.usage.interviews <= request.resource.data.interviews
+               && request.resource.data.usage.assessments <= request.resource.data.assessments
+               && request.resource.data.usage.codingAssessments <= request.resource.data.codingAssessments
+               && request.resource.data.usage.interviews
+                  + request.resource.data.usage.assessments
+                  + request.resource.data.usage.codingAssessments == 1;
+      }
+
+      function isSingleUsageIncrement() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usage', 'lastCandidateSubmissionAt'])
+               && hasValidLimits(request.resource.data)
+               && hasValidUsage(request.resource.data)
+               && hasValidUsageBaseline(request.resource.data)
+               && request.resource.data.usageBaseline == resource.data.usageBaseline
+               && request.resource.data.usage.interviews <= request.resource.data.interviews
+               && request.resource.data.usage.assessments <= request.resource.data.assessments
+               && request.resource.data.usage.codingAssessments <= request.resource.data.codingAssessments
+               && request.resource.data.usage.interviews >= resource.data.usage.interviews
+               && request.resource.data.usage.assessments >= resource.data.usage.assessments
+               && request.resource.data.usage.codingAssessments >= resource.data.usage.codingAssessments
+               && request.resource.data.usage.interviews - resource.data.usage.interviews <= 1
+               && request.resource.data.usage.assessments - resource.data.usage.assessments <= 1
+               && request.resource.data.usage.codingAssessments - resource.data.usage.codingAssessments <= 1
+               && (request.resource.data.usage.interviews - resource.data.usage.interviews)
+                  + (request.resource.data.usage.assessments - resource.data.usage.assessments)
+                  + (request.resource.data.usage.codingAssessments - resource.data.usage.codingAssessments) == 1;
+      }
+
+      // Recruiter and candidate flows read only the single shared company pool.
+      allow get: if rateLimitId == 'company';
+      allow list: if isAdmin();
+
+      // Admins manage limits, top-ups, and resets. A candidate flow may only
+      // create the default pool or atomically increment exactly one usage slot.
+      allow create: if rateLimitId == 'company'
+                    && (isAdmin() || isInitialPublicConsumption());
+      allow update: if rateLimitId == 'company'
+                    && (isAdmin() || isSingleUsageIncrement());
+      allow delete: if rateLimitId == 'company' && isAdmin();
     }
   }
 }

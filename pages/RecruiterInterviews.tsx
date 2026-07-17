@@ -12,6 +12,8 @@ import { sendInterviewInvitations } from '../services/brevoService';
 import EditJobModal from './EditJob';
 
 import { evaluateResumeMatch } from '../services/api';
+import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
+import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rateLimitService';
 
 // Setup PDF.js worker to enable PDF parsing
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -115,6 +117,8 @@ const RecruiterInterviews: React.FC = () => {
 
   const messageBox = useMessageBox();
   const navigate = useNavigate();
+  const { status: rateLimitStatus } = useCompanyRateLimits();
+  const interviewLimitReached = isRateLimitReached(rateLimitStatus, 'interviews');
   const actionButtonClass = 'geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white';
 
   useEffect(() => {
@@ -542,9 +546,18 @@ const RecruiterInterviews: React.FC = () => {
             <p className="geist-small mt-1 text-[#8f8f8f]">Manage all your scheduled interviews.</p>
           </div>
           <div className="flex items-center gap-2">
-            <Link to="/recruiter/interview/create" className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea]">
+            <Link
+              to="/recruiter/interview/create"
+              onClick={(event) => {
+                if (!interviewLimitReached) return;
+                event.preventDefault();
+                messageBox.showWarning(getRateLimitReachedMessage('interviews'));
+              }}
+              aria-disabled={interviewLimitReached}
+              className={`geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border px-3 font-medium transition-colors ${interviewLimitReached ? 'cursor-not-allowed border-red-500/30 bg-red-500/10 text-red-400' : 'border-white bg-white text-black hover:bg-[#eaeaea]'}`}
+            >
               <i className="fas fa-plus text-[11px]"></i>
-              <span>Create Interview</span>
+              <span>{interviewLimitReached ? 'Interview limit reached' : 'Create Interview'}</span>
             </Link>
           </div>
         </div>

@@ -9,6 +9,8 @@ import { useTheme } from '../context/ThemeContext';
 import { AlertTriangle, Clock, Code, Terminal, Play, FileCode, Settings, CheckCircle, Calculator as CalculatorIcon, Flag, X } from 'lucide-react';
 import { sendInterviewInvitations } from '../services/brevoService';
 import { grokGenerateJson } from '../services/grokService';
+import { getCandidateRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus, recordCandidateSubmission, RateLimitResource } from '../services/rateLimitService';
+import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 
 const TestInfoForm: React.FC<{ onSubmit: (info: {name: string, email: string}) => void }> = ({ onSubmit }) => {
   const [name, setName] = useState('');
@@ -225,6 +227,7 @@ const TakeTest: React.FC = () => {
   const navigate = useNavigate();
   const { isDark } = useTheme();
   const { user, userProfile } = useAuth();
+  const { status: liveRateLimitStatus } = useCompanyRateLimits();
   const [test, setTest] = useState<any>(null);
   const [answers, setAnswers] = useState<any>({});
   const [currentQ, setCurrentQ] = useState(0);
@@ -237,6 +240,7 @@ const TakeTest: React.FC = () => {
   const [showPromoPopup, setShowPromoPopup] = useState(false);
   const [markedQuestions, setMarkedQuestions] = useState<Record<number, boolean>>({});
   const [showCalculator, setShowCalculator] = useState(false);
+  const [rateLimitError, setRateLimitError] = useState('');
   const [activeCodeTab, setActiveCodeTab] = useState<'problem' | 'code'>('problem');
   
   const [isMobile, setIsMobile] = useState(() => {
@@ -251,6 +255,18 @@ const TakeTest: React.FC = () => {
   const [fullscreenEscapes, setFullscreenEscapes] = useState(0);
   const [isTerminated, setIsTerminated] = useState(false);
   const hasEnteredFullscreenRef = useRef(isFullscreen);
+  const activeRateLimitResource: RateLimitResource = test?.type === 'coding' ? 'codingAssessments' : 'assessments';
+  const activeLimitReached = Boolean(test && isRateLimitReached(liveRateLimitStatus, activeRateLimitResource));
+
+  useEffect(() => {
+    if (!activeLimitReached || resultData || submitting) return;
+    setIsTerminated(true);
+    setRateLimitError(getCandidateRateLimitReachedMessage(activeRateLimitResource));
+    hasEnteredFullscreenRef.current = false;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    }
+  }, [activeLimitReached, activeRateLimitResource, resultData, submitting]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -292,6 +308,12 @@ const TakeTest: React.FC = () => {
       const snap = await getDoc(doc(db, 'tests', testId));
       if (snap.exists()) {
         const testData = { id: snap.id, ...snap.data() } as any;
+        const resource: RateLimitResource = testData.type === 'coding' ? 'codingAssessments' : 'assessments';
+        const rateLimitStatus = await loadCompanyRateLimitStatus();
+        if (isRateLimitReached(rateLimitStatus, resource)) {
+          setRateLimitError(getCandidateRateLimitReachedMessage(resource));
+          return;
+        }
         setTest(testData);
         if (testData.duration && !isNaN(Number(testData.duration))) {
           setTimeLeft(testData.duration * 60);
@@ -566,7 +588,8 @@ const TakeTest: React.FC = () => {
 
     console.log('[Assessment] Final email status - Sent:', emailSent, '| Error:', emailError || 'none');
 
-    await addDoc(collection(db, 'testSubmissions'), {
+    const submissionRef = doc(collection(db, 'testSubmissions'));
+    await recordCandidateSubmission(test.type === 'coding' ? 'codingAssessments' : 'assessments', submissionRef, {
       testId,
       candidateUID: user?.uid || candidateInfo.email,
       candidateName: candidateInfo.name,
@@ -578,6 +601,8 @@ const TakeTest: React.FC = () => {
       tabSwitchCount,
       emailSent,
       emailError,
+      recruiterUID: fullTestData.recruiterUID || null,
+      type: fullTestData.type === 'coding' ? 'coding' : 'aptitude',
       submittedAt: serverTimestamp()
     });
 
@@ -613,6 +638,17 @@ const TakeTest: React.FC = () => {
       handleSubmitRef.current?.();
     }
   }, [timeLeft, step]);
+
+  if (rateLimitError) return (
+    <div className={`min-h-screen flex items-center justify-center p-6 ${isDark ? 'bg-[#050505] text-white' : 'bg-gray-50 text-gray-900'}`}>
+      <div role="alert" className="w-full max-w-md rounded-[14px] border border-red-500/25 bg-white p-7 text-center shadow-[0_24px_80px_rgba(0,0,0,0.1)] dark:bg-[#0a0a0a]">
+        <AlertTriangle className="mx-auto mb-3 text-red-500" size={28} />
+        <h1 className="text-xl font-semibold">Assessment unavailable</h1>
+        <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-[#a1a1a1]">{rateLimitError}</p>
+        <button onClick={() => navigate('/')} className="mt-5 rounded-[6px] bg-black px-4 py-2.5 text-sm font-medium text-white dark:bg-white dark:text-black">Return home</button>
+      </div>
+    </div>
+  );
 
   if (step === 'collect-info') {
     return <TestInfoForm onSubmit={(info) => {

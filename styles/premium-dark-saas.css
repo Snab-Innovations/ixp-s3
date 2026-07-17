@@ -2715,3 +2715,221 @@ html.dark {
   border: 1px solid rgb(var(--border-rgb)) !important;
   color: rgb(var(--foreground-rgb)) !important;
 }
+
+/* Recruiter workspace: polished day mode
+   ------------------------------------------------------------
+   Recruiter screens intentionally use a dense, dark utility palette. These
+   light-mode translations are scoped to recruiter routes by Layout, keeping
+   admin, candidate, interview-taking, and public experiences untouched. */
+:root:not(.dark) .recruiter-shell {
+  --recruiter-day-bg: #f7f7f8;
+  --recruiter-day-surface: #ffffff;
+  --recruiter-day-subtle: #f4f4f5;
+  --recruiter-day-hover: #ededf0;
+  --recruiter-day-border: #dedee3;
+  --recruiter-day-border-soft: #e8e8ec;
+  --recruiter-day-ink: #18181b;
+  --recruiter-day-copy: #3f3f46;
+  --recruiter-day-muted: #71717a;
+  background: var(--recruiter-day-bg) !important;
+  color: var(--recruiter-day-ink) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-grid {
+  background-image:
+    linear-gradient(rgb(24 24 27 / 0.55) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(24 24 27 / 0.55) 1px, transparent 1px) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-topbar {
+  border-color: var(--recruiter-day-border) !important;
+  background: rgb(255 255 255 / 0.9) !important;
+  color: var(--recruiter-day-ink) !important;
+  box-shadow: 0 1px 0 rgb(24 24 27 / 0.025);
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-topbar h1,
+:root:not(.dark) .recruiter-shell .recruiter-topbar .text-white,
+:root:not(.dark) .recruiter-shell .recruiter-topbar [class*="hover:text-white"]:hover {
+  color: var(--recruiter-day-ink) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-topbar [class*="border-white/"] {
+  border-color: var(--recruiter-day-border) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-topbar [class*="bg-[#111]"] {
+  background: var(--recruiter-day-surface) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-sidebar,
+:root:not(.dark) .recruiter-shell .recruiter-mobile-sidebar {
+  border-color: var(--recruiter-day-border) !important;
+  background: #f1f1f3 !important;
+  color: var(--recruiter-day-copy) !important;
+  box-shadow: none;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-mobile-sidebar .recruiter-sidebar {
+  background: transparent !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-sidebar button {
+  color: #52525b !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-sidebar button:hover {
+  background: rgb(24 24 27 / 0.055) !important;
+  color: var(--recruiter-day-ink) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-sidebar button[class*="bg-white/"] {
+  background: var(--recruiter-day-surface) !important;
+  color: var(--recruiter-day-ink) !important;
+  box-shadow: 0 1px 2px rgb(24 24 27 / 0.07), inset 0 0 0 1px rgb(24 24 27 / 0.055);
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-sidebar button svg {
+  color: currentColor !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-sidebar [class*="border-white/"] {
+  border-color: #d4d4d8 !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace {
+  background: var(--recruiter-day-bg) !important;
+  color: var(--recruiter-day-ink) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-[#000]"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-[#020202]"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-[#050505]"] {
+  background: var(--recruiter-day-surface) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-[#080808]"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-[#1a1a1a]"] {
+  background: var(--recruiter-day-subtle) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-white/["] {
+  background: rgb(24 24 27 / 0.035) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-white/[0.08]"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-white/[0.09]"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-white/[0.1]"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-white/[0.11]"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-white/[0.12]"] {
+  background: rgb(24 24 27 / 0.075) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="border-white/"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace .border-white {
+  border-color: var(--recruiter-day-border) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="divide-white/"] > :not(:last-child) {
+  border-color: var(--recruiter-day-border-soft) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace .text-white,
+:root:not(.dark) .recruiter-shell .recruiter-workspace .text-\[\#ededed\] {
+  color: var(--recruiter-day-ink) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace .text-\[\#d4d4d4\] {
+  color: var(--recruiter-day-copy) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace .text-\[\#8f8f8f\],
+:root:not(.dark) .recruiter-shell .recruiter-workspace .text-\[\#9ca3af\],
+:root:not(.dark) .recruiter-shell .recruiter-workspace .text-\[\#a0a0a0\],
+:root:not(.dark) .recruiter-shell .recruiter-workspace .text-\[\#a1a1a1\],
+:root:not(.dark) .recruiter-shell .recruiter-workspace .text-\[\#a1a1aa\] {
+  color: #52525b !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace .text-\[\#6b7280\],
+:root:not(.dark) .recruiter-shell .recruiter-workspace .text-\[\#878787\] {
+  color: var(--recruiter-day-muted) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace input,
+:root:not(.dark) .recruiter-shell .recruiter-workspace select,
+:root:not(.dark) .recruiter-shell .recruiter-workspace textarea {
+  color-scheme: light !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace input[class*="bg-[#050505]"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace select[class*="bg-[#050505]"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace textarea[class*="bg-[#050505]"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace input[class*="bg-white/["],
+:root:not(.dark) .recruiter-shell .recruiter-workspace select[class*="bg-white/["],
+:root:not(.dark) .recruiter-shell .recruiter-workspace textarea[class*="bg-white/["],
+:root:not(.dark) .recruiter-shell .recruiter-workspace input.bg-transparent,
+:root:not(.dark) .recruiter-shell .recruiter-workspace select.bg-transparent,
+:root:not(.dark) .recruiter-shell .recruiter-workspace textarea.bg-transparent {
+  background: var(--recruiter-day-surface) !important;
+  color: var(--recruiter-day-ink) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace input::placeholder,
+:root:not(.dark) .recruiter-shell .recruiter-workspace textarea::placeholder {
+  color: var(--recruiter-day-muted) !important;
+  opacity: 1;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace input:focus,
+:root:not(.dark) .recruiter-shell .recruiter-workspace select:focus,
+:root:not(.dark) .recruiter-shell .recruiter-workspace textarea:focus {
+  border-color: #a1a1aa !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 0 3px rgb(24 24 27 / 0.055);
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace .bg-white.text-black {
+  border-color: var(--recruiter-day-ink) !important;
+  background: var(--recruiter-day-ink) !important;
+  color: #ffffff !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace .bg-white.text-black:hover {
+  background: #27272a !important;
+  color: #ffffff !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-blue-"].text-white,
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-green-"].text-white,
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-emerald-"].text-white,
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-red-"].text-white {
+  color: #ffffff !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="hover:bg-white/"]:hover {
+  background: var(--recruiter-day-hover) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="hover:text-white"]:hover {
+  color: var(--recruiter-day-ink) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-footer {
+  border-color: var(--recruiter-day-border) !important;
+  background: rgb(255 255 255 / 0.92) !important;
+  color: var(--recruiter-day-ink) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-footer [class*="border-white/"] {
+  border-color: var(--recruiter-day-border) !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-footer a {
+  color: #52525b !important;
+}
+
+:root:not(.dark) .recruiter-shell .recruiter-footer a:hover {
+  background: var(--recruiter-day-subtle) !important;
+  color: var(--recruiter-day-ink) !important;
+}

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { doc, getDoc, addDoc, collection, serverTimestamp, updateDoc, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, serverTimestamp, updateDoc, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { uploadToCloudinary, generateInterviewQuestions, requestTranscription, fetchTranscriptText, generateFeedback } from '../services/api';
 import { speak } from '../lib/tts';
@@ -11,6 +11,9 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import DayNightToggle from '../components/DayNightToggle';
 import * as pdfjsLib from 'pdfjs-dist';
+import { getCandidateRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus, recordCandidateSubmission } from '../services/rateLimitService';
+import { analyzeResumeText, readResumeText, saveResumeDumpCandidate } from '../services/resumeService';
+import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 
 // Setup PDF.js worker to enable PDF parsing
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -356,7 +359,7 @@ const CandidateInfoForm: React.FC<{
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resumeFile && !uploadedResumeUrl && !existingResumeUrl && !userProfile) {
+    if (!resumeFile && !uploadedResumeUrl && !existingResumeUrl) {
       setErrorMsg("Please upload your resume.");
       return;
     }
@@ -700,21 +703,19 @@ const CandidateInfoForm: React.FC<{
                 </div>
               </div>
               
-              {/* Hide Resume Upload entirely if the user is signed in (we use their Profile Box instead) */}
-              {!userProfile && (
-                <div className="candidate-resume-section bg-gray-50 dark:bg-gray-900/30 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+              <div className="candidate-resume-section bg-gray-50 dark:bg-gray-900/30 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Resume Data</label>
                   <label
                     htmlFor="resume-upload-input"
                     className={`candidate-upload-trigger w-full font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border cursor-pointer ${isUploadingResume ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-600 border-yellow-200' : uploadedResumeUrl ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-200 dark:hover:bg-blue-800/60'} ${isUploadingResume ? 'opacity-70 cursor-not-allowed' : ''}`}
                   >
                     <i className={isUploadingResume ? "fas fa-spinner fa-spin" : uploadedResumeUrl ? "fas fa-check-circle" : "fas fa-cloud-upload-alt"}></i>
-                    <span>{isUploadingResume ? 'Uploading to Cloudinary...' : uploadedResumeUrl ? 'Resume Uploaded Successfully' : resumeFile ? resumeFile.name : 'Browser/Upload Resume (PDF/Word)'}</span>
+                    <span>{isUploadingResume ? 'Uploading to Cloudinary...' : uploadedResumeUrl ? 'Resume Uploaded Successfully' : resumeFile ? resumeFile.name : existingResumeUrl ? 'Using resume saved in your profile (click to replace)' : 'Browse/Upload Resume (PDF, DOCX, or TXT)'}</span>
                   </label>
                   <input
                     id="resume-upload-input"
                     type="file"
-                    accept=".pdf,.docx,.doc"
+                    accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
                     className="hidden"
                     disabled={isUploadingResume}
                     onChange={async (e) => {
@@ -734,17 +735,16 @@ const CandidateInfoForm: React.FC<{
                     }}
                   />
                   
-                  {uploadedResumeUrl && (
+                  {(uploadedResumeUrl || existingResumeUrl) && (
                       <div className="mt-3 flex items-center justify-center flex-col">
                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Direct Cloudinary Link:</p>
-                           <a href={uploadedResumeUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline text-center truncate px-2 w-full flex items-center justify-center gap-1">
+                           <a href={uploadedResumeUrl || existingResumeUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline text-center truncate px-2 w-full flex items-center justify-center gap-1">
                                <i className="fas fa-external-link-alt py-1"></i> View Uploaded Resume
                            </a>
                       </div>
                   )}
                   <p className="text-xs text-gray-400 mt-3 text-center">Required for AI generated questions.</p>
                   </div>
-              )}
 
               {/* The label is now inside the LanguageSelector component */}
               <LanguageSelector selectedLanguage={language} onLanguageChange={setLanguage} className="pt-2" />
@@ -922,7 +922,8 @@ const InterviewReadinessOnboarding: React.FC<{
       const start = performance.now();
       // Using a slightly larger image (approx ~20KB) to test speed more accurately.
       // 20KB = 160Kb. To get 2Mbps (2000Kbps), it should download in less than 80ms.
-      const response = await fetch(`https://res.cloudinary.com/dvzxfbcsd/image/upload/v1700000000/sample.jpg?cacheBust=${Date.now()}`);
+      const response = await fetch(`https://res.cloudinary.com/demo/image/upload/w_400/sample.jpg?cacheBust=${Date.now()}`);
+      if (!response.ok) throw new Error(`Network test returned HTTP ${response.status}`);
       
       const blob = await response.blob();
       const end = performance.now();
@@ -1620,6 +1621,7 @@ const CandidateInterviewFlow: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { user, userProfile } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { status: liveRateLimitStatus } = useCompanyRateLimits();
 
   // State
   const [step, setStep] = useState<WizardStep>('validating');
@@ -1637,6 +1639,13 @@ const CandidateInterviewFlow: React.FC = () => {
   const [tabSwitches, setTabSwitches] = useState(0);
   const [speedStatus, setSpeedStatus] = useState<string | null>(null);
   const [interviewTerminated, setInterviewTerminated] = useState(false);
+  const [rateLimitStopMessage, setRateLimitStopMessage] = useState('');
+  const interviewLimitReached = isRateLimitReached(liveRateLimitStatus, 'interviews');
+
+  useEffect(() => {
+    if (!interviewLimitReached || step === 'finish') return;
+    setRateLimitStopMessage(getCandidateRateLimitReachedMessage('interviews'));
+  }, [interviewLimitReached, step]);
 
   // 1. Validate Access & Fetch Interview Details
   useEffect(() => {
@@ -1654,7 +1663,12 @@ const CandidateInterviewFlow: React.FC = () => {
           throw new Error("This interview does not exist or has been closed.");
         }
         
-        const interviewData = { id: interviewDoc.id, ...interviewDoc.data() } as any;
+         const interviewData = { id: interviewDoc.id, ...interviewDoc.data() } as any;
+
+         const rateLimitStatus = await loadCompanyRateLimitStatus();
+         if (isRateLimitReached(rateLimitStatus, 'interviews')) {
+           throw new Error(getCandidateRateLimitReachedMessage('interviews'));
+         }
 
 
 
@@ -1749,56 +1763,54 @@ const CandidateInterviewFlow: React.FC = () => {
       let resumeUrlToSave = cloudinaryUrl || existingResumeUrl || '';
       let resumeTextContent = ''; // This will hold the parsed text content of the resume
 
-      if (cloudinaryUrl) {
+      if (submittedFile) {
+        setLoadingMsg("Parsing your resume...");
+        const uploadPromise = cloudinaryUrl
+          ? Promise.resolve(cloudinaryUrl)
+          : uploadToCloudinary(submittedFile, 'auto').catch((error) => {
+              console.error("Resume cloudinary upload failed:", error);
+              return null;
+            });
+
+        const [{ base64, url }, parsedResumeText, cloudinaryResumeUrl] = await Promise.all([
+          getFileAsBase64(submittedFile),
+          readResumeText(submittedFile, submittedFile.name),
+          uploadPromise,
+        ]);
+
+        base64String = base64;
+        resumeMimeType = submittedFile.type || 'application/octet-stream';
+        resumeTextContent = parsedResumeText;
+        resumeUrlToSave = cloudinaryResumeUrl || url;
+      } else if (cloudinaryUrl || existingResumeUrl) {
         setLoadingMsg("Fetching uploaded resume for AI...");
         try {
-          const res = await fetch(cloudinaryUrl);
+          const remoteResumeUrl = cloudinaryUrl || existingResumeUrl!;
+          const res = await fetch(remoteResumeUrl);
+          if (!res.ok) throw new Error(`Resume download failed (${res.status})`);
           const blob = await res.blob();
           const [blobBase64, parsedResumeText] = await Promise.all([
             getBlobAsBase64(blob),
-            extractResumeText(blob)
+            readResumeText(blob, remoteResumeUrl.split('/').pop()?.split('?')[0] || 'resume.pdf')
           ]);
 
           base64String = blobBase64;
           resumeMimeType = blob.type || 'application/pdf';
           resumeTextContent = parsedResumeText;
+          resumeUrlToSave = remoteResumeUrl;
         } catch (error) {
-          console.error("Error fetching Cloudinary PDF:", error);
+          console.error("Error fetching remote resume:", error);
           throw new Error("Failed to process the uploaded resume.");
         }
-      } else if (submittedFile) {
-        setLoadingMsg("Uploading and parsing your resume...");
-        const uploadPromise = uploadToCloudinary(submittedFile, 'auto').catch((error) => {
-          console.error("Resume cloudinary upload failed:", error);
-          return null;
-        });
-
-        const [{ base64, url }, parsedResumeText, cloudinaryResumeUrl] = await Promise.all([
-          getFileAsBase64(submittedFile),
-          extractResumeText(submittedFile),
-          uploadPromise
-        ]);
-
-        base64String = base64;
-        resumeMimeType = submittedFile.type;
-        resumeTextContent = parsedResumeText;
-        resumeUrlToSave = cloudinaryResumeUrl || url;
-      } else if (userProfile) {
-        setLoadingMsg("Synthesizing your profile data for AI...");
-        const profileText = `[Candidate Profile Data]\nName: ${submittedInfo.name}\nEmail: ${submittedInfo.email}\nExperience: ${userProfile.experience || 0} Years\nSkills: ${(userProfile.skills || []).join(', ')}`;
-        base64String = btoa(unescape(encodeURIComponent(profileText)));
-        resumeMimeType = 'text/plain';
-        resumeTextContent = profileText; // Use the generated text for AI context
-        resumeUrlToSave = 'data:text/plain;base64,' + base64String;
       } else {
-        throw new Error("No resume or profile data provided.");
+        throw new Error("A resume is required before the interview can begin.");
       }
 
       setLoadingMsg("AI is generating tailored questions... (approx 30s)");
-      const aiQuestions = await generateInterviewQuestions(
+      const questionsPromise = generateInterviewQuestions(
         interview!.title,
         interview!.description,
-        (submittedInfo.experienceType === 'experienced' && submittedInfo.totalExperienceYears)
+        (!submittedInfo.isFresher && submittedInfo.totalExperienceYears)
           ? `${submittedInfo.totalExperienceYears} years ${submittedInfo.totalExperienceMonths} months`
           : "0 years",
         base64String,
@@ -1807,6 +1819,31 @@ const CandidateInterviewFlow: React.FC = () => {
         (interview as any).numQuestions || 5,
         resumeTextContent // Pass the parsed text to the AI
       );
+
+      const recruiterUID = (interview as any).recruiterUID as string | undefined;
+      const parsedProfilePromise = analyzeResumeText(
+        resumeTextContent,
+        submittedFile?.name || resumeUrlToSave.split('/').pop()?.split('?')[0] || 'candidate-resume',
+        { name: submittedInfo.name, email: submittedInfo.email, phone: submittedInfo.phone }
+      );
+      const saveToRecruiterLibraryPromise = recruiterUID
+        ? parsedProfilePromise.then((profile) => saveResumeDumpCandidate({
+            recruiterUID,
+            profile,
+            resumeText: resumeTextContent,
+            resumeUrl: resumeUrlToSave,
+            fileName: submittedFile?.name || resumeUrlToSave.split('/').pop()?.split('?')[0] || 'candidate-resume',
+            mimeType: resumeMimeType,
+            fileSize: submittedFile?.size,
+            source: 'candidate_interview',
+            sourceInterviewId: interviewId!,
+            sourceJobTitle: interview!.title,
+          })).catch((error) => {
+            console.error('Could not save candidate resume to recruiter library:', error);
+          })
+        : Promise.resolve();
+
+      const [aiQuestions] = await Promise.all([questionsPromise, saveToRecruiterLibraryPromise]);
 
       const manualQuestions = (interview as any).manualQuestions || [];
       const questions = [...manualQuestions, ...aiQuestions];
@@ -1865,6 +1902,23 @@ const CandidateInterviewFlow: React.FC = () => {
       </div>      {children}
     </div>
   );
+
+  if (rateLimitStopMessage) {
+    return (
+      <Container>
+        <div role="alert" className="mt-[12vh] w-full max-w-lg overflow-hidden rounded-[14px] border border-red-500/25 bg-white p-8 text-center shadow-[0_24px_80px_rgba(0,0,0,0.12)] dark:bg-[#0a0a0a]">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-red-500/25 bg-red-500/10 text-red-500">
+            <i className="fas fa-triangle-exclamation text-lg" aria-hidden="true"></i>
+          </div>
+          <h1 className="mt-5 text-2xl font-semibold tracking-[-0.03em] text-gray-950 dark:text-white">Interview unavailable</h1>
+          <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-[#a1a1a1]">{rateLimitStopMessage}</p>
+          <button type="button" onClick={() => navigate('/')} className="mt-6 rounded-[6px] bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#333] dark:bg-white dark:text-black dark:hover:bg-[#eaeaea]">
+            Return home
+          </button>
+        </div>
+      </Container>
+    );
+  }
 
   if (!interview) {
     return (
@@ -2086,7 +2140,7 @@ const CandidateInterviewFlow: React.FC = () => {
   }
 
   if (step === 'finish') {
-    return <InterviewSubmission state={interviewState} tabSwitches={tabSwitches} interviewId={interviewId!} candidateInfo={candidateInfo} terminated={interviewTerminated} />;
+    return <InterviewSubmission state={interviewState} tabSwitches={tabSwitches} interviewId={interviewId!} recruiterUID={(interview as any).recruiterUID} candidateInfo={candidateInfo} terminated={interviewTerminated} />;
   }
 
   return null;
@@ -2346,6 +2400,11 @@ const ActiveInterviewSession: React.FC<{
     setupCamera();
     return () => {
       isCancelled = true;
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.ondataavailable = null;
+        mediaRecorderRef.current.onstop = null;
+        mediaRecorderRef.current.stop();
+      }
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
       speak.stop();
     };
@@ -2806,9 +2865,10 @@ const InterviewSubmission: React.FC<{
   state: InterviewState;
   tabSwitches: number;
   interviewId: string;
+  recruiterUID?: string;
   candidateInfo: CandidateInfo;
   terminated: boolean;
-}> = ({ state, tabSwitches, interviewId, candidateInfo, terminated }) => {
+}> = ({ state, tabSwitches, interviewId, recruiterUID, candidateInfo, terminated }) => {
   const { user } = useAuth();
   const [status, setStatus] = useState("Finalizing transcripts...");
   const [showCompletionPopup, setShowCompletionPopup] = useState(false);
@@ -2904,7 +2964,7 @@ const InterviewSubmission: React.FC<{
           base64Resume = await getBlobAsBase64(blob);
         }
 
-        const candidateExperience = (candidateInfo.experienceType === 'experienced' && candidateInfo.totalExperienceYears)
+        const candidateExperience = (!candidateInfo.isFresher && candidateInfo.totalExperienceYears)
             ? `${candidateInfo.totalExperienceYears} years ${candidateInfo.totalExperienceMonths} months`
             : "0 years";
 
@@ -2957,12 +3017,14 @@ const InterviewSubmission: React.FC<{
             status: terminated ? 'Terminated' : 'Completed',
             submittedAt: serverTimestamp(), 
             candidateUID: user?.uid || null,
-            interviewId: interviewId,
+             interviewId: interviewId,
+             recruiterUID: recruiterUID || null,
             jobId: interviewId,
             isMock: state.isMock || false,
             meta: { tabSwitchCount: tabSwitches }
         }
-        const docRef = await addDoc(collection(db, 'interviews', interviewId, 'attempts'), attemptData);
+        const docRef = doc(collection(db, 'interviews', interviewId, 'attempts'));
+        await recordCandidateSubmission('interviews', docRef, attemptData);
         setReportUrl(`/report/${interviewId}/${docRef.id}`);
         setShowCompletionPopup(true);
         setStatus('Successfully Submitted!');

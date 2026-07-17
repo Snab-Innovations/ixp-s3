@@ -9,6 +9,7 @@ import { Sun, Moon, Menu, X, Monitor, Mail, Bug, MessageSquare } from 'lucide-re
 import ConnectionStatus from './ConnectionStatus';
 import Logo from './Logo';
 import DashboardSidebar from './ui/dashboard-sidebar';
+import RecruiterRateLimitBanner from './RecruiterRateLimitBanner';
 
 
 
@@ -42,19 +43,21 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20 selection:text-foreground flex flex-col transition-colors duration-300">
+    <div className={`${isRecruiterPath ? 'recruiter-shell' : ''} min-h-screen bg-background text-foreground font-sans selection:bg-primary/20 selection:text-foreground flex flex-col transition-colors duration-300`}>
       {/* Background wash */}
       <div className="fixed inset-0 z-[-1] bg-background pointer-events-none transition-colors duration-300" />
 
       {/* Tech Grid Pattern - subtle texture */}
-      <div className="fixed inset-0 z-[-1] pointer-events-none opacity-[0.03]"
+      <div className={`${isRecruiterPath ? 'recruiter-grid' : ''} fixed inset-0 z-[-1] pointer-events-none opacity-[0.03]`}
         style={{
           backgroundImage: 'linear-gradient(#ffffff 1px, transparent 1px), linear-gradient(90deg, #ffffff 1px, transparent 1px)',
           backgroundSize: '30px 30px'
         }}>
       </div>
 
-      <nav className={`sticky top-0 z-40 border-b backdrop-blur-xl transition-colors duration-300 ${showRecruiterSidebar ? 'border-white/[0.11] bg-[#000]/95 text-white' : 'border-border bg-background/90'}`}>
+      {showRecruiterSidebar ? <RecruiterRateLimitBanner /> : null}
+
+      <nav className={`sticky top-0 z-40 border-b backdrop-blur-xl transition-colors duration-300 ${isRecruiterPath ? 'recruiter-topbar' : ''} ${showRecruiterSidebar ? 'border-white/[0.11] bg-[#000]/95 text-white' : 'border-border bg-background/90'}`}>
         <div className="w-full mx-auto px-3 sm:px-4 lg:px-5">
           <div className="relative flex h-14 items-center justify-between">
 
@@ -230,11 +233,11 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <main className={`workspace-card flex-grow w-full mx-auto relative ${isRecruiterDashboard ? 'max-w-none p-0' : `px-4 sm:px-6 lg:px-8 py-8 ${showRecruiterSidebar ? 'max-w-none' : 'max-w-7xl'}`}`}>
+          <main className={`workspace-card flex-grow w-full mx-auto relative ${isRecruiterPath ? 'recruiter-workspace' : ''} ${isRecruiterDashboard ? 'max-w-none p-0' : `px-4 sm:px-6 lg:px-8 py-8 ${showRecruiterSidebar ? 'max-w-none' : 'max-w-7xl'}`}`}>
             {children}
           </main>
 
-          <footer className={`z-10 mt-auto border-t backdrop-blur-sm ${showRecruiterSidebar ? 'border-white/[0.11] bg-[#000] text-white' : 'border-border bg-background/90'}`}>
+          <footer className={`z-10 mt-auto border-t backdrop-blur-sm ${isRecruiterPath ? 'recruiter-footer' : ''} ${showRecruiterSidebar ? 'border-white/[0.11] bg-[#000] text-white' : 'border-border bg-background/90'}`}>
             <div className={`${showRecruiterSidebar ? 'w-full' : 'max-w-7xl mx-auto'} px-3 sm:px-4 lg:px-5`}>
           <div className="flex min-h-14 flex-col items-center justify-between gap-3 py-3 md:flex-row">
             <div className="flex items-center gap-2 opacity-70 transition-opacity hover:opacity-100">
@@ -277,7 +280,7 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
           {/* Sidebar */}
           {showRecruiterSidebar ? (
-            <div className="fixed inset-y-0 left-0 flex w-[220px] flex-col border-r border-white/[0.11] bg-[#000] text-white shadow-2xl">
+            <div className="recruiter-mobile-sidebar fixed inset-y-0 left-0 flex w-[220px] flex-col border-r border-white/[0.11] bg-[#000] text-white shadow-2xl">
               <DashboardSidebar
                 className="w-[220px] border-none bg-[#000]"
                 activePath={location.pathname}

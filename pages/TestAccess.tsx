@@ -6,15 +6,17 @@ import gsap from 'gsap';
 import { useTheme } from '../context/ThemeContext';
 import Logo from '../components/Logo';
 import { Timer, MonitorOff, ShieldAlert, Copy } from 'lucide-react';
+import { getRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus, RateLimitResource } from '../services/rateLimitService';
 
 const TestAccess: React.FC = () => {
   const { testId } = useParams<{ testId: string }>();
   const navigate = useNavigate();
   const { isDark } = useTheme();
   const [accessCode, setAccessCode] = useState('');
-  const [testDetails, setTestDetails] = useState<{ title: string, duration: number } | null>(null);
+  const [testDetails, setTestDetails] = useState<{ title: string, duration: number, recruiterUID?: string, type?: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isRateLimited, setIsRateLimited] = useState(false);
 
   const containerRef = useRef(null);
 
@@ -25,10 +27,18 @@ const TestAccess: React.FC = () => {
         const testDoc = await getDoc(doc(db, 'tests', testId));
         if (testDoc.exists()) {
           const testData = testDoc.data() as any;
-          setTestDetails({
-            title: testData.title || 'Assessment',
-            duration: testData.duration || 0
-          });
+           setTestDetails({
+             title: testData.title || 'Assessment',
+             duration: testData.duration || 0,
+             recruiterUID: testData.recruiterUID,
+             type: testData.type,
+           });
+           const resource: RateLimitResource = testData.type === 'coding' ? 'codingAssessments' : 'assessments';
+           const rateLimitStatus = await loadCompanyRateLimitStatus();
+           if (isRateLimitReached(rateLimitStatus, resource)) {
+             setIsRateLimited(true);
+             setError(getRateLimitReachedMessage(resource));
+           }
         } else {
           setError('Assessment not found.');
         }
@@ -65,6 +75,13 @@ const TestAccess: React.FC = () => {
 
       if (testDoc.exists()) {
         const testData = testDoc.data() as any;
+        const resource: RateLimitResource = testData.type === 'coding' ? 'codingAssessments' : 'assessments';
+        const rateLimitStatus = await loadCompanyRateLimitStatus();
+        if (isRateLimitReached(rateLimitStatus, resource)) {
+          setIsRateLimited(true);
+          setError(getRateLimitReachedMessage(resource));
+          return;
+        }
         if (accessCode.trim().toUpperCase() === (testData.accessCode || '').toUpperCase()) {
           navigate(`/test/start/${testId}`);
         } else {
@@ -122,7 +139,7 @@ const TestAccess: React.FC = () => {
           <p className="rounded-[8px] border border-red-500/20 bg-red-500/10 p-3 text-sm font-medium text-red-600 dark:text-red-400">{error}</p>
         )}
 
-        {testDetails ? (
+        {testDetails && !isRateLimited ? (
           <div className="space-y-4 border-t border-black/[0.08] pt-4 dark:border-white/[0.11]">
             <label className="block text-center text-sm font-medium text-gray-700 dark:text-[#a1a1a1]">Enter Access Code</label>
             <input

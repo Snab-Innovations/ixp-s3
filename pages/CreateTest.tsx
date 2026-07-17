@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { grokGenerateJson } from '../services/grokService';
 import { useMessageBox } from '../components/MessageBox';
+import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
+import { getRateLimitReachedMessage, isRateLimitReached, RateLimitResource } from '../services/rateLimitService';
 
 const FieldSection = ({
   label,
@@ -52,6 +54,7 @@ const CreateTest: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { showError, showSuccess } = useMessageBox();
+  const { status: rateLimitStatus, loading: rateLimitLoading, refresh: refreshRateLimit } = useCompanyRateLimits();
   const initialType = searchParams.get('type') === 'coding' ? 'coding' : 'aptitude';
   const [type, setType] = useState<'aptitude' | 'coding'>(initialType);
   const [title, setTitle] = useState('');
@@ -66,6 +69,8 @@ const CreateTest: React.FC = () => {
   const [automationType, setAutomationType] = useState<'internal' | 'external'>('internal');
   const [externalLink, setExternalLink] = useState('');
   const [externalAccessCode, setExternalAccessCode] = useState('');
+  const activeLimitResource: RateLimitResource = type === 'coding' ? 'codingAssessments' : 'assessments';
+  const activeLimitReached = isRateLimitReached(rateLimitStatus, activeLimitResource);
 
   const [manualQ, setManualQ] = useState({ question: '', options: ['', '', '', ''], correct: 0 });
   const [manualCodeQ, setManualCodeQ] = useState({ title: '', description: '', testCases: '' });
@@ -184,6 +189,16 @@ const CreateTest: React.FC = () => {
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
 
+    const latestRateLimit = await refreshRateLimit();
+    if (!latestRateLimit) {
+      showError('Unable to verify the company assessment limit. Please try again.');
+      return;
+    }
+    if (isRateLimitReached(latestRateLimit, activeLimitResource)) {
+      showError(getRateLimitReachedMessage(activeLimitResource));
+      return;
+    }
+
     if (!title.trim()) {
       showError('Assessment title is required.');
       return;
@@ -255,13 +270,18 @@ const CreateTest: React.FC = () => {
           <button
             type="submit"
             form="create-assessment-form"
-            disabled={saving || generating || questions.length === 0}
+            disabled={saving || generating || questions.length === 0 || rateLimitLoading || activeLimitReached}
             className={primaryButtonClass}
           >
             <Save size={16} />
-            <span>{saving ? 'Saving' : 'Create Assessment'}</span>
+            <span>{saving ? 'Saving' : activeLimitReached ? 'Rate limit reached' : 'Create Assessment'}</span>
           </button>
         </div>
+        {activeLimitReached && (
+          <div className="border-t border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-400 sm:px-6 lg:px-7">
+            {getRateLimitReachedMessage(activeLimitResource)}
+          </div>
+        )}
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,0.4fr)_1px_minmax(0,1fr)]">
@@ -621,9 +641,9 @@ const CreateTest: React.FC = () => {
             <button type="button" onClick={() => navigate('/recruiter/tests')} className={secondaryButtonClass}>
               Cancel
             </button>
-            <button type="submit" disabled={saving || generating || questions.length === 0} className={primaryButtonClass}>
+            <button type="submit" disabled={saving || generating || questions.length === 0 || rateLimitLoading || activeLimitReached} className={primaryButtonClass}>
               <Save size={16} />
-              <span>{saving ? 'Saving' : 'Create Assessment'}</span>
+              <span>{saving ? 'Saving' : activeLimitReached ? 'Rate limit reached' : 'Create Assessment'}</span>
             </button>
           </div>
         </form>

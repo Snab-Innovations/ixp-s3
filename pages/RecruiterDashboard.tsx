@@ -17,6 +17,9 @@ import {
   Line,
 } from 'recharts';
 import { ArrowRight, ClipboardList, ListChecks, Video } from 'lucide-react';
+import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
+import { getRateLimitReachedMessage, isRateLimitReached, RateLimitResource } from '../services/rateLimitService';
+import { useMessageBox } from '../components/MessageBox';
 import {
   ChartConfig,
   ChartContainer,
@@ -236,6 +239,8 @@ export const RecruiterDashboardSkeleton = () => (
 
 const RecruiterDashboard: React.FC = () => {
   const { user, userProfile } = useAuth();
+  const { status: rateLimitStatus } = useCompanyRateLimits();
+  const messageBox = useMessageBox();
   const [jobDocs, setJobDocs] = useState<RecruiterJobRecord[]>([]);
   const [interviews, setInterviews] = useState<RecruiterInterviewRecord[]>([]);
   const [tests, setTests] = useState<RecruiterTestRecord[]>([]);
@@ -544,18 +549,21 @@ const RecruiterDashboard: React.FC = () => {
       description: 'Questions and invites.',
       href: '/recruiter/interview/create',
       icon: Video,
+      resource: 'interviews' as RateLimitResource,
     },
     {
       label: 'Create Assessment',
       description: 'Screening test setup.',
       href: '/recruiter/tests/create?type=aptitude',
       icon: ClipboardList,
+      resource: 'assessments' as RateLimitResource,
     },
     {
       label: 'Manage Interviews',
       description: 'Workflows and reports.',
       href: '/recruiter/interviews',
       icon: ListChecks,
+      resource: null,
     },
   ];
 
@@ -729,6 +737,7 @@ const RecruiterDashboard: React.FC = () => {
             <div className="border border-white/[0.11]">
               {quickActions.map((action, index) => {
                 const ActionIcon = action.icon;
+                const limitReached = action.resource ? isRateLimitReached(rateLimitStatus, action.resource) : false;
                 const iconClassName =
                   index === 0
                     ? 'border-white bg-white text-black'
@@ -740,14 +749,22 @@ const RecruiterDashboard: React.FC = () => {
                   <Link
                     key={action.label}
                     to={action.href}
-                    className="group flex items-center gap-3 border-b border-white/[0.11] px-3.5 py-3 text-left transition-colors last:border-b-0 hover:bg-white/[0.025]"
+                    onClick={(event) => {
+                      if (!limitReached || !action.resource) return;
+                      event.preventDefault();
+                      messageBox.showWarning(getRateLimitReachedMessage(action.resource));
+                    }}
+                    aria-disabled={limitReached}
+                    className={`group flex items-center gap-3 border-b border-white/[0.11] px-3.5 py-3 text-left transition-colors last:border-b-0 ${limitReached ? 'cursor-not-allowed opacity-55' : 'hover:bg-white/[0.025]'}`}
                   >
                     <span className={`flex h-8 w-8 shrink-0 items-center justify-center border ${iconClassName}`}>
                       <ActionIcon size={14} strokeWidth={1.8} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="geist-caption block font-semibold text-white">{action.label}</span>
-                      <span className="geist-small block text-[#6b7280]">{action.description}</span>
+                      <span className={`geist-small block ${limitReached ? 'text-red-400' : 'text-[#6b7280]'}`}>
+                        {limitReached ? 'Rate limit reached.' : action.description}
+                      </span>
                     </span>
                     <ArrowRight className="h-3.5 w-3.5 text-[#6b7280] transition-transform group-hover:translate-x-0.5 group-hover:text-white" strokeWidth={1.6} />
                   </Link>

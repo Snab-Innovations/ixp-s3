@@ -161,7 +161,7 @@ export function DashboardSidebar({
     : [];
 
   return (
-      <aside className={cn('flex h-full w-[190px] flex-col border-r border-white/[0.11] bg-[#000] p-2 pt-3 font-sans text-white', className)}>
+      <aside className={cn('recruiter-sidebar flex h-full w-[190px] flex-col border-r border-white/[0.11] bg-[#000] p-2 pt-3 font-sans text-white', className)}>
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {recruiterNavGroups.map((group, index) => (
             <div key={group.heading || index} className="flex flex-col gap-0.5">

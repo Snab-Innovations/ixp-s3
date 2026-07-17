@@ -6,6 +6,7 @@ import { ThemeProvider } from '../context/ThemeContext';
 import { Interview } from '../types';
 import DayNightToggle from '../components/DayNightToggle';
 import gsap from 'gsap';
+import { getRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus } from '../services/rateLimitService';
 
 const InterviewAccess: React.FC = () => {
   const { interviewId } = useParams<{ interviewId: string }>();
@@ -15,6 +16,7 @@ const InterviewAccess: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isExpired, setIsExpired] = useState(false);
+  const [isRateLimited, setIsRateLimited] = useState(false);
 
   useEffect(() => {
     const fetchInterviewTitle = async () => {
@@ -22,8 +24,13 @@ const InterviewAccess: React.FC = () => {
       try {
         const interviewDoc = await getDoc(doc(db, 'interviews', interviewId));
         if (interviewDoc.exists()) {
-          const interviewData = interviewDoc.data() as Interview;
-          setInterviewTitle(interviewData.title);
+           const interviewData = interviewDoc.data() as Interview;
+           setInterviewTitle(interviewData.title);
+           const rateLimitStatus = await loadCompanyRateLimitStatus();
+           if (isRateLimitReached(rateLimitStatus, 'interviews')) {
+             setIsRateLimited(true);
+             setError(getRateLimitReachedMessage('interviews'));
+           }
           
           if ((interviewData as any).deadline) {
             const deadlineDate = new Date((interviewData as any).deadline);
@@ -60,6 +67,12 @@ const InterviewAccess: React.FC = () => {
 
       if (interviewDoc.exists()) {
         const interviewData = interviewDoc.data() as Interview;
+        const rateLimitStatus = await loadCompanyRateLimitStatus();
+        if (isRateLimitReached(rateLimitStatus, 'interviews')) {
+          setIsRateLimited(true);
+          setError(getRateLimitReachedMessage('interviews'));
+          return;
+        }
         if (accessCode.trim().toUpperCase() === interviewData.accessCode.toUpperCase()) {
           navigate(`/interview/start/${interviewId}`);
         } else {
@@ -93,16 +106,16 @@ const InterviewAccess: React.FC = () => {
           <p className="access-screen-alert text-red-500 bg-red-100 dark:bg-red-900/20 p-3 rounded-lg">{error}</p>
         )}
 
-        {isExpired ? (
+        {isExpired || isRateLimited ? (
           <div className="access-screen-expired space-y-4 py-4">
             <div className="access-screen-icon mx-auto w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-4">
               <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
             </div>
             <p className="text-lg font-bold text-gray-800 dark:text-gray-200">
-              Link expired
+              {isRateLimited ? 'Company interview limit reached' : 'Link expired'}
             </p>
             <p className="text-gray-600 dark:text-gray-400 pb-2">
-              Contact support if you need a new access link.
+              {isRateLimited ? 'This interview cannot start until an administrator adds a top-up or resets the company limit.' : 'Contact support if you need a new access link.'}
             </p>
             <div className="access-screen-support bg-gray-50 dark:bg-[#1a1a1a] p-4 rounded-xl border border-gray-200 dark:border-white/10">
               <p className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-1">Support</p>
@@ -127,7 +140,7 @@ const InterviewAccess: React.FC = () => {
                 disabled={isLoading}
                 className="access-screen-submit w-full bg-primary hover:bg-primary-dark text-white dark:text-black font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-primary/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isLoading ? 'Verifying...' : 'Start Interview'}
+              {isLoading ? 'Verifying...' : 'Start Interview'}
               </button>
             </div>
           </div>

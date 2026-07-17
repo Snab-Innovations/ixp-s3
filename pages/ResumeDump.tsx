@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, query, where } from 'firebase/firestore';
 import * as pdfjsLib from 'pdfjs-dist';
 import * as mammoth from 'mammoth';
 import { Archive, CheckCircle2, ExternalLink, FileText, Search, Trash2, UploadCloud, XCircle } from 'lucide-react';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
-import { uploadToCloudinary } from '../services/api';
 import { SKILL_OPTIONS } from './Profile';
+import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
@@ -35,6 +35,24 @@ interface ResumeDumpCandidate {
   resumeMimeType?: string;
   resumeSize?: number;
   resumeText?: string;
+  location?: string;
+  currentTitle?: string;
+  summary?: string;
+  totalExperienceYears?: number;
+  experience?: Array<{
+    title: string;
+    company: string;
+    startDate: string;
+    endDate: string;
+    highlights: string[];
+    skills: string[];
+  }>;
+  education?: Array<{ degree: string; institution: string; year: string }>;
+  certifications?: string[];
+  languages?: string[];
+  source?: string;
+  sourceJobTitle?: string;
+  parsingMethod?: string;
   createdAt?: TimestampLike;
   updatedAt?: TimestampLike;
 }
@@ -45,8 +63,8 @@ interface UploadResult {
   message: string;
 }
 
-const SkeletonBlock = ({ className = '' }: { className?: string }) => (
-  <span className={`block animate-pulse rounded-[6px] bg-white/[0.06] ${className}`} aria-hidden="true" />
+const SkeletonBlock = ({ className = '', style }: { className?: string; style?: React.CSSProperties }) => (
+  <span className={`block animate-pulse rounded-[6px] bg-white/[0.06] ${className}`} style={style} aria-hidden="true" />
 );
 
 export const ResumeDumpSkeleton = () => (
@@ -80,7 +98,7 @@ export const ResumeDumpSkeleton = () => (
     <section className="flex min-h-[360px] flex-col">
       <div className="hidden grid-cols-[minmax(220px,1fr)_140px_minmax(260px,1fr)_160px_220px] gap-4 border-b border-white/[0.11] bg-[#080808] px-4 py-2.5 sm:px-6 lg:grid lg:px-7">
         {[120, 64, 82, 76, 70].map((width, index) => (
-          <SkeletonBlock key={index} className="h-3 bg-white/[0.04]" style={{ width }} />
+          <span key={index} className="block h-3 animate-pulse rounded-[6px] bg-white/[0.04]" style={{ width }} aria-hidden="true" />
         ))}
       </div>
 
@@ -458,10 +476,23 @@ const ResumeDump: React.FC = () => {
       candidatesQuery,
       (snapshot) => {
         const records = snapshot.docs
-          .map((snapshotDoc) => ({
-            id: snapshotDoc.id,
-            ...snapshotDoc.data(),
-          } as ResumeDumpCandidate))
+          .map((snapshotDoc) => {
+            const data = snapshotDoc.data();
+            return {
+              ...data,
+              id: snapshotDoc.id,
+              name: typeof data.name === 'string' ? data.name : '',
+              email: typeof data.email === 'string' ? data.email : '',
+              phone: typeof data.phone === 'string' ? data.phone : '',
+              skills: Array.isArray(data.skills) ? data.skills : [],
+              experience: Array.isArray(data.experience) ? data.experience : [],
+              education: Array.isArray(data.education) ? data.education : [],
+              certifications: Array.isArray(data.certifications) ? data.certifications : [],
+              languages: Array.isArray(data.languages) ? data.languages : [],
+              resumeUrl: typeof data.resumeUrl === 'string' ? data.resumeUrl : '',
+              resumeFileName: typeof data.resumeFileName === 'string' ? data.resumeFileName : 'resume',
+            } as ResumeDumpCandidate;
+          })
           .sort((left, right) => toMillis(right.updatedAt || right.createdAt) - toMillis(left.updatedAt || left.createdAt));
         setCandidates(records);
         setLoading(false);
@@ -483,8 +514,12 @@ const ResumeDump: React.FC = () => {
       (candidate.name || '').toLowerCase().includes(term) ||
       (candidate.email || '').toLowerCase().includes(term) ||
       (candidate.phone || '').toLowerCase().includes(term) ||
+      (candidate.currentTitle || '').toLowerCase().includes(term) ||
+      (candidate.location || '').toLowerCase().includes(term) ||
+      (candidate.sourceJobTitle || '').toLowerCase().includes(term) ||
       (candidate.resumeFileName || '').toLowerCase().includes(term) ||
-      (candidate.skills || []).some((skill) => skill.toLowerCase().includes(term))
+      (candidate.skills || []).some((skill) => skill.toLowerCase().includes(term)) ||
+      (candidate.education || []).some((item) => `${item.degree} ${item.institution}`.toLowerCase().includes(term))
     ));
   }, [candidates, searchTerm]);
 
@@ -494,63 +529,38 @@ const ResumeDump: React.FC = () => {
     setUploading(true);
     setIsDraggingResume(false);
     setUploadResults([]);
-    const results: UploadResult[] = [];
+    setUploadStatus(`Parsing and saving ${files.length} resume${files.length === 1 ? '' : 's'}...`);
 
-    for (const [index, file] of files.entries()) {
-      setUploadStatus(`Processing ${index + 1} of ${files.length}: ${file.name}`);
+    const results = await Promise.all(files.map(async (file): Promise<UploadResult> => {
       try {
-        const resumeText = await readResumeText(file);
-        const normalizedText = normalizeWhitespace(resumeText);
-        const email = normalizedText.match(emailRegex)?.[1]?.toLowerCase() || '';
+        const ingested = await ingestResumeFile(file);
+        await saveResumeDumpCandidate({
+          recruiterUID: user.uid,
+          profile: ingested.profile,
+          resumeText: ingested.resumeText,
+          resumeUrl: ingested.resumeUrl,
+          fileName: file.name,
+          mimeType: file.type,
+          fileSize: file.size,
+          source: 'resume_dump',
+        });
 
-        const parsedCandidate = {
-          name: normalizedText ? extractName(resumeText, file.name) : file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim(),
-          email,
-          phone: normalizedText.match(phoneRegex)?.[0] || 'N/A',
-          skills: normalizedText ? extractSkillsRobust(resumeText) : [],
-        };
-
-        const resumeUrl = await uploadToCloudinary(file, 'auto');
-        const firestoreDocId = parsedCandidate.email
-          ? candidateDocId(user.uid, parsedCandidate.email)
-          : createFallbackCandidateId(user.uid, file.name);
-
-        await setDoc(
-          doc(db, 'resumeDumpCandidates', firestoreDocId),
-          {
-            ...parsedCandidate,
-            recruiterUID: user.uid,
-            resumeUrl,
-            resumeFileName: file.name,
-            resumeMimeType: file.type || 'application/octet-stream',
-            resumeSize: file.size,
-            resumeText: normalizedText.slice(0, 25000),
-            source: 'resume_dump',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        results.push({
+        return {
           fileName: file.name,
           status: 'saved',
-          message: normalizedText
-            ? `${parsedCandidate.name || 'Candidate'} saved`
-            : 'Saved resume link; text could not be extracted',
-        });
+          message: `${ingested.profile.name || 'Candidate'} saved with ${ingested.profile.skills.length} skill signals`,
+        };
       } catch (error: any) {
         console.error(`Resume dump upload failed for ${file.name}:`, error);
-        results.push({
+        return {
           fileName: file.name,
           status: 'failed',
           message: error?.message || 'Failed to process resume',
-        });
+        };
       }
+    }));
 
-      setUploadResults([...results]);
-    }
-
+    setUploadResults(results);
     setUploading(false);
     setUploadStatus('');
   };
@@ -768,6 +778,11 @@ const ResumeDump: React.FC = () => {
                       <div className="geist-small mt-0.5 max-w-[320px] truncate text-[#8bbde8]" title={candidate.email}>
                         {candidate.email || 'Email not found'}
                       </div>
+                      {(candidate.currentTitle || candidate.location) && (
+                        <div className="geist-small mt-0.5 max-w-[320px] truncate text-[#6b7280]" title={[candidate.currentTitle, candidate.location].filter(Boolean).join(' · ')}>
+                          {[candidate.currentTitle, candidate.location].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="geist-caption whitespace-nowrap text-[#d4d4d4]">{candidate.phone || 'N/A'}</span>
@@ -778,7 +793,7 @@ const ResumeDump: React.FC = () => {
                           type="button"
                           onClick={() => setSkillsPanelCandidate(candidate)}
                           className="flex max-w-[420px] flex-wrap gap-1.5 rounded-[6px] text-left transition-colors hover:bg-white/[0.025] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                          title="View all skills"
+                          title="View parsed candidate profile"
                         >
                           {candidate.skills.slice(0, 5).map((skill) => (
                             <span key={skill} className="geist-small rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-0.5 text-[#d4d4d4]">
@@ -792,7 +807,10 @@ const ResumeDump: React.FC = () => {
                           )}
                         </button>
                       ) : (
-                        <span className="geist-caption text-[#6b7280]">No skills found</span>
+                        <button type="button" onClick={() => setSkillsPanelCandidate(candidate)} className="geist-caption text-[#6b7280] transition-colors hover:text-white">View parsed profile</button>
+                      )}
+                      {typeof candidate.totalExperienceYears === 'number' && candidate.totalExperienceYears > 0 && (
+                        <p className="geist-small mt-1.5 text-[#6b7280]">{candidate.totalExperienceYears} years extracted experience</p>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -836,12 +854,12 @@ const ResumeDump: React.FC = () => {
         createPortal(
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm" onClick={() => setSkillsPanelCandidate(null)}>
             <div
-              className="w-full max-w-md overflow-hidden rounded-[8px] border border-white/[0.13] bg-[#050505] text-white shadow-2xl"
+              className="w-full max-w-2xl overflow-hidden rounded-[8px] border border-white/[0.13] bg-[#050505] text-white shadow-2xl"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-4 border-b border-white/[0.11] px-4 py-3">
                 <div className="min-w-0">
-                  <p className="geist-label uppercase text-[#6b7280]">Extracted skills</p>
+                  <p className="geist-label uppercase text-[#6b7280]">Parsed candidate profile</p>
                   <h3 className="geist-section-title mt-1 truncate text-white">
                     {skillsPanelCandidate.name || skillsPanelCandidate.email || 'Candidate'}
                   </h3>
@@ -855,14 +873,69 @@ const ResumeDump: React.FC = () => {
                   <span className="text-lg leading-none">&times;</span>
                 </button>
               </div>
-              <div className="max-h-[52vh] overflow-y-auto p-4">
-                <div className="flex flex-wrap gap-2">
-                  {skillsPanelCandidate.skills.map((skill) => (
-                    <span key={skill} className="geist-caption rounded-[6px] border border-white/[0.11] bg-white/[0.04] px-2.5 py-1 font-medium text-[#d4d4d4]">
-                      {skill}
-                    </span>
-                  ))}
+              <div className="max-h-[68vh] space-y-5 overflow-y-auto p-4">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
+                    <p className="geist-label uppercase text-[#6b7280]">Current role</p>
+                    <p className="geist-caption mt-1 text-[#d4d4d4]">{skillsPanelCandidate.currentTitle || 'Not found'}</p>
+                  </div>
+                  <div className="rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
+                    <p className="geist-label uppercase text-[#6b7280]">Experience</p>
+                    <p className="geist-caption mt-1 text-[#d4d4d4]">{skillsPanelCandidate.totalExperienceYears ? `${skillsPanelCandidate.totalExperienceYears} years` : 'Not found'}</p>
+                  </div>
+                  <div className="rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
+                    <p className="geist-label uppercase text-[#6b7280]">Location</p>
+                    <p className="geist-caption mt-1 text-[#d4d4d4]">{skillsPanelCandidate.location || 'Not found'}</p>
+                  </div>
                 </div>
+
+                {skillsPanelCandidate.summary && (
+                  <div>
+                    <p className="geist-label uppercase text-[#6b7280]">Professional summary</p>
+                    <p className="geist-caption mt-2 leading-6 text-[#d4d4d4]">{skillsPanelCandidate.summary}</p>
+                  </div>
+                )}
+
+                <div>
+                  <p className="geist-label uppercase text-[#6b7280]">Skills ({(skillsPanelCandidate.skills || []).length})</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(skillsPanelCandidate.skills || []).length > 0 ? skillsPanelCandidate.skills.map((skill) => (
+                      <span key={skill} className="geist-caption rounded-[6px] border border-white/[0.11] bg-white/[0.04] px-2.5 py-1 font-medium text-[#d4d4d4]">
+                        {skill}
+                      </span>
+                    )) : <span className="geist-caption text-[#6b7280]">No explicit skills found.</span>}
+                  </div>
+                </div>
+
+                {(skillsPanelCandidate.experience || []).length > 0 && (
+                  <div>
+                    <p className="geist-label uppercase text-[#6b7280]">Experience history</p>
+                    <div className="mt-2 space-y-2">
+                      {skillsPanelCandidate.experience!.map((entry, index) => (
+                        <div key={`${entry.title}-${entry.company}-${index}`} className="rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
+                          <p className="geist-caption font-semibold text-white">{entry.title || 'Role'}{entry.company ? ` · ${entry.company}` : ''}</p>
+                          {(entry.startDate || entry.endDate) && <p className="geist-small mt-1 text-[#6b7280]">{[entry.startDate, entry.endDate].filter(Boolean).join(' – ')}</p>}
+                          {entry.highlights?.[0] && <p className="geist-small mt-2 text-[#a1a1aa]">{entry.highlights[0]}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(skillsPanelCandidate.education || []).length > 0 && (
+                  <div>
+                    <p className="geist-label uppercase text-[#6b7280]">Education</p>
+                    <div className="mt-2 space-y-1.5">
+                      {skillsPanelCandidate.education!.map((entry, index) => (
+                        <p key={`${entry.degree}-${index}`} className="geist-caption text-[#d4d4d4]">{[entry.degree, entry.institution, entry.year].filter(Boolean).join(' · ')}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <p className="geist-small border-t border-white/[0.08] pt-3 text-[#6b7280]">
+                  Source: {skillsPanelCandidate.source === 'candidate_interview' ? `Candidate interview${skillsPanelCandidate.sourceJobTitle ? ` · ${skillsPanelCandidate.sourceJobTitle}` : ''}` : skillsPanelCandidate.source === 'interview_creation' ? 'Interview creation upload' : 'Resume Dump upload'} · Parser: {skillsPanelCandidate.parsingMethod || 'legacy'}
+                </p>
               </div>
             </div>
           </div>,

@@ -15,6 +15,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useMessageBox } from '../components/MessageBox';
+import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
+import { getRateLimitReachedMessage, isRateLimitReached, RateLimitResource } from '../services/rateLimitService';
 
 type TimestampLike =
   | {
@@ -80,6 +82,15 @@ const RecruiterTests: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState<'All' | 'aptitude' | 'coding'>('All');
   const navigate = useNavigate();
   const { showConfirm, showError, showSuccess } = useMessageBox();
+  const { status: rateLimitStatus } = useCompanyRateLimits();
+  const assessmentLimitReached = isRateLimitReached(rateLimitStatus, 'assessments');
+  const codingLimitReached = isRateLimitReached(rateLimitStatus, 'codingAssessments');
+
+  const guardCreateLink = (event: React.MouseEvent, resource: RateLimitResource) => {
+    if (!isRateLimitReached(rateLimitStatus, resource)) return;
+    event.preventDefault();
+    showError(getRateLimitReachedMessage(resource));
+  };
 
   useEffect(() => {
     const fetchTests = async () => {
@@ -194,17 +205,17 @@ const RecruiterTests: React.FC = () => {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Link to="/recruiter/tests/create?type=aptitude" className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white">
+            <Link to="/recruiter/tests/create?type=aptitude" onClick={(event) => guardCreateLink(event, 'assessments')} aria-disabled={assessmentLimitReached} className={`geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border px-3 font-medium transition-colors ${assessmentLimitReached ? 'cursor-not-allowed border-red-500/30 bg-red-500/10 text-red-400' : 'border-white/[0.11] bg-white/[0.03] text-[#d4d4d4] hover:bg-white/[0.06] hover:text-white'}`}>
               <FileText size={14} />
               <span>Aptitude</span>
             </Link>
-            <Link to="/recruiter/tests/create?type=coding" className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white">
+            <Link to="/recruiter/tests/create?type=coding" onClick={(event) => guardCreateLink(event, 'codingAssessments')} aria-disabled={codingLimitReached} className={`geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border px-3 font-medium transition-colors ${codingLimitReached ? 'cursor-not-allowed border-red-500/30 bg-red-500/10 text-red-400' : 'border-white/[0.11] bg-white/[0.03] text-[#d4d4d4] hover:bg-white/[0.06] hover:text-white'}`}>
               <Code size={14} />
               <span>Coding</span>
             </Link>
-            <Link to="/recruiter/tests/create" className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea]">
+            <Link to="/recruiter/tests/create" onClick={(event) => guardCreateLink(event, 'assessments')} aria-disabled={assessmentLimitReached} className={`geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border px-3 font-medium transition-colors ${assessmentLimitReached ? 'cursor-not-allowed border-red-500/30 bg-red-500/10 text-red-400' : 'border-white bg-white text-black hover:bg-[#eaeaea]'}`}>
               <Plus size={14} />
-              <span>Create Assessment</span>
+              <span>{assessmentLimitReached ? 'Limit reached' : 'Create Assessment'}</span>
             </Link>
           </div>
         </div>

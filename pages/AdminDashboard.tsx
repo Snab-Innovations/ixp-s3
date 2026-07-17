@@ -7,7 +7,7 @@ import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { db, auth } from '../services/firebase';
 import { RevenueAreaChart, UserPieChart, JobBarChart } from '../components/AdminCharts';
 import { GShapeAnimation } from '../components/AdminAnimations';
-import { Users, FileText, DollarSign, UserPlus, Briefcase, CheckCircle, XCircle, Trash2, Bell, Sun, Moon, Monitor, Video, Menu, X, Search, ShieldCheck, ShieldX, BookOpen, MessageSquare as MessageSquareIcon, Bug, Star, Activity, Database, Key, Globe, Copy, Check, Code, Server, TrendingUp } from 'lucide-react';
+import { Users, FileText, DollarSign, UserPlus, Briefcase, CheckCircle, XCircle, Trash2, Bell, Sun, Moon, Monitor, Video, Menu, X, Search, ShieldCheck, ShieldX, BookOpen, MessageSquare as MessageSquareIcon, Bug, Star, Activity, Database, Key, Globe, Copy, Check, Code, Server, TrendingUp, Gauge } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useMessageBox } from '../components/MessageBox';
 import Logo from '../components/Logo';
@@ -769,6 +769,7 @@ const AdminDashboard: React.FC = () => {
               { id: 'dbAccess', label: 'DB Access', icon: Server },
               { id: 'blogs', label: 'Manage Blogs', icon: BookOpen },
               { id: 'stats', label: 'Platform Stats', icon: Activity },
+              { id: 'rateLimiting', label: 'Rate Limiting', icon: Gauge },
               { id: 'api', label: 'API & Integrations', icon: Database }
             ].map(item => (
               <button
@@ -776,6 +777,7 @@ const AdminDashboard: React.FC = () => {
                 onClick={() => {
                   if (item.id === 'blogs') navigate('/admin/blogs');
                   else if (item.id === 'stats') navigate('/admin/stats');
+                  else if (item.id === 'rateLimiting') navigate('/admin/rate-limiting');
                   else setActiveTab(item.id as any); 
                   setIsMobileSidebarOpen(false); 
                 }}
@@ -811,6 +813,7 @@ const AdminDashboard: React.FC = () => {
             { id: 'dbAccess', label: 'DB Access', icon: Server },
             { id: 'blogs', label: 'Manage Blogs', icon: BookOpen },
             { id: 'stats', label: 'Platform Stats', icon: Activity },
+            { id: 'rateLimiting', label: 'Rate Limiting', icon: Gauge },
             { id: 'api', label: 'API & Integrations', icon: Database }
           ].map(item => (
             <button
@@ -818,6 +821,7 @@ const AdminDashboard: React.FC = () => {
               onClick={() => { 
                 if (item.id === 'blogs') navigate('/admin/blogs');
                 else if (item.id === 'stats') navigate('/admin/stats');
+                else if (item.id === 'rateLimiting') navigate('/admin/rate-limiting');
                 else setActiveTab(item.id as any);
               }}
               className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === item.id

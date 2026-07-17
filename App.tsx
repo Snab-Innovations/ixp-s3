@@ -15,6 +15,7 @@ import AdminProfile from './pages/AdminProfile';
 import Blogs from './pages/Blogs';
 import AdminBlogs from './pages/AdminBlogs';
 import AdminStats from './pages/AdminStats';
+import AdminRateLimiting from './pages/AdminRateLimiting';
 import BlogDetail from './pages/BlogDetail';
 import RecruiterTests from './pages/RecruiterTests';
 import CreateTest from './pages/CreateTest';
@@ -155,6 +156,11 @@ const App: React.FC = () => {
             <Route path="admin/stats" element={
               <ThemeProvider>
                 <ProtectedRoute role="admin"><AdminStats /></ProtectedRoute>
+              </ThemeProvider>
+            } />
+            <Route path="admin/rate-limiting" element={
+              <ThemeProvider>
+                <ProtectedRoute role="admin"><AdminRateLimiting /></ProtectedRoute>
               </ThemeProvider>
             } />
 
