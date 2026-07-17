@@ -10,6 +10,7 @@ import ConnectionStatus from './ConnectionStatus';
 import Logo from './Logo';
 import DashboardSidebar from './ui/dashboard-sidebar';
 import RecruiterRateLimitBanner from './RecruiterRateLimitBanner';
+import { useMessageBox } from './MessageBox';
 
 
 
@@ -29,6 +30,7 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   };
 
   const { theme, setTheme } = useTheme();
+  const { showInfo } = useMessageBox();
 
   // Force Dark Mode for this theme update if desired, but respecting user toggle for now.
   // Ideally for "Black Dignity" we default to dark or design the light mode to be very minimal too.
@@ -37,10 +39,21 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const isRecruiterPath = location.pathname.startsWith('/recruiter/');
   const showRecruiterSidebar = isRecruiterPath || Boolean(user && userProfile?.role === 'recruiter');
   const isRecruiterDashboard = location.pathname === '/recruiter/jobs';
+  const recruiterLightModeMessage = 'Light mode is under process of making. After it completes, it will be enabled.';
   const navigateFromSidebar = (href: string) => {
     navigate(href);
     setIsMobileMenuOpen(false);
   };
+  const handleRecruiterLightModeAttempt = () => {
+    setTheme('dark');
+    showInfo(recruiterLightModeMessage, 'Light mode in progress');
+  };
+
+  React.useEffect(() => {
+    if (showRecruiterSidebar && theme === 'light') {
+      setTheme('dark');
+    }
+  }, [showRecruiterSidebar, setTheme, theme]);
 
   return (
     <div className={`${isRecruiterPath ? 'recruiter-shell' : ''} min-h-screen bg-background text-foreground font-sans selection:bg-primary/20 selection:text-foreground flex flex-col transition-colors duration-300`}>
@@ -181,9 +194,10 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     <div className="p-3 border-t border-border flex justify-between items-center bg-muted rounded-b-xl">
                       <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 border border-border">
                         <button
-                          onClick={() => setTheme('light')}
-                          className={`p-1.5 rounded-md transition-all ${theme === 'light' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
-                          title="Light"
+                          onClick={showRecruiterSidebar ? handleRecruiterLightModeAttempt : () => setTheme('light')}
+                          aria-disabled={showRecruiterSidebar}
+                          className={`p-1.5 rounded-md transition-all ${showRecruiterSidebar ? 'cursor-not-allowed text-gray-500 opacity-50 hover:text-gray-500' : theme === 'light' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+                          title={showRecruiterSidebar ? recruiterLightModeMessage : 'Light'}
                         >
                           <Sun size={14} />
                         </button>
@@ -341,7 +355,12 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
                   {/* Theme */}
                   <div className="bg-muted p-1 rounded-xl flex">
-                    <button onClick={() => setTheme('light')} className={`flex-1 p-2 rounded-lg transition-all flex items-center justify-center gap-2 text-xs font-medium ${theme === 'light' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}>
+                    <button
+                      onClick={showRecruiterSidebar ? handleRecruiterLightModeAttempt : () => setTheme('light')}
+                      aria-disabled={showRecruiterSidebar}
+                      className={`flex-1 p-2 rounded-lg transition-all flex items-center justify-center gap-2 text-xs font-medium ${showRecruiterSidebar ? 'cursor-not-allowed text-gray-500 opacity-50 hover:text-gray-500' : theme === 'light' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+                      title={showRecruiterSidebar ? recruiterLightModeMessage : 'Light'}
+                    >
                       <Sun size={14} /> Light
                     </button>
                     <button onClick={() => setTheme('dark')} className={`flex-1 p-2 rounded-lg transition-all flex items-center justify-center gap-2 text-xs font-medium ${theme === 'dark' ? 'bg-gray-700 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}>
