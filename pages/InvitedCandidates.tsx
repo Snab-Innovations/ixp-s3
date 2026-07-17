@@ -13,6 +13,10 @@ import { evaluateResumeForMultipleJobs } from '../services/api';
 // Setup PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
+const InlineBusySkeleton = ({ className = 'bg-current/25' }: { className?: string }) => (
+    <span className={`inline-block h-3 w-16 animate-pulse rounded-[4px] ${className}`} aria-hidden="true" />
+);
+
 interface GlobalCandidate {
     email: string;
     phone: string;
@@ -451,8 +455,17 @@ const InvitedCandidates: React.FC = () => {
                                 <span className="geist-small rounded-[6px] border border-[#2e2e2e] bg-[#1a1a1a] px-2 py-0.5 text-[#a0a0a0]">Step 2</span>
                             </div>
                             <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-[6px] border border-dashed border-[#454545] bg-[#000] px-4 py-5 text-center transition-colors hover:bg-[#1a1a1a]">
-                                <i className={`fas fa-cloud-upload-alt text-lg text-[#8f8f8f] ${parsingResumes ? 'fa-spin text-white' : ''}`}></i>
-                                <span className="geist-caption font-medium text-[#d4d4d4]">{parsingResumes ? 'Scanning documents...' : 'Upload PDFs or TXTs'}</span>
+                                {parsingResumes ? (
+                                    <>
+                                        <InlineBusySkeleton className="w-6 bg-white/[0.16]" />
+                                        <InlineBusySkeleton className="w-36 bg-white/[0.16]" />
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="fas fa-cloud-upload-alt text-lg text-[#8f8f8f]"></i>
+                                        <span className="geist-caption font-medium text-[#d4d4d4]">Upload PDFs or TXTs</span>
+                                    </>
+                                )}
                                 <span className="geist-small text-[#6b7280]">Emails, phone numbers, and match scores are extracted automatically.</span>
                                 <input type="file" multiple accept=".pdf,.txt" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
                             </label>
@@ -527,7 +540,14 @@ const InvitedCandidates: React.FC = () => {
                         disabled={sendingEmails || newCandidates.length === 0}
                         className="geist-caption mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea] disabled:border-[#2e2e2e] disabled:bg-[#1a1a1a] disabled:text-[#878787] disabled:cursor-not-allowed disabled:opacity-100"
                     >
-                        {sendingEmails ? <><i className="fas fa-circle-notch fa-spin"></i> Dispatching...</> : <><i className="fas fa-paper-plane text-[11px]"></i> Dispatch {newCandidates.length} Invites</>}
+                        {sendingEmails ? (
+                            <InlineBusySkeleton className="w-28 bg-black/[0.18]" />
+                        ) : (
+                            <>
+                                <i className="fas fa-paper-plane text-[11px]"></i>
+                                Dispatch {newCandidates.length} Invites
+                            </>
+                        )}
                     </button>
                 </aside>
             </section>

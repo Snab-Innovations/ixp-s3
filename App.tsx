@@ -24,13 +24,18 @@ import TestResults from './pages/TestResults';
 import ContactUs from './pages/ContactUs';
 import ReportBug from './pages/ReportBug';
 import CreateInterview, { CreateInterviewSkeleton } from './pages/CreateInterview';
-import RecruiterInterviews from './pages/RecruiterInterviews';
+import RecruiterInterviews, { RecruiterInterviewsSkeleton } from './pages/RecruiterInterviews';
 import InterviewAccess from './pages/InterviewAccess';
 import TestAccess from './pages/TestAccess';
 import InterviewResponses from './pages/InterviewResponses';
 import InterviewOverview from './pages/InterviewOverview';
 import InterviewCandidates from './pages/InterviewCandidates';
 import ResumeDump, { ResumeDumpSkeleton } from './pages/ResumeDump';
+import {
+  InterviewCandidatesSkeleton,
+  InterviewOverviewSkeleton,
+  InterviewResponsesSkeleton,
+} from './components/ui/interview-loading-skeleton';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import SubmitReview from './pages/SubmitReview';
@@ -206,18 +211,18 @@ const App: React.FC = () => {
                 <Routes>
                   {/* Recruiter Routes */}
                   <Route path="recruiter/jobs" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterDashboardSkeleton />}><RecruiterDashboard /></ProtectedRoute>} />
-                  <Route path="recruiter/interviews" element={<ProtectedRoute role="recruiter"><RecruiterInterviews /></ProtectedRoute>} />
-                  <Route path="recruiter/invites" element={<ProtectedRoute role="recruiter"><InvitedCandidates /></ProtectedRoute>} />
+                  <Route path="recruiter/interviews" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><RecruiterInterviews /></ProtectedRoute>} />
+                  <Route path="recruiter/invites" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><InvitedCandidates /></ProtectedRoute>} />
                   <Route path="recruiter/resume-dump" element={<ProtectedRoute role="recruiter" loadingFallback={<ResumeDumpSkeleton />}><ResumeDump /></ProtectedRoute>} />
-                  <Route path="recruiter/interview/:interviewId" element={<ProtectedRoute role="recruiter"><InterviewOverview /></ProtectedRoute>} />
-                  <Route path="recruiter/interview/:interviewId/overview" element={<ProtectedRoute role="recruiter"><InterviewOverview /></ProtectedRoute>} />
-                  <Route path="recruiter/interview/:interviewId/responses" element={<ProtectedRoute role="recruiter"><InterviewResponses /></ProtectedRoute>} />
-                  <Route path="recruiter/interview/:interviewId/candidates" element={<ProtectedRoute role="recruiter"><InterviewCandidates /></ProtectedRoute>} />
-                  <Route path="recruiter/interview/responses/:interviewId" element={<ProtectedRoute role="recruiter"><InterviewResponses /></ProtectedRoute>} />
+                  <Route path="recruiter/interview/:interviewId" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewOverviewSkeleton />}><InterviewOverview /></ProtectedRoute>} />
+                  <Route path="recruiter/interview/:interviewId/overview" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewOverviewSkeleton />}><InterviewOverview /></ProtectedRoute>} />
+                  <Route path="recruiter/interview/:interviewId/responses" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewResponsesSkeleton />}><InterviewResponses /></ProtectedRoute>} />
+                  <Route path="recruiter/interview/:interviewId/candidates" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewCandidatesSkeleton />}><InterviewCandidates /></ProtectedRoute>} />
+                  <Route path="recruiter/interview/responses/:interviewId" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewResponsesSkeleton />}><InterviewResponses /></ProtectedRoute>} />
                   <Route path="recruiter/interview/create" element={<ProtectedRoute role="recruiter" loadingFallback={<CreateInterviewSkeleton />}><CreateInterview /></ProtectedRoute>} />
-                  <Route path="recruiter/tests" element={<ProtectedRoute role="recruiter"><RecruiterTests /></ProtectedRoute>} />
-                  <Route path="recruiter/tests/create" element={<ProtectedRoute role="recruiter"><CreateTest /></ProtectedRoute>} />
-                  <Route path="recruiter/tests/:testId/results" element={<ProtectedRoute role="recruiter"><TestResults /></ProtectedRoute>} />
+                  <Route path="recruiter/tests" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><RecruiterTests /></ProtectedRoute>} />
+                  <Route path="recruiter/tests/create" element={<ProtectedRoute role="recruiter" loadingFallback={<CreateInterviewSkeleton />}><CreateTest /></ProtectedRoute>} />
+                  <Route path="recruiter/tests/:testId/results" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewResponsesSkeleton />}><TestResults /></ProtectedRoute>} />
                   
                   {/* Shared Routes */}
                   <Route path="profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

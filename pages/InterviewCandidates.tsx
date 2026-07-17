@@ -422,8 +422,17 @@ const InterviewCandidates: React.FC = () => {
       <section className="grid gap-3 border-b border-white/[0.11] px-4 py-3 sm:px-6 lg:px-7">
           <div className="grid gap-3 xl:grid-cols-[220px_minmax(0,1fr)_auto]">
             <label className="flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-[6px] border border-dashed border-white/[0.18] bg-white/[0.03] px-3 text-[#d4d4d4] transition-colors hover:bg-white/[0.06]">
-              <i className={`fas fa-cloud-upload-alt text-[12px] ${parsingResumes ? 'fa-spin' : ''}`}></i>
-              <span className="geist-caption font-medium">{parsingResumes ? 'Parsing resumes' : 'Upload resumes'}</span>
+              {parsingResumes ? (
+                <>
+                  <ButtonBusySkeleton className="w-4 bg-white/[0.16]" />
+                  <ButtonBusySkeleton className="w-24 bg-white/[0.16]" />
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-cloud-upload-alt text-[12px]"></i>
+                  <span className="geist-caption font-medium">Upload resumes</span>
+                </>
+              )}
               <input type="file" multiple accept=".pdf,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
             </label>
             <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_170px_auto]">
@@ -435,8 +444,14 @@ const InterviewCandidates: React.FC = () => {
               </button>
             </div>
             <button onClick={handleSendInvites} disabled={sendingEmails || newEmails.length === 0} className={primaryButtonClass}>
-              {sendingEmails ? <i className="fa-solid fa-circle-notch fa-spin text-[11px]"></i> : <i className="fas fa-paper-plane text-[11px]"></i>}
-              Send invites{queuedCount ? ` (${queuedCount})` : ''}
+              {sendingEmails ? (
+                <ButtonBusySkeleton className="w-28 bg-black/[0.18]" />
+              ) : (
+                <>
+                  <i className="fas fa-paper-plane text-[11px]"></i>
+                  Send invites{queuedCount ? ` (${queuedCount})` : ''}
+                </>
+              )}
             </button>
           </div>
 
@@ -490,8 +505,14 @@ const InterviewCandidates: React.FC = () => {
           <option value="Pending">Pending</option>
         </select>
         <button type="button" onClick={handleSendBulkReminders} disabled={reminding} className={actionButtonClass}>
-          {reminding ? <i className="fas fa-spinner fa-spin text-[11px]"></i> : <i className="fas fa-bell text-[11px]"></i>}
-          Pending reminders
+          {reminding ? (
+            <ButtonBusySkeleton className="w-28 bg-white/[0.16]" />
+          ) : (
+            <>
+              <i className="fas fa-bell text-[11px]"></i>
+              Pending reminders
+            </>
+          )}
         </button>
       </section>
 
@@ -522,8 +543,14 @@ const InterviewCandidates: React.FC = () => {
                         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                           <input type="email" value={editedEmailValue} onChange={(e) => setEditedEmailValue(e.target.value)} className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-white outline-none focus:border-white/[0.28]" autoFocus />
                           <button onClick={() => handleEditAndResend(candidate.email, editedEmailValue)} disabled={resendingEmail !== null} className={primaryButtonClass}>
-                            {isResending ? <i className="fas fa-spinner fa-spin text-[11px]"></i> : <i className="fas fa-save text-[11px]"></i>}
-                            Save
+                            {isResending ? (
+                              <ButtonBusySkeleton className="w-12 bg-black/[0.18]" />
+                            ) : (
+                              <>
+                                <i className="fas fa-save text-[11px]"></i>
+                                Save
+                              </>
+                            )}
                           </button>
                           <button onClick={() => setEditingCandidateEmail(null)} disabled={resendingEmail !== null} className={actionButtonClass}>Cancel</button>
                         </div>
@@ -590,8 +617,14 @@ const InterviewCandidates: React.FC = () => {
                             Edit
                           </button>
                           <button onClick={() => handleResend(candidate.email)} disabled={resendingEmail !== null} className={actionButtonClass} title="Resend Invitation">
-                            {isResending ? <i className="fas fa-spinner fa-spin text-[11px]"></i> : <i className="fas fa-paper-plane text-[11px]"></i>}
-                            Resend
+                            {isResending ? (
+                              <ButtonBusySkeleton className="w-16 bg-white/[0.16]" />
+                            ) : (
+                              <>
+                                <i className="fas fa-paper-plane text-[11px]"></i>
+                                Resend
+                              </>
+                            )}
                           </button>
                         </>
                       )}
