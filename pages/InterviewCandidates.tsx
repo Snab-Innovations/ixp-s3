@@ -22,6 +22,10 @@ const buildWhatsAppMessage = (interview: Interview) => {
   return `Hi there!\n\nWe're actively hiring for the ${interview.title} role and we'd love to invite you to take our AI-powered interview.\n\nStart your interview here:\n${link}\n\nAccess Code:\n${interview.accessCode}\n\nYou can complete it whenever you're ready. Best of luck!`;
 };
 
+const ButtonBusySkeleton = ({ className = 'bg-current/25' }: { className?: string }) => (
+  <span className={`inline-block h-3 w-16 animate-pulse rounded-[4px] ${className}`} aria-hidden="true" />
+);
+
 const InterviewCandidates: React.FC = () => {
   const { interviewId } = useParams<{ interviewId: string }>();
   const { user } = useAuth();
