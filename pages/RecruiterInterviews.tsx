@@ -74,8 +74,78 @@ const getInterviewStatus = (interview: Interview) => {
         label: 'Active',
         dotClass: 'bg-[#50e3c2]',
         pillClass: 'border-[#123b2a] bg-[#071a12] text-[#83d0a3]',
-      };
+    };
 };
+
+const ButtonBusySkeleton = ({ className = 'bg-current/25' }: { className?: string }) => (
+  <span className={`inline-block h-3 w-16 animate-pulse rounded-[4px] ${className}`} aria-hidden="true" />
+);
+
+export const RecruiterInterviewsSkeleton = () => (
+  <div className="-mx-4 -my-8 flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-hidden bg-[#000] text-white sm:-mx-6 lg:-mx-8 animate-pulse">
+    <section className="shrink-0 border-b border-white/[0.11] bg-[#000]">
+      <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-7 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <div className="h-8 w-24 rounded-[6px] bg-white/[0.04]" />
+          <div className="h-7 w-48 rounded-[6px] bg-white/[0.04] mt-3" />
+          <div className="h-4 w-64 rounded-[6px] bg-white/[0.04] mt-2" />
+        </div>
+        <div className="h-8 w-32 rounded-[6px] bg-white/[0.04]" />
+      </div>
+    </section>
+
+    <section className="grid shrink-0 grid-cols-2 border-b border-white/[0.11] lg:grid-cols-4">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="border-r border-white/[0.11] px-4 py-4 last:border-r-0 sm:px-6 lg:px-7">
+          <div className="h-3 w-12 rounded bg-white/[0.04]" />
+          <div className="h-6 w-16 rounded bg-white/[0.04] mt-2" />
+        </div>
+      ))}
+    </section>
+
+    <section className="shrink-0 border-b border-white/[0.11]">
+      <div className="flex flex-col gap-3 px-4 py-3 sm:px-6 lg:px-7 xl:flex-row xl:items-center xl:justify-between">
+        <div className="h-9 w-full xl:max-w-xs rounded-[6px] bg-white/[0.04]" />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="h-9 w-28 rounded-[6px] bg-white/[0.04]" />
+          <div className="h-9 w-48 rounded-[6px] bg-white/[0.04]" />
+        </div>
+      </div>
+    </section>
+
+    <section className="flex min-h-0 flex-1 flex-col">
+      <div className="hidden shrink-0 items-center gap-4 border-b border-white/[0.11] px-4 py-3 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:px-7">
+        <div className="h-3 w-16 rounded bg-white/[0.04]" />
+        <div className="h-3 w-12 rounded bg-white/[0.04] mx-auto" />
+        <div className="h-3 w-16 rounded bg-white/[0.04] mx-auto" />
+        <div className="h-3 w-16 rounded bg-white/[0.04] mx-auto" />
+        <div className="h-3 w-12 rounded bg-white/[0.04] mx-auto" />
+        <div className="h-3 w-12 rounded bg-white/[0.04] mx-auto" />
+        <div className="h-3 w-12 rounded bg-white/[0.04] ml-auto" />
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {[...Array(8)].map((_, idx) => (
+          <div
+            key={idx}
+            className="grid gap-3 border-b border-white/[0.08] px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:items-center lg:gap-4 lg:px-7"
+          >
+            <div className="space-y-2">
+              <div className="h-4 w-40 rounded bg-white/[0.04]" />
+              <div className="h-3 w-20 rounded bg-white/[0.04]" />
+            </div>
+            <div className="h-4 w-12 rounded bg-white/[0.04] mx-auto" />
+            <div className="h-5 w-16 rounded bg-white/[0.04] mx-auto" />
+            <div className="h-4 w-16 rounded bg-white/[0.04] mx-auto" />
+            <div className="h-4 w-16 rounded bg-white/[0.04] mx-auto" />
+            <div className="h-4 w-12 rounded bg-white/[0.04] mx-auto" />
+            <div className="h-8 w-20 rounded bg-white/[0.04] ml-auto" />
+          </div>
+        ))}
+      </div>
+    </section>
+  </div>
+);
 
 const RecruiterInterviews: React.FC = () => {
   const { user } = useAuth();
@@ -413,77 +483,7 @@ const RecruiterInterviews: React.FC = () => {
   };
 
 
-  if (loading) return (
-    <div className="-mx-4 -my-8 flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-hidden bg-[#000] text-white sm:-mx-6 lg:-mx-8 animate-pulse">
-      {/* Sticky Header Skeleton */}
-      <section className="shrink-0 border-b border-white/[0.11] bg-[#000]">
-        <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-7 xl:flex-row xl:items-start xl:justify-between">
-          <div>
-            <div className="h-8 w-24 rounded-[6px] bg-white/[0.04]" />
-            <div className="h-7 w-48 rounded-[6px] bg-white/[0.04] mt-3" />
-            <div className="h-4 w-64 rounded-[6px] bg-white/[0.04] mt-2" />
-          </div>
-          <div className="h-8 w-32 rounded-[6px] bg-white/[0.04]" />
-        </div>
-      </section>
-
-      {/* Stats Strip Skeleton */}
-      <section className="grid shrink-0 grid-cols-2 border-b border-white/[0.11] lg:grid-cols-4">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="border-r border-white/[0.11] px-4 py-4 last:border-r-0 sm:px-6 lg:px-7">
-            <div className="h-3 w-12 rounded bg-white/[0.04]" />
-            <div className="h-6 w-16 rounded bg-white/[0.04] mt-2" />
-          </div>
-        ))}
-      </section>
-
-      {/* Search & Filter Bar Skeleton */}
-      <section className="shrink-0 border-b border-white/[0.11]">
-        <div className="flex flex-col gap-3 px-4 py-3 sm:px-6 lg:px-7 xl:flex-row xl:items-center xl:justify-between">
-          <div className="h-9 w-full xl:max-w-xs rounded-[6px] bg-white/[0.04]" />
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="h-9 w-28 rounded-[6px] bg-white/[0.04]" />
-            <div className="h-9 w-48 rounded-[6px] bg-white/[0.04]" />
-          </div>
-        </div>
-      </section>
-
-      {/* Content Table Skeleton */}
-      <section className="flex min-h-0 flex-1 flex-col">
-        {/* Table Header Skeleton */}
-        <div className="hidden shrink-0 items-center gap-4 border-b border-white/[0.11] px-4 py-3 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:px-7">
-          <div className="h-3 w-16 rounded bg-white/[0.04]" />
-          <div className="h-3 w-12 rounded bg-white/[0.04] mx-auto" />
-          <div className="h-3 w-16 rounded bg-white/[0.04] mx-auto" />
-          <div className="h-3 w-16 rounded bg-white/[0.04] mx-auto" />
-          <div className="h-3 w-12 rounded bg-white/[0.04] mx-auto" />
-          <div className="h-3 w-12 rounded bg-white/[0.04] mx-auto" />
-          <div className="h-3 w-12 rounded bg-white/[0.04] ml-auto" />
-        </div>
-
-        {/* Rows Skeleton */}
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {[...Array(8)].map((_, idx) => (
-            <div 
-              key={idx} 
-              className="grid gap-3 border-b border-white/[0.08] px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:items-center lg:gap-4 lg:px-7"
-            >
-              <div className="space-y-2">
-                <div className="h-4 w-40 rounded bg-white/[0.04]" />
-                <div className="h-3 w-20 rounded bg-white/[0.04]" />
-              </div>
-              <div className="h-4 w-12 rounded bg-white/[0.04] mx-auto" />
-              <div className="h-5 w-16 rounded bg-white/[0.04] mx-auto" />
-              <div className="h-4 w-16 rounded bg-white/[0.04] mx-auto" />
-              <div className="h-4 w-16 rounded bg-white/[0.04] mx-auto" />
-              <div className="h-4 w-12 rounded bg-white/[0.04] mx-auto" />
-              <div className="h-8 w-20 rounded bg-white/[0.04] ml-auto" />
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
+  if (loading) return <RecruiterInterviewsSkeleton />;
 
   const departments = ['All', ...Array.from(new Set(interviews.map(i => i.department).filter(Boolean)))];
 
