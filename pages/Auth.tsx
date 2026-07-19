@@ -40,7 +40,7 @@ const AuthPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [fullname, setFullname] = useState('');
   const [experience, setExperience] = useState(0);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const navigate = useNavigate();
 
   const switchMode = (nextMode: AuthMode) => {
@@ -280,7 +280,8 @@ const AuthPage: React.FC = () => {
           </h2>
           <span>Manage recruiter access, interviews, assessments, and candidate outcomes from one secure workspace.</span>
           <a className="ix-auth-maintainer" href="https://snab.co.in" target="_blank" rel="noopener noreferrer">
-            Managed and maintained by <strong>SNAB Innovations</strong>
+            <span>Managed and maintained by</span>
+            <strong>SNAB Innovations</strong>
           </a>
         </div>
         <div className="ix-auth-visual-index" aria-hidden="true"><span>01</span><i /></div>
