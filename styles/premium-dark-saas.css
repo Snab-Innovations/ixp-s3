@@ -345,7 +345,6 @@ main.workspace-card h2.text-3xl {
 .candidate-card,
 .stat-card,
 .chart-box,
-.auth-card,
 .saas-modal-card,
 .access-container {
   background-color: var(--card) !important;
@@ -362,7 +361,6 @@ main.workspace-card h2.text-3xl {
 .dark .candidate-card,
 .dark .stat-card,
 .dark .chart-box,
-.dark .auth-card,
 .dark .saas-modal-card,
 .dark .access-container {
   box-shadow: 0 18px 45px rgb(0 0 0 / 0.5), inset 0 0 0 1px rgb(255 255 255 / 0.03) !important;
@@ -386,8 +384,7 @@ main.workspace-card h2.text-3xl {
   color: var(--popover-foreground) !important;
 }
 
-.saas-btn-primary,
-.auth-card button[type='submit']:not(.no-saas-gradient) {
+.saas-btn-primary {
   background: var(--primary) !important;
   color: var(--primary-foreground) !important;
   border: 1px solid rgb(var(--primary-rgb) / 0.12) !important;
@@ -395,59 +392,15 @@ main.workspace-card h2.text-3xl {
   transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease, opacity 180ms ease;
 }
 
-.saas-btn-primary:hover:not(:disabled),
-.auth-card button[type='submit']:not(:disabled):hover {
+.saas-btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
   filter: brightness(1.03);
   box-shadow: 0 16px 36px rgb(var(--primary-rgb) / 0.22);
 }
 
-.saas-btn-primary:disabled,
-.auth-card button[type='submit']:disabled {
+.saas-btn-primary:disabled {
   cursor: not-allowed;
   opacity: 0.55;
-}
-
-.auth-panel h1,
-.auth-panel h2,
-.auth-panel h3 {
-  color: var(--foreground) !important;
-}
-
-.auth-panel p,
-.auth-panel label,
-.auth-panel .auth-muted {
-  color: var(--muted-foreground) !important;
-}
-
-.auth-panel input:not([type='checkbox']):not([type='radio']),
-.auth-panel textarea,
-.auth-panel select {
-  background-color: var(--muted) !important;
-  border-color: var(--input) !important;
-  color: var(--foreground) !important;
-}
-
-.auth-panel input::placeholder,
-.auth-panel textarea::placeholder {
-  color: var(--muted-foreground) !important;
-  opacity: 0.75;
-}
-
-.auth-panel input:focus,
-.auth-panel textarea:focus,
-.auth-panel select:focus {
-  border-color: var(--ring) !important;
-  box-shadow: 0 0 0 3px rgb(var(--ring-rgb) / 0.22) !important;
-}
-
-.auth-panel .auth-divider {
-  border-color: var(--border) !important;
-}
-
-.auth-panel .auth-divider-label {
-  background-color: var(--card) !important;
-  color: var(--muted-foreground) !important;
 }
 
 .saas-tabs {
@@ -1701,7 +1654,6 @@ html.dark {
 .candidate-card,
 .stat-card,
 .chart-box,
-.auth-card,
 .saas-modal-card,
 .access-container {
   background: var(--card) !important;
@@ -1715,7 +1667,6 @@ html.dark {
 .dark .candidate-card,
 .dark .stat-card,
 .dark .chart-box,
-.dark .auth-card,
 .dark .saas-modal-card,
 .dark .access-container {
   box-shadow: none !important;
@@ -1731,34 +1682,18 @@ html.dark {
   border-color: var(--border) !important;
 }
 
-.saas-btn-primary,
-.auth-card button[type='submit']:not(.no-saas-gradient) {
+.saas-btn-primary {
   background: var(--primary) !important;
   color: var(--primary-foreground) !important;
   border: 1px solid transparent !important;
   box-shadow: none !important;
 }
 
-.saas-btn-primary:hover:not(:disabled),
-.auth-card button[type='submit']:not(:disabled):hover {
+.saas-btn-primary:hover:not(:disabled) {
   transform: none !important;
   filter: none !important;
   box-shadow: none !important;
   opacity: 0.92;
-}
-
-.auth-panel input:not([type='checkbox']):not([type='radio']),
-.auth-panel textarea,
-.auth-panel select {
-  background: var(--secondary) !important;
-  border-color: var(--input) !important;
-  box-shadow: none !important;
-}
-
-.auth-panel input:focus,
-.auth-panel textarea:focus,
-.auth-panel select:focus {
-  box-shadow: 0 0 0 1px rgb(var(--foreground-rgb) / 0.14) !important;
 }
 
 .access-screen,
