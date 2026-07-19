@@ -40,8 +40,8 @@
 .ix-auth-brand {
   display: flex;
   align-items: center;
-  min-height: 96px;
-  padding: 24px clamp(28px, 4vw, 64px);
+  min-height: 80px;
+  padding: 20px clamp(28px, 3.5vw, 52px);
 }
 
 .ix-auth-brand a {
@@ -60,7 +60,7 @@
   position: relative;
   z-index: 1;
   display: block;
-  width: clamp(170px, 16vw, 224px);
+  width: clamp(156px, 14vw, 196px);
   height: auto;
   object-fit: contain;
 }
@@ -68,21 +68,21 @@
 .ix-auth-form-wrap {
   display: flex;
   width: 100%;
-  max-width: 520px;
+  max-width: 470px;
   margin: auto;
-  padding: 40px clamp(28px, 4vw, 64px) 48px;
+  padding: 32px clamp(28px, 3.5vw, 52px) 40px;
   flex-direction: column;
   justify-content: center;
 }
 
 .ix-auth-heading {
-  margin-bottom: 32px;
+  margin-bottom: 26px;
 }
 
 .ix-auth-section-label {
-  margin: 0 0 14px !important;
+  margin: 0 0 12px !important;
   color: #717171 !important;
-  font-size: 11px !important;
+  font-size: 10px !important;
   font-weight: 650;
   letter-spacing: 0.16em;
   line-height: 1;
@@ -92,18 +92,18 @@
 .ix-auth-heading h1 {
   margin: 0;
   color: var(--auth-white);
-  font-size: clamp(36px, 3.2vw, 52px);
-  font-weight: 520;
-  letter-spacing: -0.045em;
-  line-height: 1.02;
+  font-size: clamp(30px, 2.4vw, 36px);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
 }
 
 .ix-auth-heading > p:last-child {
   max-width: 380px;
-  margin: 14px 0 0;
+  margin: 10px 0 0;
   color: var(--auth-muted);
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .ix-auth-alert {
@@ -138,18 +138,18 @@
 .ix-auth-form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .ix-auth-field {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 7px;
 }
 
 .ix-auth-field > label {
   color: #d0d0d0;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 520;
   letter-spacing: 0.01em;
 }
@@ -162,7 +162,7 @@
 
 .ix-auth-input-icon {
   position: absolute;
-  left: 15px;
+  left: 12px;
   display: inline-flex;
   color: #696969;
   pointer-events: none;
@@ -170,15 +170,15 @@
 
 .ix-auth-field input:not([type='checkbox']) {
   width: 100%;
-  height: 52px;
-  padding: 0 46px;
+  height: 40px;
+  padding: 0 40px;
   border: 1px solid var(--auth-border);
   border-radius: 5px;
   outline: none;
   background: var(--auth-surface);
   color: var(--auth-white);
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -202,10 +202,10 @@
 
 .ix-auth-password-toggle {
   position: absolute;
-  right: 8px;
+  right: 4px;
   display: inline-flex;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   align-items: center;
   justify-content: center;
   border: 0;
@@ -301,18 +301,18 @@
 .ix-auth-submit {
   display: flex;
   width: 100%;
-  height: 52px;
+  height: 40px;
   align-items: center;
   justify-content: space-between;
-  margin-top: 4px;
-  padding: 0 18px 0 20px;
+  margin-top: 2px;
+  padding: 0 12px 0 14px;
   border: 1px solid #4567ff;
   border-radius: 5px;
   background: var(--auth-blue);
   color: white;
   font: inherit;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 14px;
+  font-weight: 550;
   letter-spacing: 0.01em;
   cursor: pointer;
   transition: background-color 160ms ease, border-color 160ms ease;
@@ -358,7 +358,7 @@
 }
 
 .ix-auth-footer {
-  padding: 22px clamp(28px, 4vw, 64px) 28px;
+  padding: 18px clamp(28px, 3.5vw, 52px) 22px;
   color: #595959;
 }
 
@@ -386,20 +386,6 @@
   margin: 0;
   font-size: 10px;
   line-height: 1.5;
-}
-
-.ix-auth-footer p a {
-  display: inline;
-  color: #777;
-  font-size: inherit;
-  text-decoration: underline;
-  text-decoration-color: #3e3e3e;
-  text-underline-offset: 2px;
-}
-
-.ix-auth-footer p a:hover {
-  color: #e4e4e4;
-  text-decoration-color: #e4e4e4;
 }
 
 .ix-auth-visual {
@@ -432,15 +418,15 @@
 .ix-auth-visual-copy {
   position: absolute;
   z-index: 2;
-  top: clamp(120px, 20vh, 220px);
-  left: clamp(42px, 7vw, 112px);
-  width: min(470px, calc(100% - 84px));
+  top: clamp(110px, 18vh, 180px);
+  left: clamp(42px, 6vw, 92px);
+  width: min(620px, calc(100% - 84px));
 }
 
 .ix-auth-visual-copy > p {
-  margin: 0 0 22px;
+  margin: 0 0 18px;
   color: #d0d0d0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 560;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -449,20 +435,44 @@
 .ix-auth-visual-copy h2 {
   margin: 0;
   color: #f4f4f2;
-  font-size: clamp(36px, 4.15vw, 72px);
-  font-weight: 470;
-  letter-spacing: -0.055em;
-  line-height: 0.98;
-  text-wrap: balance;
+  font-size: clamp(38px, 3.5vw, 52px);
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  line-height: 1.02;
+}
+
+.ix-auth-visual-copy h2 span {
+  display: block;
+  white-space: nowrap;
 }
 
 .ix-auth-visual-copy > span {
   display: block;
   max-width: 390px;
-  margin-top: 26px;
+  margin-top: 20px;
   color: #b8b8b8;
   font-size: 14px;
-  line-height: 1.65;
+  line-height: 1.55;
+}
+
+.ix-auth-maintainer {
+  display: inline-block;
+  margin-top: 14px;
+  color: #8f8f8f;
+  font-size: 12px;
+  line-height: 1.5;
+  text-decoration: none;
+}
+
+.ix-auth-maintainer strong {
+  color: #d7d7d7;
+  font-weight: 550;
+}
+
+.ix-auth-maintainer:hover strong {
+  color: white;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .ix-auth-visual-index {
@@ -576,7 +586,7 @@
   }
 
   .ix-auth-visual-copy h2 {
-    font-size: clamp(36px, 5vw, 56px);
+    font-size: clamp(34px, 4.4vw, 44px);
   }
 }
 
@@ -645,7 +655,7 @@
   }
 
   .ix-auth-heading h1 {
-    font-size: 38px;
+    font-size: 32px;
   }
 
   .ix-auth-heading > p:last-child {

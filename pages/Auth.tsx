@@ -265,10 +265,7 @@ const AuthPage: React.FC = () => {
             <Link to="/contact"><Mail size={14} /> Support</Link>
             <Link to="/report-bug"><Bug size={14} /> Report issue</Link>
           </div>
-          <p>
-            © {new Date().getFullYear()} InterviewXpert · Built by{' '}
-            <a href="https://snab.co.in" target="_blank" rel="noopener noreferrer">SNAB Innovations</a>
-          </p>
+          <p>© {new Date().getFullYear()} InterviewXpert</p>
         </footer>
       </section>
 
@@ -277,8 +274,14 @@ const AuthPage: React.FC = () => {
         <div className="ix-auth-visual-shade" />
         <div className="ix-auth-visual-copy">
           <p>Structured hiring, without the noise.</p>
-          <h2>Better interviews.<br />Clearer decisions.</h2>
+          <h2>
+            <span>Better interviews.</span>
+            <span>Clearer decisions.</span>
+          </h2>
           <span>Manage recruiter access, interviews, assessments, and candidate outcomes from one secure workspace.</span>
+          <a className="ix-auth-maintainer" href="https://snab.co.in" target="_blank" rel="noopener noreferrer">
+            Managed and maintained by <strong>SNAB Innovations</strong>
+          </a>
         </div>
         <div className="ix-auth-visual-index" aria-hidden="true"><span>01</span><i /></div>
       </aside>
