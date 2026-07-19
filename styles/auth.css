@@ -418,10 +418,9 @@
 .ix-auth-visual-copy {
   position: absolute;
   z-index: 2;
-  top: 50%;
-  left: 50%;
+  top: clamp(110px, 18vh, 180px);
+  left: clamp(42px, 7vw, 112px);
   width: min(620px, calc(100% - 84px));
-  transform: translate(-50%, -50%);
 }
 
 .ix-auth-visual-copy > p {
@@ -596,7 +595,7 @@
   }
 
   .ix-auth-visual-copy {
-    left: 50%;
+    left: clamp(36px, 5vw, 72px);
     width: calc(100% - 72px);
   }
 
@@ -722,6 +721,10 @@
   .ix-auth-footer {
     padding-top: 12px;
     padding-bottom: 18px;
+  }
+
+  .ix-auth-visual-copy {
+    top: 16vh;
   }
 
 }
