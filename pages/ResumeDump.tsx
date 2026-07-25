@@ -134,7 +134,7 @@ export const ResumeDumpSkeleton = () => (
 );
 
 const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i;
-const phoneRegex = /(?:\+?\d{1,4}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}/;
+const phoneRegex = /(?:\+?\d{1,4}[\s.-]?)?(?:[6-9]\d{4}[\s.-]?\d{5}|(?:\(?\d{2,4}\)?[\s.-]?)?\d{3,5}[\s.-]?\d{4,5})/;
 const sectionStopRegex = /\b(experience|work experience|employment|projects?|education|certifications?|achievements?|summary|profile|objective|languages?|interests?|declaration|personal details)\b/i;
 const skillSectionRegex = /\b(skills?|technical skills?|core skills?|tools?|technologies?|tech stack)\b\s*[:\-]?\s*([\s\S]{0,1800})/i;
 

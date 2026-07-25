@@ -11,6 +11,7 @@ import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rate
 import { getCandidateIdentityKeys, isCandidateIdentityInSet } from '../services/candidateIdentity';
 
 import { sendInterviewInvitations } from '../services/brevoService';
+import { sendBulkWhatsAppInvites } from '../services/waSenderService';
 import { grokGenerateJson } from '../services/grokService';
 import {
   extractSkillSignals,
@@ -135,7 +136,9 @@ const CreateInterview: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [skillSearch, setSkillSearch] = useState('');
   const [candidateEmails, setCandidateEmails] = useState<string[]>([]);
+  const [candidateDataList, setCandidateDataList] = useState<{ email: string; phone: string; name?: string }[]>([]);
   const [currentEmail, setCurrentEmail] = useState('');
+  const [currentPhone, setCurrentPhone] = useState('');
   const [resumeDumpCandidates, setResumeDumpCandidates] = useState<ResumeDumpCandidate[]>([]);
   const [shortlistedCandidateIdentityKeys, setShortlistedCandidateIdentityKeys] = useState<Set<string>>(() => new Set());
   const [uploadedResumeCandidateIds, setUploadedResumeCandidateIds] = useState<string[]>([]);
@@ -352,7 +355,7 @@ const CreateInterview: React.FC = () => {
     setCustomFields(customFields.filter(field => field.id !== id));
   };
 
-  const addCandidateEmail = (email: string) => {
+  const addCandidateEmail = (email: string, phone: string = '') => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) return;
 
@@ -360,12 +363,21 @@ const CreateInterview: React.FC = () => {
       if (prev.some((existingEmail) => existingEmail.toLowerCase() === normalizedEmail)) return prev;
       return [...prev, normalizedEmail];
     });
+
+    if (phone && phone.trim()) {
+      setCandidateDataList((prev) => {
+        const map = new Map(prev.map((c) => [c.email.toLowerCase(), c]));
+        map.set(normalizedEmail, { email: normalizedEmail, phone: phone.trim() });
+        return Array.from(map.values());
+      });
+    }
   };
 
   const handleAddEmail = () => {
     if (currentEmail) {
-      addCandidateEmail(currentEmail);
+      addCandidateEmail(currentEmail, currentPhone);
       setCurrentEmail('');
+      setCurrentPhone('');
     }
   };
 
@@ -453,10 +465,17 @@ const CreateInterview: React.FC = () => {
           source: 'interview_creation',
           sourceJobTitle: formData.title,
         });
-        return { candidateId, email: ingested.profile.email, fileName: file.name, ok: true };
+        return { 
+          candidateId, 
+          email: ingested.profile.email, 
+          phone: ingested.profile.phone || '', 
+          name: ingested.profile.name || '', 
+          fileName: file.name, 
+          ok: true 
+        };
       } catch (error) {
         console.error(`Error ingesting ${file.name}:`, error);
-        return { candidateId: '', email: '', fileName: file.name, ok: false };
+        return { candidateId: '', email: '', phone: '', name: '', fileName: file.name, ok: false };
       }
     }));
 
@@ -465,6 +484,21 @@ const CreateInterview: React.FC = () => {
     setUploadedResumeCandidateIds((current) => Array.from(new Set([...current, ...savedCandidateIds])));
     const filesProcessed = results.filter((result) => result.ok).length;
     const filesWithErrors = results.length - filesProcessed;
+
+    // Collect candidate metadata (email, phone, name)
+    const validCandidates = results.filter((r) => r.ok && r.email).map((r) => ({
+      email: r.email,
+      phone: r.phone,
+      name: r.name,
+    }));
+
+    if (validCandidates.length > 0) {
+      setCandidateDataList((prev) => {
+        const map = new Map(prev.map((c) => [c.email.toLowerCase(), c]));
+        validCandidates.forEach((c) => map.set(c.email.toLowerCase(), c));
+        return Array.from(map.values());
+      });
+    }
 
     if (newEmailsFound.length > 0) {
       setCandidateEmails((prev) => {
@@ -512,6 +546,7 @@ const CreateInterview: React.FC = () => {
         manualQuestions,
         customFields,
         candidateEmails,
+        candidateData: candidateDataList,
         interviewLink: newInterviewLink,
         accessCode: newAccessCode,
         recruiterUID: user.uid,
@@ -535,7 +570,8 @@ const CreateInterview: React.FC = () => {
         }
       }
 
-      // 3. Send invitation emails if candidates are present
+      // 3. Send invitation emails via Brevo if candidate emails are present
+      let emailCount = 0;
       if (candidateEmails.length > 0) {
         setSendingEmails(true);
         try {
@@ -547,22 +583,43 @@ const CreateInterview: React.FC = () => {
           );
 
           if (result.success) {
+            emailCount = result.totalEmails;
             console.log(`[Brevo] Successfully sent ${result.totalEmails} invitation email(s)!`);
           } else {
             console.warn(`[Brevo] Partial failure sending emails: ${result.error}`);
-            alert(`⚠️ Interview created, but failed to send some emails: ${result.error}`);
           }
         } catch (err: any) {
           console.error('[Brevo] Email sending error:', err);
-          alert(`⚠️ Interview created, but error sending emails: ${err.message}`);
         } finally {
           setSendingEmails(false);
         }
       }
 
-      alert(candidateEmails.length > 0 
-        ? "✅ Interview created and invitations sent successfully!" 
-        : "✅ Interview created successfully!");
+      // 4. Send WhatsApp invitations via WasenderAPI if candidates have phone numbers
+      let waCount = 0;
+      const candidatesWithPhones = candidateDataList.filter((c) => c.phone && c.phone.trim() && c.phone !== 'N/A');
+      if (candidatesWithPhones.length > 0) {
+        try {
+          console.log(`[WasenderAPI] Sending WhatsApp invitations to ${candidatesWithPhones.length} candidate(s)...`);
+          const waResult = await sendBulkWhatsAppInvites(
+            candidatesWithPhones,
+            formData.title,
+            newInterviewLink,
+            newAccessCode
+          );
+          if (waResult.success) {
+            waCount = waResult.totalSent;
+            console.log(`[WasenderAPI] Successfully sent ${waResult.totalSent} WhatsApp message(s)!`);
+          } else {
+            console.warn(`[WasenderAPI] Failed to send some WhatsApp messages:`, waResult.errors);
+          }
+        } catch (waErr: any) {
+          console.error('[WasenderAPI] WhatsApp invite error:', waErr);
+        }
+      }
+
+      const statusMsg = `✅ Interview created! Invitations sent: ${emailCount > 0 ? `${emailCount} Email(s)` : ''}${emailCount > 0 && waCount > 0 ? ' & ' : ''}${waCount > 0 ? `${waCount} WhatsApp Mobile invite(s)` : ''}${emailCount === 0 && waCount === 0 ? 'No immediate invites sent' : ''}.`;
+      alert(statusMsg);
       
       navigate('/recruiter/interviews');
     } catch (err) {
@@ -919,9 +976,9 @@ const CreateInterview: React.FC = () => {
                 <input name="deadline" type="date" className={inputClass} value={formData.deadline} onChange={handleFormChange} />
               </div>
 
-              <div>
-                <label className={labelClass}>Candidate emails</label>
-                <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="xl:col-span-2">
+                <label className={labelClass}>Candidate Email & WhatsApp Phone (Optional for auto-WhatsApp invite)</label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
                   <input
                     type="email"
                     value={currentEmail}
@@ -935,19 +992,38 @@ const CreateInterview: React.FC = () => {
                     placeholder="candidate@company.com"
                     className={inputClass}
                   />
-                  <button type="button" onClick={handleAddEmail} className={secondaryButtonClass}>Add</button>
+                  <input
+                    type="tel"
+                    value={currentPhone}
+                    onChange={(e) => setCurrentPhone(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddEmail();
+                      }
+                    }}
+                    placeholder="WhatsApp Phone (e.g. 9876543210)"
+                    className={inputClass}
+                  />
+                  <button type="button" onClick={handleAddEmail} className={secondaryButtonClass}>Add Candidate</button>
                 </div>
               </div>
             </div>
 
             {candidateEmails.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
-                {candidateEmails.map(email => (
-                  <span key={email} className="geist-small inline-flex h-7 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.05] px-2.5 text-[#d4d4d4]">
-                    {email}
-                    <button type="button" onClick={() => handleRemoveEmail(email)} className="text-[#8f8f8f] transition-colors hover:text-white">&times;</button>
-                  </span>
-                ))}
+                {candidateEmails.map(email => {
+                  const data = candidateDataList.find(c => c.email.toLowerCase() === email.toLowerCase());
+                  return (
+                    <span key={email} className="geist-small inline-flex h-7 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.05] px-2.5 text-[#d4d4d4]">
+                      <span>{email}</span>
+                      {data?.phone && (
+                        <span className="text-[10px] text-emerald-400 font-mono">📱 {data.phone}</span>
+                      )}
+                      <button type="button" onClick={() => handleRemoveEmail(email)} className="text-[#8f8f8f] transition-colors hover:text-white">&times;</button>
+                    </span>
+                  );
+                })}
               </div>
             )}
 
@@ -1044,7 +1120,7 @@ const CreateInterview: React.FC = () => {
 
                           <button
                             type="button"
-                            onClick={() => addCandidateEmail(candidate.email)}
+                            onClick={() => addCandidateEmail(candidate.email, candidate.phone)}
                             disabled={!candidateEmail || Boolean(candidateEmailAdded)}
                             className={secondaryButtonClass}
                           >

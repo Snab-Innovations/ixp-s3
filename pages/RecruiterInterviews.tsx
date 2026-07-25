@@ -9,9 +9,11 @@ import * as mammoth from 'mammoth';
 import { useMessageBox } from '../components/MessageBox';
 import { createPortal } from 'react-dom';
 import { sendInterviewInvitations } from '../services/brevoService';
+import { sendWhatsAppMessage } from '../services/waSenderService';
 import EditJobModal from './EditJob';
 
 import { evaluateResumeMatch } from '../services/api';
+import { extractPhoneFromText, formatExtractedPhone } from '../services/resumeService';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rateLimitService';
 
@@ -285,11 +287,11 @@ const RecruiterInterviews: React.FC = () => {
         }
 
         const emailMatch = text.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/i);
-        const phoneMatch = text.match(/(?:\+?\d{1,4}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}/);
+        const extractedPhone = formatExtractedPhone(extractPhoneFromText(text));
 
         if (emailMatch) {
             const lowerEmail = emailMatch[1].toLowerCase();
-            const phone = phoneMatch ? phoneMatch[0] : 'N/A';
+            const phone = extractedPhone || 'N/A';
             
             // Check if not already invited/added
             // We use functional updates later, but for the map function, we check against the current state array.
@@ -1091,17 +1093,17 @@ const RecruiterInterviews: React.FC = () => {
                                 console.error("Error updating phone in Firestore:", err);
                             }
                             
-                            // Open WhatsApp web
-                            const cleanedPhone = whatsappModal.phone.replace(/[^0-9]/g, '');
-                            let targetPhone = cleanedPhone;
-                            if (cleanedPhone.length === 10) {
-                                targetPhone = '91' + cleanedPhone;
-                            }
-                            
-                            const waUrl = `https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodeURIComponent(whatsappModal.message)}`;
-                            window.open(waUrl, '_blank');
+                            // Send message via WasenderAPI
+                            const res = await sendWhatsAppMessage(whatsappModal.phone, whatsappModal.message);
                             setWhatsappModal(null);
-                            messageBox.showSuccess("Redirecting to WhatsApp Web...");
+                            if (res.success) {
+                                messageBox.showSuccess("✅ WhatsApp invitation sent successfully via WasenderAPI!");
+                            } else {
+                                messageBox.showError(`WasenderAPI error: ${res.error || 'Failed to send'}. Opening WhatsApp Web fallback.`);
+                                const cleanedPhone = whatsappModal.phone.replace(/[^0-9]/g, '');
+                                const targetPhone = cleanedPhone.length === 10 ? '91' + cleanedPhone : cleanedPhone;
+                                window.open(`https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodeURIComponent(whatsappModal.message)}`, '_blank');
+                            }
                         }}
                         className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2"
                     >

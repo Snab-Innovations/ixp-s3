@@ -8,7 +8,9 @@ import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { sendInterviewInvitations } from '../services/brevoService';
+import { sendWhatsAppMessage, sendBulkWhatsAppInvites, sendInterviewWhatsAppInvite } from '../services/waSenderService';
 import { evaluateResumeMatch } from '../services/api';
+import { extractPhoneFromText, formatExtractedPhone } from '../services/resumeService';
 import { InterviewCandidatesSkeleton } from '../components/ui/interview-loading-skeleton';
 import { Interview } from '../types';
 
@@ -167,7 +169,7 @@ const InterviewCandidates: React.FC = () => {
           }
 
           const emailMatch = text.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/i);
-          const phoneMatch = text.match(/(?:\+?\d{1,4}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}/);
+          const extractedPhone = formatExtractedPhone(extractPhoneFromText(text));
 
           if (emailMatch) {
             const lowerEmail = emailMatch[1].toLowerCase();
@@ -182,7 +184,7 @@ const InterviewCandidates: React.FC = () => {
                   console.error('Match score error:', error);
                 }
               }
-              candidatesFound.push({ email: lowerEmail, phone: phoneMatch ? phoneMatch[0] : 'N/A', matchScore });
+              candidatesFound.push({ email: lowerEmail, phone: extractedPhone || 'N/A', matchScore });
             }
           }
           filesProcessed++;
@@ -203,28 +205,41 @@ const InterviewCandidates: React.FC = () => {
   };
 
   const handleSendInvites = async () => {
-    if (!interview || newEmails.length === 0) return;
+    if (!interview || (newEmails.length === 0 && parsedCandidates.length === 0)) return;
     setSendingEmails(true);
     try {
-      const normalizedEmails = newEmails.map((email) => email.toLowerCase());
-      const candidateDataToAdd = normalizedEmails.map((email) => {
-        const parsed = parsedCandidates.find((candidate) => candidate.email.toLowerCase() === email);
-        return { email, phone: parsed?.phone || 'N/A', matchScore: parsed?.matchScore || 'N/A' };
-      });
+      const validEmails = newEmails.map((email) => email.toLowerCase()).filter(Boolean);
+      const candidatesWithPhones = parsedCandidates.filter((candidate) => candidate.phone && candidate.phone !== 'N/A');
 
       await updateDoc(doc(db, 'interviews', interview.id), {
-        candidateEmails: arrayUnion(...normalizedEmails),
-        candidateData: arrayUnion(...candidateDataToAdd),
+        candidateEmails: validEmails.length > 0 ? arrayUnion(...validEmails) : arrayUnion(),
+        candidateData: arrayUnion(...parsedCandidates),
       });
 
-      const result = await sendInterviewInvitations(normalizedEmails, interview.title, interview.interviewLink || '', interview.accessCode);
-      if (result.success) {
-        messageBox.showSuccess(`Successfully sent ${result.totalEmails} invitation(s)!`);
-        setNewEmails([]);
-        setParsedCandidates([]);
-      } else {
-        messageBox.showError(`Failed to send emails: ${result.error}`);
+      let emailCount = 0;
+      if (validEmails.length > 0) {
+        const result = await sendInterviewInvitations(validEmails, interview.title, interview.interviewLink || '', interview.accessCode);
+        if (result.success) {
+          emailCount = result.totalEmails;
+        }
       }
+
+      let waCount = 0;
+      if (candidatesWithPhones.length > 0) {
+        const waResult = await sendBulkWhatsAppInvites(
+          candidatesWithPhones,
+          interview.title,
+          interview.interviewLink || '',
+          interview.accessCode
+        );
+        if (waResult.success) {
+          waCount = waResult.totalSent;
+        }
+      }
+
+      messageBox.showSuccess(`Invitations sent: ${emailCount > 0 ? `${emailCount} Email(s)` : ''}${emailCount > 0 && waCount > 0 ? ' & ' : ''}${waCount > 0 ? `${waCount} WhatsApp Mobile invite(s)` : ''}!`);
+      setNewEmails([]);
+      setParsedCandidates([]);
     } catch (error) {
       console.error('Invite sending error:', error);
       messageBox.showError('Failed to send invitations.');
@@ -242,12 +257,30 @@ const InterviewCandidates: React.FC = () => {
 
     setReminding(true);
     try {
+      let emailCount = 0;
+      let waCount = 0;
+
       const result = await sendInterviewInvitations(pendingEmails, interview.title, interview.interviewLink || '', interview.accessCode, true);
-      if (result.success) {
-        messageBox.showSuccess(`Reminders sent successfully to ${result.totalEmails} candidate(s)!`);
-      } else {
-        messageBox.showError(`Failed to send some reminders: ${result.error}`);
+      if (result.success) emailCount = result.totalEmails;
+
+      const candData = (interview as any).candidateData || [];
+      const pendingWithPhones = pendingEmails.map((email) => {
+        const match = candData.find((c: any) => c.email && c.email.toLowerCase() === email.toLowerCase());
+        return { email, phone: match?.phone, name: email.split('@')[0] };
+      }).filter((c) => c.phone && c.phone !== 'N/A');
+
+      if (pendingWithPhones.length > 0) {
+        const waResult = await sendBulkWhatsAppInvites(
+          pendingWithPhones,
+          interview.title,
+          interview.interviewLink || '',
+          interview.accessCode,
+          true
+        );
+        if (waResult.success) waCount = waResult.totalSent;
       }
+
+      messageBox.showSuccess(`Reminders dispatched: ${emailCount > 0 ? `${emailCount} Email(s)` : ''}${emailCount > 0 && waCount > 0 ? ' & ' : ''}${waCount > 0 ? `${waCount} WhatsApp Mobile invite(s)` : ''}!`);
     } catch (error) {
       console.error('Bulk remind error:', error);
       messageBox.showError('Failed to send reminders.');
@@ -260,8 +293,38 @@ const InterviewCandidates: React.FC = () => {
     if (!interview) return;
     setResendingEmail(email);
     try {
-      const result = await sendInterviewInvitations([email], interview.title, interview.interviewLink || '', interview.accessCode);
-      result.success ? messageBox.showSuccess(`Invitation resent to ${email}!`) : messageBox.showError(`Failed to resend email: ${result.error}`);
+      let emailSent = false;
+      let waSent = false;
+
+      if (email && email.includes('@')) {
+        const result = await sendInterviewInvitations([email], interview.title, interview.interviewLink || '', interview.accessCode);
+        if (result.success) emailSent = true;
+      }
+
+      const candData = (interview as any).candidateData || [];
+      const match = candData.find((c: any) => c.email && c.email.toLowerCase() === email.toLowerCase());
+      const phone = match?.phone || parsedCandidates.find((p) => p.email.toLowerCase() === email.toLowerCase())?.phone;
+
+      if (phone && phone !== 'N/A') {
+        const waRes = await sendInterviewWhatsAppInvite({
+          phone: phone,
+          candidateName: email && email.includes('@') ? email.split('@')[0] : 'Candidate',
+          jobTitle: interview.title,
+          interviewLink: interview.interviewLink || '',
+          accessCode: interview.accessCode
+        });
+        if (waRes.success) waSent = true;
+      }
+
+      if (emailSent && waSent) {
+        messageBox.showSuccess(`Invitation resent to ${email} via BOTH Email & WhatsApp!`);
+      } else if (emailSent) {
+        messageBox.showSuccess(`Invitation resent to ${email} via Email!`);
+      } else if (waSent) {
+        messageBox.showSuccess(`Invitation resent to ${phone} via WhatsApp!`);
+      } else {
+        messageBox.showError(`Failed to resend invitation.`);
+      }
     } catch (error) {
       console.error('Resend error:', error);
       messageBox.showError('Failed to resend invitation.');
@@ -282,8 +345,7 @@ const InterviewCandidates: React.FC = () => {
       updatedEmails.push(updatedEmail.toLowerCase());
       await updateDoc(doc(db, 'interviews', interview.id), { candidateEmails: updatedEmails });
 
-      const result = await sendInterviewInvitations([updatedEmail], interview.title, interview.interviewLink || '', interview.accessCode);
-      result.success ? messageBox.showSuccess(`Email updated and invitation resent to ${updatedEmail}!`) : messageBox.showError(`Failed to resend email: ${result.error}`);
+      await handleResend(updatedEmail);
     } catch (error) {
       console.error('Edit and resend error:', error);
       messageBox.showError('Failed to update and resend invitation.');
@@ -325,28 +387,41 @@ const InterviewCandidates: React.FC = () => {
       console.error('Error updating phone in Firestore:', error);
     }
 
-    const cleanedPhone = whatsappModal.phone.replace(/[^0-9]/g, '');
-    const targetPhone = cleanedPhone.length === 10 ? `91${cleanedPhone}` : cleanedPhone;
-    window.open(`https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodeURIComponent(whatsappModal.message)}`, '_blank');
+    // Send message via WasenderAPI
+    const res = await sendWhatsAppMessage(whatsappModal.phone, whatsappModal.message);
     setWhatsappModal(null);
-    messageBox.showSuccess('Redirecting to WhatsApp Web...');
+    if (res.success) {
+      messageBox.showSuccess('✅ WhatsApp invitation sent successfully via WasenderAPI!');
+    } else {
+      messageBox.showError(`WasenderAPI error: ${res.error || 'Failed to send'}. Opening WhatsApp Web fallback.`);
+      const cleanedPhone = whatsappModal.phone.replace(/[^0-9]/g, '');
+      const targetPhone = cleanedPhone.length === 10 ? `91${cleanedPhone}` : cleanedPhone;
+      window.open(`https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodeURIComponent(whatsappModal.message)}`, '_blank');
+    }
   };
 
   const queueManualCandidate = () => {
     const email = newEmail.trim().toLowerCase();
-    if (!email) return;
-    if ((interview?.candidateEmails || []).some((item) => item.toLowerCase() === email)) {
-      messageBox.showInfo('This candidate is already invited.');
+    const phone = manualPhone.trim();
+    if (!email && !phone) {
+      messageBox.showError('Please enter an Email address or Mobile phone number.');
       return;
     }
-    if (newEmails.some((item) => item.toLowerCase() === email)) {
-      messageBox.showInfo('This candidate is already in the invite queue.');
+    if (email && (interview?.candidateEmails || []).some((item) => item.toLowerCase() === email)) {
+      messageBox.showInfo('This candidate email is already invited.');
       return;
     }
-    setNewEmails((prev) => [...prev, email]);
-    if (manualPhone) {
-      setParsedCandidates((prev) => [...prev, { email, phone: manualPhone, matchScore: 'N/A' }]);
+    if (email) {
+      if (!newEmails.some((item) => item.toLowerCase() === email)) {
+        setNewEmails((prev) => [...prev, email]);
+      }
     }
+    const formattedPhone = phone ? formatExtractedPhone(phone) : 'N/A';
+    setParsedCandidates((prev) => {
+      const exists = prev.some((c) => (email && c.email.toLowerCase() === email) || (phone && c.phone === phone));
+      if (exists) return prev;
+      return [...prev, { email: email || '', phone: formattedPhone, matchScore: 'N/A' }];
+    });
     setNewEmail('');
     setManualPhone('');
   };
@@ -369,7 +444,7 @@ const InterviewCandidates: React.FC = () => {
   const invitedCount = interview.candidateEmails?.length || 0;
   const submittedCount = submissions.length;
   const pendingCount = pendingEmails.length;
-  const queuedCount = newEmails.length;
+  const queuedCount = parsedCandidates.length > 0 ? parsedCandidates.length : newEmails.length;
   const interviewLink = interview.interviewLink || `${window.location.origin}/#/interview/${interview.id}`;
   const actionButtonClass = "geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
   const primaryButtonClass = "geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea] disabled:cursor-not-allowed disabled:opacity-40";
@@ -443,7 +518,7 @@ const InterviewCandidates: React.FC = () => {
                 Add
               </button>
             </div>
-            <button onClick={handleSendInvites} disabled={sendingEmails || newEmails.length === 0} className={primaryButtonClass}>
+            <button onClick={handleSendInvites} disabled={sendingEmails || queuedCount === 0} className={primaryButtonClass}>
               {sendingEmails ? (
                 <ButtonBusySkeleton className="w-28 bg-black/[0.18]" />
               ) : (
@@ -457,22 +532,24 @@ const InterviewCandidates: React.FC = () => {
 
           <div className="grid gap-2">
             <p className="geist-label uppercase text-[#6b7280]">Invite queue</p>
-            {newEmails.length === 0 ? (
+            {parsedCandidates.length === 0 && newEmails.length === 0 ? (
               <p className="geist-caption rounded-[6px] border border-dashed border-white/[0.11] px-3 py-2 text-[#6b7280]">No candidates queued. Upload resumes or add manually.</p>
             ) : (
               <div className="grid max-h-[120px] gap-2 overflow-y-auto pr-1">
-                {newEmails.map((email) => {
-                  const parsedData = parsedCandidates.find((candidate) => candidate.email === email);
+                {parsedCandidates.map((candidate, idx) => {
                   return (
-                    <div key={email} className="grid gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                    <div key={candidate.email || candidate.phone || idx} className="grid gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                       <div className="min-w-0">
-                        <p className="geist-caption truncate font-medium text-white">{email}</p>
+                        <p className="geist-caption truncate font-medium text-white">{candidate.email || candidate.phone}</p>
                         <p className="geist-small mt-0.5 truncate text-[#8f8f8f]">
-                          {parsedData?.phone && parsedData.phone !== 'N/A' ? `Phone: ${parsedData.phone}` : 'Phone not added'}
-                          {parsedData?.matchScore && parsedData.matchScore !== 'N/A' ? ` | Match: ${parsedData.matchScore}%` : ''}
+                          {candidate.phone && candidate.phone !== 'N/A' ? `Phone: ${candidate.phone}` : 'Phone not added'}
+                          {candidate.matchScore && candidate.matchScore !== 'N/A' ? ` | Match: ${candidate.matchScore}%` : ''}
                         </p>
                       </div>
-                      <button onClick={() => { setNewEmails((prev) => prev.filter((item) => item !== email)); setParsedCandidates((prev) => prev.filter((item) => item.email !== email)); }} className="geist-caption inline-flex h-8 items-center justify-center rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-3 font-medium text-[#ff8f8f] transition-colors hover:bg-[#260b0b]" title="Remove Candidate">
+                      <button onClick={() => {
+                        if (candidate.email) setNewEmails((prev) => prev.filter((item) => item !== candidate.email));
+                        setParsedCandidates((prev) => prev.filter((_, i) => i !== idx));
+                      }} className="geist-caption inline-flex h-8 items-center justify-center rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-3 font-medium text-[#ff8f8f] transition-colors hover:bg-[#260b0b]" title="Remove Candidate">
                         <i className="fas fa-trash-alt text-[11px]"></i>
                       </button>
                     </div>

@@ -78,10 +78,40 @@ export interface CandidateMatch extends ResumeDumpRecord {
 const PARSER_VERSION = 2;
 const MAX_RESUME_TEXT_CHARS = 25_000;
 const EMAIL_REGEX = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i;
-const PHONE_REGEX = /(?:\+?\d{1,4}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}/;
+const PHONE_REGEX = /(?:\+?\d{1,4}[\s.-]?)?(?:[6-9]\d{4}[\s.-]?\d{5}|(?:\(?\d{2,4}\)?[\s.-]?)?\d{3,5}[\s.-]?\d{4,5})/;
 const URL_REGEX = /https?:\/\/[^\s)]+/gi;
 const DATE_RANGE_REGEX = /(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|\d{1,2})?[\s/'-]*(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:present|current|now|(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|\d{1,2})?[\s/'-]*(?:19|20)\d{2})/i;
 const SECTION_HEADING_REGEX = /^(summary|profile|objective|about|skills?|technical skills?|core competencies|competencies|technologies|tools|work experience|professional experience|employment|experience|projects?|education|academic background|certifications?|courses?|achievements?|languages?|interests?|personal details)\s*:?[\s]*$/i;
+
+export function extractPhoneFromText(text: string): string {
+  if (!text) return '';
+
+  // 1. Look for explicit phone labels (e.g. Phone: 76665 43353, Mobile: +91 76665-43353)
+  const labeledMatch = text.match(/(?:phone|mobile|mob|contact|cell|call|whatsapp|tel|ph)[\s.:#]*([+\d\s().-]{7,20})/i);
+  if (labeledMatch) {
+    const rawMatch = labeledMatch[1];
+    const digitsOnly = rawMatch.replace(/[^0-9]/g, '');
+    if (digitsOnly.length >= 9 && digitsOnly.length <= 13) {
+      return rawMatch.trim();
+    }
+  }
+
+  // 2. Fallback regex match
+  const match = text.match(PHONE_REGEX);
+  return match ? match[0].trim() : '';
+}
+
+export function formatExtractedPhone(phone: string): string {
+  if (!phone) return '';
+  let digits = phone.replace(/[^0-9]/g, '');
+  if (digits.startsWith('0091')) digits = digits.slice(4);
+  else if (digits.startsWith('091')) digits = digits.slice(3);
+  else if (digits.startsWith('0')) digits = digits.replace(/^0+/, '');
+  
+  if (digits.length === 10) return '+91 ' + digits;
+  if (digits.length === 12 && digits.startsWith('91')) return '+91 ' + digits.slice(2);
+  return phone.trim();
+}
 
 const SKILL_DEFINITIONS: Array<[string, RegExp[]]> = [
   ['JavaScript', [/\bjavascript\b/i, /\becmascript\b/i, /\bjs\b/i]],
@@ -296,7 +326,7 @@ const deterministicParse = (text: string, fallbackFileName: string): ParsedResum
   return {
     name,
     email: cleanText.match(EMAIL_REGEX)?.[1]?.toLowerCase() || '',
-    phone: cleanText.match(PHONE_REGEX)?.[0]?.trim() || '',
+    phone: formatExtractedPhone(extractPhoneFromText(cleanText)),
     location,
     currentTitle: extractCurrentTitle(cleanText, name),
     summary,
@@ -387,7 +417,7 @@ export const analyzeResumeText = async (
     const profile: ParsedResumeProfile = {
       name: safeString(ai.name, 100) || fallback.name,
       email: safeString(ai.email, 150).toLowerCase() || fallback.email,
-      phone: safeString(ai.phone, 50) || fallback.phone,
+      phone: formatExtractedPhone(safeString(ai.phone, 50)) || fallback.phone,
       location: safeString(ai.location, 150) || fallback.location,
       currentTitle: safeString(ai.currentTitle, 150) || fallback.currentTitle,
       summary: safeString(ai.summary, 1200) || fallback.summary,

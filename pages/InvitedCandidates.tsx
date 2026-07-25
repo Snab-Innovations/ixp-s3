@@ -8,7 +8,9 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { useMessageBox } from '../components/MessageBox';
 import { Interview, InterviewSubmission } from '../types';
 import { sendInterviewInvitations } from '../services/brevoService';
+import { sendWhatsAppMessage, sendBulkWhatsAppInvites, sendInterviewWhatsAppInvite } from '../services/waSenderService';
 import { evaluateResumeForMultipleJobs } from '../services/api';
+import { extractPhoneFromText, formatExtractedPhone } from '../services/resumeService';
 
 // Setup PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -62,17 +64,43 @@ const InvitedCandidates: React.FC = () => {
         if (!selectedInterview) return;
         
         try {
-            const result = await sendInterviewInvitations(
-                [email],
-                selectedInterview.title,
-                selectedInterview.interviewLink || '',
-                selectedInterview.accessCode
-            );
+            let emailSent = false;
+            let waSent = false;
 
-            if (result.success) {
-                messageBox.showSuccess(`Invitation resent to ${email}!`);
+            if (email && email.includes('@')) {
+                const result = await sendInterviewInvitations(
+                    [email],
+                    selectedInterview.title,
+                    selectedInterview.interviewLink || '',
+                    selectedInterview.accessCode
+                );
+                if (result.success) emailSent = true;
+            }
+
+            // Look up candidate phone number
+            const candData = (selectedInterview as any).candidateData || [];
+            const match = candData.find((c: any) => (c.email && c.email.toLowerCase() === email.toLowerCase()) || (c.phone && c.phone === email));
+            const phone = match?.phone || globalCandidates.find(g => g.email === email)?.phone;
+
+            if (phone && phone !== 'N/A') {
+                const waRes = await sendInterviewWhatsAppInvite({
+                    phone: phone,
+                    candidateName: email && email.includes('@') ? email.split('@')[0] : 'Candidate',
+                    jobTitle: selectedInterview.title,
+                    interviewLink: selectedInterview.interviewLink || '',
+                    accessCode: selectedInterview.accessCode
+                });
+                if (waRes.success) waSent = true;
+            }
+
+            if (emailSent && waSent) {
+                messageBox.showSuccess(`Invitation resent to ${email} via BOTH Email & WhatsApp!`);
+            } else if (emailSent) {
+                messageBox.showSuccess(`Invitation resent to ${email} via Email!`);
+            } else if (waSent) {
+                messageBox.showSuccess(`Invitation resent to ${phone} via WhatsApp!`);
             } else {
-                messageBox.showError(`Failed to resend email: ${result.error}`);
+                messageBox.showError(`Failed to resend invitation.`);
             }
         } catch (error: any) {
             console.error('Resend error:', error);
@@ -184,11 +212,11 @@ const InvitedCandidates: React.FC = () => {
                 }
 
                 const emailMatch = text.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/i);
-                const phoneMatch = text.match(/(?:\+?\d{1,4}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)?\d{3}[\s.-]?\d{4}/);
+                const extractedPhone = formatExtractedPhone(extractPhoneFromText(text));
 
                 if (emailMatch) {
                     const email = emailMatch[1].toLowerCase();
-                    const phone = phoneMatch ? phoneMatch[0] : 'N/A';
+                    const phone = extractedPhone || 'N/A';
                     if (!parsed.some(c => c.email === email) && !newCandidates.some(c => c.email === email)) {
                         let scores = {};
                         if (text.length > 50 && jobsPayload.length > 0) {
@@ -221,17 +249,26 @@ const InvitedCandidates: React.FC = () => {
     };
 
     const handleManualAdd = () => {
-        if (!manualEmail) return;
-        const lowerEmail = manualEmail.toLowerCase();
-        if (!newCandidates.some(c => c.email === lowerEmail)) {
-            setNewCandidates(prev => [...prev, { email: lowerEmail, phone: manualPhone || 'N/A' }]);
+        if (!manualEmail.trim() && !manualPhone.trim()) {
+            messageBox.showError("Please enter an Email address or Mobile phone number.");
+            return;
+        }
+        const lowerEmail = manualEmail.trim().toLowerCase();
+        const phoneVal = manualPhone.trim();
+
+        const exists = newCandidates.some(c => 
+            (lowerEmail && c.email === lowerEmail) || 
+            (phoneVal && c.phone === phoneVal)
+        );
+        if (!exists) {
+            setNewCandidates(prev => [...prev, { email: lowerEmail, phone: phoneVal || 'N/A' }]);
         }
         setManualEmail('');
         setManualPhone('');
     };
 
-    const handleRemoveCandidate = (email: string) => {
-        setNewCandidates(newCandidates.filter(c => c.email !== email));
+    const handleRemoveCandidate = (identifier: string) => {
+        setNewCandidates(newCandidates.filter(c => c.email !== identifier && c.phone !== identifier));
     };
 
     const handleSendGlobalInvites = async () => {
@@ -246,45 +283,61 @@ const InvitedCandidates: React.FC = () => {
             const selectedInterview = interviews.find(i => i.id === selectedInterviewId);
             if (!selectedInterview) throw new Error("Interview not found");
 
-            const emailsOnly = newCandidates.map(c => c.email);
+            const validEmails = newCandidates.map(c => c.email).filter(Boolean);
+            const validPhoneCandidates = newCandidates.filter(c => c.phone && c.phone !== 'N/A');
 
-            // Update Database with standard strings AND our new structured candidateData array
+            // Update Database
             await updateDoc(doc(db, 'interviews', selectedInterviewId), { 
-                candidateEmails: arrayUnion(...emailsOnly),
+                candidateEmails: validEmails.length > 0 ? arrayUnion(...validEmails) : arrayUnion(),
                 candidateData: arrayUnion(...newCandidates)
             });
             
-            const result = await sendInterviewInvitations(
-                emailsOnly,
-                selectedInterview.title,
-                selectedInterview.interviewLink || '',
-                selectedInterview.accessCode
-            );
-
-            if (result.success) {
-                messageBox.showSuccess(`Successfully added and invited ${result.totalEmails} candidates!`);
-                // Optimistically update the UI table
-                const optimizedAdditions: GlobalCandidate[] = newCandidates.map(c => ({
-                    email: c.email,
-                    phone: c.phone,
-                    interviewId: selectedInterview.id,
-                    interviewTitle: selectedInterview.title,
-                    hasSubmitted: false
-                }));
-                setGlobalCandidates(prev => [...optimizedAdditions, ...prev]);
-                
-                // We must also optimistically update the interview object in state so we don't accidentally re-invite them globally
-                setInterviews(prev => prev.map(inv => {
-                    if(inv.id === selectedInterviewId) {
-                        return {...inv, candidateEmails: [...(inv.candidateEmails || []), ...emailsOnly]}
-                    }
-                    return inv;
-                }));
-
-                setNewCandidates([]);
-            } else {
-                messageBox.showError(`Failed to send emails: ${result.error}`);
+            let emailCount = 0;
+            if (validEmails.length > 0) {
+                const result = await sendInterviewInvitations(
+                    validEmails,
+                    selectedInterview.title,
+                    selectedInterview.interviewLink || '',
+                    selectedInterview.accessCode
+                );
+                if (result.success) {
+                    emailCount = result.totalEmails;
+                }
             }
+
+            let waCount = 0;
+            if (validPhoneCandidates.length > 0) {
+                const waResult = await sendBulkWhatsAppInvites(
+                    validPhoneCandidates,
+                    selectedInterview.title,
+                    selectedInterview.interviewLink || '',
+                    selectedInterview.accessCode
+                );
+                if (waResult.success) {
+                    waCount = waResult.totalSent;
+                }
+            }
+
+            messageBox.showSuccess(`Invitations dispatched: ${emailCount > 0 ? `${emailCount} Email(s)` : ''}${emailCount > 0 && waCount > 0 ? ' & ' : ''}${waCount > 0 ? `${waCount} WhatsApp Mobile invite(s)` : ''}!`);
+            
+            // Optimistically update the UI table
+            const optimizedAdditions: GlobalCandidate[] = newCandidates.map(c => ({
+                email: c.email || c.phone,
+                phone: c.phone,
+                interviewId: selectedInterview.id,
+                interviewTitle: selectedInterview.title,
+                hasSubmitted: false
+            }));
+            setGlobalCandidates(prev => [...optimizedAdditions, ...prev]);
+            
+            setInterviews(prev => prev.map(inv => {
+                if(inv.id === selectedInterviewId) {
+                    return {...inv, candidateEmails: [...(inv.candidateEmails || []), ...validEmails]}
+                }
+                return inv;
+            }));
+
+            setNewCandidates([]);
         } catch (error) {
             console.error('Invite sending error:', error);
             messageBox.showError('Failed to process invitations.');
@@ -787,17 +840,17 @@ const InvitedCandidates: React.FC = () => {
                                         console.error("Error updating phone in Firestore:", err);
                                     }
                                     
-                                    // Open WhatsApp web
-                                    const cleanedPhone = whatsappModal.phone.replace(/[^0-9]/g, '');
-                                    let targetPhone = cleanedPhone;
-                                    if (cleanedPhone.length === 10) {
-                                        targetPhone = '91' + cleanedPhone;
-                                    }
-                                    
-                                    const waUrl = `https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodeURIComponent(whatsappModal.message)}`;
-                                    window.open(waUrl, '_blank');
+                                    // Send message via WasenderAPI
+                                    const res = await sendWhatsAppMessage(whatsappModal.phone, whatsappModal.message);
                                     setWhatsappModal(null);
-                                    messageBox.showSuccess("Redirecting to WhatsApp Web...");
+                                    if (res.success) {
+                                        messageBox.showSuccess("✅ WhatsApp invitation sent successfully via WasenderAPI!");
+                                    } else {
+                                        messageBox.showError(`WasenderAPI error: ${res.error || 'Failed to send'}. Opening WhatsApp Web fallback.`);
+                                        const cleanedPhone = whatsappModal.phone.replace(/[^0-9]/g, '');
+                                        const targetPhone = cleanedPhone.length === 10 ? '91' + cleanedPhone : cleanedPhone;
+                                        window.open(`https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodeURIComponent(whatsappModal.message)}`, '_blank');
+                                    }
                                 }}
                                 className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2"
                             >
