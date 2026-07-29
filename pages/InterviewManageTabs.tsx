@@ -11,6 +11,7 @@ const InterviewManageTabs: React.FC<InterviewManageTabsProps> = ({ interviewId }
     { label: 'Overview', href: `/recruiter/interview/${interviewId}/overview`, icon: 'fas fa-layer-group' },
     { label: 'Responses', href: `/recruiter/interview/${interviewId}/responses`, icon: 'fas fa-inbox' },
     { label: 'Candidates', href: `/recruiter/interview/${interviewId}/candidates`, icon: 'fas fa-users' },
+    { label: 'Voice Interview', href: `/recruiter/interview/${interviewId}/voice-interview`, icon: 'fas fa-microphone' },
   ];
 
   return (

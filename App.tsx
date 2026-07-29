@@ -30,6 +30,7 @@ import TestAccess from './pages/TestAccess';
 import InterviewResponses from './pages/InterviewResponses';
 import InterviewOverview from './pages/InterviewOverview';
 import InterviewCandidates from './pages/InterviewCandidates';
+import InterviewVoiceInterview from './pages/InterviewVoiceInterview';
 import ResumeDump, { ResumeDumpSkeleton } from './pages/ResumeDump';
 import {
   InterviewCandidatesSkeleton,
@@ -218,6 +219,7 @@ const App: React.FC = () => {
                   <Route path="recruiter/interview/:interviewId/overview" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewOverviewSkeleton />}><InterviewOverview /></ProtectedRoute>} />
                   <Route path="recruiter/interview/:interviewId/responses" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewResponsesSkeleton />}><InterviewResponses /></ProtectedRoute>} />
                   <Route path="recruiter/interview/:interviewId/candidates" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewCandidatesSkeleton />}><InterviewCandidates /></ProtectedRoute>} />
+                  <Route path="recruiter/interview/:interviewId/voice-interview" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewOverviewSkeleton />}><InterviewVoiceInterview /></ProtectedRoute>} />
                   <Route path="recruiter/interview/responses/:interviewId" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewResponsesSkeleton />}><InterviewResponses /></ProtectedRoute>} />
                   <Route path="recruiter/interview/create" element={<ProtectedRoute role="recruiter" loadingFallback={<CreateInterviewSkeleton />}><CreateInterview /></ProtectedRoute>} />
                   <Route path="recruiter/tests" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><RecruiterTests /></ProtectedRoute>} />
