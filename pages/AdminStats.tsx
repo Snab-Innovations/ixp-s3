@@ -83,6 +83,7 @@ const AdminStats: React.FC = () => {
     clientName: 'Platform Admin',
     clientCompany: 'InterviewXpert Enterprise',
     clientEmail: 'admin@interviewxpert.in',
+    clientAddress: '',
     billingPeriod: '',
     taxRate: 18,
     footerTitle: 'Thank you for your business',
@@ -281,6 +282,7 @@ const AdminStats: React.FC = () => {
             <h3 className="text-xl font-black text-black uppercase leading-tight">{billConfig.clientName}</h3>
             <p className="text-black font-bold text-sm">{billConfig.clientCompany}</p>
             {billConfig.clientEmail && <p className="text-gray-700 font-medium text-xs mt-0.5">{billConfig.clientEmail}</p>}
+            {billConfig.clientAddress && <p className="text-gray-600 font-medium text-xs mt-0.5">{billConfig.clientAddress}</p>}
           </div>
           <div className="text-right">
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Billing Period</p>
@@ -838,6 +840,17 @@ const AdminStats: React.FC = () => {
                         type="email" 
                         value={billConfig.clientEmail} 
                         onChange={e => setBillConfig({...billConfig, clientEmail: e.target.value})} 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Client Address / Location</label>
+                      <input 
+                        type="text" 
+                        value={billConfig.clientAddress} 
+                        onChange={e => setBillConfig({...billConfig, clientAddress: e.target.value})} 
+                        placeholder="e.g. 123 Tech Park, Suite 400, Mumbai, India" 
                         className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
                       />
                     </div>
