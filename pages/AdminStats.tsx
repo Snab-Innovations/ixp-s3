@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, LayoutDashboard, Video, Users, Calendar, Clock, Printer, X, Settings, Plus } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, Video, Users, Calendar, Clock, Printer, X, Settings, Plus, Mail, Phone, FileText, Image as ImageIcon, Building, Hash, Globe, Tag } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import Logo from '../components/Logo';
 
@@ -50,14 +50,43 @@ const AdminStats: React.FC = () => {
     setTimeout(() => window.print(), 100);
   };
 
-  // Billing Modal State
+  // Helpers for invoice default values
+  const getTodayFormattedDate = () => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const generateDefaultInvoiceId = () => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const rand = Math.floor(100 + Math.random() * 900);
+    return `INV-${yyyy}${mm}${dd}-${rand}`;
+  };
+
+  // Billing Modal State & Full Invoice Configuration
   const [showBillModal, setShowBillModal] = useState(false);
-  const [invoiceId] = useState(`INV-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${Math.floor(Math.random() * 1000)}`);
+  const [activeConfigTab, setActiveConfigTab] = useState<'invoice' | 'company' | 'client' | 'items' | 'footer'>('invoice');
   
   const [billConfig, setBillConfig] = useState({
+    invoiceNumber: generateDefaultInvoiceId(),
+    invoiceDate: getTodayFormattedDate(),
+    logoUrl: '/logosnab.png',
+    companyName: 'interviewxpert.in',
+    companyEmail: 'hackathon746@gmail.com',
+    companyPhone: '+91 95455 56045',
+    companyAddress: 'SNAB Innovations',
     clientName: 'Platform Admin',
     clientCompany: 'InterviewXpert Enterprise',
+    clientEmail: 'admin@interviewxpert.in',
+    billingPeriod: '',
     taxRate: 18,
+    footerTitle: 'Thank you for your business',
+    footerSubtext: 'This is a system-generated invoice and does not require a physical signature.',
     items: [
       { id: 1, description: 'Candidate Interview Responses', quantity: 0, unitPrice: 15 }
     ]
@@ -195,28 +224,51 @@ const AdminStats: React.FC = () => {
     const taxAmount = subtotal * (billConfig.taxRate / 100);
     const totalDue = subtotal + taxAmount;
 
+    const computedPeriod = billConfig.billingPeriod || 
+      `${new Date(Number(selectedMonth.split('-')[0]), Number(selectedMonth.split('-')[1]) - 1).toLocaleString('default', { month: 'long' })} ${selectedMonth.split('-')[0]}`;
+
+    let formattedDate = billConfig.invoiceDate;
+    if (billConfig.invoiceDate && !isNaN(Date.parse(billConfig.invoiceDate))) {
+      const parsedDate = new Date(billConfig.invoiceDate);
+      formattedDate = parsedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
     return (
       <div className="text-black font-sans w-full h-full flex flex-col bg-white">
         {/* Header */}
         <div className="flex justify-between items-start border-b-4 border-black pb-4 mb-6">
           <div>
-            <div className="w-36 mb-2 invert">
-              <Logo className="w-full" />
+            <div className="flex items-center gap-3 mb-2">
+              {billConfig.logoUrl ? (
+                <img 
+                  src={billConfig.logoUrl} 
+                  alt="Company Logo" 
+                  className="h-12 max-w-[200px] object-contain" 
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="w-36 invert">
+                  <Logo className="w-full" />
+                </div>
+              )}
             </div>
-            <p className="text-black font-bold text-sm">interviewxpert.in</p>
-            <p className="text-gray-800 font-medium text-sm">hackathon746@gmail.com</p>
-            <p className="text-gray-800 font-medium text-sm">+91 95455 56045</p>
+            {billConfig.companyName && <p className="text-black font-bold text-sm">{billConfig.companyName}</p>}
+            {billConfig.companyEmail && <p className="text-gray-800 font-medium text-sm">{billConfig.companyEmail}</p>}
+            {billConfig.companyPhone && <p className="text-gray-800 font-medium text-sm">{billConfig.companyPhone}</p>}
+            {billConfig.companyAddress && <p className="text-gray-600 font-medium text-xs mt-0.5">{billConfig.companyAddress}</p>}
           </div>
           <div className="text-right">
             <h1 className="text-4xl font-black text-black uppercase tracking-widest mb-4">INVOICE</h1>
             <div className="flex justify-end gap-8 text-xs">
               <div className="text-right">
                 <p className="text-gray-500 uppercase tracking-widest font-bold mb-0.5">Invoice No</p>
-                <p className="text-black font-black text-sm">{invoiceId}</p>
+                <p className="text-black font-black text-sm">{billConfig.invoiceNumber || 'N/A'}</p>
               </div>
               <div className="text-right">
                 <p className="text-gray-500 uppercase tracking-widest font-bold mb-0.5">Date</p>
-                <p className="text-black font-black text-sm">{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                <p className="text-black font-black text-sm">{formattedDate || 'N/A'}</p>
               </div>
             </div>
           </div>
@@ -228,11 +280,12 @@ const AdminStats: React.FC = () => {
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Billed To</p>
             <h3 className="text-xl font-black text-black uppercase leading-tight">{billConfig.clientName}</h3>
             <p className="text-black font-bold text-sm">{billConfig.clientCompany}</p>
+            {billConfig.clientEmail && <p className="text-gray-700 font-medium text-xs mt-0.5">{billConfig.clientEmail}</p>}
           </div>
           <div className="text-right">
             <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Billing Period</p>
             <h3 className="text-xl font-black text-black uppercase leading-tight">
-              {new Date(Number(selectedMonth.split('-')[0]), Number(selectedMonth.split('-')[1]) - 1).toLocaleString('default', { month: 'long' })} {selectedMonth.split('-')[0]}
+              {computedPeriod}
             </h3>
           </div>
         </div>
@@ -280,8 +333,8 @@ const AdminStats: React.FC = () => {
         </div>
 
         <div className="pt-4 text-center mt-auto">
-          <h4 className="font-black text-black mb-1 uppercase tracking-widest text-sm">Thank you for your business</h4>
-          <p className="text-xs font-bold text-gray-500">This is a system-generated invoice and does not require a physical signature.</p>
+          <h4 className="font-black text-black mb-1 uppercase tracking-widest text-sm">{billConfig.footerTitle}</h4>
+          <p className="text-xs font-bold text-gray-500">{billConfig.footerSubtext}</p>
         </div>
       </div>
     );
@@ -565,8 +618,8 @@ const AdminStats: React.FC = () => {
           <div className="bg-white rounded-2xl max-w-6xl w-full h-full max-h-[90vh] flex flex-col md:flex-row shadow-2xl overflow-hidden animate-fade-in-up">
             
             {/* Left: Configuration Panel */}
-            <div className="w-full md:w-1/3 bg-gray-50 border-r border-gray-200 p-6 flex flex-col h-full">
-              <div className="flex justify-between items-center mb-6 shrink-0">
+            <div className="w-full md:w-5/12 bg-gray-50 border-r border-gray-200 p-6 flex flex-col h-full">
+              <div className="flex justify-between items-center mb-4 shrink-0">
                 <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                   <Settings size={20} className="text-blue-600" />
                   Configure Invoice
@@ -575,72 +628,303 @@ const AdminStats: React.FC = () => {
                   <X size={24} />
                 </button>
               </div>
-              
-              <div className="space-y-6 flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Billed To</label>
-                    <input type="text" value={billConfig.clientName} onChange={e => setBillConfig({...billConfig, clientName: e.target.value})} className="w-full p-2 border border-gray-300 rounded-lg text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Company</label>
-                    <input type="text" value={billConfig.clientCompany} onChange={e => setBillConfig({...billConfig, clientCompany: e.target.value})} className="w-full p-2 border border-gray-300 rounded-lg text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" />
-                  </div>
-                </div>
 
-                {/* Items Section */}
-                <div className="pt-4 border-t border-gray-200">
-                  <div className="flex justify-between items-center mb-3">
-                    <label className="block text-sm font-bold text-gray-700">Line Items</label>
-                    <button onClick={addBillItem} className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 font-bold px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors">
-                      <Plus size={14} /> Add Item
-                    </button>
+              {/* Navigation Tabs */}
+              <div className="flex border-b border-gray-200 mb-4 shrink-0 overflow-x-auto custom-scrollbar gap-1">
+                <button 
+                  onClick={() => setActiveConfigTab('invoice')}
+                  className={`px-3 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-1.5 whitespace-nowrap ${activeConfigTab === 'invoice' ? 'bg-white border-t-2 border-x border-blue-600 text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                >
+                  <Hash size={14} /> Meta
+                </button>
+                <button 
+                  onClick={() => setActiveConfigTab('company')}
+                  className={`px-3 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-1.5 whitespace-nowrap ${activeConfigTab === 'company' ? 'bg-white border-t-2 border-x border-blue-600 text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                >
+                  <Building size={14} /> Company & Logo
+                </button>
+                <button 
+                  onClick={() => setActiveConfigTab('client')}
+                  className={`px-3 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-1.5 whitespace-nowrap ${activeConfigTab === 'client' ? 'bg-white border-t-2 border-x border-blue-600 text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                >
+                  <Users size={14} /> Billed To
+                </button>
+                <button 
+                  onClick={() => setActiveConfigTab('items')}
+                  className={`px-3 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-1.5 whitespace-nowrap ${activeConfigTab === 'items' ? 'bg-white border-t-2 border-x border-blue-600 text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                >
+                  <FileText size={14} /> Items
+                </button>
+                <button 
+                  onClick={() => setActiveConfigTab('footer')}
+                  className={`px-3 py-2 text-xs font-bold rounded-t-lg transition-colors flex items-center gap-1.5 whitespace-nowrap ${activeConfigTab === 'footer' ? 'bg-white border-t-2 border-x border-blue-600 text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                >
+                  <Tag size={14} /> Footer
+                </button>
+              </div>
+              
+              <div className="space-y-4 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+
+                {/* Tab 1: Invoice Meta (Invoice Number, Date, Billing Period) */}
+                {activeConfigTab === 'invoice' && (
+                  <div className="space-y-4 animate-fade-in">
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-xs font-bold text-gray-700 flex items-center gap-1">
+                          <Hash size={14} className="text-gray-500" /> Invoice Number
+                        </label>
+                        <button 
+                          onClick={() => setBillConfig({...billConfig, invoiceNumber: generateDefaultInvoiceId()})}
+                          className="text-[11px] font-bold text-blue-600 hover:underline"
+                        >
+                          Auto Generate
+                        </button>
+                      </div>
+                      <input 
+                        type="text" 
+                        value={billConfig.invoiceNumber} 
+                        onChange={e => setBillConfig({...billConfig, invoiceNumber: e.target.value})} 
+                        placeholder="e.g. INV-20260731-123" 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow font-mono" 
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1">
+                        <Calendar size={14} className="text-gray-500" /> Invoice Date
+                      </label>
+                      <input 
+                        type="date" 
+                        value={billConfig.invoiceDate} 
+                        onChange={e => setBillConfig({...billConfig, invoiceDate: e.target.value})} 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1">
+                        <Calendar size={14} className="text-gray-500" /> Custom Billing Period
+                      </label>
+                      <input 
+                        type="text" 
+                        value={billConfig.billingPeriod} 
+                        onChange={e => setBillConfig({...billConfig, billingPeriod: e.target.value})} 
+                        placeholder="Leave blank for automatic (e.g. July 2026)" 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
+                      />
+                    </div>
                   </div>
-                  
-                  <div className="space-y-4">
-                    {billConfig.items.map((item) => (
-                      <div key={item.id} className="p-4 bg-white border border-gray-200 rounded-xl shadow-sm relative group">
-                        {billConfig.items.length > 1 && (
-                          <button onClick={() => removeBillItem(item.id)} className="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full p-1.5 hover:bg-red-200 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
-                            <X size={14} />
-                          </button>
-                        )}
-                        <input 
-                          type="text" 
-                          placeholder="Description" 
-                          value={item.description} 
-                          onChange={e => updateBillItem(item.id, 'description', e.target.value)} 
-                          className="w-full mb-3 p-2.5 border border-gray-200 rounded-lg text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
-                        />
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <span className="text-xs font-bold text-gray-500 mb-1 block">Qty</span>
-                            <input 
-                              type="number" 
-                              value={item.quantity} 
-                              onChange={e => updateBillItem(item.id, 'quantity', Number(e.target.value))} 
-                              className="w-full p-2 border border-gray-200 rounded-lg text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
-                            />
-                          </div>
-                          <div>
-                            <span className="text-xs font-bold text-gray-500 mb-1 block">Unit Price (₹)</span>
-                            <input 
-                              type="number" 
-                              value={item.unitPrice} 
-                              onChange={e => updateBillItem(item.id, 'unitPrice', Number(e.target.value))} 
-                              className="w-full p-2 border border-gray-200 rounded-lg text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
-                            />
+                )}
+
+                {/* Tab 2: Company & Logo Details */}
+                {activeConfigTab === 'company' && (
+                  <div className="space-y-4 animate-fade-in">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1">
+                        <ImageIcon size={14} className="text-gray-500" /> Logo Image URL / Path
+                      </label>
+                      <input 
+                        type="text" 
+                        value={billConfig.logoUrl} 
+                        onChange={e => setBillConfig({...billConfig, logoUrl: e.target.value})} 
+                        placeholder="public/logosnab.png" 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow font-mono mb-2" 
+                      />
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        <span className="text-[11px] text-gray-500 font-bold self-center">Presets:</span>
+                        <button 
+                          onClick={() => setBillConfig({...billConfig, logoUrl: '/logosnab.png'})}
+                          className="px-2 py-0.5 bg-gray-200 text-gray-800 rounded text-[11px] font-bold hover:bg-gray-300 transition-colors"
+                        >
+                          /logosnab.png
+                        </button>
+                        <button 
+                          onClick={() => setBillConfig({...billConfig, logoUrl: '/logo.png'})}
+                          className="px-2 py-0.5 bg-gray-200 text-gray-800 rounded text-[11px] font-bold hover:bg-gray-300 transition-colors"
+                        >
+                          /logo.png
+                        </button>
+                        <button 
+                          onClick={() => setBillConfig({...billConfig, logoUrl: '/logo-black.png'})}
+                          className="px-2 py-0.5 bg-gray-200 text-gray-800 rounded text-[11px] font-bold hover:bg-gray-300 transition-colors"
+                        >
+                          /logo-black.png
+                        </button>
+                      </div>
+                      {billConfig.logoUrl && (
+                        <div className="p-2 bg-gray-100 rounded-lg flex items-center gap-2 border border-gray-200">
+                          <span className="text-[10px] font-bold text-gray-500">Preview:</span>
+                          <img src={billConfig.logoUrl} alt="Logo preview" className="h-6 object-contain" onError={(e) => (e.target as HTMLElement).style.display = 'none'} />
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1">
+                        <Building size={14} className="text-gray-500" /> Sender Company Name
+                      </label>
+                      <input 
+                        type="text" 
+                        value={billConfig.companyName} 
+                        onChange={e => setBillConfig({...billConfig, companyName: e.target.value})} 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1">
+                        <Mail size={14} className="text-gray-500" /> Sender Email
+                      </label>
+                      <input 
+                        type="email" 
+                        value={billConfig.companyEmail} 
+                        onChange={e => setBillConfig({...billConfig, companyEmail: e.target.value})} 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1">
+                        <Phone size={14} className="text-gray-500" /> Sender Phone
+                      </label>
+                      <input 
+                        type="text" 
+                        value={billConfig.companyPhone} 
+                        onChange={e => setBillConfig({...billConfig, companyPhone: e.target.value})} 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1">
+                        <Globe size={14} className="text-gray-500" /> Address / Subtitle
+                      </label>
+                      <input 
+                        type="text" 
+                        value={billConfig.companyAddress} 
+                        onChange={e => setBillConfig({...billConfig, companyAddress: e.target.value})} 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 3: Billed To / Recipient Details */}
+                {activeConfigTab === 'client' && (
+                  <div className="space-y-4 animate-fade-in">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Client Contact Name</label>
+                      <input 
+                        type="text" 
+                        value={billConfig.clientName} 
+                        onChange={e => setBillConfig({...billConfig, clientName: e.target.value})} 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Client Company Name</label>
+                      <input 
+                        type="text" 
+                        value={billConfig.clientCompany} 
+                        onChange={e => setBillConfig({...billConfig, clientCompany: e.target.value})} 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Client Email Address</label>
+                      <input 
+                        type="email" 
+                        value={billConfig.clientEmail} 
+                        onChange={e => setBillConfig({...billConfig, clientEmail: e.target.value})} 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 4: Items & Financials */}
+                {activeConfigTab === 'items' && (
+                  <div className="space-y-4 animate-fade-in">
+                    <div className="flex justify-between items-center">
+                      <label className="block text-xs font-bold text-gray-700">Line Items</label>
+                      <button onClick={addBillItem} className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 font-bold px-3 py-1.5 rounded-lg hover:bg-blue-200 transition-colors">
+                        <Plus size={14} /> Add Item
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {billConfig.items.map((item) => (
+                        <div key={item.id} className="p-3 bg-white border border-gray-200 rounded-xl shadow-sm relative group">
+                          {billConfig.items.length > 1 && (
+                            <button onClick={() => removeBillItem(item.id)} className="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full p-1 hover:bg-red-200 shadow-sm transition-opacity">
+                              <X size={14} />
+                            </button>
+                          )}
+                          <input 
+                            type="text" 
+                            placeholder="Description" 
+                            value={item.description} 
+                            onChange={e => updateBillItem(item.id, 'description', e.target.value)} 
+                            className="w-full mb-2 p-2 border border-gray-200 rounded-lg text-xs text-gray-900 outline-none focus:ring-2 focus:ring-blue-500" 
+                          />
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-[10px] font-bold text-gray-500 mb-0.5 block">Qty</span>
+                              <input 
+                                type="number" 
+                                value={item.quantity} 
+                                onChange={e => updateBillItem(item.id, 'quantity', Number(e.target.value))} 
+                                className="w-full p-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 outline-none focus:ring-2 focus:ring-blue-500" 
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-gray-500 mb-0.5 block">Unit Price (₹)</span>
+                              <input 
+                                type="number" 
+                                value={item.unitPrice} 
+                                onChange={e => updateBillItem(item.id, 'unitPrice', Number(e.target.value))} 
+                                className="w-full p-1.5 border border-gray-200 rounded-lg text-xs text-gray-900 outline-none focus:ring-2 focus:ring-blue-500" 
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                      ))}
+                    </div>
 
-                <div className="pt-4 border-t border-gray-200">
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Global Tax Rate (%)</label>
-                  <input type="number" value={billConfig.taxRate} onChange={e => setBillConfig({...billConfig, taxRate: Number(e.target.value)})} className="w-1/2 p-2 border border-gray-300 rounded-lg text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" />
-                </div>
+                    <div className="pt-3 border-t border-gray-200">
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Tax Rate (%)</label>
+                      <input type="number" value={billConfig.taxRate} onChange={e => setBillConfig({...billConfig, taxRate: Number(e.target.value)})} className="w-full p-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab 5: Footer & Signatures */}
+                {activeConfigTab === 'footer' && (
+                  <div className="space-y-4 animate-fade-in">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Footer Message Title</label>
+                      <input 
+                        type="text" 
+                        value={billConfig.footerTitle} 
+                        onChange={e => setBillConfig({...billConfig, footerTitle: e.target.value})} 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow" 
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Footer Disclaimer / Note</label>
+                      <textarea 
+                        rows={3}
+                        value={billConfig.footerSubtext} 
+                        onChange={e => setBillConfig({...billConfig, footerSubtext: e.target.value})} 
+                        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-shadow resize-none" 
+                      />
+                    </div>
+                  </div>
+                )}
+
               </div>
 
               <div className="mt-4 shrink-0 flex gap-3 pt-4 border-t border-gray-200">
