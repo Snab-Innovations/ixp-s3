@@ -1,4 +1,4 @@
-import { collection, doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import * as mammoth from 'mammoth';
 import * as pdfjsLib from 'pdfjs-dist';
 import { db } from './firebase';
@@ -479,6 +479,77 @@ export const ingestResumeFile = async (
 
 const safeDocumentKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 100);
 
+const normalizeResumeEmail = (value?: string | null) => (value || '').trim().toLowerCase();
+
+const normalizeResumePhoneDigits = (value?: string | null) => {
+  const digits = (value || '').replace(/\D/g, '');
+  if (digits.length < 7) return '';
+  return digits.length > 10 ? digits.slice(-10) : digits;
+};
+
+const buildResumeDumpIdentityKey = (
+  profile: Pick<ParsedResumeProfile, 'email' | 'phone' | 'name'>,
+  fileName: string
+) => {
+  const email = normalizeResumeEmail(profile.email);
+  if (email) return safeDocumentKey(email) || 'candidate';
+
+  const phone = normalizeResumePhoneDigits(profile.phone);
+  if (phone) return `phone_${phone}`;
+
+  return safeDocumentKey(`${profile.name || 'candidate'}_${fileName || 'resume'}`) || 'candidate';
+};
+
+const toMillisSafe = (value: unknown) => {
+  if (!value) return 0;
+  if (typeof value === 'object' && value !== null && 'toMillis' in value && typeof (value as { toMillis?: unknown }).toMillis === 'function') {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+  if (typeof value === 'object' && value !== null && 'seconds' in value && typeof (value as { seconds?: unknown }).seconds === 'number') {
+    return (value as { seconds: number }).seconds * 1000;
+  }
+  return 0;
+};
+
+const resolveResumeDumpCandidateId = async (
+  recruiterUID: string,
+  profile: Pick<ParsedResumeProfile, 'email' | 'phone' | 'name'>,
+  fileName: string
+) => {
+  const identityKey = buildResumeDumpIdentityKey(profile, fileName);
+  const stableId = `${safeDocumentKey(recruiterUID)}_${identityKey}`;
+  const email = normalizeResumeEmail(profile.email);
+
+  // Prefer querying existing docs. Do NOT getDoc(stableId) when it may be missing —
+  // Firestore denies reads on non-existent docs when rules depend on resource.data.
+  if (email) {
+    try {
+      const legacySnap = await getDocs(query(
+        collection(db, 'resumeDumpCandidates'),
+        where('recruiterUID', '==', recruiterUID),
+        where('email', '==', email),
+        limit(25)
+      ));
+      if (!legacySnap.empty) {
+        const sorted = [...legacySnap.docs].sort(
+          (left, right) => toMillisSafe(right.data().updatedAt || right.data().createdAt) - toMillisSafe(left.data().updatedAt || left.data().createdAt)
+        );
+        const primary = sorted.find((entry) => entry.id === stableId) || sorted[0];
+        return {
+          candidateId: primary.id,
+          alreadyExists: true,
+          duplicateIds: sorted.filter((entry) => entry.id !== primary.id).map((entry) => entry.id),
+          createdAt: primary.data()?.createdAt,
+        };
+      }
+    } catch (error) {
+      console.warn('Could not look up existing resume dump entries by email:', error);
+    }
+  }
+
+  return { candidateId: stableId, alreadyExists: false, duplicateIds: [] as string[], createdAt: undefined as unknown };
+};
+
 export const saveResumeDumpCandidate = async ({
   recruiterUID,
   profile,
@@ -503,15 +574,32 @@ export const saveResumeDumpCandidate = async ({
   sourceJobTitle?: string;
 }) => {
   if (!recruiterUID) throw new Error('Recruiter ownership is required to save a resume.');
-  const identityKey = safeDocumentKey(profile.email || `${profile.name}_${fileName}`) || 'candidate';
-  const randomSuffix = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID().replace(/-/g, '').slice(0, 12) : `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const candidateId = source === 'candidate_interview'
-    ? `${safeDocumentKey(recruiterUID)}_${safeDocumentKey(sourceInterviewId)}_${identityKey}_${randomSuffix}`
-    : `${safeDocumentKey(recruiterUID)}_${identityKey}`;
 
-  const candidateRef = doc(collection(db, 'resumeDumpCandidates'), candidateId);
-  await setDoc(candidateRef, {
+  const normalizedProfile: ParsedResumeProfile = {
     ...profile,
+    email: normalizeResumeEmail(profile.email),
+    phone: formatExtractedPhone(profile.phone),
+  };
+
+  // Candidates are unauthenticated and cannot query/read the dump, so use a stable
+  // identity id and upsert. Recruiters can resolve legacy duplicates and clean them up.
+  let candidateId: string;
+  let duplicateIds: string[] = [];
+  let existingCreatedAt: unknown;
+
+  if (source === 'candidate_interview') {
+    candidateId = `${safeDocumentKey(recruiterUID)}_${buildResumeDumpIdentityKey(normalizedProfile, fileName)}`;
+  } else {
+    const resolved = await resolveResumeDumpCandidateId(recruiterUID, normalizedProfile, fileName);
+    candidateId = resolved.candidateId;
+    duplicateIds = resolved.duplicateIds;
+    existingCreatedAt = resolved.createdAt;
+  }
+
+  const candidateRef = doc(db, 'resumeDumpCandidates', candidateId);
+
+  await setDoc(candidateRef, {
+    ...normalizedProfile,
     recruiterUID,
     resumeUrl,
     resumeFileName: fileName || 'resume',
@@ -521,9 +609,19 @@ export const saveResumeDumpCandidate = async ({
     source,
     sourceInterviewId,
     sourceJobTitle,
-    createdAt: serverTimestamp(),
+    ...(existingCreatedAt ? { createdAt: existingCreatedAt } : { createdAt: serverTimestamp() }),
     updatedAt: serverTimestamp(),
-  }, { merge: source !== 'candidate_interview' });
+  }, { merge: true });
+
+  if (duplicateIds.length > 0) {
+    await Promise.all(duplicateIds.map(async (duplicateId) => {
+      try {
+        await deleteDoc(doc(db, 'resumeDumpCandidates', duplicateId));
+      } catch (error) {
+        console.warn(`Could not remove duplicate resume dump entry ${duplicateId}:`, error);
+      }
+    }));
+  }
 
   return candidateId;
 };

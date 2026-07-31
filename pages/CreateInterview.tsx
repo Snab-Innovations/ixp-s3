@@ -8,7 +8,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { ExternalLink } from 'lucide-react';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rateLimitService';
-import { getCandidateIdentityKeys, isCandidateIdentityInSet } from '../services/candidateIdentity';
+import { getCandidateIdentityKeys, isCandidateIdentityInSet, dedupeCandidatesByIdentity } from '../services/candidateIdentity';
 
 import { sendInterviewInvitations } from '../services/brevoService';
 import { sendBulkWhatsAppInvites } from '../services/waSenderService';
@@ -187,7 +187,7 @@ const CreateInterview: React.FC = () => {
     const unsubscribe = onSnapshot(
       resumeDumpQuery,
       (snapshot) => {
-        setResumeDumpCandidates(snapshot.docs.map((candidateDoc) => {
+        const mapped = snapshot.docs.map((candidateDoc) => {
           const data = candidateDoc.data();
           return {
             id: candidateDoc.id,
@@ -212,7 +212,16 @@ const CreateInterview: React.FC = () => {
             resumeUrl: typeof data.resumeUrl === 'string' ? data.resumeUrl : '',
             resumeFileName: typeof data.resumeFileName === 'string' ? data.resumeFileName : '',
             resumeText: typeof data.resumeText === 'string' ? data.resumeText : '',
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt,
           };
+        });
+        setResumeDumpCandidates(dedupeCandidatesByIdentity(mapped, (candidate) => {
+          const stamp = candidate.updatedAt || candidate.createdAt;
+          if (stamp && typeof stamp === 'object' && 'toMillis' in stamp && typeof (stamp as { toMillis?: unknown }).toMillis === 'function') {
+            return (stamp as { toMillis: () => number }).toMillis();
+          }
+          return 0;
         }));
         setLoadingResumeDumpCandidates(false);
       },

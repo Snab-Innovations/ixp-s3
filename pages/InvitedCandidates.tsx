@@ -4,16 +4,12 @@ import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import * as pdfjsLib from 'pdfjs-dist';
 import { useMessageBox } from '../components/MessageBox';
 import { Interview, InterviewSubmission } from '../types';
 import { sendInterviewInvitations } from '../services/brevoService';
 import { sendWhatsAppMessage, sendBulkWhatsAppInvites, sendInterviewWhatsAppInvite } from '../services/waSenderService';
 import { evaluateResumeForMultipleJobs } from '../services/api';
-import { extractPhoneFromText, formatExtractedPhone } from '../services/resumeService';
-
-// Setup PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 
 const InlineBusySkeleton = ({ className = 'bg-current/25' }: { className?: string }) => (
     <span className={`inline-block h-3 w-16 animate-pulse rounded-[4px] ${className}`} aria-hidden="true" />
@@ -186,44 +182,42 @@ const InvitedCandidates: React.FC = () => {
 
     const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;
-        if (!files || files.length === 0) return;
+        if (!files || files.length === 0 || !user) return;
 
         setParsingResumes(true);
         const parsed: {email: string, phone: string, scores?: Record<string, string>}[] = [];
         let filesProcessed = 0;
         
         const jobsPayload = interviews.map(i => ({ id: i.id, title: i.title, description: i.description }));
+        const selectedInterview = interviews.find((item) => item.id === selectedInterviewId);
 
         const parsePromises = Array.from(files).map(async (file: File) => {
-            let text = '';
             try {
-                if (file.type === 'application/pdf') {
-                    const arrayBuffer = await file.arrayBuffer();
-                    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        const page = await pdf.getPage(i);
-                        const textContent = await page.getTextContent();
-                        text += textContent.items.map((item: any) => item.str).join(' ');
-                    }
-                } else if (file.type === 'text/plain') {
-                    text = await file.text();
-                } else {
-                    return;
-                }
+                const ingested = await ingestResumeFile(file);
+                const email = (ingested.profile.email || '').toLowerCase();
+                const phone = ingested.profile.phone || 'N/A';
 
-                const emailMatch = text.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/i);
-                const extractedPhone = formatExtractedPhone(extractPhoneFromText(text));
+                await saveResumeDumpCandidate({
+                  recruiterUID: user.uid,
+                  profile: ingested.profile,
+                  resumeText: ingested.resumeText,
+                  resumeUrl: ingested.resumeUrl,
+                  fileName: file.name,
+                  mimeType: file.type,
+                  fileSize: file.size,
+                  source: 'interview_creation',
+                  sourceInterviewId: selectedInterview?.id || '',
+                  sourceJobTitle: selectedInterview?.title || '',
+                });
 
-                if (emailMatch) {
-                    const email = emailMatch[1].toLowerCase();
-                    const phone = extractedPhone || 'N/A';
+                if (email) {
                     if (!parsed.some(c => c.email === email) && !newCandidates.some(c => c.email === email)) {
                         let scores = {};
-                        if (text.length > 50 && jobsPayload.length > 0) {
+                        if (ingested.resumeText.length > 50 && jobsPayload.length > 0) {
                             try {
-                                scores = await evaluateResumeForMultipleJobs(jobsPayload, text);
-                            } catch (e) {
-                                console.error('Multi job score error:', e);
+                                scores = await evaluateResumeForMultipleJobs(jobsPayload, ingested.resumeText);
+                            } catch (err) {
+                                console.error('Multi job score error:', err);
                             }
                         }
                         if (!parsed.some(c => c.email === email)) {

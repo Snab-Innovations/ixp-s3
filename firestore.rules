@@ -236,6 +236,16 @@ service cloud.firestore {
                && get(/databases/$(database)/documents/interviews/$(data.sourceInterviewId)).data.recruiterUID == data.recruiterUID;
       }
 
+      function sameCandidateIdentity(existing, incoming) {
+        return (incoming.email is string && incoming.email.size() > 0 && existing.email == incoming.email)
+            || (incoming.phone is string && incoming.phone.size() > 0 && existing.phone == incoming.phone)
+            || (
+                 (incoming.email.size() == 0 && existing.email.size() == 0)
+                 && (incoming.phone.size() == 0 && existing.phone.size() == 0)
+                 && incoming.name == existing.name
+               );
+      }
+
       allow read, write: if request.auth != null 
                           && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
 
@@ -245,9 +255,23 @@ service cloud.firestore {
                       && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter'
                     ) || isValidCandidateInterviewResume(request.resource.data);
 
-      allow read, update, delete: if request.auth != null
-                                  && resource.data.recruiterUID == request.auth.uid
-                                  && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter';
+      allow update: if (
+                      request.auth != null
+                      && resource.data.recruiterUID == request.auth.uid
+                      && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter'
+                    ) || (
+                      isValidCandidateInterviewResume(request.resource.data)
+                      && resource.data.recruiterUID == request.resource.data.recruiterUID
+                      && sameCandidateIdentity(resource.data, request.resource.data)
+                    );
+
+      allow get: if request.auth != null
+                 && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter'
+                 && (resource == null || resource.data.recruiterUID == request.auth.uid);
+
+      allow list, delete: if request.auth != null
+                          && resource.data.recruiterUID == request.auth.uid
+                          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter';
     }
 
     // --- Transactions Collection Rules ---

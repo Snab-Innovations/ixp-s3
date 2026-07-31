@@ -2,19 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { arrayUnion, collection, doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { Link, useParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import * as pdfjsLib from 'pdfjs-dist';
-import * as mammoth from 'mammoth';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { sendInterviewInvitations } from '../services/brevoService';
 import { sendWhatsAppMessage, sendBulkWhatsAppInvites, sendInterviewWhatsAppInvite } from '../services/waSenderService';
 import { evaluateResumeMatch } from '../services/api';
-import { extractPhoneFromText, formatExtractedPhone } from '../services/resumeService';
+import { formatExtractedPhone, ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 import { InterviewCandidatesSkeleton } from '../components/ui/interview-loading-skeleton';
 import { Interview } from '../types';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 type CandidateDraft = { email: string; phone: string; matchScore?: string };
 type RosterCandidate = { email: string; hasSubmitted: boolean; attemptId?: string; allowReattempt?: boolean };
@@ -137,7 +133,7 @@ const InterviewCandidates: React.FC = () => {
   }, [interview, submissions]);
 
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!interview) return;
+    if (!interview || !user) return;
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -148,43 +144,37 @@ const InterviewCandidates: React.FC = () => {
 
     await Promise.all(
       Array.from(files).map(async (file) => {
-        let text = '';
         try {
-          if (file.type === 'application/pdf') {
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
-            for (let i = 1; i <= pdf.numPages; i++) {
-              const page = await pdf.getPage(i);
-              const textContent = await page.getTextContent();
-              text += textContent.items.map((item: any) => item.str).join(' ');
-            }
-          } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.docx')) {
-            const arrayBuffer = await file.arrayBuffer();
-            const result = await mammoth.extractRawText({ arrayBuffer });
-            text = result.value;
-          } else if (file.type === 'text/plain') {
-            text = await file.text();
-          } else {
-            return;
-          }
+          const ingested = await ingestResumeFile(file);
+          const lowerEmail = (ingested.profile.email || '').toLowerCase();
+          const phone = ingested.profile.phone || 'N/A';
 
-          const emailMatch = text.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/i);
-          const extractedPhone = formatExtractedPhone(extractPhoneFromText(text));
+          await saveResumeDumpCandidate({
+            recruiterUID: user.uid,
+            profile: ingested.profile,
+            resumeText: ingested.resumeText,
+            resumeUrl: ingested.resumeUrl,
+            fileName: file.name,
+            mimeType: file.type,
+            fileSize: file.size,
+            source: 'interview_creation',
+            sourceInterviewId: interview.id,
+            sourceJobTitle: interview.title,
+          });
 
-          if (emailMatch) {
-            const lowerEmail = emailMatch[1].toLowerCase();
+          if (lowerEmail) {
             const alreadyInvited = (interview.candidateEmails || []).some((email) => email.toLowerCase() === lowerEmail);
             const alreadyQueued = newEmails.some((email) => email.toLowerCase() === lowerEmail);
             if (!alreadyInvited && !alreadyQueued && !candidatesFound.some((candidate) => candidate.email === lowerEmail)) {
               let matchScore = 'N/A';
-              if (text.length > 50) {
+              if (ingested.resumeText.length > 50) {
                 try {
-                  matchScore = await evaluateResumeMatch(interview.title, interview.description, text);
+                  matchScore = await evaluateResumeMatch(interview.title, interview.description, ingested.resumeText);
                 } catch (error) {
                   console.error('Match score error:', error);
                 }
               }
-              candidatesFound.push({ email: lowerEmail, phone: extractedPhone || 'N/A', matchScore });
+              candidatesFound.push({ email: lowerEmail, phone, matchScore });
             }
           }
           filesProcessed++;

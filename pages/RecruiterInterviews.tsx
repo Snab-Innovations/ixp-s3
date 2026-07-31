@@ -4,8 +4,6 @@ import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { Interview } from '../types';
-import * as pdfjsLib from 'pdfjs-dist';
-import * as mammoth from 'mammoth';
 import { useMessageBox } from '../components/MessageBox';
 import { createPortal } from 'react-dom';
 import { sendInterviewInvitations } from '../services/brevoService';
@@ -13,12 +11,9 @@ import { sendWhatsAppMessage } from '../services/waSenderService';
 import EditJobModal from './EditJob';
 
 import { evaluateResumeMatch } from '../services/api';
-import { extractPhoneFromText, formatExtractedPhone } from '../services/resumeService';
+import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rateLimitService';
-
-// Setup PDF.js worker to enable PDF parsing
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 type TimestampLike =
   | {
@@ -177,6 +172,7 @@ const RecruiterInterviews: React.FC = () => {
 
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'expired'>('active');
   const [selectedDept, setSelectedDept] = useState('All');
   const [dateMode, setDateMode] = useState<'range' | 'specific'>('range');
   const [startDate, setStartDate] = useState('');
@@ -257,7 +253,7 @@ const RecruiterInterviews: React.FC = () => {
 
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0 || !user) return;
 
     setParsingResumes(true);
     const newCandidatesFound: {email: string, phone: string, matchScore?: string}[] = [];
@@ -266,48 +262,35 @@ const RecruiterInterviews: React.FC = () => {
 
     const parsePromises = Array.from(files).map(async (f) => {
       const file = f as File;
-      let text = '';
       try {
-        if (file.type === 'application/pdf') {
-          const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            text += textContent.items.map((item: any) => item.str).join(' ');
-          }
-        } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.docx')) {
-          const arrayBuffer = await file.arrayBuffer();
-          const result = await mammoth.extractRawText({ arrayBuffer });
-          text = result.value;
-        } else if (file.type === 'text/plain') {
-          text = await file.text();
-        } else {
-          return; // Skip unsupported file types
-        }
+        const ingested = await ingestResumeFile(file);
+        const lowerEmail = (ingested.profile.email || '').toLowerCase();
+        const phone = ingested.profile.phone || 'N/A';
 
-        const emailMatch = text.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/i);
-        const extractedPhone = formatExtractedPhone(extractPhoneFromText(text));
+        await saveResumeDumpCandidate({
+          recruiterUID: user.uid,
+          profile: ingested.profile,
+          resumeText: ingested.resumeText,
+          resumeUrl: ingested.resumeUrl,
+          fileName: file.name,
+          mimeType: file.type,
+          fileSize: file.size,
+          source: 'interview_creation',
+          sourceInterviewId: selectedInterview?.id || '',
+          sourceJobTitle: selectedInterview?.title || '',
+        });
 
-        if (emailMatch) {
-            const lowerEmail = emailMatch[1].toLowerCase();
-            const phone = extractedPhone || 'N/A';
-            
-            // Check if not already invited/added
-            // We use functional updates later, but for the map function, we check against the current state array.
+        if (lowerEmail) {
             if (!(selectedInterview?.candidateEmails || []).includes(lowerEmail) && !newEmails.includes(lowerEmail)) {
-                
-                // Fetch AI match score
                 let matchScore = "N/A";
-                if (selectedInterview && text.length > 50) {
+                if (selectedInterview && ingested.resumeText.length > 50) {
                     try {
-                        matchScore = await evaluateResumeMatch(selectedInterview.title, selectedInterview.description, text);
-                    } catch (e) {
-                        console.error('Match score error:', e);
+                        matchScore = await evaluateResumeMatch(selectedInterview.title, selectedInterview.description, ingested.resumeText);
+                    } catch (err) {
+                        console.error('Match score error:', err);
                     }
                 }
                 
-                // Ensure thread-safety for pushing to array
                 if (!newCandidatesFound.some(c => c.email === lowerEmail)) {
                     newCandidatesFound.push({ email: lowerEmail, phone, matchScore });
                 }
@@ -497,10 +480,15 @@ const RecruiterInterviews: React.FC = () => {
       interview.department?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       interview.description?.toLowerCase().includes(searchQuery.toLowerCase());
       
-    // 2. Department filter
+    // 2. Active / Expired filter
+    const interviewStatus = getInterviewStatus(interview).label;
+    const matchesStatus =
+      statusFilter === 'active' ? interviewStatus === 'Active' : interviewStatus === 'Expired';
+
+    // 3. Department filter
     const matchesDept = selectedDept === 'All' || interview.department === selectedDept;
     
-    // 3. Date range or specific date filter
+    // 4. Date range or specific date filter
     let matchesDate = true;
     if (interview.createdAt) {
       const createdDate = interview.createdAt.toDate ? interview.createdAt.toDate() : new Date((interview.createdAt as any).seconds * 1000);
@@ -526,7 +514,7 @@ const RecruiterInterviews: React.FC = () => {
       matchesDate = false;
     }
     
-    return matchesSearch && matchesDept && matchesDate;
+    return matchesSearch && matchesStatus && matchesDept && matchesDate;
   });
 
   const activeInterviews = interviews.filter(interview => getInterviewStatus(interview).label === 'Active').length;
@@ -588,15 +576,35 @@ const RecruiterInterviews: React.FC = () => {
       {/* Search & Filter Bar */}
       <section className="shrink-0 border-b border-white/[0.11]">
         <div className="flex flex-col gap-3 px-4 py-3 sm:px-6 lg:px-7 xl:flex-row xl:items-center xl:justify-between">
-          <div className="relative w-full xl:max-w-xs">
-            <i className="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-[#6b7280]"></i>
-            <input 
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search interviews..."
-              className="geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] pl-9 pr-3 text-white outline-none transition-colors placeholder:text-[#6b7280] focus:border-white/[0.28] focus:bg-white/[0.05]"
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-auto sm:min-w-[220px] xl:max-w-xs">
+              <i className="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-[#6b7280]"></i>
+              <input 
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search interviews..."
+                className="geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] pl-9 pr-3 text-white outline-none transition-colors placeholder:text-[#6b7280] focus:border-white/[0.28] focus:bg-white/[0.05]"
+              />
+            </div>
+            <div className="flex rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-0.5">
+              <button
+                type="button"
+                onClick={() => setStatusFilter('active')}
+                className={`geist-caption inline-flex h-7 items-center gap-1.5 rounded-[4px] px-3 font-medium transition-colors ${statusFilter === 'active' ? 'bg-[#071a12] text-[#83d0a3]' : 'text-[#6b7280] hover:text-[#d4d4d4]'}`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${statusFilter === 'active' ? 'bg-[#50e3c2]' : 'bg-[#6b7280]'}`} />
+                Active
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('expired')}
+                className={`geist-caption inline-flex h-7 items-center gap-1.5 rounded-[4px] px-3 font-medium transition-colors ${statusFilter === 'expired' ? 'bg-[#180707] text-[#ff8f8f]' : 'text-[#6b7280] hover:text-[#d4d4d4]'}`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${statusFilter === 'expired' ? 'bg-[#ff6b6b]' : 'bg-[#6b7280]'}`} />
+                Expired
+              </button>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2">
@@ -630,9 +638,9 @@ const RecruiterInterviews: React.FC = () => {
                 </div>
               )}
             </div>
-            {(searchQuery || selectedDept !== 'All' || startDate || endDate || specificDate) && (
+            {(searchQuery || statusFilter !== 'active' || selectedDept !== 'All' || startDate || endDate || specificDate) && (
               <button
-                onClick={() => { setSearchQuery(''); setSelectedDept('All'); setStartDate(''); setEndDate(''); setSpecificDate(''); }}
+                onClick={() => { setSearchQuery(''); setStatusFilter('active'); setSelectedDept('All'); setStartDate(''); setEndDate(''); setSpecificDate(''); }}
                 className="geist-caption inline-flex h-8 items-center justify-center gap-1 rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-3 font-medium text-[#ff8f8f] transition-colors hover:bg-[#260b0b]"
               >
                 <i className="fas fa-undo-alt text-[10px]"></i>
@@ -666,7 +674,7 @@ const RecruiterInterviews: React.FC = () => {
               </div>
               <p className="geist-caption mt-4 text-[#d4d4d4]">No interviews match your filters.</p>
               <button
-                onClick={() => { setSearchQuery(''); setSelectedDept('All'); setStartDate(''); setEndDate(''); setSpecificDate(''); }}
+                onClick={() => { setSearchQuery(''); setStatusFilter('active'); setSelectedDept('All'); setStartDate(''); setEndDate(''); setSpecificDate(''); }}
                 className="geist-caption mt-3 inline-flex h-8 items-center justify-center rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-3 font-medium text-[#ff8f8f] transition-colors hover:bg-[#260b0b]"
               >
                 Reset Filters

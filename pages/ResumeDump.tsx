@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { SKILL_OPTIONS } from './Profile';
 import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
+import { dedupeCandidatesByIdentity } from '../services/candidateIdentity';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
@@ -494,7 +495,7 @@ const ResumeDump: React.FC = () => {
             } as ResumeDumpCandidate;
           })
           .sort((left, right) => toMillis(right.updatedAt || right.createdAt) - toMillis(left.updatedAt || left.createdAt));
-        setCandidates(records);
+        setCandidates(dedupeCandidatesByIdentity(records, (candidate) => toMillis(candidate.updatedAt || candidate.createdAt)));
         setLoading(false);
       },
       (error) => {
