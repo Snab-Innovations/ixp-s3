@@ -840,13 +840,13 @@ const InvitedCandidates: React.FC = () => {
                                         console.error("Error updating phone in Firestore:", err);
                                     }
                                     
-                                    // Send message via WasenderAPI
+                                    // Send message via WhatsApp API
                                     const res = await sendWhatsAppMessage(whatsappModal.phone, whatsappModal.message);
                                     setWhatsappModal(null);
                                     if (res.success) {
-                                        messageBox.showSuccess("✅ WhatsApp invitation sent successfully via WasenderAPI!");
+                                        messageBox.showSuccess("✅ WhatsApp invitation sent successfully!");
                                     } else {
-                                        messageBox.showError(`WasenderAPI error: ${res.error || 'Failed to send'}. Opening WhatsApp Web fallback.`);
+                                        messageBox.showError(`WhatsApp API error: ${res.error || 'Failed to send'}. Opening WhatsApp Web fallback.`);
                                         const cleanedPhone = whatsappModal.phone.replace(/[^0-9]/g, '');
                                         const targetPhone = cleanedPhone.length === 10 ? '91' + cleanedPhone : cleanedPhone;
                                         window.open(`https://web.whatsapp.com/send?phone=${targetPhone}&text=${encodeURIComponent(whatsappModal.message)}`, '_blank');

@@ -595,12 +595,12 @@ const CreateInterview: React.FC = () => {
         }
       }
 
-      // 4. Send WhatsApp invitations via WasenderAPI if candidates have phone numbers
+      // 4. Send WhatsApp invitations via WhatsApp API if candidates have phone numbers
       let waCount = 0;
       const candidatesWithPhones = candidateDataList.filter((c) => c.phone && c.phone.trim() && c.phone !== 'N/A');
       if (candidatesWithPhones.length > 0) {
         try {
-          console.log(`[WasenderAPI] Sending WhatsApp invitations to ${candidatesWithPhones.length} candidate(s)...`);
+          console.log(`[WhatsApp API] Sending WhatsApp invitations to ${candidatesWithPhones.length} candidate(s)...`);
           const waResult = await sendBulkWhatsAppInvites(
             candidatesWithPhones,
             formData.title,
@@ -609,12 +609,12 @@ const CreateInterview: React.FC = () => {
           );
           if (waResult.success) {
             waCount = waResult.totalSent;
-            console.log(`[WasenderAPI] Successfully sent ${waResult.totalSent} WhatsApp message(s)!`);
+            console.log(`[WhatsApp API] Successfully sent ${waResult.totalSent} WhatsApp message(s)!`);
           } else {
-            console.warn(`[WasenderAPI] Failed to send some WhatsApp messages:`, waResult.errors);
+            console.warn(`[WhatsApp API] Failed to send some WhatsApp messages:`, waResult.errors);
           }
         } catch (waErr: any) {
-          console.error('[WasenderAPI] WhatsApp invite error:', waErr);
+          console.error('[WhatsApp API] WhatsApp invite error:', waErr);
         }
       }
 
