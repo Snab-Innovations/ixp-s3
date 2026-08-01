@@ -1,4 +1,5 @@
 import { grokGenerateWithResume, grokGenerateWithResumeJson, grokGenerateText, BUDGET } from "./grokService";
+import { uploadToS3, isS3Configured } from './s3Service';
 
 // Config Constants (loaded from environment variables)
 const ASSEMBLYAI_API_KEY = import.meta.env.VITE_ASSEMBLYAI_API_KEY;
@@ -309,8 +310,18 @@ export const evaluateResumeForMultipleJobs = async (
   }
 };
 
-// ── Cloudinary ────────────────────────────────────────────────────────────────
+// ── Storage (Amazon S3 Primary with Cloudinary Fallback) ──────────────────────────────────
 export const uploadToCloudinary = async (blob: Blob, resourceType: 'video' | 'image' | 'auto' | 'raw' = 'auto') => {
+  // If S3 is configured, upload directly to Amazon S3
+  if (isS3Configured()) {
+    try {
+      return await uploadToS3(blob, resourceType);
+    } catch (s3Err) {
+      console.warn("Amazon S3 Upload failed, attempting Cloudinary fallback...", s3Err);
+    }
+  }
+
+  // Cloudinary fallback logic
   const isVideo = resourceType === 'video';
   const isRaw = resourceType === 'raw';
   const uploadUrl = resourceType === 'auto'

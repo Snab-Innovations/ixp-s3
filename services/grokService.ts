@@ -1,82 +1,23 @@
-// ── Grok AI Service ──────────────────────────────────────────────────────────
-// Model: grok-4.3 (text/image capable; used here for text)
-// Base URL: https://api.x.ai/v1
-// Auth: VITE_XAI_API_KEY
+import { callGeminiApi, geminiGenerateJson } from './geminiService';
 
-const GROK_BASE_URL = "https://api.x.ai/v1";
-const GROK_MODEL = import.meta.env.VITE_XAI_MODEL || "grok-4.3";
-const GROK_REASONING_EFFORT = import.meta.env.VITE_XAI_REASONING_EFFORT || "none";
+// ── Token budgets & constants ────────────────────────────────────────────────
+export const MAX_TOKENS_QUESTIONS = 500;
+export const MAX_TOKENS_FEEDBACK = 1800;
 
-// ── Token budgets ─────────────────────────────────────────────────────────────
-// Hard ceiling on output tokens to prevent runaway costs.
-// Questions: 5 template + AI-generated (~15 tokens each) → 280 safe headroom.
-// Feedback report: 3 short sections + 3 score lines (out of 10) → 300 sufficient.
-const MAX_TOKENS_QUESTIONS = 500;  // Increased for more robust questions
-const MAX_TOKENS_FEEDBACK   = 1800;  // Increased for accurate resume scoring and communication analysis
+// ── Google Gemini AI Service Router ──────────────────────────────────────────────────
 
-// Resume cap: Provide much more context so the AI can give a specific, dynamic analysis
-// without relying on generic placeholders.
-const RESUME_EMBED_MAX_CHARS = 5000;
-
-const getApiKey = (): string => {
-  const key = import.meta.env.VITE_XAI_API_KEY;
-  if (!key || key === "YOUR_XAI_API_KEY_HERE") {
-    throw new Error("Grok API key missing. Add VITE_XAI_API_KEY to .env.");
-  }
-  return key;
-};
-
-// ── Internal fetch helper ─────────────────────────────────────────────────────
 async function callGrok(
   messages: { role: "system" | "user" | "assistant"; content: string }[],
   temperature = 0.5,
   maxTokens?: number,
   responseFormat?: { type: "json_object" | "text" }
 ): Promise<string> {
-  const apiKey = getApiKey();
-
-  const body: any = {
-    model: GROK_MODEL,
-    messages,
-    temperature,
-    reasoning_effort: GROK_REASONING_EFFORT,
-  };
-  if (maxTokens) body.max_tokens = maxTokens;
-  if (responseFormat) body.response_format = responseFormat;
-
-  const res = await fetch(`${GROK_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    let errMsg = `Grok API error: ${res.status}`;
-    let rawError = "";
-    try {
-      rawError = await res.text();
-      const errBody = rawError ? JSON.parse(rawError) : {};
-      const serverMessage = errBody?.error?.message || errBody?.error || errBody?.message;
-      if (serverMessage) {
-        errMsg = typeof serverMessage === "string" ? serverMessage : JSON.stringify(serverMessage);
-      } else if (rawError) {
-        errMsg = rawError;
-      }
-    } catch {
-      if (rawError) errMsg = rawError;
-    }
-    throw new Error(errMsg);
-  }
-
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? "";
+  const systemInstruction = messages.find(m => m.role === 'system')?.content || '';
+  const userPrompt = messages.filter(m => m.role !== 'system').map(m => m.content).join('\n\n');
+  const responseJson = responseFormat?.type === 'json_object';
+  
+  return await callGeminiApi(systemInstruction, userPrompt, temperature, responseJson);
 }
-
-const stripMarkdownJson = (text: string): string =>
-  text.replace(/```json/g, '').replace(/```/g, '').trim();
 
 export async function grokGenerateJson<T>(
   systemPrompt: string,
@@ -84,17 +25,7 @@ export async function grokGenerateJson<T>(
   temperature = 0.2,
   maxTokens?: number
 ): Promise<T> {
-  const text = await callGrok(
-    [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-    temperature,
-    maxTokens,
-    { type: "json_object" }
-  );
-
-  return JSON.parse(stripMarkdownJson(text)) as T;
+  return await geminiGenerateJson<T>(systemPrompt, userPrompt, temperature);
 }
 
 // ── Resume extractor ──────────────────────────────────────────────────────────

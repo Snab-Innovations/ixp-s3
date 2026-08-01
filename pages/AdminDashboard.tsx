@@ -7,10 +7,11 @@ import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { db, auth } from '../services/firebase';
 import { RevenueAreaChart, UserPieChart, JobBarChart } from '../components/AdminCharts';
 import { GShapeAnimation } from '../components/AdminAnimations';
-import { Users, FileText, DollarSign, UserPlus, Briefcase, CheckCircle, XCircle, Trash2, Bell, Sun, Moon, Monitor, Video, Menu, X, Search, ShieldCheck, ShieldX, BookOpen, MessageSquare as MessageSquareIcon, Bug, Star, Activity, Database, Key, Globe, Copy, Check, Code, Server, TrendingUp, Gauge, Download } from 'lucide-react';
+import { Users, FileText, DollarSign, UserPlus, Briefcase, CheckCircle, XCircle, Trash2, Bell, Sun, Moon, Monitor, Video, Menu, X, Search, ShieldCheck, ShieldX, BookOpen, MessageSquare as MessageSquareIcon, Bug, Star, Activity, Database, Key, Globe, Copy, Check, Code, Server, TrendingUp, Gauge, Download, HardDrive } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useMessageBox } from '../components/MessageBox';
 import Logo from '../components/Logo';
+import AdminApiTester from './AdminApiTester';
 
 const AdminDashboard: React.FC = () => {
   // Real-time Data State
@@ -29,7 +30,7 @@ const AdminDashboard: React.FC = () => {
   const [perInterviewPrice, setPerInterviewPrice] = useState<number>(150);
 
   // UI State
-  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'users' | 'jobs' | 'consents' | 'transactions' | 'submissions' | 'reviews' | 'api' | 'dbAccess'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'users' | 'jobs' | 'consents' | 'transactions' | 'submissions' | 'reviews' | 'api' | 'apiTester' | 'dbAccess'>('overview');
   const [dbSubTab, setDbSubTab] = useState<'submissions' | 'interviews' | 'users'>('submissions');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -828,6 +829,8 @@ const AdminDashboard: React.FC = () => {
               { id: 'blogs', label: 'Manage Blogs', icon: BookOpen },
               { id: 'stats', label: 'Platform Stats', icon: Activity },
               { id: 'rateLimiting', label: 'Rate Limiting', icon: Gauge },
+              { id: 'storage', label: 'Amazon S3 Storage', icon: HardDrive },
+              { id: 'apiTester', label: 'API Playground & Tester', icon: Code },
               { id: 'api', label: 'API & Integrations', icon: Database }
             ].map(item => (
               <button
@@ -836,6 +839,7 @@ const AdminDashboard: React.FC = () => {
                   if (item.id === 'blogs') navigate('/admin/blogs');
                   else if (item.id === 'stats') navigate('/admin/stats');
                   else if (item.id === 'rateLimiting') navigate('/admin/rate-limiting');
+                  else if (item.id === 'storage') navigate('/admin/storage');
                   else setActiveTab(item.id as any); 
                   setIsMobileSidebarOpen(false); 
                 }}
@@ -873,6 +877,8 @@ const AdminDashboard: React.FC = () => {
             { id: 'blogs', label: 'Manage Blogs', icon: BookOpen },
             { id: 'stats', label: 'Platform Stats', icon: Activity },
             { id: 'rateLimiting', label: 'Rate Limiting', icon: Gauge },
+            { id: 'storage', label: 'Amazon S3 Storage', icon: HardDrive },
+            { id: 'apiTester', label: 'API Playground & Tester', icon: Code },
             { id: 'api', label: 'API & Integrations', icon: Database }
           ].map(item => (
             <button
@@ -881,6 +887,7 @@ const AdminDashboard: React.FC = () => {
                 if (item.id === 'blogs') navigate('/admin/blogs');
                 else if (item.id === 'stats') navigate('/admin/stats');
                 else if (item.id === 'rateLimiting') navigate('/admin/rate-limiting');
+                else if (item.id === 'storage') navigate('/admin/storage');
                 else setActiveTab(item.id as any);
               }}
               className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium transition-all ${activeTab === item.id
@@ -1601,6 +1608,12 @@ const AdminDashboard: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'apiTester' && (
+            <div className="animate-in fade-in duration-300">
+              <AdminApiTester />
             </div>
           )}
 
