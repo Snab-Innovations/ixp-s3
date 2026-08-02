@@ -121,7 +121,7 @@ export default function AdminApiTester() {
     }
   };
 
-  // Run Brevo Test
+  // Run Amazon SES Test
   const handleTestBrevo = async () => {
     if (!emailRecipient) {
       setEmailError("Recipient email address is required.");
@@ -139,13 +139,13 @@ export default function AdminApiTester() {
         'TEST-CODE'
       );
       if (res.success) {
-        setEmailResult(`Test email sent successfully to ${emailRecipient}`);
+        setEmailResult(`Test email sent successfully to ${emailRecipient} via Amazon SES`);
       } else {
-        throw new Error(res.error || 'Failed to send email via Brevo');
+        throw new Error(res.error || 'Failed to send email via Amazon SES');
       }
     } catch (err: any) {
-      console.error("Brevo Test Error:", err);
-      setEmailError(err.message || "Failed to send email via Brevo.");
+      console.error("Amazon SES Test Error:", err);
+      setEmailError(err.message || "Failed to send email via Amazon SES.");
     } finally {
       setIsEmailLoading(false);
     }
@@ -215,7 +215,7 @@ export default function AdminApiTester() {
             onClick={() => setActiveApiTab('brevo')}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${activeApiTab === 'brevo' ? 'bg-blue-600 text-white shadow-md' : isDark ? 'bg-white/5 text-gray-400 hover:bg-white/10' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
           >
-            <Mail size={16} /> Brevo Email Tester
+            <Mail size={16} /> Amazon SES Email Tester
           </button>
           <button
             onClick={() => setActiveApiTab('env')}

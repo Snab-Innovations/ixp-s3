@@ -1,10 +1,10 @@
-// Resend & Brevo Email Service Integration
-// Exports Resend transactional email sender with designer template
+// Amazon SES Email Service Integration
+// Re-exports Amazon SES transactional email sender with designer template
 
 export {
   sendSingleEmail,
   sendInterviewInvitations,
   getDesignerEmailTemplate,
   deriveNameFromEmail
-} from './resendService';
-export type { SendEmailResult } from './resendService';
+} from './sesService';
+export type { SendEmailResult, JobDetailsOptions } from './sesService';

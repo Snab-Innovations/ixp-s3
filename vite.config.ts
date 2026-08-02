@@ -8,15 +8,7 @@ export default defineConfig(({ mode }) => {
     return {
       server: {
         port: 3000,
-        host: '0.0.0.0',
-        proxy: {
-          '/api/resend': {
-            target: 'https://api.resend.com',
-            changeOrigin: true,
-            secure: true,
-            rewrite: (path) => path.replace(/^\/api\/resend/, '')
-          }
-        }
+        host: '0.0.0.0'
       },
       plugins: [tailwindcss(), react()],
       optimizeDeps: {
