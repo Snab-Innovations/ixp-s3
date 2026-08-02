@@ -7,7 +7,7 @@ import { AuditLog } from '../types';
  */
 export async function logTeamActivity(
   teamId: string,
-  action: 'job_created' | 'interview_created' | 'candidate_added' | 'test_created' | 'secondary_recruiter_added' | 'status_updated' | 'resume_uploaded',
+  action: 'job_created' | 'interview_created' | 'candidate_added' | 'candidate_invited' | 'candidate_whatsapp_invited' | 'candidate_reminder_sent' | 'test_created' | 'secondary_recruiter_added' | 'status_updated' | 'resume_uploaded' | string,
   details: string,
   performedBy: {
     uid: string;

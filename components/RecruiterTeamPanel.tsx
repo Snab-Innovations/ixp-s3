@@ -38,7 +38,12 @@ export const RecruiterTeamPanel: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const primaryUid = userProfile?.parentRecruiterId || userProfile?.teamId || user?.uid || '';
-  const isPrimary = !userProfile?.parentRecruiterId;
+  const isPrimary = !userProfile?.parentRecruiterId && !(userProfile as any)?.isSubRecruiter && userProfile?.role !== 'sub_recruiter';
+
+  // Team & Audit Logs should ONLY be visible to the main recruiter (Primary Owner), NOT sub-recruiters
+  if (!isPrimary) {
+    return null;
+  }
 
   // Load team members
   useEffect(() => {
@@ -75,14 +80,19 @@ export const RecruiterTeamPanel: React.FC = () => {
     return unsubscribe;
   }, [primaryUid, userProfile]);
 
-  // Load Audit Logs
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
+
+  // Lazy load Audit Logs ONLY when activeTab === 'audit'
   useEffect(() => {
-    if (!primaryUid) return;
+    if (!primaryUid || activeTab !== 'audit') return;
+
+    setLoadingAuditLogs(true);
     const unsub = subscribeTeamAuditLogs(primaryUid, (logs) => {
       setAuditLogs(logs);
+      setLoadingAuditLogs(false);
     });
     return unsub;
-  }, [primaryUid]);
+  }, [primaryUid, activeTab]);
 
   const handleAddSubRecruiter = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,6 +168,46 @@ export const RecruiterTeamPanel: React.FC = () => {
     }
   };
 
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Filtered lists
+  const filteredMembers = teamMembers.filter((m) => {
+    const queryStr = searchQuery.toLowerCase().trim();
+    if (!queryStr) return true;
+    return (
+      (m.name || '').toLowerCase().includes(queryStr) ||
+      (m.email || '').toLowerCase().includes(queryStr) ||
+      (m.designation || '').toLowerCase().includes(queryStr) ||
+      (m.role || '').toLowerCase().includes(queryStr)
+    );
+  });
+
+  const filteredLogs = auditLogs.filter((log) => {
+    const queryStr = searchQuery.toLowerCase().trim();
+    if (!queryStr) return true;
+    return (
+      (log.details || '').toLowerCase().includes(queryStr) ||
+      (log.action || '').toLowerCase().includes(queryStr) ||
+      (log.performedBy?.name || '').toLowerCase().includes(queryStr) ||
+      (log.performedBy?.email || '').toLowerCase().includes(queryStr) ||
+      (log.performedBy?.designation || '').toLowerCase().includes(queryStr) ||
+      (log.createdAt ? new Date(log.createdAt).toLocaleString().toLowerCase().includes(queryStr) : false)
+    );
+  });
+
+  const getLogIcon = (action: string) => {
+    if (action.includes('whatsapp') || action.includes('invited') || action.includes('reminder')) {
+      return <Mail size={16} className="text-emerald-400" />;
+    }
+    if (action.includes('job') || action.includes('interview')) {
+      return <Briefcase size={16} className="text-blue-400" />;
+    }
+    if (action.includes('resume')) {
+      return <Sparkles size={16} className="text-amber-400" />;
+    }
+    return <Clock size={16} className="text-purple-400" />;
+  };
+
   return (
     <div className="border-t border-white/[0.11] bg-black p-4 sm:p-6 lg:p-7 space-y-6">
       
@@ -177,34 +227,56 @@ export const RecruiterTeamPanel: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex rounded-lg border border-white/[0.12] bg-[#0c0c0c] p-1">
-            <button
-              onClick={() => setActiveTab('members')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                activeTab === 'members' ? 'bg-white/[0.1] text-white' : 'text-[#9ca3af] hover:text-white'
-              }`}
-            >
-              <Users size={14} /> Team Members
-            </button>
-            <button
-              onClick={() => setActiveTab('audit')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                activeTab === 'audit' ? 'bg-white/[0.1] text-white' : 'text-[#9ca3af] hover:text-white'
-              }`}
-            >
-              <Activity size={14} /> Audit Trail ({auditLogs.length})
-            </button>
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
+          {/* SEARCH BAR */}
+          <div className="relative min-w-[200px] sm:min-w-[240px]">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={activeTab === 'audit' ? 'Search audit logs...' : 'Search members...'}
+              className="w-full rounded-lg border border-white/[0.15] bg-[#0c0c0c] pl-8 pr-8 py-1.5 text-xs text-white placeholder-[#6b7280] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+            <Activity className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-[#6b7280]" />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-2.5 text-[#6b7280] hover:text-white"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
 
-          {isPrimary && (
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white shadow-lg shadow-blue-500/20 transition-all cursor-pointer"
-            >
-              <UserPlus size={15} /> Add Sub-Recruiter
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border border-white/[0.12] bg-[#0c0c0c] p-1">
+              <button
+                onClick={() => setActiveTab('members')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  activeTab === 'members' ? 'bg-white/[0.1] text-white' : 'text-[#9ca3af] hover:text-white'
+                }`}
+              >
+                <Users size={14} /> Team Members ({filteredMembers.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('audit')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  activeTab === 'audit' ? 'bg-white/[0.1] text-white' : 'text-[#9ca3af] hover:text-white'
+                }`}
+              >
+                <Activity size={14} /> Audit Trail
+              </button>
+            </div>
+
+            {isPrimary && (
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-blue-600 hover:bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-lg shadow-blue-500/20 transition-all cursor-pointer"
+              >
+                <UserPlus size={14} /> Add Sub-Recruiter
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -222,46 +294,54 @@ export const RecruiterTeamPanel: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.08]">
-                {teamMembers.map((member) => {
-                  const isOwner = !member.parentRecruiterId;
-                  return (
-                    <tr key={member.uid} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="px-4 py-3.5 whitespace-nowrap">
-                        <div className="flex items-center gap-3">
-                          <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${
-                            isOwner ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300' : 'bg-blue-500/20 border border-blue-500/40 text-blue-300'
-                          }`}>
-                            {member.name ? member.name.charAt(0).toUpperCase() : 'R'}
-                          </div>
-                          <div>
-                            <div className="text-sm font-semibold text-white flex items-center gap-1.5">
-                              {member.name || 'Recruiter'}
-                              {isOwner && <Shield size={13} className="text-amber-400" />}
+                {filteredMembers.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-xs text-[#9ca3af]">
+                      No team members found matching "{searchQuery}".
+                    </td>
+                  </tr>
+                ) : (
+                  filteredMembers.map((member) => {
+                    const isOwner = !member.parentRecruiterId;
+                    return (
+                      <tr key={member.uid} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                              isOwner ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300' : 'bg-blue-500/20 border border-blue-500/40 text-blue-300'
+                            }`}>
+                              {member.name ? member.name.charAt(0).toUpperCase() : 'R'}
                             </div>
-                            <div className="text-[11px] text-[#6b7280]">UID: {member.uid.slice(0, 10)}...</div>
+                            <div>
+                              <div className="text-sm font-semibold text-white flex items-center gap-1.5">
+                                {member.name || 'Recruiter'}
+                                {isOwner && <Shield size={13} className="text-amber-400" />}
+                              </div>
+                              <div className="text-[11px] text-[#6b7280]">UID: {member.uid.slice(0, 10)}...</div>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-xs text-[#d1d5db]">
-                        {member.email}
-                      </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border ${
-                          isOwner 
-                            ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                            : 'bg-blue-500/10 border-blue-500/30 text-blue-300'
-                        }`}>
-                          <Briefcase size={12} /> {member.designation || (isOwner ? 'Primary Owner' : 'Sub-Recruiter')}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-xs">
-                        <span className="inline-flex items-center gap-1 text-emerald-400 font-medium">
-                          <CheckCircle2 size={13} /> Shared Jobs & Responses
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-xs text-[#d1d5db]">
+                          {member.email}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border ${
+                            isOwner 
+                              ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                              : 'bg-blue-500/10 border-blue-500/30 text-blue-300'
+                          }`}>
+                            <Briefcase size={12} /> {member.designation || (isOwner ? 'Primary Owner' : 'Sub-Recruiter')}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap text-xs">
+                          <span className="inline-flex items-center gap-1 text-emerald-400 font-medium">
+                            <CheckCircle2 size={13} /> Shared Jobs & Responses
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -271,37 +351,97 @@ export const RecruiterTeamPanel: React.FC = () => {
       {/* TAB 2: REAL-TIME AUDIT LOGS */}
       {activeTab === 'audit' && (
         <div className="space-y-4">
-          {auditLogs.length === 0 ? (
+          {loadingAuditLogs ? (
+            <div className="text-center py-12 border border-white/[0.11] rounded-xl bg-[#080808] flex items-center justify-center gap-3">
+              <Activity className="animate-spin h-5 w-5 text-blue-400" />
+              <span className="text-xs text-[#9ca3af]">Loading real-time audit logs...</span>
+            </div>
+          ) : filteredLogs.length === 0 ? (
             <div className="text-center py-12 border border-dashed border-white/[0.11] rounded-xl bg-[#080808]">
               <Activity className="mx-auto h-8 w-8 text-[#6b7280] mb-2" />
-              <p className="text-xs text-[#9ca3af]">No audit events recorded yet. Activity like creating jobs or uploading resumes will appear here live.</p>
+              <p className="text-xs text-[#9ca3af]">
+                {searchQuery ? `No audit events found matching "${searchQuery}".` : 'No audit events recorded yet. Activity like inviting candidates or creating jobs will appear here live.'}
+              </p>
             </div>
           ) : (
-            <div className="space-y-2.5">
-              {auditLogs.map((log) => (
-                <div key={log.id} className="flex items-start gap-3.5 p-3.5 rounded-xl border border-white/[0.08] bg-[#090909] hover:border-white/[0.15] transition-all">
-                  <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400 shrink-0 mt-0.5">
-                    <Clock size={16} />
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs font-semibold text-white truncate">
-                        {log.details}
+            <div className="space-y-3">
+              {filteredLogs.map((log) => (
+                <div key={log.id} className="p-4 rounded-xl border border-white/[0.1] bg-[#090909] hover:border-white/[0.2] transition-all space-y-3">
+                  {/* Account Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-full bg-blue-500/20 border border-blue-500/40 text-blue-300 flex items-center justify-center font-bold text-xs shrink-0">
+                        {(log.performedBy?.name || log.performedBy?.email || 'R').charAt(0).toUpperCase()}
                       </div>
-                      <span className="text-[11px] text-[#6b7280] shrink-0 font-mono">
+                      <div>
+                        <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <span>{log.performedBy?.name || 'Recruiter Account'}</span>
+                          {log.performedBy?.email && (
+                            <span className="text-[11px] text-[#9ca3af] font-normal">({log.performedBy.email})</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-[#6b7280]">
+                          Account Designation: <span className="text-blue-400 font-medium">{log.performedBy?.designation || 'Recruiter'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase border bg-white/[0.04] text-[#d1d5db] border-white/[0.1]">
+                        {log.action.replace(/_/g, ' ')}
+                      </span>
+                      <span className="text-[11px] text-[#6b7280] font-mono">
                         {log.createdAt ? new Date(log.createdAt).toLocaleString() : 'Just now'}
                       </span>
                     </div>
+                  </div>
 
-                    <div className="flex items-center gap-2 mt-1 text-[11px] text-[#9ca3af]">
-                      <span>Performed by:</span>
-                      <span className="font-medium text-blue-300">
-                        {log.performedBy?.name || log.performedBy?.email || 'Team Member'}
-                      </span>
-                      {log.performedBy?.designation && (
-                        <span className="text-[#6b7280]">({log.performedBy.designation})</span>
-                      )}
+                  {/* Activity Details / Candidate & Job Focus */}
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shrink-0 mt-0.5">
+                      {getLogIcon(log.action || '')}
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <p className="text-xs font-semibold text-white leading-relaxed">
+                        {log.details}
+                      </p>
+
+                      <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                        {/* Inviting Account Email */}
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 border border-blue-500/30 text-[11px] font-medium text-blue-300">
+                          <Mail size={12} className="text-blue-400" />
+                          <span>Invited By Account: <strong className="text-white">{log.performedBy?.name || 'Recruiter'} ({log.performedBy?.email || 'N/A'})</strong></span>
+                        </span>
+
+                        {/* Candidate Email & Mobile Badges */}
+                        {(() => {
+                          const text = log.details || '';
+                          const emailMatches = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g) || [];
+                          const phoneMatches = text.match(/(\b[6-9]\d{9}\b|\(\d{10}\))/g) || [];
+                          
+                          const candEmails = Array.from(new Set(emailMatches.filter(
+                            (e) => e.toLowerCase() !== log.performedBy?.email?.toLowerCase() && e.toLowerCase() !== 'invites@snab.co.in'
+                          )));
+                          const candPhones = Array.from(new Set(phoneMatches));
+
+                          return (
+                            <>
+                              {candEmails.map((candEmail, idx) => (
+                                <span key={`email-${idx}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-medium text-emerald-300">
+                                  <Mail size={12} className="text-emerald-400" />
+                                  <span>Invited To Candidate Email: <strong className="text-white">{candEmail}</strong></span>
+                                </span>
+                              ))}
+                              {candPhones.map((phone, idx) => (
+                                <span key={`phone-${idx}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-medium text-emerald-300">
+                                  <Phone size={12} className="text-emerald-400" />
+                                  <span>Candidate Mobile: <strong className="text-white">{phone}</strong></span>
+                                </span>
+                              ))}
+                            </>
+                          );
+                        })()}
+                      </div>
                     </div>
                   </div>
                 </div>

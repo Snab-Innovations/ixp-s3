@@ -10,6 +10,7 @@ import { sendInterviewInvitations } from '../services/brevoService';
 import { sendWhatsAppMessage, sendBulkWhatsAppInvites, sendInterviewWhatsAppInvite } from '../services/waSenderService';
 import { evaluateResumeForMultipleJobs } from '../services/api';
 import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
+import { logTeamActivity } from '../services/auditService';
 
 const InlineBusySkeleton = ({ className = 'bg-current/25' }: { className?: string }) => (
     <span className={`inline-block h-3 w-16 animate-pulse rounded-[4px] ${className}`} aria-hidden="true" />
@@ -337,6 +338,26 @@ const InvitedCandidates: React.FC = () => {
             }
 
             messageBox.showSuccess(`Invitations dispatched: ${emailCount > 0 ? `${emailCount} Email(s)` : ''}${emailCount > 0 && waCount > 0 ? ' & ' : ''}${waCount > 0 ? `${waCount} WhatsApp Mobile invite(s)` : ''}!`);
+            
+            const primaryUid = userProfile?.parentRecruiterId || userProfile?.teamId || user?.uid || '';
+            if (primaryUid) {
+              const candidateSummary = newCandidates.map(c => c.phone && c.phone !== 'N/A' ? `${c.email} (${c.phone})` : c.email).join(', ');
+              const detailMsg = newCandidates.length === 1
+                ? `Added & invited candidate ${candidateSummary} for job "${selectedInterview.title}"`
+                : `Added & invited ${newCandidates.length} candidate(s) (${candidateSummary}) for job "${selectedInterview.title}"`;
+
+              logTeamActivity(
+                primaryUid,
+                'candidate_invited',
+                detailMsg,
+                {
+                  uid: user?.uid || '',
+                  name: userProfile?.name || user?.displayName || user?.email || 'Recruiter',
+                  email: user?.email || '',
+                  designation: userProfile?.designation || 'Recruiter'
+                }
+              );
+            }
             
             // Optimistically update the UI table
             const optimizedAdditions: GlobalCandidate[] = newCandidates.map(c => ({

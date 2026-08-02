@@ -11,6 +11,7 @@ import { evaluateResumeMatch } from '../services/api';
 import { formatExtractedPhone, ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 import { parseCandidateDocument } from '../services/candidateFileParser';
 import { InterviewCandidatesSkeleton } from '../components/ui/interview-loading-skeleton';
+import { logTeamActivity } from '../services/auditService';
 import { Interview } from '../types';
 
 type CandidateDraft = { email: string; phone: string; matchScore?: string };
@@ -516,6 +517,20 @@ const InterviewCandidates: React.FC = () => {
 
       if (res.success) {
         messageBox.showSuccess(`✅ WhatsApp invitation sent to ${phone} via API!`);
+        const primaryUid = userProfile?.parentRecruiterId || userProfile?.teamId || user?.uid || '';
+        if (primaryUid) {
+          logTeamActivity(
+            primaryUid,
+            'candidate_whatsapp_invited',
+            `Sent direct WhatsApp invitation to candidate ${phone} (${candidateEmail}) for job "${interview.title}"`,
+            {
+              uid: user?.uid || '',
+              name: userProfile?.name || user?.displayName || user?.email || 'Recruiter',
+              email: user?.email || '',
+              designation: userProfile?.designation || 'Recruiter'
+            }
+          );
+        }
       } else {
         messageBox.showError(`WhatsApp API error: ${res.error || 'Failed to send'}`);
       }

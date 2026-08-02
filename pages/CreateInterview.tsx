@@ -671,6 +671,17 @@ const CreateInterview: React.FC = () => {
       }
 
       const statusMsg = `✅ Interview created! Invitations sent: ${emailCount > 0 ? `${emailCount} Email(s)` : ''}${emailCount > 0 && waCount > 0 ? ' & ' : ''}${waCount > 0 ? `${waCount} WhatsApp Mobile invite(s)` : ''}${emailCount === 0 && waCount === 0 ? 'No immediate invites sent' : ''}.`;
+      
+      if (emailCount > 0 || waCount > 0) {
+        const candidateSummary = candidateDataList.map(c => c.phone && c.phone !== 'N/A' ? `${c.email} (${c.phone})` : c.email).join(', ');
+        logTeamActivity(
+          teamId,
+          'candidate_invited',
+          `Invited candidate(s) [${candidateSummary}] for job "${formData.title}"`,
+          creatorInfo
+        );
+      }
+
       alert(statusMsg);
       
       navigate('/recruiter/interviews');

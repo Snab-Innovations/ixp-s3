@@ -14,7 +14,7 @@ import EditJobModal from './EditJob';
 import { evaluateResumeMatch } from '../services/api';
 import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 import { parseCandidateDocument } from '../services/candidateFileParser';
-import { sendBulkWhatsAppInvites } from '../services/waSenderService';
+import { logTeamActivity } from '../services/auditService';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rateLimitService';
 
@@ -570,6 +570,31 @@ const RecruiterInterviews: React.FC = () => {
         }
 
         messageBox.showSuccess(`Invitations sent: ${emailCount > 0 ? `${emailCount} Email(s)` : ''}${emailCount > 0 && waCount > 0 ? ' & ' : ''}${waCount > 0 ? `${waCount} WhatsApp invite(s)` : ''}!`);
+        
+        const primaryUid = userProfile?.parentRecruiterId || userProfile?.teamId || user?.uid || '';
+        if (primaryUid) {
+          const candidateSummary = candidateDataToAdd.map(c => {
+            const phonePart = c.phone && c.phone !== 'N/A' ? ` (${c.phone})` : '';
+            return `${c.email}${phonePart}`;
+          }).join(', ');
+
+          const detailMsg = candidateDataToAdd.length === 1
+            ? `Invited candidate ${candidateSummary} for job "${selectedInterview.title}"`
+            : `Invited ${candidateDataToAdd.length} candidates [${candidateSummary}] for job "${selectedInterview.title}"`;
+
+          logTeamActivity(
+            primaryUid,
+            'candidate_invited',
+            detailMsg,
+            {
+              uid: user?.uid || '',
+              name: userProfile?.name || user?.displayName || user?.email || 'Recruiter',
+              email: user?.email || '',
+              designation: userProfile?.designation || 'Recruiter'
+            }
+          );
+        }
+
         setIsInviteModalOpen(false);
         setSelectedInterview(null);
         setNewEmails([]);
