@@ -6,28 +6,9 @@ import { ThemeProvider } from '../context/ThemeContext';
 import { Interview } from '../types';
 import DayNightToggle from '../components/DayNightToggle';
 import gsap from 'gsap';
+import { ChevronDown } from 'lucide-react';
 import { getRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus } from '../services/rateLimitService';
 import { stageCandidateConsent } from '../services/candidateConsent';
-
-const CANDIDATE_CONSENT_ITEMS = [
-  {
-    id: 'continuous_recording',
-    title: 'Continuous recording and monitoring',
-    text: 'Your audio and video will be continuously recorded and monitored for the entire, uninterrupted duration of the interview session.',
-  },
-  {
-    id: 'ai_processing',
-    title: 'AI processing and assessment',
-    text: 'Your recorded media, spoken transcripts, biometric indicators such as gaze and posture, and session metadata will be processed by AI to evaluate your skills, communication, reasoning, and behavioral metrics against the job rubric.',
-  },
-  {
-    id: 'recruiting_company_sharing',
-    title: 'Sharing with the recruiting company',
-    text: 'Your sensitive data and the AI-generated performance and integrity report will be shared with the recruiting company for its exclusive review.',
-  },
-] as const;
-
-type CandidateConsentItemId = typeof CANDIDATE_CONSENT_ITEMS[number]['id'];
 
 const InterviewAccess: React.FC = () => {
   const { interviewId } = useParams<{ interviewId: string }>();
@@ -41,13 +22,10 @@ const InterviewAccess: React.FC = () => {
   const [isExpired, setIsExpired] = useState(false);
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
-  const [consentSelections, setConsentSelections] = useState<Record<CandidateConsentItemId, boolean>>({
-    continuous_recording: false,
-    ai_processing: false,
-    recruiting_company_sharing: false,
-  });
 
-  const hasAcceptedAll = CANDIDATE_CONSENT_ITEMS.every((item) => consentSelections[item.id]);
+  // Candidate Consent States
+  const [isConsented, setIsConsented] = useState(false);
+  const [isLearnMoreOpen, setIsLearnMoreOpen] = useState(false);
 
   useEffect(() => {
     const fetchInterviewTitle = async () => {
@@ -114,16 +92,8 @@ const InterviewAccess: React.FC = () => {
     }
   };
 
-  const setAllConsents = (checked: boolean) => {
-    setConsentSelections({
-      continuous_recording: checked,
-      ai_processing: checked,
-      recruiting_company_sharing: checked,
-    });
-  };
-
   const handleConsent = async () => {
-    if (!interviewId || !hasAcceptedAll) return;
+    if (!interviewId || !isConsented) return;
 
     setIsLoading(true);
     setError('');
@@ -151,61 +121,96 @@ const InterviewAccess: React.FC = () => {
           </h1>
           {showConsent ? (
             <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
-              Review and accept each item to start candidate onboarding for <strong>{interviewTitle}</strong>.
+              Review and consent to start candidate onboarding for <strong>{interviewTitle}</strong>.
             </p>
           ) : null}
         </div>
         
         {error && (
-          <p className="access-screen-alert text-red-500 bg-red-100 dark:bg-red-900/20 p-3 rounded-lg">{error}</p>
+          <p className="access-screen-alert text-red-500 bg-red-100 dark:bg-red-900/20 p-3 rounded-lg text-sm font-medium">{error}</p>
         )}
 
         {showConsent && !isExpired && !isRateLimited ? (
-          <div className="text-left">
-            <label className="mb-4 flex cursor-pointer items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800/70 dark:bg-blue-950/30">
-              <input
-                type="checkbox"
-                checked={hasAcceptedAll}
-                onChange={(event) => setAllConsents(event.target.checked)}
-                className="size-5 shrink-0 accent-blue-600"
-              />
-              <span>
-                <span className="block text-sm font-bold text-gray-900 dark:text-white">Select all consents</span>
-                <span className="block text-xs leading-5 text-gray-600 dark:text-gray-400">Select or clear every item below.</span>
-              </span>
-            </label>
+          <div className="text-left space-y-4">
+            {/* Checkbox (primary, one line) */}
+            <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 transition-colors dark:border-blue-900/60 dark:bg-blue-950/30">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isConsented}
+                  onChange={(e) => setIsConsented(e.target.checked)}
+                  className="mt-1 size-5 shrink-0 accent-blue-600 cursor-pointer rounded"
+                />
+                <span className="text-sm font-medium leading-relaxed text-gray-800 dark:text-gray-200">
+                  I consent to this interview being recorded, analyzed by AI, and shared with the recruiting company, as described in{' '}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setIsLearnMoreOpen((prev) => !prev);
+                    }}
+                    className="inline-flex items-center gap-1 font-bold text-blue-600 underline hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 focus:outline-none"
+                  >
+                    <span>Learn more</span>
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform duration-200 ${isLearnMoreOpen ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+                  .
+                </span>
+              </label>
+            </div>
 
-            <fieldset className="flex flex-col gap-3">
-              <legend className="sr-only">Interview consent items</legend>
-              {CANDIDATE_CONSENT_ITEMS.map((item) => (
-                <label
-                  key={item.id}
-                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 p-4 transition hover:border-blue-300 dark:border-white/10 dark:hover:border-blue-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={consentSelections[item.id]}
-                    onChange={(event) => setConsentSelections((current) => ({
-                      ...current,
-                      [item.id]: event.target.checked,
-                    }))}
-                    className="mt-0.5 size-5 shrink-0 accent-blue-600"
-                  />
-                  <span>
-                    <span className="block text-sm font-bold text-gray-900 dark:text-white">{item.title}</span>
-                    <span className="mt-1 block text-sm leading-6 text-gray-600 dark:text-gray-300">{item.text}</span>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
+            {/* "Learn more" expandable panel content */}
+            {isLearnMoreOpen && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50/90 p-5 space-y-4 text-xs sm:text-sm text-gray-700 dark:border-white/10 dark:bg-gray-800/90 dark:text-gray-300 shadow-inner">
+                <h4 className="text-sm font-bold uppercase tracking-wider text-gray-900 dark:text-white border-b border-gray-200 dark:border-white/10 pb-2">
+                  What you're agreeing to
+                </h4>
 
+                <div className="space-y-3 leading-relaxed">
+                  <p>
+                    <strong className="text-gray-900 dark:text-white">1. Recording</strong> — Your audio and video will be continuously recorded for the full duration of this interview session.
+                  </p>
+
+                  <p>
+                    <strong className="text-gray-900 dark:text-white">2. AI processing</strong> — Your recording, transcript, and behavioral/biometric indicators (such as gaze and posture) will be analyzed by AI to assess your skills, communication, reasoning, and behavior against the job rubric.
+                  </p>
+
+                  <p>
+                    <strong className="text-gray-900 dark:text-white">3. Sharing</strong> — Your recording, transcript, and the AI-generated assessment report will be shared with the recruiting company for their exclusive review as part of this hiring process.
+                  </p>
+
+                  <p>
+                    <strong className="text-gray-900 dark:text-white">4. Consent record</strong> — When you submit this consent, we log your IP address, timestamp, and the exact text shown above as proof that consent was given. This record is used only to verify consent and is handled under our{' '}
+                    <a
+                      href="/privacy-policy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline font-semibold hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                    >
+                      Privacy Policy
+                    </a>
+                    .
+                  </p>
+                </div>
+
+                <div className="pt-3 border-t border-gray-200 dark:border-white/10 text-xs italic text-gray-500 dark:text-gray-400">
+                  You may withdraw consent before the interview begins by closing this window. Once the interview starts, this consent applies for its full duration.
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
             <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
               <button
                 type="button"
                 onClick={() => {
                   setShowConsent(false);
                   setError('');
-                  setAllConsents(false);
+                  setIsConsented(false);
+                  setIsLearnMoreOpen(false);
                 }}
                 disabled={isLoading}
                 className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
@@ -215,7 +220,7 @@ const InterviewAccess: React.FC = () => {
               <button
                 type="button"
                 onClick={handleConsent}
-                disabled={!hasAcceptedAll || isLoading}
+                disabled={!isConsented || isLoading}
                 className="access-screen-submit w-full rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-50 dark:text-black"
               >
                 {isLoading ? 'Continuing...' : 'I consent and continue'}
