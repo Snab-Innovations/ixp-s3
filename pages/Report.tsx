@@ -1173,7 +1173,7 @@ const InterviewReport: React.FC = () => {
                             <div className="space-y-2 mt-2">
                                 <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Qualifications</h3>
                                 <div className="flex flex-col p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
-                                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Basic Qualification</span>
+                                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Highest Qualification</span>
                                     <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{submission.candidateInfo.qualificationBasic || 'N/A'}</span>
                                 </div>
                                 {submission.candidateInfo.qualificationPG && (

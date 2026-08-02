@@ -414,7 +414,6 @@ export const uploadToCloudinary = async (blob: Blob, resourceType: 'video' | 'im
 export const requestTranscription = async (audioUrl: string, languageCode: string = 'en') => {
   try {
     const body: any = { audio_url: audioUrl, language_code: languageCode };
-    if (languageCode !== 'en') body.speech_model = 'nano';
     const response = await fetch(ASSEMBLYAI_TRANSCRIPT_ENDPOINT, {
       method: 'POST',
       headers: { 'authorization': ASSEMBLYAI_API_KEY, 'content-type': 'application/json' },
