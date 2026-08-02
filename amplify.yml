@@ -3,6 +3,7 @@ backend:
   phases:
     build:
       commands:
+        - rm -rf node_modules
         - npm install --no-audit
         - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
 frontend:
@@ -17,6 +18,3 @@ frontend:
     baseDirectory: dist
     files:
       - '**/*'
-  cache:
-    paths:
-      - node_modules/**/*
