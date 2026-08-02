@@ -48,6 +48,7 @@ import InvitedCandidates from './pages/InvitedCandidates';
 import CareerHub from './pages/CareerHub';
 import StatusPage from './pages/Status';
 import ClientView from './pages/ClientView';
+import ActiveJobsPage from './pages/ActiveJobs';
 
 const DefaultRouteLoader = () => (
   <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
@@ -142,6 +143,16 @@ const App: React.FC = () => {
             <Route path="career-hub" element={
               <ThemeProvider>
                 <CareerHub />
+              </ThemeProvider>
+            } />
+            <Route path="jobs" element={
+              <ThemeProvider>
+                <ActiveJobsPage />
+              </ThemeProvider>
+            } />
+            <Route path="active-jobs" element={
+              <ThemeProvider>
+                <ActiveJobsPage />
               </ThemeProvider>
             } />
 
