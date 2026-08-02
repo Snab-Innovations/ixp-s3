@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { defineBackend } from '@aws-amplify/backend';
 import { HttpApi, HttpMethod } from 'aws-cdk-lib/aws-apigatewayv2';
+import { Duration } from 'aws-cdk-lib';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import { apiServer } from './functions/api-server/resource.js';
 
@@ -55,7 +56,7 @@ const httpApi = new HttpApi(backend.stack, 'InterviewXpertHttpApi', {
       HttpMethod.OPTIONS,
     ],
     allowOrigins: ['*'],
-    maxAge: 86400,
+    maxAge: Duration.seconds(86400),
   },
 });
 
