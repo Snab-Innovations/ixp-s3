@@ -5,6 +5,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useMessageBox } from '../components/MessageBox';
+import { sendWhatsAppMessage } from '../services/waSenderService';
 
 export const SKILL_OPTIONS = [
   "HTML", "CSS", "React", "Node.js", "JavaScript", "TypeScript", "Java",
@@ -61,15 +62,71 @@ const Profile: React.FC = () => {
     hobbies: '',
     customSections: [] as CustomSection[]
   });
-  const [skillSearch, setSkillSearch] = useState('');
+  // WhatsApp Testing & Credential States
+  const [testPhone, setTestPhone] = useState('');
+  const [testMessage, setTestMessage] = useState('Hello! This is a test message from SNAB Innovations WhatsApp API system.');
+  const [savingWaCredentials, setSavingWaCredentials] = useState(false);
+  const [testingWa, setTestingWa] = useState(false);
 
-  // Temp states for adding items
-  const [tempExp, setTempExp] = useState<ExperienceItem>({ id: 0, role: '', company: '', duration: '', description: '' });
-  const [tempEdu, setTempEdu] = useState<EducationItem>({ id: 0, degree: '', school: '', year: '' });
-  const [tempProject, setTempProject] = useState<ProjectItem>({ id: 0, title: '', link: '', description: '' });
-  const [tempCert, setTempCert] = useState<CertificationItem>({ id: 0, name: '', issuer: '', year: '' });
-  const [tempVol, setTempVol] = useState<VolunteeringItem>({ id: 0, role: '', organization: '', duration: '', description: '' });
-  const [tempCustom, setTempCustom] = useState<CustomSection>({ id: 0, title: '', content: '' });
+  const handleSaveWaCredentials = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    setSavingWaCredentials(true);
+    try {
+      await Promise.all([
+        setDoc(doc(db, 'profiles', user.uid), {
+          whatsappSessionId: formData.whatsappSessionId || '',
+          whatsappSessionPasscode: formData.whatsappSessionPasscode || '',
+          updatedAt: new Date()
+        }, { merge: true }),
+        setDoc(doc(db, 'users', user.uid), {
+          whatsappSessionId: formData.whatsappSessionId || '',
+          whatsappSessionPasscode: formData.whatsappSessionPasscode || '',
+          updatedAt: new Date()
+        }, { merge: true })
+      ]);
+      messageBox.showSuccess('✅ WhatsApp Session Credentials saved successfully!');
+    } catch (err: any) {
+      console.error("Error saving WhatsApp credentials:", err);
+      messageBox.showError("Failed to save WhatsApp credentials.");
+    } finally {
+      setSavingWaCredentials(false);
+    }
+  };
+
+  const handleTestWaMessage = async () => {
+    if (!testPhone.trim()) {
+      messageBox.showError("Please enter a valid mobile number for testing (e.g. 9823188483)");
+      return;
+    }
+    if (!formData.whatsappSessionId.trim() || !formData.whatsappSessionPasscode.trim()) {
+      messageBox.showError("Please enter your WhatsApp Session ID & Passcode before testing.");
+      return;
+    }
+
+    setTestingWa(true);
+    try {
+      const res = await sendWhatsAppMessage(
+        testPhone.trim(),
+        testMessage.trim(),
+        {
+          sessionId: formData.whatsappSessionId.trim(),
+          passcode: formData.whatsappSessionPasscode.trim()
+        }
+      );
+
+      if (res.success) {
+        messageBox.showSuccess(`🎉 WhatsApp test message dispatched successfully to ${testPhone.trim()}!`);
+      } else {
+        messageBox.showError(`❌ Test Failed: ${res.error || 'Failed to send WhatsApp message'}`);
+      }
+    } catch (err: any) {
+      console.error("WhatsApp testing error:", err);
+      messageBox.showError(`Test Failed: ${err.message || 'Network error'}`);
+    } finally {
+      setTestingWa(false);
+    }
+  };
 
   const steps = [
     { id: 'basics', title: 'Identity', icon: 'fa-id-card', description: 'Start with the basics.' },
@@ -123,7 +180,9 @@ const Profile: React.FC = () => {
             certifications: profileInfo.certifications || [],
             volunteering: profileInfo.volunteering || [],
             hobbies: profileInfo.hobbies || '',
-            customSections: profileInfo.customSections || []
+            customSections: profileInfo.customSections || [],
+            whatsappSessionId: profileInfo.whatsappSessionId || userInfo.whatsappSessionId || '',
+            whatsappSessionPasscode: profileInfo.whatsappSessionPasscode || userInfo.whatsappSessionPasscode || ''
           });
 
         } catch (err) {
@@ -356,11 +415,18 @@ const Profile: React.FC = () => {
     if (!user) return;
     setSaving(true);
     try {
-      await setDoc(doc(db, 'profiles', user.uid), {
-        ...formData,
-        updatedAt: new Date()
-      }, { merge: true });
-      messageBox.showSuccess('Profile updated successfully!');
+      await Promise.all([
+        setDoc(doc(db, 'profiles', user.uid), {
+          ...formData,
+          updatedAt: new Date()
+        }, { merge: true }),
+        setDoc(doc(db, 'users', user.uid), {
+          whatsappSessionId: formData.whatsappSessionId || '',
+          whatsappSessionPasscode: formData.whatsappSessionPasscode || '',
+          updatedAt: new Date()
+        }, { merge: true })
+      ]);
+      messageBox.showSuccess('Profile & WhatsApp credentials updated successfully!');
       setIsEditing(false); // Switch back to view mode after saving
     } catch (err) {
       console.error("Error saving profile:", err);
@@ -728,6 +794,123 @@ const Profile: React.FC = () => {
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Location</label>
                       <input type="text" name="location" value={formData.location} onChange={handleChange} className="w-full p-3 border border-gray-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-slate-950 dark:text-white" placeholder="City, Country" />
+                    </div>
+
+                    <div className="md:col-span-2 p-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/10 space-y-4 mt-3">
+                      {/* Section Header */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-500/20 pb-3">
+                        <div>
+                          <h4 className="text-sm font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                            <i className="fab fa-whatsapp text-lg"></i>
+                            <span>WhatsApp Task Manager Credentials</span>
+                          </h4>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                            Set your account's individual WhatsApp Session ID & Passcode. These credentials will be used strictly whenever you send candidate invitations via WhatsApp.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleSaveWaCredentials}
+                          disabled={savingWaCredentials}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow-md flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                        >
+                          {savingWaCredentials ? (
+                            <>
+                              <i className="fas fa-spinner fa-spin"></i> Saving...
+                            </>
+                          ) : (
+                            <>
+                              <i className="fas fa-save"></i> Save Credentials
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Credentials Inputs */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                            WhatsApp Session ID
+                          </label>
+                          <input
+                            type="text"
+                            name="whatsappSessionId"
+                            value={formData.whatsappSessionId || ''}
+                            onChange={handleChange}
+                            className="w-full p-2.5 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                            placeholder="e.g. aa"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
+                            WhatsApp Session Passcode
+                          </label>
+                          <input
+                            type="password"
+                            name="whatsappSessionPasscode"
+                            value={formData.whatsappSessionPasscode || ''}
+                            onChange={handleChange}
+                            className="w-full p-2.5 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                            placeholder="e.g. ."
+                          />
+                        </div>
+                      </div>
+
+                      {/* Live Testing Tool Box */}
+                      <div className="pt-3 border-t border-emerald-500/20 space-y-3">
+                        <div className="flex items-center gap-2 text-xs font-bold text-emerald-500 uppercase tracking-wider">
+                          <i className="fas fa-paper-plane"></i>
+                          <span>Live WhatsApp Testing Tool</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">
+                              Test Contact Mobile Number
+                            </label>
+                            <input
+                              type="tel"
+                              value={testPhone}
+                              onChange={(e) => setTestPhone(e.target.value)}
+                              placeholder="e.g. 9823188483"
+                              className="w-full p-2.5 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 dark:text-slate-300 mb-1">
+                              Test Message
+                            </label>
+                            <input
+                              type="text"
+                              value={testMessage}
+                              onChange={(e) => setTestMessage(e.target.value)}
+                              placeholder="Enter test message content..."
+                              className="w-full p-2.5 border border-gray-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-950 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end pt-1">
+                          <button
+                            type="button"
+                            onClick={handleTestWaMessage}
+                            disabled={testingWa}
+                            className="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/40 text-emerald-400 hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                          >
+                            {testingWa ? (
+                              <>
+                                <i className="fas fa-spinner fa-spin"></i> Sending Test WhatsApp...
+                              </>
+                            ) : (
+                              <>
+                                <i className="fab fa-whatsapp text-sm"></i> Send Test Message
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

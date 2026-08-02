@@ -13,6 +13,7 @@ import { getCandidateIdentityKeys, isCandidateIdentityInSet, dedupeCandidatesByI
 import { sendInterviewInvitations } from '../services/brevoService';
 import { sendBulkWhatsAppInvites } from '../services/waSenderService';
 import { grokGenerateJson } from '../services/grokService';
+import { parseJobDescriptionText, ParsedJdResult } from '../services/geminiService';
 import {
   extractSkillSignals,
   ingestResumeFile,
@@ -147,6 +148,8 @@ const CreateInterview: React.FC = () => {
   const [loadingShortlistedCandidates, setLoadingShortlistedCandidates] = useState(false);
   const [shortlistedCandidatesError, setShortlistedCandidatesError] = useState(false);
   const [parsingJd, setParsingJd] = useState(false);
+  const [jdImportMode, setJdImportMode] = useState<'upload' | 'paste'>('upload');
+  const [pastedJdText, setPastedJdText] = useState('');
   const [parsingResumes, setParsingResumes] = useState(false);
   const [sendingEmails, setSendingEmails] = useState(false);
   const [manualQuestions, setManualQuestions] = useState<string[]>([]);
@@ -395,6 +398,57 @@ const CreateInterview: React.FC = () => {
     setCandidateEmails(candidateEmails.filter(email => email !== emailToRemove));
   };
 
+  const handleApplyParsedJdData = (parsed: ParsedJdResult) => {
+    setFormData(prev => ({
+      ...prev,
+      title: parsed.title || parsed.vacancyName || parsed.designation || prev.title,
+      description: parsed.description || prev.description,
+      department: parsed.department || parsed.industry || parsed.roleCategory || prev.department,
+      employmentType: parsed.employmentType || prev.employmentType,
+      minExperience: parsed.minExperience !== undefined ? Number(parsed.minExperience) : prev.minExperience,
+      maxExperience: parsed.maxExperience !== undefined ? Number(parsed.maxExperience) : prev.maxExperience,
+      experience: parsed.minExperience !== undefined ? Number(parsed.minExperience) : prev.experience,
+      skills: parsed.skills || (parsed.technicalSkills && parsed.softSkills ? `${parsed.technicalSkills}, ${parsed.softSkills}` : prev.skills),
+      education: parsed.qualification || parsed.education || prev.education,
+      salaryRange: parsed.salaryRange || (parsed.minSalary && parsed.maxSalary ? `${parsed.minSalary} - ${parsed.maxSalary}` : (prev as any).salaryRange || ''),
+      location: parsed.location || (parsed.city ? `${parsed.city}, ${parsed.state || ''}` : (prev as any).location || ''),
+      genderRequirement: parsed.gender || (prev as any).genderRequirement || '',
+    }));
+
+    if (parsed.customFields && Array.from(parsed.customFields).length > 0) {
+      const newFields = parsed.customFields.map((cf, idx) => ({
+        id: Date.now() + idx,
+        key: cf.key.trim(),
+        value: cf.value.trim()
+      }));
+
+      setCustomFields(prev => {
+        const existingKeys = new Set(prev.map(f => f.key.toLowerCase()));
+        const filteredNew = newFields.filter(f => !existingKeys.has(f.key.toLowerCase()));
+        return [...prev, ...filteredNew];
+      });
+    }
+  };
+
+  const handleParsePastedJDText = async () => {
+    if (!pastedJdText.trim()) {
+      alert('Please paste some Job Description text first.');
+      return;
+    }
+
+    setParsingJd(true);
+    try {
+      const parsedData = await parseJobDescriptionText(pastedJdText.trim());
+      handleApplyParsedJdData(parsedData);
+      alert('✅ Job description parsed! All standard details & dynamic custom fields auto-filled.');
+    } catch (error: any) {
+      console.error('Error parsing pasted JD:', error);
+      alert(`❌ Failed to parse pasted JD text: ${error.message || 'AI parsing error'}`);
+    } finally {
+      setParsingJd(false);
+    }
+  };
+
   const handleJDUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -424,32 +478,12 @@ const CreateInterview: React.FC = () => {
         return;
       }
 
-      const prompt = `Parse the following job description text and extract the fields into a raw JSON object. Schema: {"title": "string", "description": "string", "department": "string", "employmentType": "string", "experience": "number", "skills": "string", "education": "string"}. Return ONLY valid JSON. Text: --- ${text} ---`;
-
-      const parsedData = await grokGenerateJson<{
-        title?: string;
-        description?: string;
-        department?: string;
-        employmentType?: string;
-        experience?: number;
-        skills?: string;
-        education?: string;
-      }>('You are an expert HR assistant. Return only valid JSON.', prompt, 0.2, 800);
-
-      setFormData(prev => ({
-        ...prev,
-        title: parsedData.title || prev.title,
-        description: parsedData.description || prev.description,
-        department: parsedData.department || prev.department,
-        employmentType: parsedData.employmentType || prev.employmentType,
-        experience: parsedData.experience || prev.experience,
-        skills: parsedData.skills || prev.skills,
-        education: parsedData.education || prev.education,
-      }));
-      alert('✅ Job description parsed and form autofilled!');
+      const parsedData = await parseJobDescriptionText(text);
+      handleApplyParsedJdData(parsedData);
+      alert('✅ Job description document parsed! All standard details & dynamic custom fields auto-filled.');
     } catch (error) {
       console.error('Error parsing JD:', error);
-      alert('❌ Failed to parse job description. Please fill the form manually.');
+      alert('❌ Failed to parse job description document. Please fill the form manually.');
     } finally {
       setParsingJd(false);
       e.target.value = '';
@@ -656,7 +690,9 @@ const CreateInterview: React.FC = () => {
               experience: (formData as any).experience || (formData as any).experienceRequired,
               salary: (formData as any).salary || (formData as any).salaryRange,
               recruiterName: userProfile?.name || creatorInfo.name || (user as any)?.displayName || 'Recruiter',
-              recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+              recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',
+              whatsappSessionId: userProfile?.whatsappSessionId || '',
+              whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
             }
           );
           if (waResult.success) {
@@ -722,31 +758,83 @@ const CreateInterview: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,0.42fr)_1px_minmax(0,1fr)]">
         <aside className="border-b border-white/[0.11] bg-[#020202] px-4 py-5 sm:px-6 lg:border-b-0 lg:px-7">
-          <div className="lg:sticky lg:top-[5.25rem]">
-            <p className={panelHeaderClass}>Source</p>
-            <h2 className={panelTitleClass}>Start from a job description</h2>
-            <p className={helperTextClass}>
-              Upload a PDF or TXT brief to fill role details faster, then review each field before creating the interview.
-            </p>
+          <div className="lg:sticky lg:top-[5.25rem] space-y-4">
+            <div>
+              <p className={panelHeaderClass}>Source</p>
+              <h2 className={panelTitleClass}>Start from a job description</h2>
+              <p className={helperTextClass}>
+                Upload a PDF/TXT or paste raw JD text below to auto-fill details & create dynamic custom fields.
+              </p>
+            </div>
 
-            <label
-              htmlFor="jd-upload"
-              className={`geist-caption mt-5 flex min-h-28 cursor-pointer flex-col justify-center rounded-[6px] border border-dashed bg-white/[0.025] px-4 py-4 text-[#d4d4d4] transition-colors hover:border-white/[0.3] hover:bg-white/[0.045] ${parsingJd ? 'cursor-not-allowed border-white/[0.12]' : 'border-white/[0.18]'}`}
-            >
-              {parsingJd ? (
-                <span className="flex flex-col gap-2" role="status" aria-label="Parsing job description">
-                  <SkeletonBlock className="h-4 w-44" />
-                  <SkeletonBlock className="h-3 w-64 max-w-full bg-white/[0.08]" />
-                  <SkeletonBlock className="h-3 w-36 bg-white/[0.08]" />
-                </span>
-              ) : (
-                <>
-                  <span className="font-medium text-white">Upload job description</span>
-                  <span className="geist-small mt-1 text-[#8f8f8f]">PDF or TXT. The form remains editable after import.</span>
-                </>
-              )}
-            </label>
-            <input id="jd-upload" type="file" accept=".pdf,.txt" className="hidden" onChange={handleJDUpload} disabled={parsingJd} />
+            {/* Mode Switcher Tabs */}
+            <div className="flex rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-1">
+              <button
+                type="button"
+                onClick={() => setJdImportMode('upload')}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-[4px] transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${jdImportMode === 'upload' ? 'bg-white text-black font-semibold shadow' : 'text-[#8f8f8f] hover:text-white'}`}
+              >
+                <i className="fas fa-file-pdf"></i> Upload File
+              </button>
+              <button
+                type="button"
+                onClick={() => setJdImportMode('paste')}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-[4px] transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${jdImportMode === 'paste' ? 'bg-white text-black font-semibold shadow' : 'text-[#8f8f8f] hover:text-white'}`}
+              >
+                <i className="fas fa-paste"></i> Paste JD Text
+              </button>
+            </div>
+
+            {jdImportMode === 'upload' ? (
+              <>
+                <label
+                  htmlFor="jd-upload"
+                  className={`geist-caption flex min-h-28 cursor-pointer flex-col justify-center rounded-[6px] border border-dashed bg-white/[0.025] px-4 py-4 text-[#d4d4d4] transition-colors hover:border-white/[0.3] hover:bg-white/[0.045] ${parsingJd ? 'cursor-not-allowed border-white/[0.12]' : 'border-white/[0.18]'}`}
+                >
+                  {parsingJd ? (
+                    <span className="flex flex-col gap-2" role="status" aria-label="Parsing job description">
+                      <SkeletonBlock className="h-4 w-44" />
+                      <SkeletonBlock className="h-3 w-64 max-w-full bg-white/[0.08]" />
+                      <SkeletonBlock className="h-3 w-36 bg-white/[0.08]" />
+                    </span>
+                  ) : (
+                    <>
+                      <span className="font-medium text-white flex items-center gap-2">
+                        <i className="fas fa-file-upload text-blue-400"></i> Upload job description file
+                      </span>
+                      <span className="geist-small mt-1 text-[#8f8f8f]">PDF or TXT document with job requirements.</span>
+                    </>
+                  )}
+                </label>
+                <input id="jd-upload" type="file" accept=".pdf,.txt" className="hidden" onChange={handleJDUpload} disabled={parsingJd} />
+              </>
+            ) : (
+              <div className="space-y-3">
+                <textarea
+                  rows={8}
+                  value={pastedJdText}
+                  onChange={(e) => setPastedJdText(e.target.value)}
+                  placeholder="Paste complete Job Description text here (e.g. 23632 | Production Engineer, Location: Ambad, Experience: 1-2 yrs, Facilities, Bond, Salary, etc.)..."
+                  className="w-full rounded-[6px] border border-white/[0.18] bg-white/[0.03] p-3 text-xs text-white placeholder-gray-500 outline-none focus:border-white leading-relaxed resize-none font-sans"
+                />
+                <button
+                  type="button"
+                  onClick={handleParsePastedJDText}
+                  disabled={parsingJd || !pastedJdText.trim()}
+                  className="w-full h-9 rounded-[6px] bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow"
+                >
+                  {parsingJd ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin"></i> Parsing & Auto-Filling JD...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-wand-magic-sparkles"></i> Auto-Fill JD Details & Custom Fields
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
 
             <div className="mt-7 border-t border-white/[0.11] pt-5">
               <p className={panelHeaderClass}>Flow</p>

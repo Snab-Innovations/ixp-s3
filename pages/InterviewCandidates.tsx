@@ -41,6 +41,7 @@ const InterviewCandidates: React.FC = () => {
   const [sendingEmails, setSendingEmails] = useState(false);
   const [editingCandidateEmail, setEditingCandidateEmail] = useState<string | null>(null);
   const [editedEmailValue, setEditedEmailValue] = useState('');
+  const [editedPhoneValue, setEditedPhoneValue] = useState('');
   const [resendingEmail, setResendingEmail] = useState<string | null>(null);
   const [reminding, setReminding] = useState(false);
   const [rosterSearch, setRosterSearch] = useState('');
@@ -408,7 +409,11 @@ const InterviewCandidates: React.FC = () => {
           candidateName: email && email.includes('@') ? email.split('@')[0] : 'Candidate',
           jobTitle: interview.title,
           interviewLink: interview.interviewLink || '',
-          accessCode: interview.accessCode
+          accessCode: interview.accessCode,
+          options: {
+            whatsappSessionId: userProfile?.whatsappSessionId || '',
+            whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
+          }
         });
         if (waRes.success) waSent = true;
       }
@@ -430,8 +435,8 @@ const InterviewCandidates: React.FC = () => {
     }
   };
 
-  const handleEditAndResend = async (oldEmail: string, updatedEmail: string) => {
-    if (!interview || !updatedEmail || oldEmail === updatedEmail) {
+  const handleEditAndResend = async (oldEmail: string, updatedEmail: string, updatedPhone?: string) => {
+    if (!interview || !updatedEmail) {
       setEditingCandidateEmail(null);
       return;
     }
@@ -439,8 +444,32 @@ const InterviewCandidates: React.FC = () => {
     setResendingEmail(oldEmail);
     try {
       const updatedEmails = (interview.candidateEmails || []).filter((email) => email.toLowerCase() !== oldEmail.toLowerCase());
-      updatedEmails.push(updatedEmail.toLowerCase());
-      await updateDoc(doc(db, 'interviews', interview.id), { candidateEmails: updatedEmails });
+      if (!updatedEmails.includes(updatedEmail.toLowerCase())) {
+        updatedEmails.push(updatedEmail.toLowerCase());
+      }
+
+      const candData = (interview as any).candidateData || [];
+      const idx = candData.findIndex((c: any) => c.email && c.email.toLowerCase() === oldEmail.toLowerCase());
+      let updatedCandData = [...candData];
+
+      if (idx > -1) {
+        updatedCandData[idx] = {
+          ...updatedCandData[idx],
+          email: updatedEmail.toLowerCase(),
+          phone: updatedPhone && updatedPhone.trim() ? updatedPhone.trim() : (updatedCandData[idx].phone || 'N/A')
+        };
+      } else {
+        updatedCandData.push({
+          email: updatedEmail.toLowerCase(),
+          phone: updatedPhone && updatedPhone.trim() ? updatedPhone.trim() : 'N/A',
+          name: 'Candidate'
+        });
+      }
+
+      await updateDoc(doc(db, 'interviews', interview.id), {
+        candidateEmails: updatedEmails,
+        candidateData: updatedCandData
+      });
 
       await handleResend(updatedEmail);
     } catch (error) {
@@ -511,7 +540,9 @@ const InterviewCandidates: React.FC = () => {
           experience: (interview as any).experience || (interview as any).experienceRequired,
           salary: (interview as any).salary || (interview as any).salaryRange,
           recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiting Team',
-          recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+          recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',
+          whatsappSessionId: userProfile?.whatsappSessionId || '',
+          whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
         }
       });
 
@@ -800,27 +831,58 @@ const InterviewCandidates: React.FC = () => {
                   <article key={`${candidate.email}-${candidate.attemptId || 'pending'}`} className="grid gap-3 border-b border-white/[0.08] px-4 py-3 transition-colors hover:bg-white/[0.025] sm:px-6 lg:grid-cols-[minmax(0,1fr)_120px_150px_minmax(280px,auto)] lg:items-center lg:gap-4 lg:px-7">
                     <div className="min-w-0">
                       {isEditing ? (
-                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-                          <input type="email" value={editedEmailValue} onChange={(e) => setEditedEmailValue(e.target.value)} className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-white outline-none focus:border-white/[0.28]" autoFocus />
-                          <button onClick={() => handleEditAndResend(candidate.email, editedEmailValue)} disabled={resendingEmail !== null} className={primaryButtonClass}>
+                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
+                          <input
+                            type="email"
+                            value={editedEmailValue}
+                            onChange={(e) => setEditedEmailValue(e.target.value)}
+                            className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-white outline-none focus:border-white/[0.28]"
+                            placeholder="Candidate Email"
+                            autoFocus
+                          />
+                          <input
+                            type="tel"
+                            value={editedPhoneValue}
+                            onChange={(e) => setEditedPhoneValue(e.target.value)}
+                            className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-white outline-none focus:border-white/[0.28]"
+                            placeholder="Phone (e.g. 9823188483)"
+                          />
+                          <button onClick={() => handleEditAndResend(candidate.email, editedEmailValue, editedPhoneValue)} disabled={resendingEmail !== null} className={primaryButtonClass}>
                             {isResending ? (
                               <ButtonBusySkeleton className="w-12 bg-black/[0.18]" />
                             ) : (
                               <>
                                 <i className="fas fa-save text-[11px]"></i>
-                                Save
+                                Save & Resend
                               </>
                             )}
                           </button>
                           <button onClick={() => setEditingCandidateEmail(null)} disabled={resendingEmail !== null} className={actionButtonClass}>Cancel</button>
                         </div>
                       ) : (
-                        <>
-                          <p className="geist-caption truncate font-semibold text-white">{candidate.email}</p>
-                          <p className="geist-small mt-1 truncate text-[#8f8f8f]">
-                            {candidateData?.phone && candidateData.phone !== 'N/A' ? `Phone: ${candidateData.phone}` : 'Phone not added'}
-                          </p>
-                        </>
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="geist-caption truncate font-semibold text-white">{candidate.email}</p>
+                            <p className="geist-small mt-1 truncate text-[#8bbde8]">
+                              {candidateData?.phone && candidateData.phone !== 'N/A' ? (
+                                <span><i className="fas fa-phone-alt mr-1 text-[10px] opacity-70"></i>{candidateData.phone}</span>
+                              ) : (
+                                <span className="text-[#8f8f8f]">Phone not added</span>
+                              )}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setEditingCandidateEmail(candidate.email);
+                              setEditedEmailValue(candidate.email);
+                              setEditedPhoneValue(candidateData?.phone && candidateData.phone !== 'N/A' ? candidateData.phone : '');
+                            }}
+                            className="p-1 text-[#8f8f8f] hover:text-white transition-colors"
+                            title="Edit Candidate Email & Phone"
+                          >
+                            <i className="fas fa-edit text-xs"></i>
+                          </button>
+                        </div>
                       )}
                     </div>
 

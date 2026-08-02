@@ -563,7 +563,9 @@ const RecruiterInterviews: React.FC = () => {
                   experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
                   salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
                   recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
-                  recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+                  recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',
+                  whatsappSessionId: userProfile?.whatsappSessionId || '',
+                  whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
                 }
             );
             if (waResult.success) waCount = waResult.totalSent;

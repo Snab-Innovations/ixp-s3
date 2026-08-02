@@ -56,6 +56,161 @@ const InvitedCandidates: React.FC = () => {
         interview: Interview;
     } | null>(null);
 
+    const [editingCandidate, setEditingCandidate] = useState<{
+        email: string;
+        interviewId: string;
+        editEmail: string;
+        editPhone: string;
+    } | null>(null);
+    const [sendingDirectWhatsAppEmail, setSendingDirectWhatsAppEmail] = useState<string | null>(null);
+
+    const handleSaveCandidateEdit = async () => {
+        if (!editingCandidate) return;
+        const { email: oldEmail, interviewId, editEmail, editPhone } = editingCandidate;
+        const newEmail = editEmail.trim().toLowerCase();
+        const newPhone = editPhone.trim() || 'N/A';
+
+        if (!newEmail) {
+            messageBox.showError("Candidate Email is required.");
+            return;
+        }
+
+        try {
+            const targetInterview = interviews.find(i => i.id === interviewId);
+            if (!targetInterview) return;
+
+            // 1. Update candidateEmails
+            const updatedEmails = (targetInterview.candidateEmails || []).filter(e => e.toLowerCase() !== oldEmail.toLowerCase());
+            if (!updatedEmails.includes(newEmail)) {
+                updatedEmails.push(newEmail);
+            }
+
+            // 2. Update candidateData
+            const candData = (targetInterview as any).candidateData || [];
+            const idx = candData.findIndex((c: any) => c.email && c.email.toLowerCase() === oldEmail.toLowerCase());
+            let updatedCandData = [...candData];
+
+            if (idx > -1) {
+                updatedCandData[idx] = {
+                    ...updatedCandData[idx],
+                    email: newEmail,
+                    phone: newPhone
+                };
+            } else {
+                updatedCandData.push({
+                    email: newEmail,
+                    phone: newPhone,
+                    name: 'Candidate'
+                });
+            }
+
+            await updateDoc(doc(db, 'interviews', interviewId), {
+                candidateEmails: updatedEmails,
+                candidateData: updatedCandData
+            });
+
+            // 3. Update local state
+            setGlobalCandidates(prev => prev.map(c => {
+                if (c.email.toLowerCase() === oldEmail.toLowerCase() && c.interviewId === interviewId) {
+                    return {
+                        ...c,
+                        email: newEmail,
+                        phone: newPhone
+                    };
+                }
+                return c;
+            }));
+
+            // 4. Audit Log
+            const primaryUid = userProfile?.parentRecruiterId || userProfile?.teamId || user?.uid || '';
+            if (primaryUid) {
+                logTeamActivity(
+                    primaryUid,
+                    'candidate_invited',
+                    `Updated candidate details: Email changed to "${newEmail}", Mobile set to "${newPhone}" for job "${targetInterview.title}"`,
+                    {
+                        uid: user?.uid || '',
+                        name: userProfile?.name || user?.displayName || user?.email || 'Recruiter',
+                        email: user?.email || '',
+                        designation: userProfile?.designation || 'Recruiter'
+                    }
+                );
+            }
+
+            messageBox.showSuccess("✅ Candidate Email and Phone Number updated successfully!");
+            setEditingCandidate(null);
+        } catch (err: any) {
+            console.error("Failed to save candidate edit:", err);
+            messageBox.showError("Failed to update candidate details.");
+        }
+    };
+
+    const handleDirectWhatsAppInviteFromHub = async (email: string, phone: string, interviewId: string) => {
+        const selectedInterview = interviews.find(i => i.id === interviewId);
+        if (!selectedInterview) return;
+
+        const validPhone = phone && phone !== 'N/A' ? phone.trim() : '';
+
+        if (!validPhone) {
+            setEditingCandidate({
+                email,
+                interviewId,
+                editEmail: email,
+                editPhone: ''
+            });
+            messageBox.showError("Phone number not added for this candidate. Please enter candidate mobile number below to send WhatsApp invite.");
+            return;
+        }
+
+        setSendingDirectWhatsAppEmail(email);
+        try {
+            const res = await sendInterviewWhatsAppInvite({
+                phone: validPhone,
+                candidateName: email.split('@')[0] || 'Candidate',
+                jobTitle: selectedInterview.title,
+                interviewLink: selectedInterview.interviewLink || `${window.location.origin}/#/interview/${selectedInterview.id}`,
+                accessCode: selectedInterview.accessCode,
+                options: {
+                    gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
+                    location: (selectedInterview as any).location,
+                    education: (selectedInterview as any).education || (selectedInterview as any).qualification,
+                    qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
+                    experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                    salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+                    recruiterName: userProfile?.name || (user as any)?.displayName || 'Recruiting Team',
+                    recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',
+                    whatsappSessionId: userProfile?.whatsappSessionId || '',
+                    whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
+                }
+            });
+
+            if (res.success) {
+                messageBox.showSuccess(`✅ WhatsApp invitation dispatched directly to ${validPhone}!`);
+                const primaryUid = userProfile?.parentRecruiterId || userProfile?.teamId || user?.uid || '';
+                if (primaryUid) {
+                    logTeamActivity(
+                        primaryUid,
+                        'candidate_whatsapp_invited',
+                        `Sent independent WhatsApp invitation to candidate ${validPhone} (${email}) for job "${selectedInterview.title}"`,
+                        {
+                            uid: user?.uid || '',
+                            name: userProfile?.name || user?.displayName || user?.email || 'Recruiter',
+                            email: user?.email || '',
+                            designation: userProfile?.designation || 'Recruiter'
+                        }
+                    );
+                }
+            } else {
+                messageBox.showError(`WhatsApp API Error: ${res.error || 'Failed to send WhatsApp message'}`);
+            }
+        } catch (err: any) {
+            console.error("Direct WhatsApp error:", err);
+            messageBox.showError("Failed to send WhatsApp invitation.");
+        } finally {
+            setSendingDirectWhatsAppEmail(null);
+        }
+    };
+
     const handleResendFromHub = async (email: string, interviewId: string) => {
         const selectedInterview = interviews.find(i => i.id === interviewId);
         if (!selectedInterview) return;
@@ -330,7 +485,21 @@ const InvitedCandidates: React.FC = () => {
                     validPhoneCandidates,
                     selectedInterview.title,
                     selectedInterview.interviewLink || '',
-                    selectedInterview.accessCode
+                    selectedInterview.accessCode,
+                    false,
+                    undefined,
+                    {
+                      gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
+                      location: (selectedInterview as any).location,
+                      education: (selectedInterview as any).education || (selectedInterview as any).qualification,
+                      qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
+                      experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                      salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+                      recruiterName: userProfile?.name || (user as any)?.displayName || 'Recruiting Team',
+                      recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',
+                      whatsappSessionId: userProfile?.whatsappSessionId || '',
+                      whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
+                    }
                 );
                 if (waResult.success) {
                     waCount = waResult.totalSent;
@@ -695,67 +864,156 @@ const InvitedCandidates: React.FC = () => {
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredCandidates.map((candidate, idx) => (
-                                        <tr key={idx} className="transition-colors hover:bg-white/[0.025]">
-                                            <td className="px-4 py-3 sm:px-6 lg:px-7">
-                                                <div className="geist-caption font-medium text-white">{candidate.email}</div>
-                                                {candidate.phone !== 'N/A' && <div className="geist-label mt-0.5 text-[#8bbde8]"><i className="fas fa-phone-alt mr-1 text-[10px] opacity-70"></i>{candidate.phone}</div>}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className="geist-small inline-flex max-w-[240px] truncate rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1 font-medium text-[#d4d4d4]" title={candidate.interviewTitle}>{candidate.interviewTitle}</span>
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
-                                                {candidate.hasSubmitted ? (
-                                                    <span className="geist-small inline-flex items-center gap-1.5 rounded-[6px] border border-[#123b2a] bg-[#071a12] px-2 py-1 font-medium text-[#83d0a3]">
-                                                        <i className="fas fa-check-circle text-[10px]"></i> Submitted
-                                                    </span>
-                                                ) : (
-                                                    <span className="geist-small inline-flex items-center gap-1.5 rounded-[6px] border border-[#42320f] bg-[#1d1605] px-2 py-1 font-medium text-[#f5c76b]">
-                                                        <i className="fas fa-clock text-[10px]"></i> Pending
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
-                                                {candidate.hasSubmitted ? (
-                                                    <span className="geist-label tabular-nums text-white">{candidate.score?.toFixed(0)}<span className="text-[#6b7280]">/10</span></span>
-                                                ) : <span className="geist-label text-[#6b7280]">-</span>}
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                {candidate.hasSubmitted ? (
-                                                     <Link to={`/report/${candidate.interviewId}/${candidate.submissionId}`} target="_blank" className="geist-caption inline-flex h-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white">View Report</Link>
-                                                ) : (
-                                                     <div className="flex justify-end items-center gap-1.5">
-                                                         <button 
-                                                             onClick={() => {
-                                                                 const selectedInterview = interviews.find(i => i.id === candidate.interviewId);
-                                                                 if (!selectedInterview) return;
-                                                                 const link = `${window.location.origin}/#/interview/${selectedInterview.id}`;
-                                                                 const msg = `👋 Hi there!\n\nWe're actively hiring for the *${selectedInterview.title}* role and we'd love to invite you to take our AI-powered interview to fast-track your application! 🌟\n\n🚀 *Start your interview here:* \n${link}\n\n🔑 *Your Access Code:* \n${selectedInterview.accessCode}\n\nIt only takes a few minutes and you can complete it whenever you're ready. Best of luck! 🎉`;
-                                                                 setWhatsappModal({
-                                                                     isOpen: true,
-                                                                     email: candidate.email,
-                                                                     phone: candidate.phone === 'N/A' ? '' : candidate.phone,
-                                                                     message: msg,
-                                                                     interview: selectedInterview
-                                                                 });
-                                                             }}
-                                                             className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-[#123b2a] bg-[#071a12] text-[#83d0a3] transition-colors hover:bg-[#0b2419]" 
-                                                             title="Invite via WhatsApp Web"
-                                                         >
-                                                             <i className="fab fa-whatsapp text-[13px]"></i>
-                                                         </button>
-                                                         <button 
-                                                             onClick={() => handleResendFromHub(candidate.email, candidate.interviewId)}
-                                                             className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white" 
-                                                             title="Re-send Email Invitation"
-                                                         >
-                                                             <i className="fas fa-redo-alt text-[11px]"></i>
-                                                         </button>
-                                                     </div>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))
+                                    filteredCandidates.map((candidate, idx) => {
+                                        const isEditingThis = editingCandidate && 
+                                            editingCandidate.email.toLowerCase() === candidate.email.toLowerCase() && 
+                                            editingCandidate.interviewId === candidate.interviewId;
+
+                                        if (isEditingThis) {
+                                            return (
+                                                <tr key={idx} className="bg-[#0c0c0c] border-b border-blue-500/30">
+                                                    <td colSpan={5} className="px-4 py-3 sm:px-6 lg:px-7">
+                                                        <div className="flex flex-wrap items-center gap-3">
+                                                            <div className="flex-1 min-w-[200px]">
+                                                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Candidate Email</label>
+                                                                <input
+                                                                    type="email"
+                                                                    value={editingCandidate.editEmail}
+                                                                    onChange={(e) => setEditingCandidate({ ...editingCandidate, editEmail: e.target.value })}
+                                                                    className="w-full h-8 px-3 rounded-md border border-white/[0.2] bg-black text-xs text-white outline-none focus:border-blue-500"
+                                                                    placeholder="Candidate Email"
+                                                                />
+                                                            </div>
+                                                            <div className="flex-1 min-w-[180px]">
+                                                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Candidate Mobile Phone</label>
+                                                                <input
+                                                                    type="tel"
+                                                                    value={editingCandidate.editPhone}
+                                                                    onChange={(e) => setEditingCandidate({ ...editingCandidate, editPhone: e.target.value })}
+                                                                    className="w-full h-8 px-3 rounded-md border border-white/[0.2] bg-black text-xs text-white outline-none focus:border-blue-500"
+                                                                    placeholder="Mobile Phone (e.g. 9823188483)"
+                                                                />
+                                                            </div>
+                                                            <div className="flex items-center gap-2 pt-4">
+                                                                <button
+                                                                    onClick={handleSaveCandidateEdit}
+                                                                    className="h-8 px-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-md shadow flex items-center gap-1.5 cursor-pointer"
+                                                                >
+                                                                    <i className="fas fa-save text-[11px]"></i> Save & Update
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setEditingCandidate(null)}
+                                                                    className="h-8 px-3 border border-white/[0.15] text-xs font-medium text-gray-300 hover:text-white rounded-md cursor-pointer"
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        }
+
+                                        return (
+                                            <tr key={idx} className="transition-colors hover:bg-white/[0.025]">
+                                                <td className="px-4 py-3 sm:px-6 lg:px-7">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <div>
+                                                            <div className="geist-caption font-medium text-white">{candidate.email}</div>
+                                                            {candidate.phone !== 'N/A' ? (
+                                                                <div className="geist-label mt-0.5 text-[#8bbde8]">
+                                                                    <i className="fas fa-phone-alt mr-1 text-[10px] opacity-70"></i>{candidate.phone}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="geist-label mt-0.5 text-[#6b7280]">
+                                                                    Mobile Phone not added
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => setEditingCandidate({
+                                                                email: candidate.email,
+                                                                interviewId: candidate.interviewId,
+                                                                editEmail: candidate.email,
+                                                                editPhone: candidate.phone === 'N/A' ? '' : candidate.phone
+                                                            })}
+                                                            className="p-1 text-[#6b7280] hover:text-blue-400 transition-colors"
+                                                            title="Edit Candidate Email & Mobile Phone"
+                                                        >
+                                                            <i className="fas fa-edit text-xs"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className="geist-small inline-flex max-w-[240px] truncate rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1 font-medium text-[#d4d4d4]" title={candidate.interviewTitle}>{candidate.interviewTitle}</span>
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    {candidate.hasSubmitted ? (
+                                                        <span className="geist-small inline-flex items-center gap-1.5 rounded-[6px] border border-[#123b2a] bg-[#071a12] px-2 py-1 font-medium text-[#83d0a3]">
+                                                            <i className="fas fa-check-circle text-[10px]"></i> Submitted
+                                                        </span>
+                                                    ) : (
+                                                        <span className="geist-small inline-flex items-center gap-1.5 rounded-[6px] border border-[#42320f] bg-[#1d1605] px-2 py-1 font-medium text-[#f5c76b]">
+                                                            <i className="fas fa-clock text-[10px]"></i> Pending
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-center">
+                                                    {candidate.hasSubmitted ? (
+                                                        <span className="geist-label tabular-nums text-white">{candidate.score?.toFixed(0)}<span className="text-[#6b7280]">/10</span></span>
+                                                    ) : <span className="geist-label text-[#6b7280]">-</span>}
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    {candidate.hasSubmitted ? (
+                                                         <Link to={`/report/${candidate.interviewId}/${candidate.submissionId}`} target="_blank" className="geist-caption inline-flex h-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white">View Report</Link>
+                                                    ) : (
+                                                         <div className="flex justify-end items-center gap-1.5">
+                                                             {/* Direct API WhatsApp Send */}
+                                                             <button
+                                                                 onClick={() => handleDirectWhatsAppInviteFromHub(candidate.email, candidate.phone, candidate.interviewId)}
+                                                                 disabled={sendingDirectWhatsAppEmail === candidate.email}
+                                                                 className="flex h-8 items-center gap-1 px-2.5 rounded-[6px] border border-[#123b2a] bg-[#071a12] text-[#83d0a3] transition-colors hover:bg-[#0b2419] text-xs font-semibold disabled:opacity-50"
+                                                                 title="Send WhatsApp Invite directly via API"
+                                                             >
+                                                                 <i className="fab fa-whatsapp text-[13px]"></i>
+                                                                 <span>WhatsApp</span>
+                                                             </button>
+
+                                                             {/* Web WhatsApp Fallback Modal */}
+                                                             <button 
+                                                                 onClick={() => {
+                                                                     const selectedInterview = interviews.find(i => i.id === candidate.interviewId);
+                                                                     if (!selectedInterview) return;
+                                                                     const link = `${window.location.origin}/#/interview/${selectedInterview.id}`;
+                                                                     const msg = `👋 Hi there!\n\nWe're actively hiring for the *${selectedInterview.title}* role and we'd love to invite you to take our AI-powered interview to fast-track your application! 🌟\n\n🚀 *Start your interview here:* \n${link}\n\n🔑 *Your Access Code:* \n${selectedInterview.accessCode}\n\nIt only takes a few minutes and you can complete it whenever you're ready. Best of luck! 🎉`;
+                                                                     setWhatsappModal({
+                                                                         isOpen: true,
+                                                                         email: candidate.email,
+                                                                         phone: candidate.phone === 'N/A' ? '' : candidate.phone,
+                                                                         message: msg,
+                                                                         interview: selectedInterview
+                                                                     });
+                                                                 }}
+                                                                 className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white" 
+                                                                 title="Open WhatsApp Web Preview Modal"
+                                                             >
+                                                                 <i className="fas fa-external-link-alt text-[11px]"></i>
+                                                             </button>
+
+                                                             {/* Resend Email Button */}
+                                                             <button 
+                                                                 onClick={() => handleResendFromHub(candidate.email, candidate.interviewId)}
+                                                                 className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white" 
+                                                                 title="Re-send Email Invitation"
+                                                             >
+                                                                 <i className="fas fa-redo-alt text-[11px]"></i>
+                                                             </button>
+                                                         </div>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
                                 )}
                             </tbody>
                         </table>

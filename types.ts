@@ -65,6 +65,8 @@ export interface Interview {
     teamId?: string;
     isSecondary?: boolean;
     designation?: string;
+    whatsappSessionId?: string;
+    whatsappSessionPasscode?: string;
   }
 
   export interface AuditLog {

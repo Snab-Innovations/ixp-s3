@@ -35,6 +35,8 @@ export const RecruiterTeamPanel: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [designation, setDesignation] = useState('Sub-Recruiter');
+  const [subWaSessionId, setSubWaSessionId] = useState('');
+  const [subWaPasscode, setSubWaPasscode] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const primaryUid = userProfile?.parentRecruiterId || userProfile?.teamId || user?.uid || '';
@@ -120,18 +122,26 @@ export const RecruiterTeamPanel: React.FC = () => {
       const subUid = userCred.user.uid;
 
       // 2. Write Secondary Recruiter doc to main Firestore database
-      await setDoc(doc(db, 'users', subUid), {
+      const subData = {
         uid: subUid,
         email: email.trim(),
         name: fullName.trim(),
+        displayName: fullName.trim(),
         role: 'recruiter',
         isSecondary: true,
         parentRecruiterId: primaryUid,
         teamId: primaryUid,
         designation: designation.trim() || 'Secondary Recruiter',
+        whatsappSessionId: subWaSessionId.trim(),
+        whatsappSessionPasscode: subWaPasscode.trim(),
         adminVerified: true,
         createdAt: serverTimestamp()
-      }, { merge: true });
+      };
+
+      await Promise.all([
+        setDoc(doc(db, 'users', subUid), subData, { merge: true }),
+        setDoc(doc(db, 'profiles', subUid), subData, { merge: true })
+      ]);
 
       // 3. Log Audit Event
       await logTeamActivity(
@@ -525,6 +535,34 @@ export const RecruiterTeamPanel: React.FC = () => {
                     className="w-full rounded-lg border border-white/[0.12] bg-[#141414] pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-[#6b7280] focus:border-blue-500 focus:outline-none"
                     required
                   />
+                </div>
+              </div>
+
+              <div className="border-t border-white/[0.1] pt-3 space-y-3">
+                <div className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                  <Phone size={14} /> WhatsApp Credentials (Optional)
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-medium text-[#9ca3af] mb-1">WhatsApp Session ID</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. aa"
+                      value={subWaSessionId}
+                      onChange={(e) => setSubWaSessionId(e.target.value)}
+                      className="w-full rounded-lg border border-white/[0.12] bg-[#141414] px-3 py-2 text-xs text-white placeholder-[#6b7280] focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-[#9ca3af] mb-1">Passcode</label>
+                    <input
+                      type="password"
+                      placeholder="e.g. ."
+                      value={subWaPasscode}
+                      onChange={(e) => setSubWaPasscode(e.target.value)}
+                      className="w-full rounded-lg border border-white/[0.12] bg-[#141414] px-3 py-2 text-xs text-white placeholder-[#6b7280] focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 

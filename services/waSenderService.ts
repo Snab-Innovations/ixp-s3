@@ -2,8 +2,6 @@
 // Uses WhatsApp Task Manager REST API (https://whatsapp-task-manager-ai4d.onrender.com/api/v1/send-message)
 
 const WHATSAPP_API_URL = import.meta.env.VITE_WHATSAPP_API_URL;
-const WHATSAPP_SESSION_ID = import.meta.env.VITE_WHATSAPP_SESSION_ID;
-const WHATSAPP_SESSION_PASSCODE = import.meta.env.VITE_WHATSAPP_SESSION_PASSCODE;
 
 export interface SendWhatsAppResponse {
   success: boolean;
@@ -20,6 +18,8 @@ export interface WhatsAppInviteOptions {
   salary?: string;
   recruiterName?: string;
   recruiterPhone?: string;
+  whatsappSessionId?: string;
+  whatsappSessionPasscode?: string;
 }
 
 /**
@@ -49,25 +49,33 @@ export function formatPhoneForWhatsApp(phone: string): string {
 }
 
 /**
- * Sends a single WhatsApp message via WhatsApp Task Manager API.
+ * Sends a single WhatsApp message via WhatsApp Task Manager API using active recruiter's saved profile credentials.
+ * DO NOT fallback to .env for WhatsApp session credentials.
  */
-export async function sendWhatsAppMessage(phone: string, text: string): Promise<SendWhatsAppResponse> {
+export async function sendWhatsAppMessage(
+  phone: string,
+  text: string,
+  credentials?: { sessionId?: string; passcode?: string }
+): Promise<SendWhatsAppResponse> {
   const formattedPhone = formatPhoneForWhatsApp(phone);
   if (!formattedPhone) {
     console.error('[WhatsApp API] Invalid phone number provided:', phone);
     return { success: false, error: 'Invalid or missing phone number.' };
   }
 
-  const apiUrl = WHATSAPP_API_URL;
-  const sessionId = WHATSAPP_SESSION_ID;
-  const passcode = WHATSAPP_SESSION_PASSCODE;
+  const apiUrl = WHATSAPP_API_URL || 'https://whatsapp-task-manager-ai4d.onrender.com/api/v1/send-message';
+  const sessionId = credentials?.sessionId?.trim() || '';
+  const passcode = credentials?.passcode?.trim() || '';
 
   if (!sessionId || !passcode) {
-    console.error('[WhatsApp API] Credentials missing in .env');
-    return { success: false, error: 'WhatsApp API credentials are not configured.' };
+    console.error('[WhatsApp API] Saved WhatsApp Session credentials missing from profile!');
+    return {
+      success: false,
+      error: 'WhatsApp Session ID and Passcode are not configured for your account. Please set your WhatsApp Session ID & Passcode in your Profile settings before sending WhatsApp messages.'
+    };
   }
 
-  console.log('[WhatsApp API] Sending message to:', formattedPhone);
+  console.log('[WhatsApp API] Sending message via Session ID:', sessionId, 'to:', formattedPhone);
 
   try {
     const response = await fetch(apiUrl, {
@@ -171,7 +179,10 @@ export async function sendInterviewWhatsAppInvite(params: {
   options?: WhatsAppInviteOptions;
 }): Promise<SendWhatsAppResponse> {
   const messageText = buildWhatsAppInviteText(params);
-  return await sendWhatsAppMessage(params.phone, messageText);
+  return await sendWhatsAppMessage(params.phone, messageText, {
+    sessionId: params.options?.whatsappSessionId,
+    passcode: params.options?.whatsappSessionPasscode
+  });
 }
 
 /**

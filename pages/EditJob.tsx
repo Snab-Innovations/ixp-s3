@@ -4,6 +4,8 @@ import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext'; // Assuming userProfile is available here
 import { createPortal } from 'react-dom';
 import { SKILL_OPTIONS, JOB_CATEGORIES } from './Profile';
+import { parseJobDescriptionText, ParsedJdResult } from '../services/geminiService';
+import * as pdfjsLib from 'pdfjs-dist';
 
 interface EditJobModalProps {
   jobId: string;
@@ -22,6 +24,98 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
   const [currentManualQuestion, setCurrentManualQuestion] = useState('');
   const [candidateEmails, setCandidateEmails] = useState<string[]>([]);
   const [currentEmail, setCurrentEmail] = useState('');
+  const [parsingJd, setParsingJd] = useState(false);
+  const [jdImportMode, setJdImportMode] = useState<'upload' | 'paste'>('upload');
+  const [pastedJdText, setPastedJdText] = useState('');
+
+  const handleApplyParsedJdData = (parsed: ParsedJdResult) => {
+    setFormData(prev => ({
+      ...prev,
+      title: parsed.title || parsed.vacancyName || parsed.designation || prev.title,
+      description: parsed.description || prev.description,
+      category: parsed.department || parsed.industry || parsed.roleCategory || prev.category,
+      employmentType: parsed.employmentType || prev.employmentType,
+      minExperience: parsed.minExperience !== undefined ? Number(parsed.minExperience) : prev.minExperience,
+      maxExperience: parsed.maxExperience !== undefined ? Number(parsed.maxExperience) : prev.maxExperience,
+      experience: parsed.minExperience !== undefined ? Number(parsed.minExperience) : prev.experience,
+      skills: parsed.skills || (parsed.technicalSkills && parsed.softSkills ? `${parsed.technicalSkills}, ${parsed.softSkills}` : prev.skills),
+      qualifications: parsed.qualification || parsed.education || prev.qualifications,
+    }));
+
+    if (parsed.customFields && Array.from(parsed.customFields).length > 0) {
+      const newFields = parsed.customFields.map((cf, idx) => ({
+        id: Date.now() + idx,
+        key: cf.key.trim(),
+        value: cf.value.trim()
+      }));
+
+      setCustomFields(prev => {
+        const existingKeys = new Set(prev.map(f => f.key.toLowerCase()));
+        const filteredNew = newFields.filter(f => !existingKeys.has(f.key.toLowerCase()));
+        return [...prev, ...filteredNew];
+      });
+    }
+  };
+
+  const handleParsePastedJDText = async () => {
+    if (!pastedJdText.trim()) {
+      alert('Please paste some Job Description text first.');
+      return;
+    }
+
+    setParsingJd(true);
+    try {
+      const parsedData = await parseJobDescriptionText(pastedJdText.trim());
+      handleApplyParsedJdData(parsedData);
+      alert('✅ Job description parsed! All details & dynamic custom fields updated.');
+    } catch (error: any) {
+      console.error('Error parsing pasted JD:', error);
+      alert(`❌ Failed to parse pasted JD text: ${error.message || 'AI parsing error'}`);
+    } finally {
+      setParsingJd(false);
+    }
+  };
+
+  const handleJDUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setParsingJd(true);
+    let text = '';
+    try {
+      if (file.type === 'application/pdf') {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          text += textContent.items.map((item: any) => item.str).join(' ');
+        }
+      } else if (file.type === 'text/plain') {
+        text = await file.text();
+      } else {
+        alert('Unsupported file type. Please upload a PDF or TXT file.');
+        setParsingJd(false);
+        return;
+      }
+
+      if (!text.trim()) {
+        alert('Could not extract text from the document.');
+        setParsingJd(false);
+        return;
+      }
+
+      const parsedData = await parseJobDescriptionText(text);
+      handleApplyParsedJdData(parsedData);
+      alert('✅ Job description document parsed! All details & dynamic custom fields updated.');
+    } catch (error) {
+      console.error('Error parsing JD:', error);
+      alert('❌ Failed to parse job description document.');
+    } finally {
+      setParsingJd(false);
+      e.target.value = '';
+    }
+  };
 
   const [eduInput, setEduInput] = useState('');
   const [formData, setFormData] = useState({
@@ -352,6 +446,64 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         ) : (
           <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
             <div className="p-5 space-y-5 overflow-y-auto custom-scrollbar bg-[#000]">
+
+              {/* AI JD Import & Auto-Fill Box */}
+              <div className="p-4 rounded-xl border border-blue-500/30 bg-blue-500/5 space-y-3 mb-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-500/20 pb-2">
+                  <div className="flex items-center gap-2 text-blue-400 font-bold text-xs">
+                    <i className="fas fa-wand-magic-sparkles"></i>
+                    <span>AI JD Import & Auto-Fill</span>
+                  </div>
+
+                  <div className="flex rounded-md border border-white/10 bg-black/40 p-0.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setJdImportMode('upload')}
+                      className={`px-2.5 py-1 rounded text-xs transition-colors flex items-center gap-1 ${jdImportMode === 'upload' ? 'bg-blue-600 text-white font-bold' : 'text-gray-400 hover:text-white'}`}
+                    >
+                      <i className="fas fa-file-pdf"></i> Upload File
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setJdImportMode('paste')}
+                      className={`px-2.5 py-1 rounded text-xs transition-colors flex items-center gap-1 ${jdImportMode === 'paste' ? 'bg-blue-600 text-white font-bold' : 'text-gray-400 hover:text-white'}`}
+                    >
+                      <i className="fas fa-paste"></i> Paste JD Text
+                    </button>
+                  </div>
+                </div>
+
+                {jdImportMode === 'upload' ? (
+                  <div className="flex items-center gap-3">
+                    <label htmlFor="edit-jd-upload" className="flex-1 cursor-pointer p-2.5 border border-dashed border-white/20 rounded-lg text-center text-xs text-gray-300 hover:bg-white/5 transition-colors">
+                      {parsingJd ? (
+                        <span><i className="fas fa-spinner fa-spin mr-1"></i> Parsing JD file...</span>
+                      ) : (
+                        <span><i className="fas fa-file-upload mr-1 text-blue-400"></i> Upload JD PDF/TXT File to Auto-Fill</span>
+                      )}
+                    </label>
+                    <input id="edit-jd-upload" type="file" accept=".pdf,.txt" className="hidden" onChange={handleJDUpload} disabled={parsingJd} />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <textarea
+                      rows={4}
+                      value={pastedJdText}
+                      onChange={(e) => setPastedJdText(e.target.value)}
+                      placeholder="Paste full Job Description text here..."
+                      className="w-full p-2.5 rounded-lg border border-white/10 bg-black/40 text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500 leading-relaxed"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleParsePastedJDText}
+                      disabled={parsingJd || !pastedJdText.trim()}
+                      className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                    >
+                      {parsingJd ? <><i className="fas fa-spinner fa-spin"></i> Parsing...</> : <><i className="fas fa-wand-magic-sparkles"></i> Auto-Fill Details & Custom Fields</>}
+                    </button>
+                  </div>
+                )}
+              </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Job Title</label>
