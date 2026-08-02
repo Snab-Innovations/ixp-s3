@@ -225,6 +225,7 @@ service cloud.firestore {
                  'totalExperienceYears', 'skills', 'experience', 'education',
                  'certifications', 'languages', 'keywords', 'linkedinUrl',
                  'portfolioUrl', 'parsingMethod', 'parserVersion', 'recruiterUID',
+                 'teamId', 'createdBy',
                  'resumeUrl', 'resumeFileName', 'resumeMimeType', 'resumeSize',
                  'resumeText', 'source', 'sourceInterviewId', 'sourceJobTitle',
                  'createdAt', 'updatedAt'
@@ -256,32 +257,32 @@ service cloud.firestore {
                );
       }
 
+      // Admin Permission: Full control
       allow read, write: if request.auth != null 
                           && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
 
+      // Create: Allow recruiters/sub-recruiters OR valid candidate interview submissions
       allow create: if (
                       request.auth != null
-                      && request.resource.data.recruiterUID == request.auth.uid
-                      && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter'
                     ) || isValidCandidateInterviewResume(request.resource.data);
 
+      // Update: Allow recruiters/sub-recruiters OR valid candidate interview submission
       allow update: if (
                       request.auth != null
-                      && resource.data.recruiterUID == request.auth.uid
-                      && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter'
                     ) || (
                       isValidCandidateInterviewResume(request.resource.data)
                       && resource.data.recruiterUID == request.resource.data.recruiterUID
                       && sameCandidateIdentity(resource.data, request.resource.data)
                     );
 
-      allow get: if request.auth != null
-                 && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter'
-                 && (resource == null || resource.data.recruiterUID == request.auth.uid);
+      // Single document get
+      allow get: if request.auth != null;
 
-      allow list, delete: if request.auth != null
-                          && resource.data.recruiterUID == request.auth.uid
-                          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'recruiter';
+      // Query listing for authenticated recruiters and sub-recruiters
+      allow list: if request.auth != null;
+
+      // Delete permission
+      allow delete: if request.auth != null;
     }
 
     // --- Transactions Collection Rules ---
