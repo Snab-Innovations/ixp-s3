@@ -59,17 +59,18 @@ const AuthPage: React.FC = () => {
       await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
 
-      if (!userCredential.user.emailVerified) {
-        const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
-        if (!userDoc.exists() || !userDoc.data().adminVerified) {
+      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+      const userData = userDoc.data() || {};
+      const userRole = userData.role;
+
+      if (userRole !== 'admin') {
+        if (!userCredential.user.emailVerified && !userData.adminVerified) {
           await signOut(auth);
           setShowVerifyErrorPopup(true);
           return;
         }
       }
 
-      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
-      const userRole = userDoc.data()?.role;
       if (userRole !== 'recruiter' && userRole !== 'admin') {
         await signOut(auth);
         setError('This Dsauce portal is only for recruiters and admins. Candidates should use the interview or assessment link sent to them.');

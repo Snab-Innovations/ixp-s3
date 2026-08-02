@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { SKILL_OPTIONS } from './Profile';
 import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
+import { logTeamActivity } from '../services/auditService';
 import { dedupeCandidatesByIdentity } from '../services/candidateIdentity';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -448,7 +449,7 @@ const readResumeText = async (file: File) => {
 };
 
 const ResumeDump: React.FC = () => {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const messageBox = useMessageBox();
   const [candidates, setCandidates] = useState<ResumeDumpCandidate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -460,6 +461,8 @@ const ResumeDump: React.FC = () => {
   const [isDraggingResume, setIsDraggingResume] = useState(false);
   const [skillsPanelCandidate, setSkillsPanelCandidate] = useState<ResumeDumpCandidate | null>(null);
 
+  const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user?.uid || '';
+
   useEffect(() => {
     if (!user) {
       setCandidates([]);
@@ -468,10 +471,9 @@ const ResumeDump: React.FC = () => {
     }
 
     setLoading(true);
-    const candidatesQuery = query(
-      collection(db, 'resumeDumpCandidates'),
-      where('recruiterUID', '==', user.uid)
-    );
+    const candidatesQuery = teamId
+      ? query(collection(db, 'resumeDumpCandidates'), where('teamId', '==', teamId))
+      : query(collection(db, 'resumeDumpCandidates'), where('recruiterUID', '==', user.uid));
 
     const unsubscribe = onSnapshot(
       candidatesQuery,
@@ -535,8 +537,18 @@ const ResumeDump: React.FC = () => {
     const results = await Promise.all(files.map(async (file): Promise<UploadResult> => {
       try {
         const ingested = await ingestResumeFile(file);
+        const creatorInfo = {
+          uid: user.uid,
+          name: userProfile?.name || user.email || 'Recruiter',
+          email: user.email || '',
+          role: userProfile?.role || 'recruiter',
+          designation: userProfile?.designation || 'Recruiter'
+        };
+
         await saveResumeDumpCandidate({
           recruiterUID: user.uid,
+          teamId,
+          createdBy: creatorInfo,
           profile: ingested.profile,
           resumeText: ingested.resumeText,
           resumeUrl: ingested.resumeUrl,
@@ -545,6 +557,14 @@ const ResumeDump: React.FC = () => {
           fileSize: file.size,
           source: 'resume_dump',
         });
+
+        // Audit Logging
+        logTeamActivity(
+          teamId,
+          'resume_uploaded',
+          `Uploaded resume "${file.name}" for candidate ${ingested.profile.name || 'Candidate'}`,
+          creatorInfo
+        );
 
         return {
           fileName: file.name,

@@ -552,6 +552,8 @@ const resolveResumeDumpCandidateId = async (
 
 export const saveResumeDumpCandidate = async ({
   recruiterUID,
+  teamId,
+  createdBy,
   profile,
   resumeText,
   resumeUrl,
@@ -563,6 +565,8 @@ export const saveResumeDumpCandidate = async ({
   sourceJobTitle = '',
 }: {
   recruiterUID: string;
+  teamId?: string;
+  createdBy?: { uid: string; name?: string; email?: string; role?: string; designation?: string };
   profile: ParsedResumeProfile;
   resumeText: string;
   resumeUrl: string;
@@ -601,6 +605,8 @@ export const saveResumeDumpCandidate = async ({
   await setDoc(candidateRef, {
     ...normalizedProfile,
     recruiterUID,
+    teamId: teamId || recruiterUID,
+    ...(createdBy ? { createdBy } : {}),
     resumeUrl,
     resumeFileName: fileName || 'resume',
     resumeMimeType: mimeType || 'application/octet-stream',

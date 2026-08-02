@@ -106,7 +106,7 @@ const ListBlock = ({ label, items }: { label: string; items: any[] }) => (
 
 const InterviewOverview: React.FC = () => {
   const { interviewId } = useParams<{ interviewId: string }>();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const messageBox = useMessageBox();
   const navigate = useNavigate();
   const [interview, setInterview] = useState<Interview | null>(null);
@@ -131,7 +131,11 @@ const InterviewOverview: React.FC = () => {
         }
 
         const data = { id: snapshot.id, ...snapshot.data() } as Interview;
-        if ((data as any).recruiterUID !== user.uid) {
+        const currentTeamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
+        const interviewTeamId = (data as any).teamId || (data as any).recruiterUID;
+        const isTeamMember = interviewTeamId === currentTeamId || (data as any).recruiterUID === user.uid || userProfile?.role === 'admin';
+
+        if (!isTeamMember) {
           setInterview(null);
           setLoading(false);
           return;

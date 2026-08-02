@@ -31,7 +31,7 @@ interface GlobalCandidate {
 }
 
 const InvitedCandidates: React.FC = () => {
-    const { user } = useAuth();
+    const { user, userProfile } = useAuth();
     const [loading, setLoading] = useState(true);
     const [interviews, setInterviews] = useState<Interview[]>([]);
     const [globalCandidates, setGlobalCandidates] = useState<GlobalCandidate[]>([]);
@@ -58,30 +58,37 @@ const InvitedCandidates: React.FC = () => {
     const handleResendFromHub = async (email: string, interviewId: string) => {
         const selectedInterview = interviews.find(i => i.id === interviewId);
         if (!selectedInterview) return;
-        
+
+        let emailSent = false;
+        let waSent = false;
+
+        const candidateData = selectedInterview.candidateData?.find(c => c.email.toLowerCase() === email.toLowerCase());
+        const phone = candidateData?.phone || '';
+
         try {
-            let emailSent = false;
-            let waSent = false;
+            const result = await sendInterviewInvitations(
+                [email],
+                selectedInterview.title,
+                selectedInterview.interviewLink || '',
+                selectedInterview.accessCode,
+                false,
+                {
+                  gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
+                  location: (selectedInterview as any).location,
+                  education: (selectedInterview as any).education || (selectedInterview as any).qualification,
+                  qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
+                  experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                  salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+                  recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
+                  recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+                }
+            );
+            if (result.success && result.totalEmails > 0) emailSent = true;
 
-            if (email && email.includes('@')) {
-                const result = await sendInterviewInvitations(
-                    [email],
-                    selectedInterview.title,
-                    selectedInterview.interviewLink || '',
-                    selectedInterview.accessCode
-                );
-                if (result.success) emailSent = true;
-            }
-
-            // Look up candidate phone number
-            const candData = (selectedInterview as any).candidateData || [];
-            const match = candData.find((c: any) => (c.email && c.email.toLowerCase() === email.toLowerCase()) || (c.phone && c.phone === email));
-            const phone = match?.phone || globalCandidates.find(g => g.email === email)?.phone;
-
-            if (phone && phone !== 'N/A') {
-                const waRes = await sendInterviewWhatsAppInvite({
-                    phone: phone,
-                    candidateName: email && email.includes('@') ? email.split('@')[0] : 'Candidate',
+            if (phone) {
+                const waRes = await sendBulkWhatsAppInvites({
+                    recruiterName: user?.displayName || user?.email || 'Recruiter',
+                    candidates: [{ email, phone, name: candidateData?.name || email }],
                     jobTitle: selectedInterview.title,
                     interviewLink: selectedInterview.interviewLink || '',
                     accessCode: selectedInterview.accessCode
@@ -109,11 +116,11 @@ const InvitedCandidates: React.FC = () => {
 
         const fetchData = async () => {
             try {
-                // 1. Fetch all interviews for this recruiter
-                const q = query(
-                    collection(db, 'interviews'), 
-                    where('recruiterUID', '==', user.uid)
-                );
+                // 1. Fetch all interviews for this team
+                const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
+                const q = teamId
+                    ? query(collection(db, 'interviews'), where('teamId', '==', teamId))
+                    : query(collection(db, 'interviews'), where('recruiterUID', '==', user.uid));
                 const snapshot = await getDocs(q);
                 const fetchedInterviews = snapshot.docs
                     .map(d => ({id: d.id, ...d.data()} as Interview))
@@ -188,7 +195,13 @@ const InvitedCandidates: React.FC = () => {
         const parsed: {email: string, phone: string, scores?: Record<string, string>}[] = [];
         let filesProcessed = 0;
         
-        const jobsPayload = interviews.map(i => ({ id: i.id, title: i.title, description: i.description }));
+        const jobsPayload = interviews.map(i => ({ 
+          id: i.id, 
+          title: i.title, 
+          description: i.description,
+          education: (i as any).education,
+          gender: (i as any).gender || (i as any).genderRequirement
+        }));
         const selectedInterview = interviews.find((item) => item.id === selectedInterviewId);
 
         const parsePromises = Array.from(files).map(async (file: File) => {
@@ -292,7 +305,18 @@ const InvitedCandidates: React.FC = () => {
                     validEmails,
                     selectedInterview.title,
                     selectedInterview.interviewLink || '',
-                    selectedInterview.accessCode
+                    selectedInterview.accessCode,
+                    false,
+                    {
+                      gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
+                      location: (selectedInterview as any).location,
+                      education: (selectedInterview as any).education || (selectedInterview as any).qualification,
+                      qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
+                      experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                      salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+                      recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiter',
+                      recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+                    }
                 );
                 if (result.success) {
                     emailCount = result.totalEmails;

@@ -29,10 +29,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchProfile = async (uid: string) => {
     try {
-      const docRef = doc(db, 'users', uid);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        setUserProfile(docSnap.data() as UserProfile);
+      const profileSnap = await getDoc(doc(db, 'profiles', uid));
+      const userSnap = await getDoc(doc(db, 'users', uid));
+
+      let merged: any = {};
+      if (userSnap.exists()) {
+        merged = { ...userSnap.data() };
+      }
+      if (profileSnap.exists()) {
+        merged = { ...merged, ...profileSnap.data() };
+      }
+
+      if (merged.email || merged.name || merged.displayName || merged.phoneNumber) {
+        setUserProfile({
+          ...merged,
+          name: merged.name || merged.displayName || 'Recruiter',
+          phone: merged.phoneNumber || merged.phone || merged.contactNumber || '',
+        } as UserProfile);
       }
     } catch (err) {
       console.error("Error fetching profile:", err);
@@ -40,24 +53,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    let profileUnsubscribe: (() => void) | null = null;
+    let unSubProfile: (() => void) | null = null;
+    let unSubUser: (() => void) | null = null;
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      // Clean up previous listener if it exists
-      if (profileUnsubscribe) {
-        profileUnsubscribe();
-        profileUnsubscribe = null;
-      }
+      if (unSubProfile) { unSubProfile(); unSubProfile = null; }
+      if (unSubUser) { unSubUser(); unSubUser = null; }
 
       setUser(currentUser);
       if (currentUser) {
-        // Use onSnapshot for real-time updates (e.g. wallet balance)
-        profileUnsubscribe = onSnapshot(doc(db, 'users', currentUser.uid), (docSnapshot) => {
-          if (docSnapshot.exists()) {
-            // Spread into new object to ensure React detects state change
-            setUserProfile({ ...docSnapshot.data() } as UserProfile);
+        let profileData: any = {};
+        let userData: any = {};
+
+        const updateCombined = () => {
+          const combined = { ...userData, ...profileData };
+          const resolvedName = combined.name || combined.displayName || currentUser.displayName || 'Recruiter';
+          const resolvedPhone = combined.phoneNumber || combined.phone || combined.contactNumber || currentUser.phoneNumber || '';
+
+          setUserProfile({
+            ...combined,
+            uid: currentUser.uid,
+            email: currentUser.email || combined.email || '',
+            name: resolvedName,
+            phone: resolvedPhone,
+            phoneNumber: resolvedPhone,
+          } as UserProfile);
+        };
+
+        unSubProfile = onSnapshot(
+          doc(db, 'profiles', currentUser.uid),
+          (docSnap) => {
+            if (docSnap.exists()) profileData = docSnap.data();
+            updateCombined();
+            setLoading(false);
+          },
+          async () => {
+            await fetchProfile(currentUser.uid);
+            setLoading(false);
           }
-        });
+        );
+
+        unSubUser = onSnapshot(
+          doc(db, 'users', currentUser.uid),
+          (docSnap) => {
+            if (docSnap.exists()) userData = docSnap.data();
+            updateCombined();
+            setLoading(false);
+          },
+          () => {}
+        );
       } else {
         setUserProfile(null);
       }
@@ -66,7 +110,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       unsubscribe();
-      if (profileUnsubscribe) profileUnsubscribe();
+      if (unSubProfile) unSubProfile();
+      if (unSubUser) unSubUser();
     };
   }, []);
 

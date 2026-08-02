@@ -6,9 +6,10 @@ import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { sendInterviewInvitations } from '../services/brevoService';
-import { sendWhatsAppMessage, sendBulkWhatsAppInvites, sendInterviewWhatsAppInvite } from '../services/waSenderService';
+import { sendWhatsAppMessage, sendBulkWhatsAppInvites, sendInterviewWhatsAppInvite, buildWhatsAppInviteText } from '../services/waSenderService';
 import { evaluateResumeMatch } from '../services/api';
 import { formatExtractedPhone, ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
+import { parseCandidateDocument } from '../services/candidateFileParser';
 import { InterviewCandidatesSkeleton } from '../components/ui/interview-loading-skeleton';
 import { Interview } from '../types';
 
@@ -26,7 +27,7 @@ const ButtonBusySkeleton = ({ className = 'bg-current/25' }: { className?: strin
 
 const InterviewCandidates: React.FC = () => {
   const { interviewId } = useParams<{ interviewId: string }>();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const messageBox = useMessageBox();
   const [interview, setInterview] = useState<Interview | null>(null);
   const [submissions, setSubmissions] = useState<any[]>([]);
@@ -67,7 +68,11 @@ const InterviewCandidates: React.FC = () => {
         }
 
         const data = { id: snapshot.id, ...snapshot.data() } as Interview;
-        if ((data as any).recruiterUID !== user.uid) {
+        const currentTeamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
+        const interviewTeamId = (data as any).teamId || (data as any).recruiterUID;
+        const isTeamMember = interviewTeamId === currentTeamId || (data as any).recruiterUID === user.uid || userProfile?.role === 'admin';
+
+        if (!isTeamMember) {
           setInterview(null);
           setLoading(false);
           return;
@@ -132,6 +137,8 @@ const InterviewCandidates: React.FC = () => {
     return explicitEmails.filter((email) => !submissions.some((submission) => (submission.candidateInfo?.email || '').toLowerCase() === email));
   }, [interview, submissions]);
 
+  const [sendingProgressMsg, setSendingProgressMsg] = useState('');
+
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!interview || !user) return;
     const files = e.target.files;
@@ -142,9 +149,29 @@ const InterviewCandidates: React.FC = () => {
     let filesProcessed = 0;
     let filesWithErrors = 0;
 
-    await Promise.all(
-      Array.from(files).map(async (file) => {
-        try {
+    for (const file of Array.from(files)) {
+      try {
+        const fileName = file.name.toLowerCase();
+
+        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv')) {
+          const extracted = await parseCandidateDocument(file);
+          for (const cand of extracted) {
+            const lowerEmail = (cand.email || '').toLowerCase();
+            const phone = cand.phone || 'N/A';
+            const name = cand.name || 'Candidate';
+
+            if (lowerEmail && !(interview.candidateEmails || []).includes(lowerEmail) && !newEmails.includes(lowerEmail)) {
+              if (!candidatesFound.some(c => c.email === lowerEmail)) {
+                candidatesFound.push({ email: lowerEmail, phone, matchScore: 'N/A' });
+              }
+            } else if (phone && phone !== 'N/A') {
+              const pseudoEmail = `${phone.replace(/[^0-9]/g, '')}@whatsapp.local`;
+              if (!newEmails.includes(pseudoEmail) && !candidatesFound.some(c => c.phone === phone)) {
+                candidatesFound.push({ email: pseudoEmail, phone, matchScore: 'N/A' });
+              }
+            }
+          }
+        } else {
           const ingested = await ingestResumeFile(file);
           const lowerEmail = (ingested.profile.email || '').toLowerCase();
           const phone = ingested.profile.phone || 'N/A';
@@ -169,7 +196,15 @@ const InterviewCandidates: React.FC = () => {
               let matchScore = 'N/A';
               if (ingested.resumeText.length > 50) {
                 try {
-                  matchScore = await evaluateResumeMatch(interview.title, interview.description, ingested.resumeText);
+                  matchScore = await evaluateResumeMatch(
+                    interview.title, 
+                    interview.description, 
+                    ingested.resumeText,
+                    {
+                      education: (interview as any).education,
+                      gender: (interview as any).gender || (interview as any).genderRequirement
+                    }
+                  );
                 } catch (error) {
                   console.error('Match score error:', error);
                 }
@@ -177,13 +212,13 @@ const InterviewCandidates: React.FC = () => {
               candidatesFound.push({ email: lowerEmail, phone, matchScore });
             }
           }
-          filesProcessed++;
-        } catch (error) {
-          console.error(`Error parsing ${file.name}:`, error);
-          filesWithErrors++;
         }
-      })
-    );
+        filesProcessed++;
+      } catch (error) {
+        console.error(`Error parsing ${file.name}:`, error);
+        filesWithErrors++;
+      }
+    }
 
     if (candidatesFound.length > 0) {
       setNewEmails((prev) => [...prev, ...candidatesFound.map((candidate) => candidate.email)]);
@@ -197,8 +232,10 @@ const InterviewCandidates: React.FC = () => {
   const handleSendInvites = async () => {
     if (!interview || (newEmails.length === 0 && parsedCandidates.length === 0)) return;
     setSendingEmails(true);
+    setSendingProgressMsg('Preparing candidate invitations...');
+
     try {
-      const validEmails = newEmails.map((email) => email.toLowerCase()).filter(Boolean);
+      const validEmails = newEmails.map((email) => email.toLowerCase()).filter(e => !e.endsWith('@whatsapp.local'));
       const candidatesWithPhones = parsedCandidates.filter((candidate) => candidate.phone && candidate.phone !== 'N/A');
 
       await updateDoc(doc(db, 'interviews', interview.id), {
@@ -208,7 +245,24 @@ const InterviewCandidates: React.FC = () => {
 
       let emailCount = 0;
       if (validEmails.length > 0) {
-        const result = await sendInterviewInvitations(validEmails, interview.title, interview.interviewLink || '', interview.accessCode);
+        setSendingProgressMsg(`Sending ${validEmails.length} invitation email(s)...`);
+        const result = await sendInterviewInvitations(
+          validEmails,
+          interview.title,
+          interview.interviewLink || '',
+          interview.accessCode,
+          false,
+          {
+            gender: (interview as any).gender || (interview as any).genderRequirement,
+            location: (interview as any).location,
+            education: (interview as any).education || (interview as any).qualification,
+            qualification: (interview as any).qualification || (interview as any).education,
+            experience: (interview as any).experience || (interview as any).experienceRequired,
+            salary: (interview as any).salary || (interview as any).salaryRange,
+            recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiting Team',
+            recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+          }
+        );
         if (result.success) {
           emailCount = result.totalEmails;
         }
@@ -216,11 +270,30 @@ const InterviewCandidates: React.FC = () => {
 
       let waCount = 0;
       if (candidatesWithPhones.length > 0) {
+        setSendingProgressMsg(`Sending WhatsApp invites one-by-one with 10s anti-spam delay...`);
         const waResult = await sendBulkWhatsAppInvites(
           candidatesWithPhones,
           interview.title,
           interview.interviewLink || '',
-          interview.accessCode
+          interview.accessCode,
+          false,
+          (sentCount, totalCount, currentCandidate, isWaiting) => {
+            if (isWaiting) {
+              setSendingProgressMsg(`⏳ Sent WhatsApp to ${currentCandidate} (${sentCount}/${totalCount}). Waiting 10s delay to protect WhatsApp number...`);
+            } else {
+              setSendingProgressMsg(`📱 Sending WhatsApp invite ${sentCount}/${totalCount} to ${currentCandidate}...`);
+            }
+          },
+          {
+            gender: (interview as any).gender || (interview as any).genderRequirement,
+            location: (interview as any).location,
+            education: (interview as any).education || (interview as any).qualification,
+            qualification: (interview as any).qualification || (interview as any).education,
+            experience: (interview as any).experience || (interview as any).experienceRequired,
+            salary: (interview as any).salary || (interview as any).salaryRange,
+            recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiting Team',
+            recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+          }
         );
         if (waResult.success) {
           waCount = waResult.totalSent;
@@ -235,6 +308,7 @@ const InterviewCandidates: React.FC = () => {
       messageBox.showError('Failed to send invitations.');
     } finally {
       setSendingEmails(false);
+      setSendingProgressMsg('');
     }
   };
 
@@ -250,7 +324,23 @@ const InterviewCandidates: React.FC = () => {
       let emailCount = 0;
       let waCount = 0;
 
-      const result = await sendInterviewInvitations(pendingEmails, interview.title, interview.interviewLink || '', interview.accessCode, true);
+      const result = await sendInterviewInvitations(
+        pendingEmails,
+        interview.title,
+        interview.interviewLink || '',
+        interview.accessCode,
+        true,
+        {
+          gender: (interview as any).gender || (interview as any).genderRequirement,
+          location: (interview as any).location,
+          education: (interview as any).education || (interview as any).qualification,
+          qualification: (interview as any).qualification || (interview as any).education,
+          experience: (interview as any).experience || (interview as any).experienceRequired,
+          salary: (interview as any).salary || (interview as any).salaryRange,
+          recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiter',
+          recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+        }
+      );
       if (result.success) emailCount = result.totalEmails;
 
       const candData = (interview as any).candidateData || [];
@@ -287,7 +377,23 @@ const InterviewCandidates: React.FC = () => {
       let waSent = false;
 
       if (email && email.includes('@')) {
-        const result = await sendInterviewInvitations([email], interview.title, interview.interviewLink || '', interview.accessCode);
+        const result = await sendInterviewInvitations(
+          [email],
+          interview.title,
+          interview.interviewLink || '',
+          interview.accessCode,
+          false,
+          {
+            gender: (interview as any).gender || (interview as any).genderRequirement,
+            location: (interview as any).location,
+            education: (interview as any).education || (interview as any).qualification,
+            qualification: (interview as any).qualification || (interview as any).education,
+            experience: (interview as any).experience || (interview as any).experienceRequired,
+            salary: (interview as any).salary || (interview as any).salaryRange,
+            recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiter',
+            recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+          }
+        );
         if (result.success) emailSent = true;
       }
 
@@ -353,6 +459,71 @@ const InterviewCandidates: React.FC = () => {
     } catch (error) {
       console.error('Error updating reattempt status:', error);
       messageBox.showError('Failed to update reattempt status.');
+    }
+  };
+
+  const [sendingWhatsAppEmail, setSendingWhatsAppEmail] = useState<string | null>(null);
+
+  const handleDirectWhatsAppInvite = async (candidateEmail: string, candidatePhone?: string) => {
+    if (!interview) return;
+    const phone = candidatePhone && candidatePhone !== 'N/A' ? candidatePhone.trim() : '';
+
+    if (!phone) {
+      setWhatsappModal({
+        isOpen: true,
+        email: candidateEmail,
+        phone: '',
+        message: buildWhatsAppInviteText({
+          candidateName: candidateEmail.split('@')[0],
+          jobTitle: interview.title,
+          interviewLink: interview.interviewLink || `${window.location.origin}/#/interview/${interview.id}`,
+          accessCode: interview.accessCode,
+          options: {
+            gender: (interview as any).gender || (interview as any).genderRequirement,
+            location: (interview as any).location,
+            education: (interview as any).education || (interview as any).qualification,
+            qualification: (interview as any).qualification || (interview as any).education,
+            experience: (interview as any).experience || (interview as any).experienceRequired,
+            salary: (interview as any).salary || (interview as any).salaryRange,
+            recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiting Team',
+            recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+          }
+        }),
+        interview
+      });
+      return;
+    }
+
+    setSendingWhatsAppEmail(candidateEmail);
+    try {
+      const res = await sendInterviewWhatsAppInvite({
+        phone: phone,
+        candidateName: candidateEmail.split('@')[0],
+        jobTitle: interview.title,
+        interviewLink: interview.interviewLink || `${window.location.origin}/#/interview/${interview.id}`,
+        accessCode: interview.accessCode,
+        options: {
+          gender: (interview as any).gender || (interview as any).genderRequirement,
+          location: (interview as any).location,
+          education: (interview as any).education || (interview as any).qualification,
+          qualification: (interview as any).qualification || (interview as any).education,
+          experience: (interview as any).experience || (interview as any).experienceRequired,
+          salary: (interview as any).salary || (interview as any).salaryRange,
+          recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiting Team',
+          recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+        }
+      });
+
+      if (res.success) {
+        messageBox.showSuccess(`✅ WhatsApp invitation sent to ${phone} via API!`);
+      } else {
+        messageBox.showError(`WhatsApp API error: ${res.error || 'Failed to send'}`);
+      }
+    } catch (err: any) {
+      console.error('Direct WhatsApp error:', err);
+      messageBox.showError('Failed to send WhatsApp message via API.');
+    } finally {
+      setSendingWhatsAppEmail(null);
     }
   };
 
@@ -485,7 +656,7 @@ const InterviewCandidates: React.FC = () => {
       </section>
 
       <section className="grid gap-3 border-b border-white/[0.11] px-4 py-3 sm:px-6 lg:px-7">
-          <div className="grid gap-3 xl:grid-cols-[220px_minmax(0,1fr)_auto]">
+          <div className="grid gap-3 xl:grid-cols-[260px_minmax(0,1fr)_auto]">
             <label className="flex min-h-9 cursor-pointer items-center justify-center gap-2 rounded-[6px] border border-dashed border-white/[0.18] bg-white/[0.03] px-3 text-[#d4d4d4] transition-colors hover:bg-white/[0.06]">
               {parsingResumes ? (
                 <>
@@ -494,11 +665,11 @@ const InterviewCandidates: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <i className="fas fa-cloud-upload-alt text-[12px]"></i>
-                  <span className="geist-caption font-medium">Upload resumes</span>
+                  <i className="fas fa-file-excel text-green-400 text-[13px]"></i>
+                  <span className="geist-caption font-medium">Upload Excel / CSV / PDF / DOCX / TXT</span>
                 </>
               )}
-              <input type="file" multiple accept=".pdf,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
+              <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,text/csv" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
             </label>
             <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_170px_auto]">
               <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="Candidate email" className="geist-caption h-9 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-white outline-none transition-colors placeholder:text-[#6b7280] focus:border-white/[0.28]" />
@@ -519,6 +690,13 @@ const InterviewCandidates: React.FC = () => {
               )}
             </button>
           </div>
+
+          {sendingProgressMsg && (
+            <div className="flex items-center gap-2 rounded-[6px] border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 animate-pulse">
+              <i className="fas fa-spinner fa-spin"></i>
+              <span>{sendingProgressMsg}</span>
+            </div>
+          )}
 
           <div className="grid gap-2">
             <p className="geist-label uppercase text-[#6b7280]">Invite queue</p>
@@ -661,18 +839,15 @@ const InterviewCandidates: React.FC = () => {
                       {!candidate.hasSubmitted && (
                         <button
                           type="button"
-                          onClick={() =>
-                            setWhatsappModal({
-                              isOpen: true,
-                              email: candidate.email,
-                              phone: candidateData?.phone && candidateData.phone !== 'N/A' ? candidateData.phone : '',
-                              message: buildWhatsAppMessage(interview),
-                              interview,
-                            })
-                          }
-                          className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-[#173d25] bg-[#071a10] px-3 font-medium text-[#7ee787] transition-colors hover:bg-[#0b2415]"
+                          onClick={() => handleDirectWhatsAppInvite(candidate.email, candidateData?.phone)}
+                          disabled={sendingWhatsAppEmail === candidate.email}
+                          className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-[#173d25] bg-[#071a10] px-3 font-medium text-[#7ee787] transition-colors hover:bg-[#0b2415] disabled:opacity-50"
                         >
-                          <i className="fab fa-whatsapp text-[11px]"></i>
+                          {sendingWhatsAppEmail === candidate.email ? (
+                            <i className="fas fa-spinner fa-spin text-[11px]"></i>
+                          ) : (
+                            <i className="fab fa-whatsapp text-[11px]"></i>
+                          )}
                           WhatsApp
                         </button>
                       )}

@@ -21,6 +21,7 @@ import {
   type CandidateMatch,
   type ResumeDumpRecord,
 } from '../services/resumeService';
+import { logTeamActivity } from '../services/auditService';
 
 // Setup PDF.js worker to enable PDF parsing
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -129,7 +130,7 @@ export const CreateInterviewSkeleton = () => (
 );
 
 const CreateInterview: React.FC = () => {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const navigate = useNavigate();
   const { status: rateLimitStatus, loading: rateLimitLoading, refresh: refreshRateLimit } = useCompanyRateLimits();
   const interviewLimitReached = isRateLimitReached(rateLimitStatus, 'interviews');
@@ -550,6 +551,15 @@ const CreateInterview: React.FC = () => {
       const newAccessCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
       // 2. Save to Firestore
+      const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
+      const creatorInfo = {
+        uid: user.uid,
+        name: userProfile?.name || user.email || 'Recruiter',
+        email: user.email || '',
+        role: userProfile?.role || 'recruiter',
+        designation: userProfile?.designation || 'Recruiter'
+      };
+
       await setDoc(doc(db, 'interviews', newRand), {
         ...formData,
         manualQuestions,
@@ -559,9 +569,19 @@ const CreateInterview: React.FC = () => {
         interviewLink: newInterviewLink,
         accessCode: newAccessCode,
         recruiterUID: user.uid,
+        teamId,
+        createdBy: creatorInfo,
         createdAt: serverTimestamp(),
         isMock: false,
       });
+
+      // Log audit trail event
+      logTeamActivity(
+        teamId,
+        'interview_created',
+        `Created job/interview "${formData.title}" (ID: ${newRand})`,
+        creatorInfo
+      );
 
       if (uploadedResumeCandidateIds.length > 0) {
         try {
@@ -588,17 +608,28 @@ const CreateInterview: React.FC = () => {
             candidateEmails,
             formData.title,
             newInterviewLink,
-            newAccessCode
+            newAccessCode,
+            false,
+            {
+              gender: (formData as any).gender || (formData as any).genderRequirement,
+              location: (formData as any).location,
+              education: (formData as any).education || (formData as any).qualification,
+              qualification: (formData as any).qualification || (formData as any).education,
+              experience: (formData as any).experience || (formData as any).experienceRequired,
+              salary: (formData as any).salary || (formData as any).salaryRange,
+              recruiterName: userProfile?.name || creatorInfo.name || (user as any)?.displayName || 'Recruiter',
+              recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+            }
           );
 
           if (result.success) {
             emailCount = result.totalEmails;
-            console.log(`[Brevo] Successfully sent ${result.totalEmails} invitation email(s)!`);
+            console.log(`[Resend/Brevo] Successfully sent ${result.totalEmails} invitation email(s)!`);
           } else {
-            console.warn(`[Brevo] Partial failure sending emails: ${result.error}`);
+            console.warn(`[Resend/Brevo] Partial failure sending emails: ${result.error}`);
           }
         } catch (err: any) {
-          console.error('[Brevo] Email sending error:', err);
+          console.error('[Resend/Brevo] Email sending error:', err);
         } finally {
           setSendingEmails(false);
         }
@@ -614,7 +645,19 @@ const CreateInterview: React.FC = () => {
             candidatesWithPhones,
             formData.title,
             newInterviewLink,
-            newAccessCode
+            newAccessCode,
+            false,
+            undefined,
+            {
+              gender: (formData as any).gender || (formData as any).genderRequirement,
+              location: (formData as any).location,
+              education: (formData as any).education || (formData as any).qualification,
+              qualification: (formData as any).qualification || (formData as any).education,
+              experience: (formData as any).experience || (formData as any).experienceRequired,
+              salary: (formData as any).salary || (formData as any).salaryRange,
+              recruiterName: userProfile?.name || creatorInfo.name || (user as any)?.displayName || 'Recruiter',
+              recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+            }
           );
           if (waResult.success) {
             waCount = waResult.totalSent;

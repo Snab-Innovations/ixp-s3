@@ -52,11 +52,34 @@ export interface Interview {
     email: string;
     role: 'candidate' | 'recruiter' | 'admin';
     name: string;
+    displayName?: string;
+    phone?: string;
+    phoneNumber?: string;
+    contactNumber?: string;
     photoURL?: string;
     company?: string;
     skills?: string[];
     experience?: number;
     resumeUrl?: string;
+    parentRecruiterId?: string;
+    teamId?: string;
+    isSecondary?: boolean;
+    designation?: string;
+  }
+
+  export interface AuditLog {
+    id: string;
+    teamId: string;
+    action: string;
+    details: string;
+    performedBy: {
+      uid: string;
+      name?: string;
+      email?: string;
+      role?: string;
+      designation?: string;
+    };
+    createdAt: any;
   }
   
   export interface Job {

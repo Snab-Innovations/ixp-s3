@@ -264,11 +264,32 @@ Q&A Score: [SCORE]/100
 export const evaluateResumeMatch = async (
   jobTitle: string,
   jobDescription: string,
-  resumeText: string
+  resumeText: string,
+  extraRequirements?: {
+    education?: string;
+    gender?: string;
+  }
 ): Promise<string> => {
   const jd = truncate(jobDescription, JD_MAX_CHARS);
-  const sys = `You are a strict HR recruiter. Calculate a Resume Match Percentage (0 to 100) based strictly on how well the candidate's resume aligns with the Job Description. Be highly critical.`;
-  const prompt = `Role: ${jobTitle}\nJD: ${jd}\n\nResume:\n${truncate(resumeText, RESUME_MAX_CHARS)}\n\nOutput ONLY an integer number between 0 and 100 representing the match percentage (e.g. 85). Do not output any other text or percentage signs.`;
+  const eduReq = extraRequirements?.education ? `\nRequired Education: ${extraRequirements.education}` : '';
+  const genderReq = extraRequirements?.gender ? `\nRequired Gender: ${extraRequirements.gender}` : '';
+
+  const sys = `You are an extremely strict HR recruiter enforcing HARD ELIGIBILITY FILTERS.
+
+CRITICAL MANDATORY FILTERS (AUTOMATIC 0% MATCH IF FAILED):
+1. QUALIFICATION / EDUCATION STRICT FILTER:
+   - If the Job Title, Job Description, or Required Education specifies a required qualification/degree level (e.g. B.Tech, M.Tech, Bachelor's, Master's, MBA, Diploma, 12th, PhD, etc.):
+   - The candidate's resume MUST meet or exceed this required level.
+   - If the candidate's degree is BELOW the required qualification (e.g., job requires B.Tech/Master's but candidate has 12th/Diploma or lower), you MUST output EXACTLY 0.
+
+2. GENDER REQUIREMENTS STRICT FILTER:
+   - If the Job Title, Job Description, or Required Gender explicitly mentions a gender preference/restriction (e.g., "Female only", "Male only", "Girls", "Boys", "Women only", "Men only"):
+   - Analyze the candidate's resume for gender (name, pronouns, explicit gender field).
+   - If candidate's gender does NOT match the required gender, you MUST output EXACTLY 0.
+
+If and ONLY IF candidate passes both strict qualification and gender filters (or if neither is specified), calculate a realistic match percentage (0 to 100) based on skill overlap, experience, and role fit. Be critical.`;
+
+  const prompt = `Job Title: ${jobTitle}${eduReq}${genderReq}\nJD: ${jd}\n\nCandidate Resume:\n${truncate(resumeText, RESUME_MAX_CHARS)}\n\nOutput ONLY an integer number between 0 and 100 representing the match percentage (e.g. 85 or 0). Do not output any other text or percentage signs.`;
 
   try {
     const result = await grokGenerateText(sys, prompt, 0.1, 10);
@@ -276,36 +297,53 @@ export const evaluateResumeMatch = async (
     if (isNaN(score)) return "N/A";
     return score.toString();
   } catch (error: any) {
-    console.error("Grok Resume Match Error:", error);
+    console.error("Resume Match Error:", error);
     return "N/A";
   }
 };
 
 // ── Multi-Job Resume Match ───────────────────────────────────────────────────
 export const evaluateResumeForMultipleJobs = async (
-  jobs: { id: string; title: string; description: string }[],
+  jobs: { id: string; title: string; description: string; education?: string; gender?: string }[],
   resumeText: string
 ): Promise<Record<string, string>> => {
   if (jobs.length === 0) return {};
 
-  const jobsContext = jobs.map(j => `Job ID: ${j.id}\nTitle: ${j.title}\nJD: ${truncate(j.description, JD_MAX_CHARS / 2)}`).join('\n\n');
-  const sys = `You are a strict HR recruiter. Evaluate a candidate's resume against multiple job descriptions. Output ONLY a valid JSON object where keys are Job IDs and values are integer match percentages (0-100). Do NOT output markdown formatting like \`\`\`json.`;
-  const prompt = `Jobs:\n${jobsContext}\n\nResume:\n${truncate(resumeText, RESUME_MAX_CHARS)}\n\nOutput strictly JSON mapping Job ID to percentage match. Example: {"job123": 85, "job456": 40}`;
+  const jobsContext = jobs.map(j => {
+    const edu = j.education ? ` | Required Education: ${j.education}` : '';
+    const gen = j.gender ? ` | Required Gender: ${j.gender}` : '';
+    return `Job ID: ${j.id}\nTitle: ${j.title}${edu}${gen}\nJD: ${truncate(j.description, JD_MAX_CHARS / 2)}`;
+  }).join('\n\n');
+
+  const sys = `You are an extremely strict HR recruiter enforcing HARD ELIGIBILITY FILTERS for multiple jobs simultaneously.
+
+CRITICAL MANDATORY HARD FILTERS (AUTOMATIC 0% MATCH IF FAILED):
+1. QUALIFICATION / EDUCATION STRICT FILTER:
+   - If Job Title, Description, or Required Education specifies a qualification/degree (e.g., B.Tech, M.Tech, Bachelor's, Master's, MBA, Diploma, 12th, PhD, etc.):
+   - Candidate resume MUST meet or exceed this required level.
+   - If candidate's degree is BELOW requirement (e.g. Job requires B.Tech/Master's but resume only lists 12th/Diploma), set match percentage for that job to 0.
+
+2. GENDER REQUIREMENTS STRICT FILTER:
+   - If Job Title, Description, or Required Gender specifies a gender restriction (e.g. "Female only", "Male only", "Girls", "Boys", "Women only", "Men only"):
+   - Inspect candidate resume for gender. If candidate's gender does NOT match the job requirement, set match percentage for that job to 0.
+
+Only if candidate passes both strict qualification and gender requirements, score from 0 to 100 based on skill and experience fit.
+Output ONLY a valid JSON object where keys are Job IDs and values are integer match percentages (0-100). Do NOT output markdown formatting like \`\`\`json.`;
+
+  const prompt = `Jobs:\n${jobsContext}\n\nCandidate Resume:\n${truncate(resumeText, RESUME_MAX_CHARS)}\n\nOutput strictly JSON mapping Job ID to percentage match. Example: {"job123": 85, "job456": 0}`;
 
   try {
     const result = await grokGenerateText(sys, prompt, 0.1, 50 + jobs.length * 20);
-    // Remove any markdown block syntax if the AI mistakenly includes it
     const cleanResult = result.replace(/```json/g, '').replace(/```/g, '').trim();
     const scores = JSON.parse(cleanResult);
     
-    // Ensure it's a record of strings
     const formattedScores: Record<string, string> = {};
     for (const [key, val] of Object.entries(scores)) {
         formattedScores[key] = String(val);
     }
     return formattedScores;
   } catch (error: any) {
-    console.error("Grok Multi-Job Resume Match Error:", error);
+    console.error("Multi-Job Resume Match Error:", error);
     return {};
   }
 };

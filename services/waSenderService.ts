@@ -1,9 +1,9 @@
 // WhatsApp Messaging Service
 // Uses WhatsApp Task Manager REST API (https://whatsapp-task-manager-ai4d.onrender.com/api/v1/send-message)
 
-const WHATSAPP_API_URL = import.meta.env.VITE_WHATSAPP_API_URL ;
-const WHATSAPP_SESSION_ID = import.meta.env.VITE_WHATSAPP_SESSION_ID ;
-const WHATSAPP_SESSION_PASSCODE = import.meta.env.VITE_WHATSAPP_SESSION_PASSCODE ;
+const WHATSAPP_API_URL = import.meta.env.VITE_WHATSAPP_API_URL;
+const WHATSAPP_SESSION_ID = import.meta.env.VITE_WHATSAPP_SESSION_ID;
+const WHATSAPP_SESSION_PASSCODE = import.meta.env.VITE_WHATSAPP_SESSION_PASSCODE;
 
 export interface SendWhatsAppResponse {
   success: boolean;
@@ -11,20 +11,26 @@ export interface SendWhatsAppResponse {
   error?: string;
 }
 
+export interface WhatsAppInviteOptions {
+  gender?: string;
+  location?: string;
+  education?: string;
+  qualification?: string;
+  experience?: string;
+  salary?: string;
+  recruiterName?: string;
+  recruiterPhone?: string;
+}
+
 /**
  * Formats a phone number for WhatsApp API (digits with leading + and country code).
  * e.g., "9876543210" -> "+919876543210" (assumes India +91 if 10 digits)
- * e.g., "76665 4335" -> "+91766654335"
- * e.g., "+91 98765 43210" -> "+919876543210"
- * e.g., "09876543210" -> "+919876543210"
  */
 export function formatPhoneForWhatsApp(phone: string): string {
   if (!phone) return '';
   
-  // 1. Remove all non-numeric characters
   let cleaned = phone.replace(/[^0-9]/g, '');
 
-  // 2. Handle leading zeroes & prefixed country codes
   if (cleaned.startsWith('0091')) {
     cleaned = cleaned.substring(4);
   } else if (cleaned.startsWith('091')) {
@@ -33,12 +39,9 @@ export function formatPhoneForWhatsApp(phone: string): string {
     cleaned = cleaned.replace(/^0+/, '');
   }
 
-  // 3. If 9 or 10 digits starting with 6, 7, 8, 9 (Indian mobile prefix), prepend 91
   if ((cleaned.length === 9 || cleaned.length === 10) && /^[6-9]/.test(cleaned)) {
     cleaned = '91' + cleaned;
-  }
-  // 4. If 10 digits starting with any digit, prepend 91
-  else if (cleaned.length === 10) {
+  } else if (cleaned.length === 10) {
     cleaned = '91' + cleaned;
   }
 
@@ -60,7 +63,7 @@ export async function sendWhatsAppMessage(phone: string, text: string): Promise<
   const passcode = WHATSAPP_SESSION_PASSCODE;
 
   if (!sessionId || !passcode) {
-    console.error('[WhatsApp API] Credentials missing. Please set VITE_WHATSAPP_SESSION_ID and VITE_WHATSAPP_SESSION_PASSCODE in .env');
+    console.error('[WhatsApp API] Credentials missing in .env');
     return { success: false, error: 'WhatsApp API credentials are not configured.' };
   }
 
@@ -96,6 +99,66 @@ export async function sendWhatsAppMessage(phone: string, text: string): Promise<
 }
 
 /**
+ * Builds full WhatsApp message text matching the email template format.
+ */
+export function buildWhatsAppInviteText(params: {
+  candidateName?: string;
+  jobTitle: string;
+  interviewLink: string;
+  accessCode: string;
+  isReminder?: boolean;
+  options?: WhatsAppInviteOptions;
+}): string {
+  const { candidateName = 'Candidate', jobTitle, interviewLink, accessCode, isReminder = false, options } = params;
+
+  const genderStr = options?.gender ? `, ${options.gender}` : '';
+  const postDisplay = `*${jobTitle}${genderStr}*`;
+  const locationDisplay = options?.location || 'As specified in Job Description';
+  const qualificationDisplay = options?.qualification || options?.education || 'As per Job Description';
+  const expDisplay = options?.experience || 'As per Job Description';
+  const salaryDisplay = options?.salary || 'Competitive / As per Job Description';
+
+  const recruiterName = options?.recruiterName || 'Recruiting Team';
+  const recruiterPhone = options?.recruiterPhone || '9762588623 / 8484888632';
+
+  const headline = isReminder
+    ? `⏳ *PENDING INTERVIEW REMINDER*`
+    : `🎯 *OFFICIAL INTERVIEW INVITATION*`;
+
+  const intro = isReminder
+    ? `Dear *${candidateName}*,\n\nThis is a polite reminder to complete your AI video interview assessment for the post of *${jobTitle}* at *SNAB Innovations / Dsource*.`
+    : `Dear *${candidateName}*,\n\nWe are pleased to invite you to complete an AI video interview assessment for the post of *${jobTitle}* at *SNAB Innovations / Dsource*.`;
+
+  return `${headline}
+
+${intro}
+
+📌 *JOB REQUIREMENT DETAILS:*
+• 📌 *Post:* ${postDisplay}
+• 📍 *Location:* ${locationDisplay}
+• 🎓 *Qualification:* ${qualificationDisplay}
+• 💼 *Experience:* ${expDisplay}
+• 💰 *Salary:* ${salaryDisplay}
+
+🔐 *YOUR ACCESS CREDENTIALS:*
+• 🔑 *Access Code:* *${accessCode}*
+• 🌐 *Interview Link:* ${interviewLink}
+
+👤 *RECRUITER / CONTACT PERSON:*
+• 👤 *Contact Person:* *${recruiterName}*
+• 📞 *Mobile / Contact:* *${recruiterPhone}*
+
+⚠️ *Instructions:*
+1. Ensure a working camera & microphone on your phone or laptop.
+2. Use a stable internet connection in a quiet environment.
+
+Need Technical Help? Call Dsource Support: 9762588623 / 8484888632
+
+Best regards,
+*SNAB Innovations | Dsource Recruitment System*`;
+}
+
+/**
  * Formats and sends an interview invitation via WhatsApp.
  */
 export async function sendInterviewWhatsAppInvite(params: {
@@ -105,54 +168,46 @@ export async function sendInterviewWhatsAppInvite(params: {
   interviewLink: string;
   accessCode: string;
   isReminder?: boolean;
+  options?: WhatsAppInviteOptions;
 }): Promise<SendWhatsAppResponse> {
-  const { phone, candidateName = 'Candidate', jobTitle, interviewLink, accessCode, isReminder = false } = params;
-
-  const greeting = `Hello 👋 ${candidateName},`;
-  const intro = isReminder
-    ? `This is a friendly reminder for your upcoming interview for the role of *${jobTitle}* at DSource.`
-    : `We are pleased to invite you for an online interview for the post of *${jobTitle}* at DSource.`;
-
-  const messageText = `${greeting}
-
-${intro}
-
-📌 *Interview Details:*
-• *Interview Link:* ${interviewLink}
-• *Access Password:* ${accessCode}
-
-If you face any difficulty, please call DSource Support: 9762588623 / 8484888632.
-
-Best regards,
-*Team DSource*`;
-
-  return await sendWhatsAppMessage(phone, messageText);
+  const messageText = buildWhatsAppInviteText(params);
+  return await sendWhatsAppMessage(params.phone, messageText);
 }
 
 /**
  * Bulk sends interview invites via WhatsApp to a list of candidates with phone numbers.
+ * Sends candidates one-by-one with a mandatory 10-second delay between messages to protect WhatsApp from ban/spam blocking.
  */
 export async function sendBulkWhatsAppInvites(
   candidates: Array<{ phone: string; name?: string; email?: string }>,
   jobTitle: string,
   interviewLink: string,
   accessCode: string,
-  isReminder = false
+  isReminder = false,
+  onProgress?: (sentCount: number, totalCount: number, currentCandidate: string, isWaiting: boolean) => void,
+  options?: WhatsAppInviteOptions
 ): Promise<{ success: boolean; totalSent: number; totalFailed: number; errors: string[] }> {
   let totalSent = 0;
   let totalFailed = 0;
   const errors: string[] = [];
+  const validCandidates = candidates.filter(c => !!c.phone && c.phone.trim() !== '');
 
-  for (const candidate of candidates) {
-    if (!candidate.phone) continue;
+  for (let i = 0; i < validCandidates.length; i++) {
+    const candidate = validCandidates[i];
+    const candidateDisplayName = candidate.name || candidate.email?.split('@')[0] || candidate.phone;
+
+    if (onProgress) {
+      onProgress(i + 1, validCandidates.length, candidateDisplayName, false);
+    }
 
     const res = await sendInterviewWhatsAppInvite({
       phone: candidate.phone,
-      candidateName: candidate.name || candidate.email?.split('@')[0] || 'Candidate',
+      candidateName: candidateDisplayName,
       jobTitle,
       interviewLink,
       accessCode,
       isReminder,
+      options,
     });
 
     if (res.success) {
@@ -160,6 +215,14 @@ export async function sendBulkWhatsAppInvites(
     } else {
       totalFailed++;
       if (res.error) errors.push(`${candidate.phone}: ${res.error}`);
+    }
+
+    // Mandatory 10-second delay before sending to next candidate to protect WhatsApp account
+    if (i < validCandidates.length - 1) {
+      if (onProgress) {
+        onProgress(i + 1, validCandidates.length, candidateDisplayName, true);
+      }
+      await new Promise(resolve => setTimeout(resolve, 10000));
     }
   }
 

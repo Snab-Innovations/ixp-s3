@@ -26,6 +26,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from '../components/ui/line-chart';
+import { RecruiterTeamPanel } from '../components/RecruiterTeamPanel';
 
 type TimestampLike =
   | {
@@ -267,9 +268,19 @@ const RecruiterDashboard: React.FC = () => {
     setLoadingInterviews(true);
     setLoadingTests(true);
 
-    const jobsQuery = query(collection(db, 'jobs'), where('recruiterUID', '==', user.uid));
-    const interviewsQuery = query(collection(db, 'interviews'), where('recruiterUID', '==', user.uid));
-    const testsQuery = query(collection(db, 'tests'), where('recruiterUID', '==', user.uid));
+    const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
+
+    const jobsQuery = teamId
+      ? query(collection(db, 'jobs'), where('teamId', '==', teamId))
+      : query(collection(db, 'jobs'), where('recruiterUID', '==', user.uid));
+
+    const interviewsQuery = teamId
+      ? query(collection(db, 'interviews'), where('teamId', '==', teamId))
+      : query(collection(db, 'interviews'), where('recruiterUID', '==', user.uid));
+
+    const testsQuery = teamId
+      ? query(collection(db, 'tests'), where('teamId', '==', teamId))
+      : query(collection(db, 'tests'), where('recruiterUID', '==', user.uid));
 
     const unsubscribeJobs = onSnapshot(
       jobsQuery,
@@ -861,6 +872,9 @@ const RecruiterDashboard: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Recruiter Team & Audit Logs Section */}
+      <RecruiterTeamPanel />
 
     </div>
   );

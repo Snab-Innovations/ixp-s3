@@ -3,15 +3,18 @@ import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, arrayUnion, w
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
+import { UserPlus } from 'lucide-react';
 import { Interview } from '../types';
 import { useMessageBox } from '../components/MessageBox';
 import { createPortal } from 'react-dom';
 import { sendInterviewInvitations } from '../services/brevoService';
-import { sendWhatsAppMessage } from '../services/waSenderService';
+import { sendWhatsAppMessage, sendInterviewWhatsAppInvite, buildWhatsAppInviteText } from '../services/waSenderService';
 import EditJobModal from './EditJob';
 
 import { evaluateResumeMatch } from '../services/api';
 import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
+import { parseCandidateDocument } from '../services/candidateFileParser';
+import { sendBulkWhatsAppInvites } from '../services/waSenderService';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rateLimitService';
 
@@ -145,7 +148,7 @@ export const RecruiterInterviewsSkeleton = () => (
 );
 
 const RecruiterInterviews: React.FC = () => {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
@@ -196,10 +199,10 @@ const RecruiterInterviews: React.FC = () => {
     };
 
     setLoading(true);
-    const interviewsQuery = query(
-      collection(db, 'interviews'),
-      where('recruiterUID', '==', user.uid)
-    );
+    const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
+    const interviewsQuery = teamId
+      ? query(collection(db, 'interviews'), where('teamId', '==', teamId))
+      : query(collection(db, 'interviews'), where('recruiterUID', '==', user.uid));
 
     const unsubscribe = onSnapshot(interviewsQuery, async (querySnapshot) => {
       const interviewsData = querySnapshot.docs
@@ -251,68 +254,99 @@ const RecruiterInterviews: React.FC = () => {
       setNewEmails(newEmails.filter(email => email !== emailToRemove));
   };
 
+  const [sendingProgressMsg, setSendingProgressMsg] = useState('');
+
   const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !user) return;
 
     setParsingResumes(true);
-    const newCandidatesFound: {email: string, phone: string, matchScore?: string}[] = [];
+    const newCandidatesFound: {email: string, phone: string, name?: string, matchScore?: string}[] = [];
     let filesProcessed = 0;
     let filesWithErrors = 0;
 
-    const parsePromises = Array.from(files).map(async (f) => {
+    for (const f of Array.from(files)) {
       const file = f as File;
       try {
-        const ingested = await ingestResumeFile(file);
-        const lowerEmail = (ingested.profile.email || '').toLowerCase();
-        const phone = ingested.profile.phone || 'N/A';
+        const fileName = file.name.toLowerCase();
 
-        await saveResumeDumpCandidate({
-          recruiterUID: user.uid,
-          profile: ingested.profile,
-          resumeText: ingested.resumeText,
-          resumeUrl: ingested.resumeUrl,
-          fileName: file.name,
-          mimeType: file.type,
-          fileSize: file.size,
-          source: 'interview_creation',
-          sourceInterviewId: selectedInterview?.id || '',
-          sourceJobTitle: selectedInterview?.title || '',
-        });
+        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv')) {
+          const extracted = await parseCandidateDocument(file);
+          for (const cand of extracted) {
+            const lowerEmail = (cand.email || '').toLowerCase();
+            const phone = cand.phone || 'N/A';
+            const name = cand.name || 'Candidate';
 
-        if (lowerEmail) {
-            if (!(selectedInterview?.candidateEmails || []).includes(lowerEmail) && !newEmails.includes(lowerEmail)) {
-                let matchScore = "N/A";
-                if (selectedInterview && ingested.resumeText.length > 50) {
-                    try {
-                        matchScore = await evaluateResumeMatch(selectedInterview.title, selectedInterview.description, ingested.resumeText);
-                    } catch (err) {
-                        console.error('Match score error:', err);
-                    }
-                }
-                
-                if (!newCandidatesFound.some(c => c.email === lowerEmail)) {
-                    newCandidatesFound.push({ email: lowerEmail, phone, matchScore });
-                }
+            if (lowerEmail && !(selectedInterview?.candidateEmails || []).includes(lowerEmail) && !newEmails.includes(lowerEmail)) {
+              if (!newCandidatesFound.some(c => c.email === lowerEmail)) {
+                newCandidatesFound.push({ email: lowerEmail, phone, name, matchScore: 'N/A' });
+              }
+            } else if (phone && phone !== 'N/A') {
+              const pseudoEmail = `${phone.replace(/[^0-9]/g, '')}@whatsapp.local`;
+              if (!newEmails.includes(pseudoEmail) && !newCandidatesFound.some(c => c.phone === phone)) {
+                newCandidatesFound.push({ email: pseudoEmail, phone, name, matchScore: 'N/A' });
+              }
             }
+          }
+        } else {
+          const ingested = await ingestResumeFile(file);
+          const lowerEmail = (ingested.profile.email || '').toLowerCase();
+          const phone = ingested.profile.phone || 'N/A';
+          const name = ingested.profile.name || 'Candidate';
+
+          await saveResumeDumpCandidate({
+            recruiterUID: user.uid,
+            profile: ingested.profile,
+            resumeText: ingested.resumeText,
+            resumeUrl: ingested.resumeUrl,
+            fileName: file.name,
+            mimeType: file.type,
+            fileSize: file.size,
+            source: 'interview_creation',
+            sourceInterviewId: selectedInterview?.id || '',
+            sourceJobTitle: selectedInterview?.title || '',
+          });
+
+          if (lowerEmail) {
+            if (!(selectedInterview?.candidateEmails || []).includes(lowerEmail) && !newEmails.includes(lowerEmail)) {
+              let matchScore = "N/A";
+              if (selectedInterview && ingested.resumeText.length > 50) {
+                try {
+                  matchScore = await evaluateResumeMatch(
+                    selectedInterview.title, 
+                    selectedInterview.description, 
+                    ingested.resumeText,
+                    {
+                      education: (selectedInterview as any).education,
+                      gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement
+                    }
+                  );
+                } catch (err) {
+                  console.error('Match score error:', err);
+                }
+              }
+              
+              if (!newCandidatesFound.some(c => c.email === lowerEmail)) {
+                newCandidatesFound.push({ email: lowerEmail, phone, name, matchScore });
+              }
+            }
+          }
         }
         filesProcessed++;
       } catch (error) {
         console.error(`Error parsing ${file.name}:`, error);
         filesWithErrors++;
       }
-    });
-
-    await Promise.all(parsePromises);
+    }
 
     if (newCandidatesFound.length > 0) {
-        setNewEmails(prev => [...prev, ...newCandidatesFound.map(c => c.email)]);
-        setParsedCandidates(prev => [...prev, ...newCandidatesFound]);
+      setNewEmails(prev => [...prev, ...newCandidatesFound.map(c => c.email)]);
+      setParsedCandidates(prev => [...prev, ...newCandidatesFound]);
     }
     
     messageBox.showInfo(`Processed ${filesProcessed} file(s). Found ${newCandidatesFound.length} new candidate(s). ${filesWithErrors > 0 ? `Failed to parse ${filesWithErrors} file(s).` : ''}`);
     setParsingResumes(false);
-    e.target.value = ''; // Reset file input
+    e.target.value = '';
   };
 
   const handleEditAndResend = async (oldEmail: string, newEmail: string) => {
@@ -336,7 +370,18 @@ const RecruiterInterviews: React.FC = () => {
             [newEmail],
             selectedInterview.title,
             selectedInterview.interviewLink || '',
-            selectedInterview.accessCode
+            selectedInterview.accessCode,
+            false,
+            {
+              gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
+              location: (selectedInterview as any).location,
+              education: (selectedInterview as any).education || (selectedInterview as any).qualification,
+              qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
+              experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+              salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+              recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruitment Team',
+              recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+            }
         );
 
         if (result.success) {
@@ -361,7 +406,18 @@ const RecruiterInterviews: React.FC = () => {
             [email],
             selectedInterview.title,
             selectedInterview.interviewLink || '',
-            selectedInterview.accessCode
+            selectedInterview.accessCode,
+            false,
+            {
+              gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
+              location: (selectedInterview as any).location,
+              education: (selectedInterview as any).education || (selectedInterview as any).qualification,
+              qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
+              experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+              salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+              recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruitment Team',
+              recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+            }
         );
 
         if (result.success) {
@@ -409,16 +465,26 @@ const RecruiterInterviews: React.FC = () => {
             interview.title,
             interview.interviewLink || '',
             interview.accessCode,
-            true
+            true,
+            {
+              gender: (interview as any).gender || (interview as any).genderRequirement,
+              location: (interview as any).location,
+              education: (interview as any).education || (interview as any).qualification,
+              qualification: (interview as any).qualification || (interview as any).education,
+              experience: (interview as any).experience || (interview as any).experienceRequired,
+              salary: (interview as any).salary || (interview as any).salaryRange,
+              recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruitment Team',
+              recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+            }
         );
 
         if (result.success) {
-            messageBox.showSuccess(`Reminders sent successfully to ${result.totalEmails} candidate(s)!`);
+            messageBox.showSuccess(`Sent reminder to ${result.totalEmails} candidate(s)!`);
         } else {
-            messageBox.showError(`Failed to send some reminders: ${result.error}`);
+            messageBox.showError(`Failed to send reminders: ${result.error}`);
         }
     } catch (error: any) {
-        console.error('Bulk remind error:', error);
+        console.error('Bulk reminder error:', error);
         messageBox.showError('Failed to send reminders.');
     } finally {
         setRemindingInterviewId(null);
@@ -426,44 +492,94 @@ const RecruiterInterviews: React.FC = () => {
   };
 
   const handleSendInvites = async () => {
-    if (!selectedInterview || newEmails.length === 0) return;
+    if (!selectedInterview || (newEmails.length === 0 && parsedCandidates.length === 0)) return;
     
     setSendingEmails(true);
+    setSendingProgressMsg('Preparing candidate invitations...');
+
     try {
         const candidateDataToAdd = newEmails.map(email => {
             const parsed = parsedCandidates.find(c => c.email.toLowerCase() === email.toLowerCase());
             return {
                 email: email.toLowerCase(),
+                name: (parsed as any)?.name || 'Candidate',
                 phone: parsed?.phone || 'N/A',
                 matchScore: parsed?.matchScore || 'N/A'
             };
         });
 
+        const validEmails = newEmails.filter(e => !e.endsWith('@whatsapp.local'));
+
         await updateDoc(doc(db, 'interviews', selectedInterview.id), { 
-            candidateEmails: arrayUnion(...newEmails),
+            candidateEmails: validEmails.length > 0 ? arrayUnion(...validEmails) : arrayUnion(),
             candidateData: arrayUnion(...candidateDataToAdd)
         });
         
-        const result = await sendInterviewInvitations(
-            newEmails,
-            selectedInterview.title,
-            selectedInterview.interviewLink || '',
-            selectedInterview.accessCode
-        );
-
-        if (result.success) {
-            messageBox.showSuccess(`Successfully sent ${result.totalEmails} invitation(s)!`);
-            setIsInviteModalOpen(false);
-            setSelectedInterview(null);
-            setNewEmails([]);
-        } else {
-            messageBox.showError(`Failed to send emails: ${result.error}`);
+        let emailCount = 0;
+        if (validEmails.length > 0) {
+            setSendingProgressMsg(`Sending ${validEmails.length} invitation email(s)...`);
+            const result = await sendInterviewInvitations(
+                validEmails,
+                selectedInterview.title,
+                selectedInterview.interviewLink || '',
+                selectedInterview.accessCode,
+                false,
+                {
+                  gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
+                  location: (selectedInterview as any).location,
+                  education: (selectedInterview as any).education || (selectedInterview as any).qualification,
+                  qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
+                  experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                  salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+                  recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
+                  recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+                }
+            );
+            if (result.success) emailCount = result.totalEmails;
         }
+
+        let waCount = 0;
+        const candidatesWithPhones = parsedCandidates.filter(c => c.phone && c.phone !== 'N/A');
+        if (candidatesWithPhones.length > 0) {
+            setSendingProgressMsg(`Sending WhatsApp invites one-by-one with 10s anti-spam delay...`);
+            const waResult = await sendBulkWhatsAppInvites(
+                candidatesWithPhones,
+                selectedInterview.title,
+                selectedInterview.interviewLink || '',
+                selectedInterview.accessCode,
+                false,
+                (sentCount, totalCount, currentCandidate, isWaiting) => {
+                    if (isWaiting) {
+                        setSendingProgressMsg(`⏳ Sent WhatsApp to ${currentCandidate} (${sentCount}/${totalCount}). Waiting 10s delay to protect WhatsApp number...`);
+                    } else {
+                        setSendingProgressMsg(`📱 Sending WhatsApp invite ${sentCount}/${totalCount} to ${currentCandidate}...`);
+                    }
+                },
+                {
+                  gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
+                  location: (selectedInterview as any).location,
+                  education: (selectedInterview as any).education || (selectedInterview as any).qualification,
+                  qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
+                  experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                  salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+                  recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
+                  recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+                }
+            );
+            if (waResult.success) waCount = waResult.totalSent;
+        }
+
+        messageBox.showSuccess(`Invitations sent: ${emailCount > 0 ? `${emailCount} Email(s)` : ''}${emailCount > 0 && waCount > 0 ? ' & ' : ''}${waCount > 0 ? `${waCount} WhatsApp invite(s)` : ''}!`);
+        setIsInviteModalOpen(false);
+        setSelectedInterview(null);
+        setNewEmails([]);
+        setParsedCandidates([]);
     } catch (error: any) {
         console.error('Invite sending error:', error);
         messageBox.showError('Failed to send invitations.');
     } finally {
         setSendingEmails(false);
+        setSendingProgressMsg('');
     }
   };
 
@@ -684,7 +800,7 @@ const RecruiterInterviews: React.FC = () => {
         ) : (
           <>
             {/* Column Headers */}
-            <div className="hidden shrink-0 items-center gap-4 border-b border-white/[0.11] bg-[#000] px-4 py-2 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:px-7">
+            <div className="hidden shrink-0 items-center gap-4 border-b border-white/[0.11] bg-[#000] px-4 py-2 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_90px_110px_90px_80px_80px_230px] lg:px-7">
               <span className="geist-label uppercase text-[#6b7280]">Name</span>
               <span className="geist-label text-center uppercase text-[#6b7280]">Status</span>
               <span className="geist-label text-center uppercase text-[#6b7280]">Department</span>
@@ -705,7 +821,7 @@ const RecruiterInterviews: React.FC = () => {
                 return (
                   <article 
                     key={interview.id} 
-                    className="grid gap-3 border-b border-white/[0.08] px-4 py-3 transition-colors hover:bg-white/[0.025] sm:px-6 lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:items-center lg:gap-4 lg:px-7"
+                    className="grid gap-3 border-b border-white/[0.08] px-4 py-3 transition-colors hover:bg-white/[0.025] sm:px-6 lg:grid-cols-[minmax(0,1fr)_90px_110px_90px_80px_80px_230px] lg:items-center lg:gap-4 lg:px-7"
                   >
                     {/* Name */}
                     <div className="min-w-0">
@@ -757,10 +873,22 @@ const RecruiterInterviews: React.FC = () => {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center justify-end">
+                    <div className="flex items-center justify-end gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedInterview(interview);
+                          setIsInviteModalOpen(true);
+                        }}
+                        className="group geist-caption inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[6px] border border-blue-500/40 bg-blue-500/10 px-3 font-semibold text-blue-400 transition-all hover:border-blue-400 hover:bg-blue-500/20 hover:text-white cursor-pointer shrink-0"
+                        title="Add/Invite Candidate to this interview"
+                      >
+                        <UserPlus size={13} className="text-blue-400 group-hover:text-white transition-colors shrink-0" />
+                        <span className="whitespace-nowrap font-semibold tracking-tight">+ Add Candidate</span>
+                      </button>
                       <Link
                         to={`/recruiter/interview/${interview.id}/overview`}
-                        className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
+                        className="geist-caption inline-flex h-8 items-center justify-center gap-2 whitespace-nowrap rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white shrink-0"
                       >
                         Manage
                       </Link>
@@ -816,7 +944,7 @@ const RecruiterInterviews: React.FC = () => {
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium mb-2">Upload Resume to Find Email</label>
+                        <label className="block text-sm font-medium mb-2">Upload Candidate File or Resumes</label>
                         <label className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-50 dark:bg-gray-700 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
                             {parsingResumes ? (
                               <>
@@ -825,13 +953,19 @@ const RecruiterInterviews: React.FC = () => {
                               </>
                             ) : (
                               <>
-                                <i className="fas fa-cloud-upload-alt"></i>
-                                <span className="font-medium text-sm">Upload Resumes (PDF/DOCX/TXT)</span>
+                                <i className="fas fa-file-excel text-green-500 text-lg"></i>
+                                <span className="font-medium text-sm">Upload Excel, CSV, PDF, DOCX, or TXT (Auto-extracts Name, Phone & Email)</span>
                               </>
                             )}
-                            <input type="file" multiple accept=".pdf,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
+                            <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,text/csv" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
                         </label>
                     </div>
+                    {sendingProgressMsg && (
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg text-xs font-medium text-blue-800 dark:text-blue-200 flex items-center gap-2 animate-pulse">
+                            <i className="fas fa-spinner fa-spin"></i>
+                            <span>{sendingProgressMsg}</span>
+                        </div>
+                    )}
                     <div>
                         <label className="block text-sm font-medium mb-2">Add Candidate Manually</label>
                         <div className="flex gap-2">
@@ -1298,22 +1432,62 @@ const FullRosterModalContent: React.FC<FullRosterModalContentProps> = ({ intervi
                                         </span>
                                         <button
                                             type="button"
-                                            onClick={() => {
+                                            onClick={async () => {
                                                 const candData = (interview as any).candidateData?.find((c: any) => c.email?.toLowerCase() === cand.email?.toLowerCase());
-                                                const phone = candData?.phone || '';
-                                                const link = `${window.location.origin}/#/interview/${interview.id}`;
-                                                const msg = `👋 Hi there!\n\nWe're actively hiring for the *${interview.title}* role and we'd love to invite you to take our AI-powered interview to fast-track your application! 🌟\n\n🚀 *Start your interview here:* \n${link}\n\n🔑 *Your Access Code:* \n${interview.accessCode}\n\nIt only takes a few minutes and you can complete it whenever you're ready. Best of luck! 🎉`;
-                                                setWhatsappModal({
-                                                    isOpen: true,
-                                                    email: cand.email,
-                                                    phone: phone === 'N/A' ? '' : phone,
-                                                    message: msg,
-                                                    interview: interview
-                                                });
-                                                onClose(); // Close roster modal when opening WhatsApp modal
+                                                const phone = candData?.phone && candData.phone !== 'N/A' ? candData.phone.trim() : '';
+
+                                                const options = {
+                                                  gender: (interview as any).gender || (interview as any).genderRequirement,
+                                                  location: (interview as any).location,
+                                                  education: (interview as any).education || (interview as any).qualification,
+                                                  qualification: (interview as any).qualification || (interview as any).education,
+                                                  experience: (interview as any).experience || (interview as any).experienceRequired,
+                                                  salary: (interview as any).salary || (interview as any).salaryRange,
+                                                  recruiterName: (interview as any).createdBy?.name || 'Recruiter',
+                                                  recruiterPhone: ''
+                                                };
+
+                                                if (!phone) {
+                                                    const msg = buildWhatsAppInviteText({
+                                                      candidateName: cand.email.split('@')[0],
+                                                      jobTitle: interview.title,
+                                                      interviewLink: interview.interviewLink || `${window.location.origin}/#/interview/${interview.id}`,
+                                                      accessCode: interview.accessCode,
+                                                      options
+                                                    });
+                                                    setWhatsappModal({
+                                                        isOpen: true,
+                                                        email: cand.email,
+                                                        phone: '',
+                                                        message: msg,
+                                                        interview: interview
+                                                    });
+                                                    onClose();
+                                                    return;
+                                                }
+
+                                                try {
+                                                    const res = await sendInterviewWhatsAppInvite({
+                                                        phone: phone,
+                                                        candidateName: cand.email.split('@')[0],
+                                                        jobTitle: interview.title,
+                                                        interviewLink: interview.interviewLink || `${window.location.origin}/#/interview/${interview.id}`,
+                                                        accessCode: interview.accessCode,
+                                                        options
+                                                    });
+
+                                                    if (res.success) {
+                                                        alert(`✅ WhatsApp invitation sent to ${phone} via WhatsApp API!`);
+                                                    } else {
+                                                        alert(`WhatsApp API error: ${res.error || 'Failed to send'}`);
+                                                    }
+                                                } catch (err: any) {
+                                                    console.error('Direct WA error:', err);
+                                                    alert('Failed to send WhatsApp message via API.');
+                                                }
                                             }}
                                             className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:hover:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40 rounded-lg text-[10px] font-extrabold transition-all"
-                                            title="Click to launch WhatsApp Web wizard"
+                                            title="Directly send WhatsApp invite via API"
                                         >
                                             <i className="fab fa-whatsapp"></i>
                                             <span>Invite via WhatsApp</span>
