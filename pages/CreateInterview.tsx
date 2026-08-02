@@ -147,12 +147,14 @@ const CreateInterview: React.FC = () => {
   const [loadingResumeDumpCandidates, setLoadingResumeDumpCandidates] = useState(false);
   const [loadingShortlistedCandidates, setLoadingShortlistedCandidates] = useState(false);
   const [shortlistedCandidatesError, setShortlistedCandidatesError] = useState(false);
+  const DEFAULT_FIRST_QUESTION = "Please tell us about your work experience. For each company, tell us your job title, what work you did every day, and your main responsibilities.";
+
   const [parsingJd, setParsingJd] = useState(false);
   const [jdImportMode, setJdImportMode] = useState<'upload' | 'paste'>('upload');
   const [pastedJdText, setPastedJdText] = useState('');
   const [parsingResumes, setParsingResumes] = useState(false);
   const [sendingEmails, setSendingEmails] = useState(false);
-  const [manualQuestions, setManualQuestions] = useState<string[]>([]);
+  const [manualQuestions, setManualQuestions] = useState<string[]>([DEFAULT_FIRST_QUESTION]);
   const [currentManualQuestion, setCurrentManualQuestion] = useState('');
   interface CustomField { id: number; key: string; value: string; }
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
@@ -169,10 +171,13 @@ const CreateInterview: React.FC = () => {
     experience: 0,
     skills: '',
     education: '',
+    location: '',
+    salaryRange: '',
+    genderRequirement: 'Any',
     deadline: '',
     numQuestions: 5,
-    difficulty: 'Medium',
-    strictness: 'Medium',
+    difficulty: 'Easy',
+    strictness: 'Low',
   });
 
   useEffect(() => {
@@ -287,6 +292,7 @@ const CreateInterview: React.FC = () => {
     shortlistedCandidatesError
       ? []
       : resumeDumpCandidates
+      .filter((candidate) => !candidate.isHired && !candidate.doNotSuggest)
       .filter((candidate) => !isCandidateIdentityInSet(candidate, shortlistedCandidateIdentityKeys))
       .map((candidate) => scoreCandidateForRoleAdvanced(candidate, {
         title: formData.title,
@@ -368,34 +374,57 @@ const CreateInterview: React.FC = () => {
     setCustomFields(customFields.filter(field => field.id !== id));
   };
 
-  const addCandidateEmail = (email: string, phone: string = '') => {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) return;
+  const addCandidateEntry = (emailInput: string = '', phoneInput: string = '', nameInput: string = '') => {
+    const email = emailInput.trim().toLowerCase();
+    const phone = phoneInput.trim();
 
-    setCandidateEmails((prev) => {
-      if (prev.some((existingEmail) => existingEmail.toLowerCase() === normalizedEmail)) return prev;
-      return [...prev, normalizedEmail];
+    if (!email && !phone) {
+      alert('Please enter at least a Candidate Email address or a WhatsApp Phone number.');
+      return;
+    }
+
+    setCandidateDataList((prev) => {
+      const existingIndex = prev.findIndex(
+        (c) => (email && c.email.toLowerCase() === email) || (phone && c.phone === phone)
+      );
+
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = {
+          email: email || updated[existingIndex].email,
+          phone: phone || updated[existingIndex].phone,
+          name: nameInput || updated[existingIndex].name
+        };
+        return updated;
+      }
+
+      return [...prev, { email, phone, name: nameInput }];
     });
 
-    if (phone && phone.trim()) {
-      setCandidateDataList((prev) => {
-        const map = new Map(prev.map((c) => [c.email.toLowerCase(), c]));
-        map.set(normalizedEmail, { email: normalizedEmail, phone: phone.trim() });
-        return Array.from(map.values());
+    if (email) {
+      setCandidateEmails((prev) => {
+        if (prev.some((e) => e.toLowerCase() === email)) return prev;
+        return [...prev, email];
       });
     }
   };
 
-  const handleAddEmail = () => {
-    if (currentEmail) {
-      addCandidateEmail(currentEmail, currentPhone);
+  const handleAddCandidate = () => {
+    if (currentEmail || currentPhone) {
+      addCandidateEntry(currentEmail, currentPhone);
       setCurrentEmail('');
       setCurrentPhone('');
     }
   };
 
-  const handleRemoveEmail = (emailToRemove: string) => {
-    setCandidateEmails(candidateEmails.filter(email => email !== emailToRemove));
+  const handleRemoveCandidate = (indexToRemove: number) => {
+    const candidate = candidateDataList[indexToRemove];
+    if (candidate) {
+      if (candidate.email) {
+        setCandidateEmails((prev) => prev.filter((e) => e.toLowerCase() !== candidate.email.toLowerCase()));
+      }
+      setCandidateDataList((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+    }
   };
 
   const handleApplyParsedJdData = (parsed: ParsedJdResult) => {
@@ -898,6 +927,25 @@ const CreateInterview: React.FC = () => {
                 </div>
               </div>
 
+              <div>
+                <label className={labelClass}>Job location <span className="text-red-400">*</span></label>
+                <input name="location" type="text" required className={inputClass} value={formData.location} onChange={handleFormChange} placeholder="e.g. Ambad, Nashik / Remote / Mumbai" />
+              </div>
+
+              <div>
+                <label className={labelClass}>Salary / Compensation <span className="text-red-400">*</span></label>
+                <input name="salaryRange" type="text" required className={inputClass} value={formData.salaryRange} onChange={handleFormChange} placeholder="e.g. 20,000 - 22,000 / per month or 4 - 6 LPA" />
+              </div>
+
+              <div>
+                <label className={labelClass}>Gender requirement</label>
+                <select name="genderRequirement" className={selectClass} value={formData.genderRequirement} onChange={handleFormChange}>
+                  <option value="Any">Any</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+
               <div className="xl:col-span-2">
                 <label className={labelClass}>Minimum education level</label>
                 <div className="min-h-10 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-2">
@@ -1128,7 +1176,7 @@ const CreateInterview: React.FC = () => {
               </div>
 
               <div className="xl:col-span-2">
-                <label className={labelClass}>Candidate Email & WhatsApp Phone (Optional for auto-WhatsApp invite)</label>
+                <label className={labelClass}>Candidate Email & WhatsApp Phone (Provide Email, Phone, or Both)</label>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
                   <input
                     type="email"
@@ -1137,10 +1185,10 @@ const CreateInterview: React.FC = () => {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        handleAddEmail();
+                        handleAddCandidate();
                       }
                     }}
-                    placeholder="candidate@company.com"
+                    placeholder="candidate@company.com (Optional if phone is provided)"
                     className={inputClass}
                   />
                   <input
@@ -1150,31 +1198,30 @@ const CreateInterview: React.FC = () => {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        handleAddEmail();
+                        handleAddCandidate();
                       }
                     }}
-                    placeholder="WhatsApp Phone (e.g. 9876543210)"
+                    placeholder="WhatsApp Phone e.g. 9876543210 (Optional if email is provided)"
                     className={inputClass}
                   />
-                  <button type="button" onClick={handleAddEmail} className={secondaryButtonClass}>Add Candidate</button>
+                  <button type="button" onClick={handleAddCandidate} className={secondaryButtonClass}>Add Candidate</button>
                 </div>
               </div>
             </div>
 
-            {candidateEmails.length > 0 && (
+            {candidateDataList.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
-                {candidateEmails.map(email => {
-                  const data = candidateDataList.find(c => c.email.toLowerCase() === email.toLowerCase());
-                  return (
-                    <span key={email} className="geist-small inline-flex h-7 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.05] px-2.5 text-[#d4d4d4]">
-                      <span>{email}</span>
-                      {data?.phone && (
-                        <span className="text-[10px] text-emerald-400 font-mono">📱 {data.phone}</span>
-                      )}
-                      <button type="button" onClick={() => handleRemoveEmail(email)} className="text-[#8f8f8f] transition-colors hover:text-white">&times;</button>
-                    </span>
-                  );
-                })}
+                {candidateDataList.map((candidate, index) => (
+                  <span key={index} className="geist-small inline-flex h-8 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.05] px-3 text-[#d4d4d4]">
+                    {candidate.email ? (
+                      <span>✉️ {candidate.email}</span>
+                    ) : null}
+                    {candidate.phone ? (
+                      <span className="text-[11px] text-emerald-400 font-mono">📱 {candidate.phone}</span>
+                    ) : null}
+                    <button type="button" onClick={() => handleRemoveCandidate(index)} className="text-[#8f8f8f] transition-colors hover:text-white font-bold ml-1">&times;</button>
+                  </span>
+                ))}
               </div>
             )}
 
@@ -1209,7 +1256,11 @@ const CreateInterview: React.FC = () => {
                 <div className="mt-3 grid gap-2 xl:grid-cols-2">
                   {suggestedCandidates.map((candidate) => {
                     const candidateEmail = candidate.email.trim().toLowerCase();
-                    const candidateEmailAdded = candidateEmail && candidateEmails.some((email) => email.toLowerCase() === candidateEmail);
+                    const candidatePhone = candidate.phone ? candidate.phone.trim() : '';
+                    const candidateAdded = candidateDataList.some((c) => 
+                      (candidateEmail && c.email.toLowerCase() === candidateEmail) || 
+                      (candidatePhone && c.phone === candidatePhone)
+                    );
 
                     return (
                       <div key={candidate.id} className="rounded-[6px] border border-white/[0.11] bg-[#050505] p-3">
@@ -1219,7 +1270,7 @@ const CreateInterview: React.FC = () => {
                               {candidate.name || 'Unknown Candidate'}
                             </p>
                             <p className="geist-small mt-0.5 truncate text-[#8bbde8]" title={candidate.email}>
-                              {candidate.email || 'Email not found'}
+                              {candidate.email || (candidate.phone ? `📱 ${candidate.phone}` : 'No contact info')}
                             </p>
                             {(candidate.currentTitle || candidate.totalExperienceYears > 0) && (
                               <p className="geist-small mt-1 truncate text-[#6b7280]">
@@ -1271,11 +1322,11 @@ const CreateInterview: React.FC = () => {
 
                           <button
                             type="button"
-                            onClick={() => addCandidateEmail(candidate.email, candidate.phone)}
-                            disabled={!candidateEmail || Boolean(candidateEmailAdded)}
+                            onClick={() => addCandidateEntry(candidate.email, candidate.phone, candidate.name)}
+                            disabled={(!candidateEmail && !candidatePhone) || Boolean(candidateAdded)}
                             className={secondaryButtonClass}
                           >
-                            {candidateEmailAdded ? 'Added' : candidateEmail ? 'Add to invite' : 'No email'}
+                            {candidateAdded ? 'Added' : (candidateEmail || candidatePhone) ? 'Add to invite' : 'No contact'}
                           </button>
                         </div>
                       </div>

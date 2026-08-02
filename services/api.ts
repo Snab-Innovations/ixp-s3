@@ -50,6 +50,10 @@ export const generateOpenAITTS = async (text: string) => {
 };
 
 // ── Interview Question Generation ─────────────────────────────────────────────
+export const DEFAULT_WORK_EXPERIENCE_QUESTION_EN = "Please tell us about your work experience. For each company, tell us your job title, what work you did every day, and your main responsibilities.";
+export const DEFAULT_WORK_EXPERIENCE_QUESTION_HI = "कृपया अपने कार्य अनुभव के बारे में बताएं। प्रत्येक कंपनी के लिए, अपना पद (Job Title), प्रतिदिन किया जाने वाला कार्य और अपनी मुख्य जिम्मेदारियां बताएं।";
+export const DEFAULT_WORK_EXPERIENCE_QUESTION_MR = "कृपया आपल्या कामाच्या अनुभवाबद्दल सांगा. प्रत्येक कंपनीसाठी, तुमचे पद (Job Title), तुम्ही रोज काय काम करायचे आणि तुमच्या मुख्य जबाबदाऱ्या सांगा.";
+
 export const generateInterviewQuestions = async (
   jobTitle: string,
   jobDescription: string,
@@ -62,10 +66,14 @@ export const generateInterviewQuestions = async (
 ) => {
   // Language-specific instructions for easy, natural language
   let langInstruction = '';
+  let fixedFirstQuestion = DEFAULT_WORK_EXPERIENCE_QUESTION_EN;
+
   if (languageCode === 'mr') {
+    fixedFirstQuestion = DEFAULT_WORK_EXPERIENCE_QUESTION_MR;
     langInstruction = `Language: Marathi (Devanagari script).
 IMPORTANT: Use simple, everyday Marathi that common people speak. Do NOT use heavy/literary Marathi words. If any word is difficult or technical (like "quality management", "KPI", "compliance", "production planning" etc.), keep that word in English and write the rest in easy Marathi. The question should feel natural like a normal conversation, not like a textbook.`;
   } else if (languageCode === 'hi') {
+    fixedFirstQuestion = DEFAULT_WORK_EXPERIENCE_QUESTION_HI;
     langInstruction = `Language: Hindi (Devanagari script).
 IMPORTANT: Use simple, everyday Hindi that common people speak. Do NOT use heavy/Shudh Hindi words. If any word is difficult or technical (like "quality management", "KPI", "compliance", "production planning" etc.), keep that word in English and write the rest in easy Hindi. The question should feel natural like a normal conversation, not like a textbook.`;
   } else {
@@ -88,7 +96,7 @@ JD: ${jd}
 Experience: ${exp}
 ${langInstruction}
 
-Generate exactly ${numQuestions} verification questions. Your goal is to VERIFY whether this candidate genuinely has the skills, experience, and project knowledge they claim on their resume.
+Generate ${Math.max(1, numQuestions - 1)} verification questions. (Note: Question 1 is already fixed as work experience introduction, generate remaining questions starting from question 2). Your goal is to VERIFY whether this candidate genuinely has the skills, experience, and project knowledge they claim on their resume.
 
 How to generate questions:
 1. Read the candidate's resume carefully — look at their skills, projects, past roles, tools, and achievements.
@@ -112,11 +120,22 @@ How to generate questions:
       resumeTextContent
     );
     const parsedQuestions = Array.isArray(parsed.questions) ? parsed.questions : [];
-    if (parsedQuestions.length === 0) {
-      throw new Error("Grok did not return any interview questions.");
+    
+    // Combine fixed Question 1 + generated AI questions
+    const allQuestions = [fixedFirstQuestion, ...parsedQuestions];
+
+    // Deduplicate while preserving order and limit to total requested numQuestions
+    const uniqueQuestions: string[] = [];
+    const seen = new Set<string>();
+    for (const q of allQuestions) {
+      const key = q.trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueQuestions.push(q.trim());
+      }
     }
 
-    return parsedQuestions.slice(0, numQuestions);
+    return uniqueQuestions.slice(0, numQuestions);
   } catch (error: any) {
     console.error("Grok Generate Questions Error:", error);
     throw new Error(error.message || "Failed to generate questions");

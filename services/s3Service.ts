@@ -185,3 +185,55 @@ export const deleteS3Objects = async (keys: string[]): Promise<number> => {
     return 0;
   }
 };
+/**
+ * Extract S3 Object Key from a full Amazon S3 URL
+ */
+export const extractS3KeyFromUrl = (url?: string): string | null => {
+  if (!url || typeof url !== 'string') return null;
+
+  try {
+    // Pattern 1: https://bucket-name.s3.region.amazonaws.com/key/path
+    if (url.includes('.amazonaws.com/')) {
+      const parts = url.split('.amazonaws.com/');
+      if (parts[1]) {
+        return decodeURIComponent(parts[1].split('?')[0]);
+      }
+    }
+
+    // Pattern 2: https://s3.region.amazonaws.com/bucket-name/key/path
+    if (url.includes('s3.') && url.includes('.com/')) {
+      const afterDomain = url.split('.com/')[1];
+      if (afterDomain) {
+        const segments = afterDomain.split('/');
+        if (segments[0] === BUCKET_NAME) {
+          return decodeURIComponent(segments.slice(1).join('/').split('?')[0]);
+        }
+        return decodeURIComponent(afterDomain.split('?')[0]);
+      }
+    }
+
+    // Pattern 3: Direct key (e.g. resumes/123_abc.pdf)
+    if (url.startsWith('resumes/') || url.startsWith('videos/') || url.startsWith('documents/') || url.startsWith('images/')) {
+      return url;
+    }
+  } catch (err) {
+    console.error("Error parsing S3 URL key:", err);
+  }
+
+  return null;
+};
+
+/**
+ * Delete a file from Amazon S3 by URL or Key
+ */
+export const deleteFileFromS3ByUrl = async (fileUrl?: string): Promise<boolean> => {
+  if (!fileUrl) return false;
+  const key = extractS3KeyFromUrl(fileUrl);
+  if (!key) {
+    console.warn("[S3 Delete] Could not extract valid S3 key from URL:", fileUrl);
+    return false;
+  }
+  console.log(`[S3 Delete] Deleting object key "${key}" from S3 Bucket "${BUCKET_NAME}"...`);
+  return await deleteS3Object(key);
+};
+

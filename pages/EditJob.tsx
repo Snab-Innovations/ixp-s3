@@ -133,7 +133,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     minExperience: 0,
     maxExperience: 0,
     experience: 0,
-    difficulty: 'Medium',
+    difficulty: 'Easy',
   });
   const [skillSearch, setSkillSearch] = useState('');
 

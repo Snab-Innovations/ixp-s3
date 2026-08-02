@@ -55,6 +55,8 @@ export interface ResumeDumpRecord extends ParsedResumeProfile {
   source?: ResumeSource;
   sourceInterviewId?: string;
   sourceJobTitle?: string;
+  isHired?: boolean;
+  doNotSuggest?: boolean;
   createdAt?: unknown;
   updatedAt?: unknown;
 }

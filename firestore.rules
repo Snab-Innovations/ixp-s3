@@ -228,6 +228,7 @@ service cloud.firestore {
                  'teamId', 'createdBy',
                  'resumeUrl', 'resumeFileName', 'resumeMimeType', 'resumeSize',
                  'resumeText', 'source', 'sourceInterviewId', 'sourceJobTitle',
+                 'isHired', 'doNotSuggest',
                  'createdAt', 'updatedAt'
                ])
                && data.source == 'candidate_interview'

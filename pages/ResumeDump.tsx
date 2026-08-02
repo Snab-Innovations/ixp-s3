@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { collection, deleteDoc, doc, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import * as pdfjsLib from 'pdfjs-dist';
 import * as mammoth from 'mammoth';
-import { Archive, CheckCircle2, ExternalLink, FileText, Search, Trash2, UploadCloud, XCircle } from 'lucide-react';
+import { Archive, CheckCircle2, ExternalLink, FileText, Search, Trash2, UploadCloud, UserCheck, UserX, XCircle } from 'lucide-react';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
@@ -11,6 +11,7 @@ import { SKILL_OPTIONS } from './Profile';
 import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 import { logTeamActivity } from '../services/auditService';
 import { dedupeCandidatesByIdentity } from '../services/candidateIdentity';
+import { deleteFileFromS3ByUrl } from '../services/s3Service';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
@@ -55,6 +56,8 @@ interface ResumeDumpCandidate {
   source?: string;
   sourceJobTitle?: string;
   parsingMethod?: string;
+  isHired?: boolean;
+  doNotSuggest?: boolean;
   createdAt?: TimestampLike;
   updatedAt?: TimestampLike;
 }
@@ -613,7 +616,29 @@ const ResumeDump: React.FC = () => {
   const deleteCandidate = async (candidate: ResumeDumpCandidate) => {
     setDeletingCandidateId(candidate.id);
     try {
+      // 1. Delete candidate document from Firestore
       await deleteDoc(doc(db, 'resumeDumpCandidates', candidate.id));
+
+      // 2. Delete candidate resume file from Amazon S3 Bucket
+      if (candidate.resumeUrl) {
+        console.log(`[Resume Dump] Deleting S3 resume file for ${candidate.name || candidate.email}...`);
+        await deleteFileFromS3ByUrl(candidate.resumeUrl);
+      }
+
+      // 3. Log audit event
+      const creatorInfo = {
+        uid: user?.uid || '',
+        name: userProfile?.name || user?.email || 'Recruiter',
+        email: user?.email || '',
+        role: userProfile?.role || 'recruiter',
+        designation: userProfile?.designation || 'Recruiter'
+      };
+      logTeamActivity(
+        teamId,
+        'candidate_deleted',
+        `Deleted candidate "${candidate.name || candidate.email}" and removed resume file from S3`,
+        creatorInfo
+      );
     } catch (error) {
       console.error('Failed to delete resume dump candidate:', error);
       messageBox.showError('Failed to delete candidate.');
@@ -624,10 +649,37 @@ const ResumeDump: React.FC = () => {
 
   const confirmDeleteCandidate = (candidate: ResumeDumpCandidate) => {
     messageBox.showConfirm(
-      `Delete ${candidate.name || candidate.email} from Resume Dump? This removes the stored candidate record, but it does not delete the Cloudinary file.`,
+      `Delete ${candidate.name || candidate.email} from Resume Dump? This permanently deletes the stored candidate record and deletes their resume file from S3 storage.`,
       () => deleteCandidate(candidate),
       'Delete candidate'
     );
+  };
+
+  const toggleHiredStatus = async (candidate: ResumeDumpCandidate) => {
+    const newStatus = !(candidate.isHired || candidate.doNotSuggest);
+    try {
+      await updateDoc(doc(db, 'resumeDumpCandidates', candidate.id), {
+        isHired: newStatus,
+        doNotSuggest: newStatus,
+        updatedAt: serverTimestamp(),
+      });
+      const creatorInfo = {
+        uid: user?.uid || '',
+        name: userProfile?.name || user?.email || 'Recruiter',
+        email: user?.email || '',
+        role: userProfile?.role || 'recruiter',
+        designation: userProfile?.designation || 'Recruiter'
+      };
+      logTeamActivity(
+        teamId,
+        'candidate_status_changed',
+        `Marked candidate "${candidate.name || candidate.email}" as ${newStatus ? 'Hired / Excluded from suggestions' : 'Available for suggestions'}`,
+        creatorInfo
+      );
+    } catch (error) {
+      console.error('Failed to update candidate status:', error);
+      messageBox.showError('Failed to update candidate status.');
+    }
   };
 
   const actionButtonClass = 'geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40';
@@ -644,83 +696,59 @@ const ResumeDump: React.FC = () => {
             <p className="geist-label uppercase text-[#6b7280]">Recruiter Library</p>
             <h1 className="geist-page-title mt-2 text-white">Resume Dump</h1>
             <p className="geist-small mt-1 max-w-2xl text-[#8f8f8f]">
-              Upload resumes once, extract candidate details, and keep Cloudinary links ready for upcoming interview creation.
+              Upload resumes once, extract candidate details, and keep Cloudinary links ready for upcoming interview creation. Mark candidates as Hired to exclude them from automated suggestions.
             </p>
           </div>
 
-          <label className={`geist-caption inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-[6px] border px-3 font-medium transition-colors ${uploading ? 'cursor-not-allowed border-white/[0.12] bg-white/[0.03] text-[#8f8f8f]' : 'border-white bg-white text-black hover:bg-[#eaeaea]'}`}>
-            <UploadCloud size={14} strokeWidth={1.8} />
-            {uploading ? 'Processing resumes' : 'Upload resumes'}
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-              className="hidden"
-              onChange={handleUpload}
-              disabled={uploading}
-            />
-          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[240px] flex-1 sm:flex-initial">
+              <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[#8f8f8f]" strokeWidth={1.8} />
+              <input
+                type="text"
+                placeholder="Search by name, email, skill, or degree..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-[#050505] pl-9 pr-3 text-white outline-none placeholder:text-[#6b7280] focus:border-white/[0.24]"
+              />
+            </div>
+            <label className="geist-caption inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea]">
+              <UploadCloud size={14} strokeWidth={1.8} />
+              Upload resumes
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                className="hidden"
+                onChange={handleUpload}
+                disabled={uploading}
+              />
+            </label>
+          </div>
         </div>
       </section>
 
-      <section className="grid gap-3 border-b border-white/[0.11] px-4 py-3 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:px-7">
-        <label className="relative min-w-0">
-          <span className="sr-only">Search resume dump</span>
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[#6b7280]" strokeWidth={1.8} />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search name, email, phone, or skill"
-            className="geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] pl-9 pr-3 text-white outline-none transition-colors placeholder:text-[#6b7280] focus:border-white/[0.28] focus:bg-white/[0.05]"
-          />
-        </label>
-
-        <div className="geist-small flex min-h-9 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-[#8f8f8f]">
-          <Archive size={14} strokeWidth={1.8} />
-          Candidate suggestions will plug into Create Interview later.
-        </div>
-      </section>
-
-      {filteredCandidates.length > 0 && (
-        <section className="border-b border-white/[0.11] px-4 py-3 sm:px-6 lg:px-7">
+      {uploading && (
+        <section className="border-b border-white/[0.11] bg-white/[0.02] px-4 py-4 sm:px-6 lg:px-7">
           <label
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`flex min-h-20 cursor-pointer items-center justify-center gap-3 rounded-[6px] border border-dashed px-4 py-4 text-center transition-colors ${
-              isDraggingResume
-                ? 'border-white bg-white/[0.08] text-white'
-                : 'border-white/[0.16] bg-white/[0.02] text-[#8f8f8f] hover:border-white/[0.28] hover:bg-white/[0.04] hover:text-[#d4d4d4]'
-            } ${uploading ? 'cursor-not-allowed opacity-70' : ''}`}
+            className={`flex cursor-pointer items-center gap-3 rounded-[6px] border border-dashed px-4 py-3 transition-colors ${
+              isDraggingResume ? 'border-white bg-white/[0.06]' : 'border-white/[0.16] bg-white/[0.02] hover:bg-white/[0.04]'
+            }`}
           >
             <UploadCloud size={18} strokeWidth={1.8} />
             <span className="min-w-0">
               <span className="geist-caption block font-medium text-white">
                 {uploading ? 'Processing resumes' : isDraggingResume ? 'Drop resumes to upload' : 'Drop resumes here or click to upload'}
               </span>
-              <span className="geist-small mt-0.5 block text-[#8f8f8f]">PDF, DOCX, or TXT files</span>
             </span>
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-              className="hidden"
-              onChange={handleUpload}
-              disabled={uploading}
-            />
           </label>
         </section>
       )}
 
-      {(uploading || uploadResults.length > 0) && (
+      {(uploadResults.length > 0) && (
         <section className="border-b border-white/[0.11] px-4 py-3 sm:px-6 lg:px-7">
-          {uploadStatus && (
-            <p className="geist-caption mb-2 flex items-center gap-2 text-[#d4d4d4]">
-              <FileText size={14} strokeWidth={1.8} />
-              {uploadStatus}
-            </p>
-          )}
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {uploadResults.slice(-6).map((result) => (
               <div key={`${result.fileName}-${result.message}`} className="flex min-w-0 items-start gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 py-2">
@@ -740,7 +768,7 @@ const ResumeDump: React.FC = () => {
       )}
 
       <section className="flex min-h-[360px] flex-col">
-        {filteredCandidates.length === 0 ? (
+        {filteredCandidates.length === 0 && !uploading ? (
           <label
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -749,7 +777,7 @@ const ResumeDump: React.FC = () => {
               isDraggingResume
                 ? 'border-white bg-white/[0.06]'
                 : 'border-white/[0.11] bg-transparent hover:bg-white/[0.025]'
-            } ${uploading ? 'cursor-not-allowed opacity-80' : ''}`}
+            }`}
           >
             <div className={`flex h-14 w-14 items-center justify-center rounded-[8px] border transition-colors ${
               isDraggingResume
@@ -759,23 +787,11 @@ const ResumeDump: React.FC = () => {
               <UploadCloud size={24} strokeWidth={1.7} />
             </div>
             <h2 className="geist-section-title mt-4 text-white">
-              {uploading ? 'Processing resumes' : isDraggingResume ? 'Drop resumes here' : 'Drag and drop resumes here'}
+              {isDraggingResume ? 'Drop resumes here' : 'Drag and drop resumes here'}
             </h2>
             <p className="geist-caption mt-2 max-w-md text-[#8f8f8f]">
               Drop PDF, DOCX, or TXT resumes anywhere in this box. Missing email, phone, or skills will not block saving.
             </p>
-            <span className="geist-caption mt-5 inline-flex h-9 items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea]">
-              <UploadCloud size={14} strokeWidth={1.8} />
-              Browse files
-            </span>
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-              className="hidden"
-              onChange={handleUpload}
-              disabled={uploading}
-            />
           </label>
         ) : (
           <div className="overflow-x-auto">
@@ -785,13 +801,14 @@ const ResumeDump: React.FC = () => {
                   <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[#6b7280] sm:px-6 lg:px-7">Candidate</th>
                   <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[#6b7280]">Phone</th>
                   <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[#6b7280]">Skills</th>
+                  <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[#6b7280]">Suggestion Status</th>
                   <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[#6b7280]">Uploaded</th>
                   <th className="geist-label whitespace-nowrap px-4 py-2.5 text-right uppercase text-[#6b7280]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.08]">
                 {filteredCandidates.map((candidate) => (
-                  <tr key={candidate.id} className="transition-colors hover:bg-white/[0.025]">
+                  <tr key={candidate.id} className={`transition-colors ${candidate.isHired || candidate.doNotSuggest ? 'bg-emerald-950/10 hover:bg-emerald-950/20' : 'hover:bg-white/[0.025]'}`}>
                     <td className="px-4 py-3 sm:px-6 lg:px-7">
                       <div className="geist-caption max-w-[320px] truncate font-semibold text-white" title={candidate.name}>
                         {candidate.name || 'Unknown Candidate'}
@@ -835,6 +852,17 @@ const ResumeDump: React.FC = () => {
                       )}
                     </td>
                     <td className="px-4 py-3">
+                      {candidate.isHired || candidate.doNotSuggest ? (
+                        <span className="geist-small inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 font-semibold text-emerald-400">
+                          🎉 Hired (Excluded)
+                        </span>
+                      ) : (
+                        <span className="geist-small inline-flex items-center gap-1.5 rounded-full border border-white/[0.11] bg-white/[0.03] px-2.5 py-1 text-[#a1a1aa]">
+                          Available
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="geist-label whitespace-nowrap text-[#9ca3af]">{formatDate(candidate.updatedAt || candidate.createdAt)}</div>
                       <div className="geist-small mt-0.5 max-w-[160px] truncate text-[#6b7280]" title={candidate.resumeFileName}>
                         {candidate.resumeFileName}
@@ -842,6 +870,28 @@ const ResumeDump: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleHiredStatus(candidate)}
+                          className={`geist-caption inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border px-2.5 font-medium transition-colors ${
+                            candidate.isHired || candidate.doNotSuggest
+                              ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/40'
+                              : 'border-white/[0.11] bg-white/[0.03] text-[#d4d4d4] hover:bg-white/[0.06] hover:text-white'
+                          }`}
+                          title={candidate.isHired || candidate.doNotSuggest ? 'Mark candidate as available for job suggestions' : 'Mark candidate as Hired (will never be suggested for job roles)'}
+                        >
+                          {candidate.isHired || candidate.doNotSuggest ? (
+                            <>
+                              <UserX size={13} strokeWidth={1.8} />
+                              <span>Hired (No Suggest)</span>
+                            </>
+                          ) : (
+                            <>
+                              <UserCheck size={13} strokeWidth={1.8} />
+                              <span>Mark Hired</span>
+                            </>
+                          )}
+                        </button>
                         <a
                           href={candidate.resumeUrl}
                           target="_blank"
