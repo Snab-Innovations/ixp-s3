@@ -14,6 +14,14 @@ interface ImportMetaEnv {
     readonly VITE_OPENROUTER_MODEL: string;
     readonly VITE_GEMINI_API_KEY: string;
     readonly VITE_GEMINI_MODEL: string;
+    readonly VITE_ANTHROPIC_API_KEY: string;
+    readonly VITE_ANTHROPIC_BASE_URL: string;
+    readonly VITE_ANTHROPIC_WORKSPACE_ID: string;
+    readonly VITE_AWS_BEDROCK_REGION: string;
+    readonly VITE_BEDROCK_CHAT_BASE_URL: string;
+    readonly VITE_BEDROCK_MODEL_QUESTIONS: string;
+    readonly VITE_BEDROCK_MODEL_REPORT: string;
+    readonly VITE_BEDROCK_MODEL_DEFAULT: string;
 }
 
 interface ImportMeta {

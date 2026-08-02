@@ -464,7 +464,7 @@ const TakeTest: React.FC = () => {
       });
       score = Math.round((correctCount / test.questions.length) * 100);
     } else {
-      // AI Grading for Coding (powered by Grok)
+      // AI Grading for Coding (GLM 4.7 Flash via Bedrock Mantle)
       try {
         const prompt = `Evaluate this code submission for the problem: "${test.questions[currentQ].title}".
         Description: ${test.questions[currentQ].description}
