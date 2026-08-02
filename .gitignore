@@ -16,6 +16,10 @@ scripts/cognito-migration-report.json
 dist/
 build/
 
+# Amplify
+amplify_outputs.json
+.amplify/
+
 # OS files
 .DS_Store
 Thumbs.db
