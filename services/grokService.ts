@@ -1,82 +1,123 @@
-import { callGeminiApi, geminiGenerateJson } from './geminiService';
+import {
+  callBedrockApi,
+  callBedrockChat,
+  bedrockGenerateJson,
+  stripMarkdownJson,
+  type BedrockModelPurpose,
+} from './bedrockService';
 
 // ── Token budgets & constants ────────────────────────────────────────────────
-export const MAX_TOKENS_QUESTIONS = 500;
-export const MAX_TOKENS_FEEDBACK = 1800;
+export const MAX_TOKENS_QUESTIONS = 2048;
+export const MAX_TOKENS_FEEDBACK = 8192; // MiniMax M2.5 uses reasoning tokens; keep headroom for report body
+export const RESUME_EMBED_MAX_CHARS = 3000;
 
-// ── Google Gemini AI Service Router ──────────────────────────────────────────────────
+// ── Bedrock AI Service Router (legacy "grok*" names kept for call-site stability)
 
-async function callGrok(
-  messages: { role: "system" | "user" | "assistant"; content: string }[],
+async function callAi(
+  messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
   temperature = 0.5,
   maxTokens?: number,
-  responseFormat?: { type: "json_object" | "text" }
+  responseFormat?: { type: 'json_object' | 'text' },
+  purpose: BedrockModelPurpose = 'default'
 ): Promise<string> {
-  const systemInstruction = messages.find(m => m.role === 'system')?.content || '';
-  const userPrompt = messages.filter(m => m.role !== 'system').map(m => m.content).join('\n\n');
+  const systemInstruction = messages.find((m) => m.role === 'system')?.content || '';
+  const history = messages
+    .filter((m) => m.role !== 'system')
+    .map((m) => ({
+      role: (m.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
+      content: m.content,
+    }));
+
   const responseJson = responseFormat?.type === 'json_object';
-  
-  return await callGeminiApi(systemInstruction, userPrompt, temperature, responseJson);
+  const tokens = maxTokens ?? 4096;
+
+  if (history.length === 1 && history[0].role === 'user') {
+    return callBedrockApi(
+      systemInstruction,
+      history[0].content,
+      temperature,
+      responseJson,
+      purpose,
+      tokens
+    );
+  }
+
+  const text = await callBedrockChat(systemInstruction, history, temperature, purpose, tokens);
+  if (responseJson) {
+    // Caller may parse; ensure instruction was applied via system prompt at call sites.
+    return text;
+  }
+  return text;
 }
 
 export async function grokGenerateJson<T>(
   systemPrompt: string,
   userPrompt: string,
   temperature = 0.2,
-  maxTokens?: number
+  maxTokens?: number,
+  purpose: BedrockModelPurpose = 'default'
 ): Promise<T> {
-  return await geminiGenerateJson<T>(systemPrompt, userPrompt, temperature);
+  return bedrockGenerateJson<T>(
+    systemPrompt,
+    userPrompt,
+    temperature,
+    purpose,
+    maxTokens ?? 4096
+  );
 }
 
 // ── Resume extractor ──────────────────────────────────────────────────────────
-// Decodes base64 resume and truncates to RESUME_EMBED_MAX_CHARS.
-// This is the single biggest lever for reducing input token cost.
 function extractResumeText(base64Resume: string, mimeType: string): string {
-  if (!base64Resume) return "";
+  if (!base64Resume) return '';
 
-  const isTextBased = mimeType.startsWith("text/") || mimeType === "application/json";
+  const isTextBased = mimeType.startsWith('text/') || mimeType === 'application/json';
 
-  let raw = "";
+  let raw = '';
 
   if (isTextBased) {
-    try { raw = atob(base64Resume); } catch { raw = base64Resume; }
+    try {
+      raw = atob(base64Resume);
+    } catch {
+      raw = base64Resume;
+    }
   } else {
-    // PDF / image: decode and keep only if it has meaningful printable content
     try {
       const decoded = atob(base64Resume);
-      const printable = decoded.split("").filter(
+      const printable = decoded.split('').filter(
         (c) => c.charCodeAt(0) >= 32 && c.charCodeAt(0) < 127
       ).length;
       if (printable / decoded.length > 0.2) raw = decoded;
-    } catch { /* ignore binary */ }
+    } catch {
+      /* ignore binary */
+    }
   }
 
   if (!raw) {
-    return "(Resume is binary/unreadable. Evaluate based on JD and stated experience.)";
+    return '(Resume is binary/unreadable. Evaluate based on JD and stated experience.)';
   }
 
-  // Hard truncate — the most important token-saving step
   return raw.length > RESUME_EMBED_MAX_CHARS
-    ? raw.slice(0, RESUME_EMBED_MAX_CHARS) + "…"
+    ? raw.slice(0, RESUME_EMBED_MAX_CHARS) + '…'
     : raw;
 }
-
-// ── Public API ────────────────────────────────────────────────────────────────
 
 /** One-shot text generation — no resume context. */
 export async function grokGenerateText(
   systemPrompt: string,
   userPrompt: string,
   temperature = 0.5,
-  maxTokens?: number
+  maxTokens?: number,
+  purpose: BedrockModelPurpose = 'default'
 ): Promise<string> {
-  return callGrok(
+  return callAi(
     [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
     ],
     temperature,
-    maxTokens
+    maxTokens,
+    undefined,
+    purpose
   );
 }
 
@@ -88,22 +129,24 @@ export async function grokGenerateWithResume(
   mimeType: string,
   temperature = 0.5,
   maxTokens?: number,
-  resumeTextContent?: string // New optional parameter
+  resumeTextContent?: string,
+  purpose: BedrockModelPurpose = 'default'
 ): Promise<string> {
-  // Prioritize the pre-parsed text if available, otherwise extract from base64.
   const resumeText = resumeTextContent || extractResumeText(base64Resume, mimeType);
 
   const fullUserMessage = resumeText
     ? `${textPrompt}\n\n[Resume]\n${resumeText}`
     : textPrompt;
 
-  return callGrok(
+  return callAi(
     [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: fullUserMessage },
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: fullUserMessage },
     ],
     temperature,
-    maxTokens
+    maxTokens,
+    undefined,
+    purpose
   );
 }
 
@@ -114,40 +157,37 @@ export async function grokGenerateWithResumeJson<T>(
   mimeType: string,
   temperature = 0.2,
   maxTokens?: number,
-  resumeTextContent?: string
+  resumeTextContent?: string,
+  purpose: BedrockModelPurpose = 'default'
 ): Promise<T> {
   const resumeText = resumeTextContent || extractResumeText(base64Resume, mimeType);
   const fullUserMessage = resumeText
     ? `${textPrompt}\n\n[Resume]\n${resumeText}`
     : textPrompt;
 
-  const text = await callGrok(
+  const text = await callAi(
     [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: fullUserMessage },
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: fullUserMessage },
     ],
     temperature,
     maxTokens,
-    { type: "json_object" }
+    { type: 'json_object' },
+    purpose
   );
 
   return JSON.parse(stripMarkdownJson(text)) as T;
 }
 
-/** Multi-turn chat — used by AIAgent & CareerBot. */
+/** Multi-turn chat — used by CareerHub bot (GLM 4.7 Flash). */
 export async function grokChat(
   systemPrompt: string,
-  history: { role: "user" | "assistant"; content: string }[],
+  history: { role: 'user' | 'assistant'; content: string }[],
   temperature = 0.7
 ): Promise<string> {
-  return callGrok(
-    [{ role: "system", content: systemPrompt }, ...history],
-    temperature
-    // No max_tokens cap on chat — user conversations need flexibility
-  );
+  return callBedrockChat(systemPrompt, history, temperature, 'default', 4096);
 }
 
-// ── Token budget exports (used by api.ts) ─────────────────────────────────────
 export const BUDGET = {
   QUESTIONS: MAX_TOKENS_QUESTIONS,
   FEEDBACK: MAX_TOKENS_FEEDBACK,

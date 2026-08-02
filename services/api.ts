@@ -117,7 +117,8 @@ How to generate questions:
       mimeType,
       0.5,
       BUDGET.QUESTIONS,
-      resumeTextContent
+      resumeTextContent,
+      'questions' // MiniMax M2.1
     );
     const parsedQuestions = Array.isArray(parsed.questions) ? parsed.questions : [];
     
@@ -137,7 +138,7 @@ How to generate questions:
 
     return uniqueQuestions.slice(0, numQuestions);
   } catch (error: any) {
-    console.error("Grok Generate Questions Error:", error);
+    console.error("Bedrock Generate Questions Error:", error);
     throw new Error(error.message || "Failed to generate questions");
   }
 };
@@ -271,10 +272,19 @@ Q&A Score: [SCORE]/100
 `;
 
   try {
-    const result = await grokGenerateWithResume(sys, feedbackPrompt, base64Resume, mimeType, 0.2, BUDGET.FEEDBACK, resumeTextContent);
+    const result = await grokGenerateWithResume(
+      sys,
+      feedbackPrompt,
+      base64Resume,
+      mimeType,
+      0.2,
+      BUDGET.FEEDBACK,
+      resumeTextContent,
+      'report' // MiniMax M2.5
+    );
     return result || "AI feedback generation failed.";
   } catch (error: any) {
-    console.error("Grok Feedback Error:", error);
+    console.error("Bedrock Feedback Error:", error);
     throw new Error(error.message);
   }
 };

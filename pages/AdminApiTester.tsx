@@ -23,26 +23,28 @@ import {
 import { isS3Configured, uploadToS3 } from '../services/s3Service';
 import { sendInterviewInvitations } from '../services/brevoService';
 
-import { callGeminiApi, getGeminiApiKey } from '../services/geminiService';
+import {
+  callBedrockApi,
+  getBedrockApiKey,
+  BEDROCK_MODELS,
+} from '../services/bedrockService';
 
 export default function AdminApiTester() {
   const navigate = useNavigate();
   const { isDark } = useTheme();
 
   // Active Tab
-  const [activeApiTab, setActiveApiTab] = useState<'gemini' | 's3' | 'brevo' | 'env'>('gemini');
+  const [activeApiTab, setActiveApiTab] = useState<'bedrock' | 's3' | 'brevo' | 'env'>('bedrock');
 
-  // Google Gemini Test State
-  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => {
+  // Amazon Bedrock Mantle Test State
+  const [bedrockApiKey, setBedrockApiKey] = useState<string>(() => {
     try {
-      return getGeminiApiKey();
+      return getBedrockApiKey();
     } catch {
       return '';
     }
   });
-  const [selectedModel, setSelectedModel] = useState<string>(
-    import.meta.env.VITE_GEMINI_MODEL || 'gemini-2.0-flash'
-  );
+  const [selectedModel, setSelectedModel] = useState<string>(BEDROCK_MODELS.default);
   const [testPrompt, setTestPrompt] = useState<string>(
     'Explain how AI works in a few words'
   );
@@ -67,11 +69,11 @@ export default function AdminApiTester() {
   const [emailResult, setEmailResult] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
 
-  // Run Google Gemini API Test
-  const handleTestGemini = async () => {
-    const cleanKey = geminiApiKey.replace(/['"]/g, '').trim();
+  // Run Amazon Bedrock Mantle API Test
+  const handleTestBedrock = async () => {
+    const cleanKey = bedrockApiKey.replace(/['"]/g, '').trim();
     if (!cleanKey) {
-      setAiError("Google Gemini API Key is missing. Enter your VITE_GEMINI_API_KEY below.");
+      setAiError('Bedrock API key missing. Set VITE_ANTHROPIC_API_KEY in .env.');
       return;
     }
 
@@ -81,13 +83,21 @@ export default function AdminApiTester() {
     const start = performance.now();
 
     try {
-      const reply = await callGeminiApi('', testPrompt, temperature, false);
+      const reply = await callBedrockApi(
+        '',
+        testPrompt,
+        temperature,
+        false,
+        'default',
+        1024,
+        selectedModel
+      );
       const latency = Math.round(performance.now() - start);
       setAiLatencyMs(latency);
       setAiResponse(reply);
     } catch (err: any) {
-      console.error("Google Gemini API Test Error:", err);
-      setAiError(err.message || 'Failed to call Google Gemini API.');
+      console.error('Bedrock API Test Error:', err);
+      setAiError(err.message || 'Failed to call Amazon Bedrock Mantle.');
     } finally {
       setIsAiLoading(false);
     }
@@ -190,10 +200,10 @@ export default function AdminApiTester() {
         {/* Navigation Tabs */}
         <div className="flex border-b border-gray-200 dark:border-white/10 gap-2 overflow-x-auto custom-scrollbar pb-1">
           <button
-            onClick={() => setActiveApiTab('gemini')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${activeApiTab === 'gemini' ? 'bg-blue-600 text-white shadow-md' : isDark ? 'bg-white/5 text-gray-400 hover:bg-white/10' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
+            onClick={() => setActiveApiTab('bedrock')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${activeApiTab === 'bedrock' ? 'bg-blue-600 text-white shadow-md' : isDark ? 'bg-white/5 text-gray-400 hover:bg-white/10' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
           >
-            <Sparkles size={16} /> Google Gemini AI Tester (@google/genai)
+            <Sparkles size={16} /> AWS Bedrock Mantle (Chat Completions)
           </button>
           <button
             onClick={() => setActiveApiTab('s3')}
@@ -215,53 +225,52 @@ export default function AdminApiTester() {
           </button>
         </div>
 
-        {/* Tab 1: Google Gemini AI Playground */}
-        {activeApiTab === 'gemini' && (
+        {/* Tab 1: AWS Bedrock Mantle Playground */}
+        {activeApiTab === 'bedrock' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             {/* Left Column: Request Form */}
             <div className={`p-6 rounded-2xl border ${isDark ? 'bg-[#111] border-white/10' : 'bg-white border-gray-200'} shadow-sm space-y-4`}>
               <h2 className="text-base font-bold flex items-center gap-2">
                 <Sparkles size={18} className="text-blue-500" />
-                Configure Google Gemini API Request
+                Configure Bedrock Mantle Request (ap-south-1)
               </h2>
 
               <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1">Google Gemini API Key (VITE_GEMINI_API_KEY)</label>
+                <label className="block text-xs font-bold text-gray-500 mb-1">Bedrock API Key (VITE_ANTHROPIC_API_KEY)</label>
                 <input 
                   type="password" 
-                  value={geminiApiKey}
-                  onChange={e => setGeminiApiKey(e.target.value)}
-                  placeholder="AIzaSy..."
+                  value={bedrockApiKey}
+                  onChange={e => setBedrockApiKey(e.target.value)}
+                  placeholder="ABSK..."
                   className={`w-full p-2.5 rounded-xl border text-xs font-mono outline-none ${isDark ? 'bg-black border-white/10 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1">Select Google Gemini Model</label>
+                <label className="block text-xs font-bold text-gray-500 mb-1">Select Bedrock Model</label>
                 
-                {/* Quick Model Pill Buttons */}
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   <button
                     type="button"
-                    onClick={() => setSelectedModel('gemini-2.0-flash')}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${selectedModel === 'gemini-2.0-flash' ? 'bg-blue-600 text-white border-blue-700 shadow' : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20'}`}
+                    onClick={() => setSelectedModel(BEDROCK_MODELS.questions)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${selectedModel === BEDROCK_MODELS.questions ? 'bg-blue-600 text-white border-blue-700 shadow' : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/20'}`}
                   >
-                    ⚡ gemini-2.0-flash
+                    MiniMax M2.1 (questions)
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedModel('gemini-2.0-flash-lite')}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${selectedModel === 'gemini-2.0-flash-lite' ? 'bg-purple-600 text-white border-purple-700 shadow' : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30 hover:bg-purple-500/20'}`}
+                    onClick={() => setSelectedModel(BEDROCK_MODELS.report)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${selectedModel === BEDROCK_MODELS.report ? 'bg-purple-600 text-white border-purple-700 shadow' : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30 hover:bg-purple-500/20'}`}
                   >
-                    🚀 gemini-2.0-flash-lite
+                    MiniMax M2.5 (report)
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedModel('gemini-1.5-flash-latest')}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${selectedModel === 'gemini-1.5-flash-latest' ? 'bg-emerald-600 text-white border-emerald-700 shadow' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'}`}
+                    onClick={() => setSelectedModel(BEDROCK_MODELS.default)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${selectedModel === BEDROCK_MODELS.default ? 'bg-emerald-600 text-white border-emerald-700 shadow' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'}`}
                   >
-                    🟢 gemini-1.5-flash-latest
+                    GLM 4.7 Flash (default)
                   </button>
                 </div>
 
@@ -270,10 +279,9 @@ export default function AdminApiTester() {
                   onChange={e => setSelectedModel(e.target.value)}
                   className={`w-full p-2.5 rounded-xl border text-xs font-bold outline-none cursor-pointer ${isDark ? 'bg-black border-white/10 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`}
                 >
-                  <option value="gemini-2.0-flash">gemini-2.0-flash (Recommended Default)</option>
-                  <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite (Fast & Lightweight)</option>
-                  <option value="gemini-1.5-flash-latest">gemini-1.5-flash-latest</option>
-                  <option value="gemini-1.5-pro-latest">gemini-1.5-pro-latest (Complex Reasoning)</option>
+                  <option value={BEDROCK_MODELS.questions}>{BEDROCK_MODELS.questions} — Interview questions</option>
+                  <option value={BEDROCK_MODELS.report}>{BEDROCK_MODELS.report} — Report generation</option>
+                  <option value={BEDROCK_MODELS.default}>{BEDROCK_MODELS.default} — All other AI tasks</option>
                 </select>
               </div>
 
@@ -305,17 +313,17 @@ export default function AdminApiTester() {
               </div>
 
               <button
-                onClick={handleTestGemini}
+                onClick={handleTestBedrock}
                 disabled={isAiLoading || !testPrompt.trim()}
                 className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isAiLoading ? (
                   <>
-                    <RefreshCw size={16} className="animate-spin" /> Calling Google Gemini API...
+                    <RefreshCw size={16} className="animate-spin" /> Calling Bedrock Mantle...
                   </>
                 ) : (
                   <>
-                    <Send size={16} /> Test Google Gemini API
+                    <Send size={16} /> Test Bedrock Mantle API
                   </>
                 )}
               </button>
@@ -324,12 +332,11 @@ export default function AdminApiTester() {
             {/* Right Column: Output & Response Panel */}
             <div className="space-y-6">
               
-              {/* Response Card */}
               <div className={`p-6 rounded-2xl border ${isDark ? 'bg-[#111] border-white/10' : 'bg-white border-gray-200'} shadow-sm space-y-3`}>
                 <div className="flex justify-between items-center">
                   <h3 className="text-base font-bold flex items-center gap-2">
                     <Terminal size={18} className="text-emerald-500" />
-                    Google Gemini API Response Output
+                    Bedrock Mantle Response
                   </h3>
 
                   {aiLatencyMs !== null && (
@@ -342,7 +349,7 @@ export default function AdminApiTester() {
                 {isAiLoading ? (
                   <div className="py-12 flex flex-col items-center justify-center space-y-2">
                     <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-500"></div>
-                    <p className="text-xs text-gray-500 font-bold">Waiting for Google Gemini response...</p>
+                    <p className="text-xs text-gray-500 font-bold">Waiting for Bedrock response...</p>
                   </div>
                 ) : aiError ? (
                   <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-600 dark:text-red-400 text-xs font-medium space-y-1">
@@ -370,30 +377,30 @@ export default function AdminApiTester() {
                   </div>
                 ) : (
                   <div className="py-12 text-center text-xs text-gray-400 font-medium">
-                    Click "Test Google Gemini API" to see live responses from Google GenAI.
+                    Click "Test Bedrock Mantle API" to verify MiniMax / GLM models.
                   </div>
                 )}
               </div>
 
-              {/* Code Snippet Box */}
               <div className={`p-6 rounded-2xl border ${isDark ? 'bg-[#111] border-white/10' : 'bg-white border-gray-200'} shadow-sm space-y-2`}>
                 <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <Code size={14} /> Official @google/genai Code Snippet
+                  <Code size={14} /> openai SDK → Bedrock Mantle /v1 (MiniMax / GLM)
                 </h4>
                 <div className="p-3 bg-black text-gray-300 rounded-xl font-mono text-[11px] overflow-x-auto custom-scrollbar border border-white/10">
-                  <pre>{`import { GoogleGenAI } from "@google/genai";
+                  <pre>{`import OpenAI from "openai";
 
-const ai = new GoogleGenAI({ apiKey: "${geminiApiKey || 'YOUR_GEMINI_API_KEY'}" });
+// MiniMax + GLM require Chat Completions (not Anthropic Messages).
+const client = new OpenAI({
+  apiKey: process.env.ANTHROPIC_API_KEY, // Bedrock Mantle ABSK key
+  baseURL: "https://bedrock-mantle.ap-south-1.api.aws/v1",
+});
 
-async function main() {
-  const interaction = await ai.interactions.create({
-    model: "${selectedModel}",
-    input: "${testPrompt}",
-  });
-  console.log(interaction.output_text);
-}
-
-main();`}</pre>
+const msg = await client.chat.completions.create({
+  model: "${selectedModel}",
+  max_tokens: 1024,
+  messages: [{ role: "user", content: "${testPrompt.replace(/"/g, '\\"')}" }],
+});
+console.log(msg.choices[0].message.content);`}</pre>
                 </div>
               </div>
 
@@ -529,8 +536,13 @@ main();`}</pre>
 
             <div className="space-y-3">
               {[
-                { name: 'VITE_OPENROUTER_API_KEY', val: import.meta.env.VITE_OPENROUTER_API_KEY || import.meta.env.VITE_XAI_API_KEY },
-                { name: 'VITE_OPENROUTER_MODEL', val: import.meta.env.VITE_OPENROUTER_MODEL || 'google/gemini-2.0-flash-lite-preview-02-05:free' },
+                { name: 'VITE_ANTHROPIC_API_KEY', val: import.meta.env.VITE_ANTHROPIC_API_KEY },
+                { name: 'VITE_ANTHROPIC_BASE_URL', val: import.meta.env.VITE_ANTHROPIC_BASE_URL },
+                { name: 'VITE_BEDROCK_CHAT_BASE_URL', val: import.meta.env.VITE_BEDROCK_CHAT_BASE_URL },
+                { name: 'VITE_ANTHROPIC_WORKSPACE_ID', val: import.meta.env.VITE_ANTHROPIC_WORKSPACE_ID },
+                { name: 'VITE_BEDROCK_MODEL_QUESTIONS', val: import.meta.env.VITE_BEDROCK_MODEL_QUESTIONS },
+                { name: 'VITE_BEDROCK_MODEL_REPORT', val: import.meta.env.VITE_BEDROCK_MODEL_REPORT },
+                { name: 'VITE_BEDROCK_MODEL_DEFAULT', val: import.meta.env.VITE_BEDROCK_MODEL_DEFAULT },
                 { name: 'VITE_AWS_S3_BUCKET_NAME', val: import.meta.env.VITE_AWS_S3_BUCKET_NAME },
                 { name: 'VITE_AWS_S3_REGION', val: import.meta.env.VITE_AWS_S3_REGION },
                 { name: 'VITE_AWS_S3_ACCESS_KEY_ID', val: import.meta.env.VITE_AWS_S3_ACCESS_KEY_ID },
