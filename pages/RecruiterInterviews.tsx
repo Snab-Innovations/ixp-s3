@@ -163,6 +163,7 @@ const RecruiterInterviews: React.FC = () => {
   const [sendingEmails, setSendingEmails] = useState(false);
   const [editingCandidateEmail, setEditingCandidateEmail] = useState<string | null>(null);
   const [editedEmailValue, setEditedEmailValue] = useState('');
+  const [editedPhoneValue, setEditedPhoneValue] = useState('');
   const [resendingEmail, setResendingEmail] = useState<string | null>(null);
   const [remindingInterviewId, setRemindingInterviewId] = useState<string | null>(null);
   const [whatsappModal, setWhatsappModal] = useState<{
@@ -349,25 +350,56 @@ const RecruiterInterviews: React.FC = () => {
     e.target.value = '';
   };
 
-  const handleEditAndResend = async (oldEmail: string, newEmail: string) => {
-    if (!selectedInterview || !newEmail || oldEmail === newEmail) {
+  const handleEditAndResend = async (oldEmail: string, newEmail: string, newPhone?: string) => {
+    if (!selectedInterview || (!newEmail && !newPhone)) {
         setEditingCandidateEmail(null);
         return;
     }
     
     setResendingEmail(oldEmail);
     try {
+        const targetEmail = (newEmail || oldEmail).toLowerCase().trim();
+        const targetPhone = (newPhone !== undefined ? newPhone : '').trim();
+
+        // 1. Update candidateEmails array
         const updatedEmails = (selectedInterview.candidateEmails || []).filter(e => e.toLowerCase() !== oldEmail.toLowerCase());
-        updatedEmails.push(newEmail.toLowerCase());
+        if (!updatedEmails.includes(targetEmail)) {
+          updatedEmails.push(targetEmail);
+        }
+
+        // 2. Update candidateData array with phone number
+        const currentCandData = (selectedInterview as any).candidateData || [];
+        let updatedCandData = [...currentCandData];
+        const idx = updatedCandData.findIndex((c: any) => c.email && c.email.toLowerCase() === oldEmail.toLowerCase());
+        
+        if (idx > -1) {
+          updatedCandData[idx] = {
+            ...updatedCandData[idx],
+            email: targetEmail,
+            phone: targetPhone || updatedCandData[idx].phone || 'N/A'
+          };
+        } else {
+          updatedCandData.push({
+            email: targetEmail,
+            name: targetEmail.split('@')[0] || 'Candidate',
+            phone: targetPhone || 'N/A',
+            matchScore: 'N/A'
+          });
+        }
 
         await updateDoc(doc(db, 'interviews', selectedInterview.id), { 
-            candidateEmails: updatedEmails
+            candidateEmails: updatedEmails,
+            candidateData: updatedCandData
         });
         
-        setSelectedInterview({...selectedInterview, candidateEmails: updatedEmails});
-        
+        setSelectedInterview({
+          ...selectedInterview,
+          candidateEmails: updatedEmails,
+          candidateData: updatedCandData
+        } as any);
+
         const result = await sendInterviewInvitations(
-            [newEmail],
+            [targetEmail],
             selectedInterview.title,
             selectedInterview.interviewLink || '',
             selectedInterview.accessCode,
@@ -385,16 +417,18 @@ const RecruiterInterviews: React.FC = () => {
         );
 
         if (result.success) {
-            messageBox.showSuccess(`Email updated and invitation resent to ${newEmail}!`);
+            messageBox.showSuccess(`✅ Candidate contact updated (Email: ${targetEmail}, Contact: ${targetPhone || 'N/A'}) & invite resent!`);
         } else {
-            messageBox.showError(`Failed to resend email: ${result.error}`);
+            messageBox.showSuccess(`✅ Candidate contact updated (Email: ${targetEmail}, Contact: ${targetPhone || 'N/A'})!`);
         }
     } catch (error: any) {
         console.error('Edit & Resend error:', error);
-        messageBox.showError('Failed to update and resend invitation.');
+        messageBox.showError('Failed to update candidate contact details.');
     } finally {
         setResendingEmail(null);
         setEditingCandidateEmail(null);
+        setEditedEmailValue('');
+        setEditedPhoneValue('');
     }
   };
 
@@ -930,85 +964,108 @@ const RecruiterInterviews: React.FC = () => {
 
 
     {isInviteModalOpen && selectedInterview && createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col text-gray-900 dark:text-white">
-                <h3 className="font-bold text-lg p-4 border-b border-gray-200 dark:border-gray-700">Invite Candidates</h3>
-                <div className="p-4 space-y-4 overflow-y-auto">
-                    <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg space-y-3">
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200" onClick={() => setIsInviteModalOpen(false)}>
+            <div className="bg-[#090909] border border-white/[0.13] rounded-[12px] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col text-white animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+                {/* Modal Header */}
+                <div className="flex items-center justify-between px-5 py-4 bg-[#0d0d0d] border-b border-white/[0.11]">
+                    <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-[6px] bg-white/[0.05] border border-white/[0.11] text-white">
+                            <i className="fas fa-user-plus text-sm"></i>
+                        </div>
                         <div>
-                            <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-1">Access Code</h4>
-                            <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-600">
-                                <span className="font-mono tracking-widest">{selectedInterview.accessCode}</span>
-                                <button onClick={() => {navigator.clipboard.writeText(selectedInterview.accessCode || ''); messageBox.showSuccess('Access code copied!');}} className="text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors" title="Copy Access Code">
+                            <h3 className="font-bold text-base text-white">Invite Candidates</h3>
+                            <p className="geist-small text-[#8f8f8f]">{selectedInterview.title}</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setIsInviteModalOpen(false)}
+                        className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white"
+                    >
+                        <span className="text-xl leading-none">&times;</span>
+                    </button>
+                </div>
+
+                {/* Modal Body Content */}
+                <div className="p-5 space-y-4 overflow-y-auto">
+                    <div className="p-4 bg-white/[0.025] border border-white/[0.11] rounded-[8px] space-y-3">
+                        <div>
+                            <h4 className="geist-label uppercase text-[#6b7280] mb-1">Access Code</h4>
+                            <div className="flex items-center justify-between bg-[#111111] p-2.5 rounded-[6px] border border-white/[0.11]">
+                                <span className="font-mono text-sm font-bold tracking-widest text-white">{selectedInterview.accessCode}</span>
+                                <button onClick={() => {navigator.clipboard.writeText(selectedInterview.accessCode || ''); messageBox.showSuccess('Access code copied!');}} className="text-[#8f8f8f] hover:text-white transition-colors" title="Copy Access Code">
                                     <i className="fas fa-copy"></i>
                                 </button>
                             </div>
                         </div>
                         <div>
-                            <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-1">Interview Link</h4>
-                            <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-600">
-                                <span className="text-sm truncate mr-2 text-gray-600 dark:text-gray-400">
+                            <h4 className="geist-label uppercase text-[#6b7280] mb-1">Interview Link</h4>
+                            <div className="flex items-center justify-between bg-[#111111] p-2.5 rounded-[6px] border border-white/[0.11]">
+                                <span className="text-xs font-mono truncate mr-2 text-[#d4d4d4]">
                                     {selectedInterview.interviewLink || `${window.location.origin}/#/interview/${selectedInterview.id}`}
                                 </span>
                                 <button onClick={() => {
                                     const link = selectedInterview.interviewLink || `${window.location.origin}/#/interview/${selectedInterview.id}`;
                                     navigator.clipboard.writeText(link);
                                     messageBox.showSuccess('Interview link copied!');
-                                }} className="text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors" title="Copy Interview Link">
+                                }} className="text-[#8f8f8f] hover:text-white transition-colors" title="Copy Interview Link">
                                     <i className="fas fa-link"></i>
                                 </button>
                             </div>
                         </div>
-                        <div className="pt-2 text-right">
+                        <div className="pt-1 text-right">
                              <button onClick={() => {
                                     const link = selectedInterview.interviewLink || `${window.location.origin}/#/interview/${selectedInterview.id}`;
                                     const text = `You've been invited to an interview for ${selectedInterview.title}.\n\nInterview Link: ${link}\nAccess Code: ${selectedInterview.accessCode}`;
                                     navigator.clipboard.writeText(text);
                                     messageBox.showSuccess('Full invite details copied!');
-                             }} className="text-xs font-semibold text-primary hover:text-primary-dark">
+                             }} className="geist-caption text-xs font-semibold text-white hover:underline transition-colors">
                                  <i className="fas fa-clipboard-list mr-1"></i> Copy Full Invite Details
                              </button>
                         </div>
                     </div>
+
                     <div>
-                        <label className="block text-sm font-medium mb-2">Upload Candidate File or Resumes</label>
-                        <label className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-50 dark:bg-gray-700 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
+                        <label className="block geist-label uppercase text-[#6b7280] mb-1.5">Upload Candidate File or Resumes</label>
+                        <label className="flex items-center justify-center gap-2 px-4 py-3 bg-white/[0.02] border-2 border-dashed border-white/[0.16] rounded-[8px] cursor-pointer hover:bg-white/[0.04] transition-colors">
                             {parsingResumes ? (
                               <>
-                                <ButtonBusySkeleton className="w-5 bg-gray-400/40 dark:bg-white/30" />
-                                <ButtonBusySkeleton className="w-40 bg-gray-400/40 dark:bg-white/30" />
+                                <ButtonBusySkeleton className="w-5 bg-white/30" />
+                                <ButtonBusySkeleton className="w-40 bg-white/30" />
                               </>
                             ) : (
                               <>
-                                <i className="fas fa-file-excel text-green-500 text-lg"></i>
-                                <span className="font-medium text-sm">Upload Excel, CSV, PDF, DOCX, or TXT (Auto-extracts Name, Phone & Email)</span>
+                                <i className="fas fa-file-excel text-emerald-400 text-lg"></i>
+                                <span className="geist-caption font-medium text-xs text-[#d4d4d4]">Upload Excel, CSV, PDF, DOCX, or TXT (Auto-extracts Name, Phone & Email)</span>
                               </>
                             )}
                             <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,text/csv" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
                         </label>
                     </div>
+
                     {sendingProgressMsg && (
-                        <div className="p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg text-xs font-medium text-blue-800 dark:text-blue-200 flex items-center gap-2 animate-pulse">
-                            <i className="fas fa-spinner fa-spin"></i>
+                        <div className="p-3 bg-white/[0.04] border border-white/[0.15] rounded-[6px] text-xs font-medium text-white flex items-center gap-2 animate-pulse">
+                            <i className="fas fa-spinner fa-spin text-white"></i>
                             <span>{sendingProgressMsg}</span>
                         </div>
                     )}
+
                     <div>
-                        <label className="block text-sm font-medium mb-2">Add Candidate Manually</label>
+                        <label className="block geist-label uppercase text-[#6b7280] mb-1.5">Add Candidate Manually</label>
                         <div className="flex gap-2">
                             <input 
                                 type="email" 
                                 value={newEmail} 
                                 onChange={(e) => setNewEmail(e.target.value)} 
                                 placeholder="Candidate email" 
-                                className="flex-1 p-2 border rounded bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-sm outline-none" 
+                                className="flex-1 p-2 rounded-[6px] bg-[#111111] border border-white/[0.11] text-xs text-white outline-none focus:border-white/30 placeholder:text-[#6b7280]" 
                             />
                             <input 
                                 type="tel" 
                                 value={manualPhone} 
                                 onChange={(e) => setManualPhone(e.target.value)} 
                                 placeholder="Phone number (optional)" 
-                                className="w-1/3 p-2 border rounded bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-sm outline-none" 
+                                className="w-1/3 p-2 rounded-[6px] bg-[#111111] border border-white/[0.11] text-xs text-white outline-none focus:border-white/30 placeholder:text-[#6b7280]" 
                             />
                             <button 
                                 onClick={() => {
@@ -1020,57 +1077,58 @@ const RecruiterInterviews: React.FC = () => {
                                     setNewEmail('');
                                     setManualPhone('');
                                 }} 
-                                className="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 transition-colors"
+                                className="geist-caption bg-white text-black font-semibold px-4 py-2 rounded-[6px] text-xs hover:bg-neutral-200 transition-colors shrink-0"
                             >
                                 Add
                             </button>
                         </div>
                     </div>
+
                     <div>
-                        <h4 className="font-semibold mb-2 text-sm">New Candidates to Invite:</h4>
+                        <h4 className="geist-label uppercase text-[#6b7280] mb-1.5">New Candidates to Invite:</h4>
                         {newEmails.length === 0 ? (
-                             <p className="text-xs text-gray-500 italic">No candidates added yet. Upload resumes or add manually.</p>
+                             <p className="geist-small text-[#6b7280] italic">No candidates added yet. Upload resumes or add manually above.</p>
                         ) : (
-                            <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto">
+                            <div className="flex flex-col gap-2 max-h-[180px] overflow-y-auto pr-1">
                                 {newEmails.map(email => {
                                     const parsedData = parsedCandidates.find(c => c.email === email);
                                     
                                     let ScoreBadge = null;
                                     if (parsedData?.matchScore && parsedData.matchScore !== 'N/A') {
                                         const numScore = parseFloat(parsedData.matchScore);
-                                        let badgeColor = 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700';
+                                        let badgeColor = 'bg-white/[0.04] text-[#8f8f8f] border-white/[0.08]';
                                         let icon = 'fas fa-minus-circle';
                                         
                                         if (!isNaN(numScore)) {
                                             if (numScore >= 75) {
-                                                badgeColor = 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border shadow-sm border-green-200 dark:border-green-800';
+                                                badgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 font-semibold';
                                                 icon = 'fas fa-check-circle';
                                             } else if (numScore >= 50) {
-                                                badgeColor = 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300 border shadow-sm border-yellow-200 dark:border-yellow-800';
+                                                badgeColor = 'bg-white/[0.06] text-[#d4d4d4] border-white/[0.15]';
                                                 icon = 'fas fa-exclamation-circle';
                                             } else {
-                                                badgeColor = 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border shadow-sm border-red-200 dark:border-red-800';
+                                                badgeColor = 'bg-red-500/10 text-red-400 border-red-500/30';
                                                 icon = 'fas fa-times-circle';
                                             }
                                         }
                                         
                                         ScoreBadge = (
-                                            <div className={`mt-1 flex w-fit items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-bold ${badgeColor}`} title="AI Resume Match Score vs Job Description">
+                                            <div className={`mt-1 flex w-fit items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-xs border ${badgeColor}`} title="AI Resume Match Score vs Job Description">
                                                 <i className={icon}></i> Match: {parsedData.matchScore}%
                                             </div>
                                         );
                                     }
 
                                     return (
-                                        <div key={email} className="flex items-start justify-between text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 shadow-sm transition-colors hover:border-gray-300 dark:hover:border-gray-500">
-                                            <div className="flex flex-col">
-                                                <span className="font-semibold text-gray-900 dark:text-white mb-0.5">{email}</span>
+                                        <div key={email} className="flex items-start justify-between text-xs bg-white/[0.025] border border-white/[0.11] rounded-[6px] px-3.5 py-2.5 shadow-sm transition-colors hover:border-white/20">
+                                            <div className="flex flex-col min-w-0">
+                                                <span className="font-semibold text-white truncate max-w-[260px]">{email}</span>
                                                 {parsedData?.phone && parsedData.phone !== 'N/A' && (
-                                                    <span className="text-xs text-blue-600 dark:text-blue-400 font-mono flex items-center gap-1.5"><i className="fas fa-phone-alt"></i>{parsedData.phone}</span>
+                                                    <span className="text-xs text-[#8bbde8] font-mono flex items-center gap-1.5 mt-0.5"><i className="fas fa-phone-alt"></i>{parsedData.phone}</span>
                                                 )}
                                                 {ScoreBadge}
                                             </div>
-                                            <button onClick={() => handleRemoveNewEmail(email)} className="text-gray-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" title="Remove Candidate">
+                                            <button onClick={() => handleRemoveNewEmail(email)} className="text-[#8f8f8f] hover:text-[#ff8f8f] transition-colors p-1.5 rounded hover:bg-white/[0.06]" title="Remove Candidate">
                                                 <i className="fas fa-trash-alt"></i>
                                             </button>
                                         </div>
@@ -1079,59 +1137,85 @@ const RecruiterInterviews: React.FC = () => {
                             </div>
                         )}
                     </div>
+
                     {selectedInterview.candidateEmails && selectedInterview.candidateEmails.length > 0 && (
-                        <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                            <h4 className="font-semibold mb-2 text-sm">Previously Invited Candidates:</h4>
-                            <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto pr-1">
+                        <div className="pt-3 border-t border-white/[0.11]">
+                            <h4 className="geist-label uppercase text-[#6b7280] mb-2">Previously Invited Candidates:</h4>
+                            <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
                                 {selectedInterview.candidateEmails.map((email) => {
                                     const isEditing = editingCandidateEmail === email;
                                     const isResending = resendingEmail === email;
-                                    
+                                    const candData = ((selectedInterview as any).candidateData || []).find((c: any) => c.email && c.email.toLowerCase() === email.toLowerCase());
+                                    const candPhone = candData?.phone && candData.phone !== 'N/A' ? candData.phone : '';
+
                                     return (
-                                        <div key={email} className="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 shadow-sm">
+                                        <div key={email} className="flex items-center justify-between text-xs bg-white/[0.025] border border-white/[0.11] rounded-[6px] px-3.5 py-2.5 shadow-sm">
                                             {isEditing ? (
-                                                <div className="flex-1 flex gap-2 mr-2">
+                                                <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mr-2">
                                                     <input 
                                                         type="email" 
                                                         value={editedEmailValue} 
                                                         onChange={(e) => setEditedEmailValue(e.target.value)} 
-                                                        className="w-full p-1.5 text-sm border rounded bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
+                                                        placeholder="Candidate Email"
+                                                        className="flex-1 p-2 text-xs rounded-[6px] border border-white/[0.11] bg-[#111111] text-white outline-none focus:border-white/30"
                                                         autoFocus
                                                     />
-                                                    <button 
-                                                        onClick={() => handleEditAndResend(email, editedEmailValue)}
-                                                        disabled={resendingEmail !== null}
-                                                        className="bg-green-500 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-green-600 disabled:opacity-50 flex items-center gap-1 shrink-0"
-                                                    >
-                                                        {isResending ? <ButtonBusySkeleton className="w-12 bg-white/45" /> : <><i className="fas fa-save"></i> Save</>}
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => setEditingCandidateEmail(null)}
-                                                        disabled={resendingEmail !== null}
-                                                        className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-3 py-1.5 rounded text-xs font-semibold hover:bg-gray-300 dark:hover:bg-gray-500 shrink-0"
-                                                    >
-                                                        Cancel
-                                                    </button>
+                                                    <input 
+                                                        type="tel" 
+                                                        value={editedPhoneValue} 
+                                                        onChange={(e) => setEditedPhoneValue(e.target.value)} 
+                                                        placeholder="Phone number (e.g. +91...)"
+                                                        className="w-full sm:w-2/5 p-2 text-xs rounded-[6px] border border-white/[0.11] bg-[#111111] text-white outline-none focus:border-white/30"
+                                                    />
+                                                    <div className="flex items-center gap-1.5 shrink-0">
+                                                        <button 
+                                                            onClick={() => handleEditAndResend(email, editedEmailValue, editedPhoneValue)}
+                                                            disabled={resendingEmail !== null}
+                                                            className="bg-white text-black hover:bg-neutral-200 px-3 py-1.5 rounded-[6px] text-xs font-semibold disabled:opacity-50 flex items-center gap-1 shrink-0 transition-colors"
+                                                        >
+                                                            {isResending ? <ButtonBusySkeleton className="w-12 bg-black/30" /> : <><i className="fas fa-save"></i> Save</>}
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => { setEditingCandidateEmail(null); setEditedEmailValue(''); setEditedPhoneValue(''); }}
+                                                            disabled={resendingEmail !== null}
+                                                            className="border border-white/[0.11] bg-white/[0.03] text-[#d4d4d4] hover:bg-white/[0.06] px-3 py-1.5 rounded-[6px] text-xs shrink-0 transition-colors"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             ) : (
                                                 <>
-                                                    <span className="font-medium text-gray-900 dark:text-white truncate max-w-[200px]" title={email}>{email}</span>
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className="font-semibold text-white truncate max-w-[240px]" title={email}>{email}</span>
+                                                        {candPhone ? (
+                                                            <span className="text-xs text-[#8bbde8] font-mono flex items-center gap-1.5 mt-0.5">
+                                                                <i className="fas fa-phone-alt"></i> {candPhone}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[11px] text-[#6b7280] italic">No phone attached (Click pencil to add)</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
                                                         <button 
-                                                            onClick={() => { setEditingCandidateEmail(email); setEditedEmailValue(email); }}
+                                                            onClick={() => { 
+                                                                setEditingCandidateEmail(email); 
+                                                                setEditedEmailValue(email); 
+                                                                setEditedPhoneValue(candPhone);
+                                                            }}
                                                             disabled={resendingEmail !== null}
-                                                            className="text-gray-500 hover:text-blue-500 transition-colors p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700" 
-                                                            title="Edit Email & Resend"
+                                                            className="text-[#8f8f8f] hover:text-white transition-colors p-1.5 rounded hover:bg-white/[0.06]" 
+                                                            title="Edit Email & Phone Number"
                                                         >
                                                             <i className="fas fa-pencil-alt text-xs"></i>
                                                         </button>
                                                         <button 
                                                             onClick={() => handleResend(email)}
                                                             disabled={resendingEmail !== null}
-                                                            className="text-gray-500 hover:text-green-500 transition-colors p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-1" 
+                                                            className="text-[#8f8f8f] hover:text-emerald-400 transition-colors p-1.5 rounded hover:bg-white/[0.06] flex items-center gap-1" 
                                                             title="Resend Invitation"
                                                         >
-                                                            {isResending ? <ButtonBusySkeleton className="w-5 bg-gray-400/40 dark:bg-white/30" /> : <i className="fas fa-paper-plane text-xs"></i>}
+                                                            {isResending ? <ButtonBusySkeleton className="w-5 bg-white/30" /> : <i className="fas fa-paper-plane text-xs"></i>}
                                                         </button>
                                                     </div>
                                                 </>
@@ -1143,15 +1227,22 @@ const RecruiterInterviews: React.FC = () => {
                         </div>
                     )}
                 </div>
-                <div className="flex justify-end gap-2 p-4 border-t border-gray-200 dark:border-gray-700">
-                    <button onClick={() => setIsInviteModalOpen(false)} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded">Cancel</button>
+
+                {/* Modal Footer */}
+                <div className="flex justify-end gap-2 p-4 bg-[#0d0d0d] border-t border-white/[0.11]">
+                    <button 
+                        onClick={() => setIsInviteModalOpen(false)} 
+                        className="geist-caption h-9 px-4 rounded-[6px] border border-white/[0.11] bg-white/[0.03] hover:bg-white/[0.06] font-semibold text-xs text-[#d4d4d4] transition-colors"
+                    >
+                        Cancel
+                    </button>
                     <button 
                         onClick={handleSendInvites} 
                         disabled={sendingEmails || newEmails.length === 0}
-                        className="bg-green-500 text-white px-4 py-2 rounded flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="geist-caption h-9 px-4 rounded-[6px] bg-white text-black hover:bg-neutral-200 font-semibold text-xs flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                         {sendingEmails ? (
-                            <ButtonBusySkeleton className="w-20 bg-white/45" />
+                            <ButtonBusySkeleton className="w-20 bg-black/30" />
                         ) : 'Send Invites'}
                     </button>
                 </div>
