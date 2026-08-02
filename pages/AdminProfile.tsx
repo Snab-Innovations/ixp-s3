@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { doc, onSnapshot, updateDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from '../services/firebase';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { User, Mail, Calendar, Shield, Sun, Moon, Monitor, ArrowLeft, Edit2, Save, X, FileText, DollarSign } from 'lucide-react';
 import gsap from 'gsap';
-import { signOut } from 'firebase/auth';
 
 const AdminProfile: React.FC = () => {
     const navigate = useNavigate();
     const { theme, setTheme } = useTheme();
+    const { signOut } = useAuth();
     const [adminData, setAdminData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
@@ -194,7 +195,7 @@ const AdminProfile: React.FC = () => {
                                 Manage Blogs
                             </button>
 
-                            <button onClick={() => signOut(auth)} className="w-full text-left px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors flex items-center gap-2">
+                            <button onClick={() => signOut()} className="w-full text-left px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors flex items-center gap-2">
                                 Sign Out
                             </button>
                         </div>

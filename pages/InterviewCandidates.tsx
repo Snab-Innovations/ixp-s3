@@ -1,9 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { arrayUnion, collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { Link, useParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Sparkles, Check, UserPlus, ExternalLink, X, Search } from 'lucide-react';
-import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { sendInterviewInvitations } from '../services/brevoService';
@@ -14,6 +12,8 @@ import { parseCandidateDocument } from '../services/candidateFileParser';
 import { InterviewCandidatesSkeleton } from '../components/ui/interview-loading-skeleton';
 import { logTeamActivity } from '../services/auditService';
 import { Interview } from '../types';
+import { poll, rds } from '../services/rdsApi';
+import { dedupeCandidatesByIdentity, normalizeCandidatePhone } from '../services/candidateIdentity';
 
 type CandidateDraft = { email: string; phone: string; matchScore?: string };
 type RosterCandidate = { email: string; hasSubmitted: boolean; attemptId?: string; allowReattempt?: boolean };
@@ -63,12 +63,13 @@ const InterviewCandidates: React.FC = () => {
   useEffect(() => {
     if (!user) return;
     setLoadingResumeDump(true);
-    const q = query(collection(db, 'resumeDumpCandidates'), where('recruiterUID', '==', user.uid));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const list: ResumeDumpRecord[] = snapshot.docs.map(candidateDoc => {
-        const data = candidateDoc.data();
-        return {
-          id: candidateDoc.id,
+    const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
+
+    return poll(
+      () => rds.listResumeDump(teamId),
+      ({ candidates }) => {
+        const list: ResumeDumpRecord[] = (candidates || []).map((data: any) => ({
+          id: data.id,
           recruiterUID: data.recruiterUID || user.uid,
           name: data.name || '',
           email: data.email || '',
@@ -91,16 +92,17 @@ const InterviewCandidates: React.FC = () => {
           resumeFileName: data.resumeFileName || '',
           isHired: Boolean(data.isHired),
           doNotSuggest: Boolean(data.doNotSuggest),
-        };
-      });
-      setResumeDumpCandidates(list);
-      setLoadingResumeDump(false);
-    }, (err) => {
-      console.error("Failed to load resume dump candidates for suggestions:", err);
-      setLoadingResumeDump(false);
-    });
-    return () => unsub();
-  }, [user]);
+        }));
+        setResumeDumpCandidates(list);
+        setLoadingResumeDump(false);
+      },
+      (err) => {
+        console.error('Failed to load resume dump candidates for suggestions:', err);
+        setLoadingResumeDump(false);
+      },
+      10000
+    );
+  }, [user, userProfile?.teamId, userProfile?.parentRecruiterId]);
 
   const suggestedCandidatesForInterview = useMemo(() => {
     if (!interview) return [];
@@ -171,45 +173,53 @@ const InterviewCandidates: React.FC = () => {
       return;
     }
 
-    const unsubscribeInterview = onSnapshot(
-      doc(db, 'interviews', interviewId),
-      (snapshot) => {
-        if (!snapshot.exists()) {
+    return poll(
+      async () => {
+        const [{ interview: row }, { attempts }] = await Promise.all([
+          rds.getInterview(interviewId),
+          rds.listAttempts(interviewId),
+        ]);
+        return { row, attempts: attempts || [] };
+      },
+      ({ row, attempts }) => {
+        if (!row) {
           setInterview(null);
+          setSubmissions([]);
           setLoading(false);
           return;
         }
 
-        const data = { id: snapshot.id, ...snapshot.data() } as Interview;
+        const data = { ...row, id: row.id } as Interview;
         const currentTeamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
         const interviewTeamId = (data as any).teamId || (data as any).recruiterUID;
-        const isTeamMember = interviewTeamId === currentTeamId || (data as any).recruiterUID === user.uid || userProfile?.role === 'admin';
+        const isTeamMember =
+          interviewTeamId === currentTeamId ||
+          (data as any).recruiterUID === user.uid ||
+          userProfile?.role === 'admin';
 
         if (!isTeamMember) {
           setInterview(null);
+          setSubmissions([]);
           setLoading(false);
           return;
         }
+
         setInterview(data);
+        setSubmissions(
+          dedupeCandidatesByIdentity(attempts || [], (attempt: any) => {
+            const ts = attempt.submittedAt ? new Date(attempt.submittedAt).getTime() : 0;
+            return Number.isFinite(ts) ? ts : 0;
+          })
+        );
         setLoading(false);
       },
       (error) => {
         console.error('Error loading interview:', error);
         setLoading(false);
-      }
+      },
+      8000
     );
-
-    const unsubscribeSubmissions = onSnapshot(
-      collection(db, 'interviews', interviewId, 'attempts'),
-      (snapshot) => setSubmissions(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }))),
-      (error) => console.error('Error loading submissions:', error)
-    );
-
-    return () => {
-      unsubscribeInterview();
-      unsubscribeSubmissions();
-    };
-  }, [interviewId, user]);
+  }, [interviewId, user, userProfile?.teamId, userProfile?.parentRecruiterId, userProfile?.role]);
 
   const roster = useMemo<RosterCandidate[]>(() => {
     if (!interview) return [];
@@ -226,7 +236,16 @@ const InterviewCandidates: React.FC = () => {
     });
 
     explicitEmails.forEach((email) => {
-      const hasSubmitted = submissions.some((submission) => (submission.candidateInfo?.email || '').toLowerCase() === email);
+      const hasSubmitted = submissions.some((submission) => {
+        const subEmail = (submission.candidateInfo?.email || '').toLowerCase();
+        if (subEmail && subEmail === email) return true;
+        const candidateData = (interview.candidateData || []).find(
+          (c: any) => (c.email || '').toLowerCase() === email
+        );
+        const subPhone = normalizeCandidatePhone((submission.candidateInfo as any)?.phone);
+        const invitedPhone = normalizeCandidatePhone(candidateData?.phone);
+        return Boolean(subPhone && invitedPhone && subPhone === invitedPhone);
+      });
       if (!hasSubmitted && !unifiedList.some((candidate) => candidate.email.toLowerCase() === email)) {
         unifiedList.push({ email, hasSubmitted: false });
       }
@@ -262,7 +281,7 @@ const InterviewCandidates: React.FC = () => {
     let filesProcessed = 0;
     let filesWithErrors = 0;
 
-    for (const file of Array.from(files)) {
+    for (const file of Array.from(files) as File[]) {
       try {
         const fileName = file.name.toLowerCase();
 
@@ -351,10 +370,27 @@ const InterviewCandidates: React.FC = () => {
       const validEmails = newEmails.map((email) => email.toLowerCase()).filter(e => !e.endsWith('@whatsapp.local'));
       const candidatesWithPhones = parsedCandidates.filter((candidate) => candidate.phone && candidate.phone !== 'N/A');
 
-      await updateDoc(doc(db, 'interviews', interview.id), {
-        candidateEmails: validEmails.length > 0 ? arrayUnion(...validEmails) : arrayUnion(),
-        candidateData: arrayUnion(...parsedCandidates),
+      const existingEmails = (interview.candidateEmails || []).map((e) => e.toLowerCase());
+      const mergedEmails = Array.from(new Set([...existingEmails, ...validEmails]));
+      const existingCandidateData = ((interview as any).candidateData || []) as any[];
+      const mergedCandidateData = [...existingCandidateData];
+      for (const candidate of parsedCandidates) {
+        const idx = mergedCandidateData.findIndex(
+          (c) => (c.email || '').toLowerCase() === (candidate.email || '').toLowerCase()
+        );
+        if (idx >= 0) mergedCandidateData[idx] = { ...mergedCandidateData[idx], ...candidate };
+        else mergedCandidateData.push(candidate);
+      }
+
+      await rds.updateInterview(interview.id, {
+        candidateEmails: mergedEmails,
+        candidateData: mergedCandidateData,
       });
+      setInterview({
+        ...interview,
+        candidateEmails: mergedEmails,
+        candidateData: mergedCandidateData,
+      } as any);
 
       let emailCount = 0;
       if (validEmails.length > 0) {
@@ -577,10 +613,15 @@ const InterviewCandidates: React.FC = () => {
         });
       }
 
-      await updateDoc(doc(db, 'interviews', interview.id), {
+      await rds.updateInterview(interview.id, {
         candidateEmails: updatedEmails,
         candidateData: updatedCandData
       });
+      setInterview({
+        ...interview,
+        candidateEmails: updatedEmails,
+        candidateData: updatedCandData,
+      } as any);
 
       await handleResend(updatedEmail);
     } catch (error) {
@@ -595,7 +636,12 @@ const InterviewCandidates: React.FC = () => {
   const handleAllowReattempt = async (attemptId: string, currentAllowValue: boolean) => {
     if (!interview) return;
     try {
-      await updateDoc(doc(db, 'interviews', interview.id, 'attempts', attemptId), { allowReattempt: !currentAllowValue });
+      await rds.updateAttempt(attemptId, { allowReattempt: !currentAllowValue });
+      setSubmissions((prev) =>
+        prev.map((attempt) =>
+          attempt.id === attemptId ? { ...attempt, allowReattempt: !currentAllowValue } : attempt
+        )
+      );
       messageBox.showSuccess(!currentAllowValue ? 'Reattempt permission granted!' : 'Reattempt permission removed.');
     } catch (error) {
       console.error('Error updating reattempt status:', error);
@@ -691,7 +737,6 @@ const InterviewCandidates: React.FC = () => {
     }
 
     try {
-      const intRef = doc(db, 'interviews', whatsappModal.interview.id);
       const currentCandData = (whatsappModal.interview as any).candidateData || [];
       const index = currentCandData.findIndex((candidate: any) => candidate.email?.toLowerCase() === whatsappModal.email.toLowerCase());
       const updatedCandData = [...currentCandData];
@@ -700,9 +745,14 @@ const InterviewCandidates: React.FC = () => {
       } else {
         updatedCandData.push({ email: whatsappModal.email, phone: whatsappModal.phone });
       }
-      await updateDoc(intRef, { candidateData: updatedCandData });
+      await rds.updateInterview(whatsappModal.interview.id, { candidateData: updatedCandData });
+      setInterview((prev) =>
+        prev && prev.id === whatsappModal.interview.id
+          ? ({ ...prev, candidateData: updatedCandData } as any)
+          : prev
+      );
     } catch (error) {
-      console.error('Error updating phone in Firestore:', error);
+      console.error('Error updating phone on interview:', error);
     }
 
     // Send message via WhatsApp API

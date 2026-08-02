@@ -1,15 +1,4 @@
-import {
-  collection,
-  doc,
-  DocumentData,
-  DocumentReference,
-  getDoc,
-  getDocs,
-  runTransaction,
-  serverTimestamp,
-  setDoc,
-} from 'firebase/firestore';
-import { db } from './firebase';
+import { poll, rds } from './rdsApi';
 
 export type RateLimitResource = 'interviews' | 'assessments' | 'codingAssessments';
 
@@ -62,13 +51,7 @@ export const buildCompanyRateLimitStatus = (
   data?: Record<string, any>,
   initialized = false,
 ): CompanyRateLimitStatus => ({
-  initialized: Boolean(
-    initialized
-    && data?.scope === 'company'
-    && data?.usage
-    && data?.topUps
-    && data?.usageBaseline
-  ),
+  initialized: Boolean(initialized && data),
   limits: parseCompanyRateLimits(data),
   usage: parseUsageValues(data?.usage),
   topUps: parseUsageValues(data?.topUps),
@@ -99,103 +82,56 @@ export const getCandidateRateLimitReachedMessage = (resource: RateLimitResource)
   return `This ${activity} cannot be conducted because the hiring team's ${activity} limit has been reached. Please contact the hiring team for assistance.`;
 };
 
-export const loadCompanyRawUsage = async (): Promise<CompanyRateLimitUsage> => {
-  let interviewsSnapshot;
-  let testsSnapshot;
-  let submissionsSnapshot;
-  try {
-    [interviewsSnapshot, testsSnapshot, submissionsSnapshot] = await Promise.all([
-      getDocs(collection(db, 'interviews')),
-      getDocs(collection(db, 'tests')),
-      getDocs(collection(db, 'testSubmissions')),
-    ]);
-  } catch (error: any) {
-    if (error?.code === 'permission-denied') {
-      throw new Error('Firestore denied access to interviews or assessment submissions while calculating company usage.');
-    }
-    throw error;
-  }
-
-  let interviews = 0;
-  const batchSize = 20;
-  for (let start = 0; start < interviewsSnapshot.docs.length; start += batchSize) {
-    const interviewBatch = interviewsSnapshot.docs.slice(start, start + batchSize);
-    try {
-      const attemptSnapshots = await Promise.all(
-        interviewBatch.map(interview => getDocs(collection(db, 'interviews', interview.id, 'attempts')))
-      );
-      interviews += attemptSnapshots.reduce((total, snapshot) => total + snapshot.size, 0);
-    } catch (error: any) {
-      if (error?.code === 'permission-denied') {
-        throw new Error('Firestore denied access to candidate interview attempts while calculating company usage.');
-      }
-      throw error;
-    }
-  }
-
-  const testsById = new Map(testsSnapshot.docs.map(test => [test.id, test.data()]));
-  let assessments = 0;
-  let codingAssessments = 0;
-
-  submissionsSnapshot.docs.forEach(submission => {
-    const data = submission.data();
-    const type = data.type || testsById.get(data.testId)?.type;
-    if (type === 'coding') codingAssessments += 1;
-    else assessments += 1;
-  });
-
-  return { interviews, assessments, codingAssessments };
-};
-
 export const loadCompanyRateLimitStatus = async (): Promise<CompanyRateLimitStatus> => {
-  const limitSnapshot = await getDoc(doc(db, 'rateLimits', 'company'));
-  return buildCompanyRateLimitStatus(limitSnapshot.data(), limitSnapshot.exists());
+  const { rateLimits } = await rds.getRateLimits();
+  return buildCompanyRateLimitStatus(rateLimits, true);
 };
 
+/**
+ * Count real submissions from Postgres for admin reconciliation.
+ */
+export const loadCompanyRawUsage = async (): Promise<CompanyRateLimitUsage> => {
+  const data = await rds.getRawUsage();
+  return {
+    interviews: normalizeLimit(data.interviews, 0),
+    assessments: normalizeLimit(data.assessments, 0),
+    codingAssessments: normalizeLimit(data.codingAssessments, 0),
+  };
+};
+
+export const saveCompanyRateLimits = async (patch: Record<string, unknown>) => {
+  await rds.updateRateLimits(patch);
+};
+
+/**
+ * Check company rate limit before writing a submission.
+ * Usage counters are incremented server-side when attempts/test-submissions are created.
+ */
+export const assertCompanyRateLimit = async (resource: RateLimitResource) => {
+  const status = await loadCompanyRateLimitStatus();
+  if (isRateLimitReached(status, resource)) {
+    throw new Error(getRateLimitReachedMessage(resource));
+  }
+  return status;
+};
+
+/** @deprecated Prefer assertCompanyRateLimit + rds.createAttempt / createTestSubmission */
 export const recordCandidateSubmission = async (
   resource: RateLimitResource,
-  submissionRef: DocumentReference<DocumentData>,
+  _submissionRef: unknown,
   submissionData: Record<string, unknown>,
 ) => {
-  const limitRef = doc(db, 'rateLimits', 'company');
-  try {
-    await runTransaction(db, async transaction => {
-      const snapshot = await transaction.get(limitRef);
-      const status = buildCompanyRateLimitStatus(snapshot.data(), snapshot.exists());
-
-      if (isRateLimitReached(status, resource)) {
-        throw new Error(getRateLimitReachedMessage(resource));
-      }
-
-      transaction.set(submissionRef, submissionData);
-      transaction.set(limitRef, {
-        scope: 'company',
-        ...status.limits,
-        usage: {
-          ...status.usage,
-          [resource]: status.usage[resource] + 1,
-        },
-        topUps: status.topUps,
-        usageBaseline: status.usageBaseline,
-        lastCandidateSubmissionAt: serverTimestamp(),
-      }, { merge: true });
-    }, { maxAttempts: 1 });
-  } catch (error: any) {
-    const recoverableCounterError = [
-      'permission-denied',
-      'resource-exhausted',
-      'unavailable',
-      'deadline-exceeded',
-      'aborted',
-    ].includes(error?.code) || /quota exceeded/i.test(String(error?.message || ''));
-
-    // Preserve the interview report when the optional company counter cannot
-    // be read or updated. The admin page reconciles usage from actual reports.
-    if (recoverableCounterError) {
-      await setDoc(submissionRef, submissionData);
-      console.warn('Candidate submission saved without updating the rate-limit counter; an administrator can reconcile it later.');
-      return;
-    }
-    throw error;
-  }
+  await assertCompanyRateLimit(resource);
+  void submissionData;
 };
+
+export const subscribeCompanyRateLimits = (
+  onData: (status: CompanyRateLimitStatus) => void,
+  onError?: (err: unknown) => void,
+) =>
+  poll(
+    () => loadCompanyRateLimitStatus(),
+    onData,
+    onError,
+    10000
+  );

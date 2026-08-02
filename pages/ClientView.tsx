@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { collection, query, onSnapshot, orderBy, doc, getDoc, where } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import { InterviewSubmission } from '../types';
 import { useTheme } from '../context/ThemeContext';
 import DayNightToggle from '../components/DayNightToggle';
+import { poll, rds } from '../services/rdsApi';
 
 const ClientView: React.FC = () => {
   const { theme, setTheme } = useTheme();
@@ -18,36 +17,27 @@ const ClientView: React.FC = () => {
   useEffect(() => {
     if (!interviewId) return;
 
-    // Fetch Interview details to get Job Title
-    const fetchInterviewDetails = async () => {
-      try {
-        const interviewDoc = await getDoc(doc(db, 'interviews', interviewId));
-        if (interviewDoc.exists()) {
-          setJobTitle(interviewDoc.data().title || 'Shortlisted Candidates');
-        }
-      } catch (err) {
-        console.error("Error fetching interview details:", err);
-      }
-    };
+    rds.getInterview(interviewId)
+      .then(({ interview }) => {
+        if (interview) setJobTitle(interview.title || 'Shortlisted Candidates');
+      })
+      .catch((err) => console.error('Error fetching interview details:', err));
 
-    fetchInterviewDetails();
-
-    const submissionsQuery = query(
-      collection(db, 'interviews', interviewId, 'attempts'),
-      where('status', '==', 'Shortlist'),
-      orderBy('submittedAt', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(submissionsQuery, (querySnapshot) => {
-      const submissionsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InterviewSubmission));
-      setSubmissions(submissionsData);
-      setLoading(false);
-    }, (err) => {
-        console.error("Error fetching submissions:", err);
+    return poll(
+      () => rds.listAttempts(interviewId),
+      ({ attempts }) => {
+        const submissionsData = (attempts || [])
+          .filter((row: any) => row.status === 'Shortlist')
+          .map((row: any) => ({ ...row, id: row.id } as InterviewSubmission));
+        setSubmissions(submissionsData);
         setLoading(false);
-    });
-
-    return () => unsubscribe();
+      },
+      (err) => {
+        console.error('Error fetching submissions:', err);
+        setLoading(false);
+      },
+      8000
+    );
   }, [interviewId]);
 
   const getScoreValue = (score: unknown): number => {

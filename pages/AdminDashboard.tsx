@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
-import { collection, query, where, doc, deleteDoc, setDoc, serverTimestamp, updateDoc, orderBy, onSnapshot, collectionGroup } from 'firebase/firestore';
-import { initializeApp, deleteApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { db, auth } from '../services/firebase';
+import { createCognitoUser, setCognitoUserEnabled } from '../services/authService';
+import { rds, poll } from '../services/rdsApi';
+import { useAuth } from '../context/AuthContext';
 import { RevenueAreaChart, UserPieChart, JobBarChart } from '../components/AdminCharts';
 import { GShapeAnimation } from '../components/AdminAnimations';
 import { Users, FileText, DollarSign, UserPlus, Briefcase, CheckCircle, XCircle, Trash2, Bell, Sun, Moon, Monitor, Video, Menu, X, Search, ShieldCheck, ShieldX, BookOpen, MessageSquare as MessageSquareIcon, Bug, Star, Activity, Database, Key, Globe, Copy, Check, Code, Server, TrendingUp, Gauge, Download, HardDrive } from 'lucide-react';
@@ -13,7 +12,28 @@ import { useMessageBox } from '../components/MessageBox';
 import Logo from '../components/Logo';
 import AdminApiTester from './AdminApiTester';
 
+/** Compatibility shim so existing `.toDate()` UI code works with ISO strings from RDS. */
+function stamp(value: any) {
+  if (!value) return null;
+  if (typeof value?.toDate === 'function') return value;
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return {
+    toDate: () => d,
+    seconds: Math.floor(d.getTime() / 1000),
+  };
+}
+
+function withStamps<T extends Record<string, any>>(row: T, keys: string[] = ['createdAt', 'submittedAt', 'acceptedAt', 'updatedAt']): T {
+  const next: any = { ...row };
+  for (const key of keys) {
+    if (key in next) next[key] = stamp(next[key]);
+  }
+  return next;
+}
+
 const AdminDashboard: React.FC = () => {
+  const { signOut, user, userProfile } = useAuth();
   // Real-time Data State
   const [requests, setRequests] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
@@ -56,136 +76,82 @@ const AdminDashboard: React.FC = () => {
   const contentRef = useRef<HTMLDivElement>(null);
   const hasAnimated = useRef(false);
 
-  // Load Real-time Data
+  // Load dashboard data from RDS (poll replaces Firestore onSnapshot)
   useEffect(() => {
-    // 1. Recruiter Requests
-    const qRequests = query(collection(db, 'recruiterRequests'), where('status', '==', 'pending'));
-    const unsubRequests = onSnapshot(qRequests, (snap) => {
-      setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
-    // 2. Users
-    const qUsers = query(collection(db, 'users'));
-    const unsubUsers = onSnapshot(qUsers, (snap) => {
-      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
-    // 3. Posted Interviews (fetched instead of legacy jobs)
-    const qJobs = query(collection(db, 'interviews'), orderBy('createdAt', 'desc'));
-    const unsubJobs = onSnapshot(qJobs, (snap) => {
-      setJobs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
-    // 4. Transactions
-    const qTransactions = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'));
-    const unsubTransactions = onSnapshot(qTransactions, (snap) => {
-      setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
-    // 5. Interviews - Real-time tracking
-    const qInterviews = query(collection(db, 'interviews'), orderBy('createdAt', 'desc'));
-    const unsubInterviews = onSnapshot(qInterviews, (snap) => {
-      setInterviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false); // Initial load done when interviews load
-    });
-
-    // 6. Admin Profile - Real-time
-    let unsubAdmin = () => { };
-    const currentUser = auth.currentUser;
-    if (currentUser) {
-      unsubAdmin = onSnapshot(doc(db, 'users', currentUser.uid), (docSnap) => {
-        if (docSnap.exists()) {
-          setAdminData({ id: docSnap.id, ...docSnap.data() });
+    const stoppers = [
+      poll(
+        () => rds.listRecruiterRequests(),
+        (data) => setRequests((data.requests || []).map((r) => withStamps(r))),
+        (err) => console.error('Error loading recruiter requests:', err)
+      ),
+      poll(
+        () => rds.listUsers(),
+        (data) => setUsers((data.users || []).map((u) => withStamps(u))),
+        (err) => console.error('Error loading users:', err)
+      ),
+      poll(
+        () => rds.listInterviews(),
+        (data) => {
+          const list = (data.interviews || []).map((i) => withStamps(i));
+          setJobs(list);
+          setInterviews(list);
+          setLoading(false);
+        },
+        (err) => {
+          console.error('Error loading interviews:', err);
+          setLoading(false);
         }
-      });
+      ),
+      poll(
+        () => rds.listTransactions(),
+        (data) => setTransactions((data.transactions || []).map((t) => withStamps(t))),
+        (err) => console.error('Error loading transactions:', err)
+      ),
+      poll(
+        () => rds.listContactSubmissions(),
+        (data) => setContactSubmissions((data.submissions || []).map((s) => withStamps(s))),
+        (err) => console.error('Error loading contact submissions:', err)
+      ),
+      poll(
+        () => rds.listBugReports(),
+        (data) => setBugReports((data.reports || []).map((b) => withStamps(b))),
+        (err) => console.error('Error loading bug reports:', err)
+      ),
+      poll(
+        () => rds.listReviews(),
+        (data) => setAllReviews((data.reviews || []).map((r) => withStamps(r))),
+        (err) => console.error('Error loading reviews:', err)
+      ),
+      poll(
+        () => rds.listConsents(),
+        (data) => setCandidateConsents((data.consents || []).map((c) => withStamps(c))),
+        (err) => console.error('Error loading candidate consents:', err)
+      ),
+      poll(
+        () => rds.getSettings('pricing'),
+        (data: any) => {
+          const price = Number(data?.settings?.perInterviewPrice ?? 150);
+          setPerInterviewPrice(price || 150);
+        },
+        (err) => console.error('Error loading pricing settings:', err)
+      ),
+      poll(
+        () => rds.listAttemptsByRecruiter(),
+        (data) => {
+          const list = (data.attempts || []).map((a) => withStamps(a));
+          list.sort((a, b) => (b.submittedAt?.seconds || 0) - (a.submittedAt?.seconds || 0));
+          setAllAttempts(list);
+        },
+        (err) => console.error('Error loading attempts:', err)
+      ),
+    ];
+
+    if (userProfile || user) {
+      setAdminData(userProfile || user);
     }
 
-    // 7. Contact Submissions
-    const qContact = query(collection(db, 'contactSubmissions'), orderBy('createdAt', 'desc'));
-    const unsubContact = onSnapshot(qContact, (snap) => {
-      setContactSubmissions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
-    // 8. Bug Reports
-    const qBugs = query(collection(db, 'bugReports'), orderBy('createdAt', 'desc'));
-    const unsubBugs = onSnapshot(qBugs, (snap) => {
-      setBugReports(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
-    // 9. All Reviews
-    const qReviews = query(collection(db, 'reviews'), orderBy('createdAt', 'desc'));
-    const unsubReviews = onSnapshot(qReviews, (snap) => {
-      setAllReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
-    // 10. Universal Interview Price - Real-time
-    const unsubPricing = onSnapshot(doc(db, 'settings', 'pricing'), (docSnap) => {
-      if (docSnap.exists()) {
-        setPerInterviewPrice(Number(docSnap.data().perInterviewPrice) || 150);
-      }
-    });
-
-    const qConsents = query(collection(db, 'candidateConsents'), orderBy('createdAt', 'desc'));
-    const unsubConsents = onSnapshot(qConsents, (snap) => {
-      setCandidateConsents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (error) => {
-      console.error('Error loading candidate consents:', error);
-    });
-
-    return () => {
-      unsubRequests();
-      unsubUsers();
-      unsubJobs();
-      unsubTransactions();
-      unsubInterviews();
-      unsubAdmin();
-      unsubContact();
-      unsubBugs();
-      unsubReviews();
-      unsubPricing();
-      unsubConsents();
-    };
-  }, []);
-
-  // Live tracking of all attempts across all recruiter interviews
-  useEffect(() => {
-    if (interviews.length === 0) return;
-
-    const unsubs: (() => void)[] = [];
-    const attemptsMap = new Map<string, any[]>();
-
-    interviews.forEach(interview => {
-      const q = collection(db, 'interviews', interview.id, 'attempts');
-      const unsub = onSnapshot(q, (snap) => {
-        const list = snap.docs.map(doc => ({
-          id: doc.id,
-          interviewId: interview.id,
-          ...doc.data()
-        }));
-        attemptsMap.set(interview.id, list);
-
-        // Merge all lists and update state
-        const all: any[] = [];
-        attemptsMap.forEach(attemptsList => {
-          all.push(...attemptsList);
-        });
-        // Sort by submittedAt desc
-        all.sort((a, b) => {
-          const timeA = a.submittedAt?.seconds || 0;
-          const timeB = b.submittedAt?.seconds || 0;
-          return timeB - timeA;
-        });
-        setAllAttempts(all);
-      }, (err) => {
-        console.error(`Error loading attempts for interview ${interview.id}:`, err);
-      });
-      unsubs.push(unsub);
-    });
-
-    return () => {
-      unsubs.forEach(unsub => unsub());
-    };
-  }, [interviews]);
+    return () => stoppers.forEach((stop) => stop());
+  }, [user, userProfile]);
 
   // GSAP Initial Page Animation
   useLayoutEffect(() => {
@@ -193,7 +159,6 @@ const AdminDashboard: React.FC = () => {
     hasAnimated.current = true;
 
     const ctx = gsap.context(() => {
-      // Header animation
       if (headerRef.current) {
         gsap.fromTo(headerRef.current,
           { y: -30, opacity: 0 },
@@ -201,13 +166,14 @@ const AdminDashboard: React.FC = () => {
         );
       }
 
-      // Sidebar animation
       if (sidebarRef.current) {
         const navItems = sidebarRef.current.querySelectorAll('button');
-        gsap.fromTo(navItems,
-          { x: -30, opacity: 0 },
-          { x: 0, opacity: 1, duration: 0.5, stagger: 0.08, ease: "power2.out", delay: 0.2 }
-        );
+        if (navItems.length) {
+          gsap.fromTo(navItems,
+            { x: -30, opacity: 0 },
+            { x: 0, opacity: 1, duration: 0.5, stagger: 0.08, ease: "power2.out", delay: 0.2 }
+          );
+        }
       }
     });
 
@@ -218,68 +184,81 @@ const AdminDashboard: React.FC = () => {
   useEffect(() => {
     if (loading) return;
 
+    let timeoutId: number | undefined;
     const ctx = gsap.context(() => {
       if (activeTab === 'overview') {
-        // Animate stat cards
         if (statsRef.current) {
           const cards = statsRef.current.querySelectorAll('.stat-card');
-          gsap.fromTo(cards,
-            { y: 25, opacity: 0, scale: 0.95 },
-            { y: 0, opacity: 1, scale: 1, duration: 0.5, stagger: 0.1, ease: "power3.out" }
+          if (cards.length) {
+            gsap.fromTo(cards,
+              { y: 25, opacity: 0, scale: 0.95 },
+              { y: 0, opacity: 1, scale: 1, duration: 0.5, stagger: 0.1, ease: "power3.out" }
+            );
+          }
+        }
+        const allCharts = document.querySelectorAll('.chart-box');
+        if (allCharts.length) {
+          gsap.fromTo(allCharts,
+            { y: 30, opacity: 0, scale: 0.98 },
+            { y: 0, opacity: 1, scale: 1, duration: 0.6, stagger: 0.15, ease: "power2.out", delay: 0.3 }
           );
         }
-        // Animate all charts (including job bar chart)
-        const allCharts = document.querySelectorAll('.chart-box');
-        gsap.fromTo(allCharts,
-          { y: 30, opacity: 0, scale: 0.98 },
-          { y: 0, opacity: 1, scale: 1, duration: 0.6, stagger: 0.15, ease: "power2.out", delay: 0.3 }
-        );
       } else {
-        // Animate tab content with small delay to allow DOM to render
-        setTimeout(() => {
+        timeoutId = window.setTimeout(() => {
           const items = document.querySelectorAll('.animated-item');
-          gsap.fromTo(items,
-            { y: 20, opacity: 0 },
-            { y: 0, opacity: 1, duration: 0.4, stagger: 0.04, ease: "power2.out" }
-          );
+          if (items.length) {
+            gsap.fromTo(items,
+              { y: 20, opacity: 0 },
+              { y: 0, opacity: 1, duration: 0.4, stagger: 0.04, ease: "power2.out" }
+            );
+          }
         }, 10);
       }
     });
 
-    return () => ctx.revert();
+    return () => {
+      if (timeoutId) window.clearTimeout(timeoutId);
+      ctx.revert();
+    };
   }, [activeTab, loading]);
 
-  // --- Actions (Preserved Logic) ---
+  // --- Actions ---
 
   const handleApproveRecruiter = async (req: any) => {
     const tempPassword = prompt(`Enter a temporary password for ${req.email}:`, "Password123!");
     if (!tempPassword) return;
 
+    if (tempPassword.length < 8) {
+      messageBox.showError('Password must be at least 8 characters and include upper, lower, and a number (Cognito policy).');
+      return;
+    }
+
     setProcessingId(req.id);
-    const secondaryApp = initializeApp(auth.app.options, "SecondaryApp");
-    const secondaryAuth = getAuth(secondaryApp);
 
     try {
-      const cred = await createUserWithEmailAndPassword(secondaryAuth, req.email, tempPassword);
-      await setDoc(doc(db, 'users', cred.user.uid), {
-        uid: cred.user.uid,
+      const created = await createCognitoUser({
         email: req.email,
-        fullname: req.fullname,
+        password: tempPassword,
+        name: req.fullname,
         role: 'recruiter',
-        experience: req.experience || 0,
-        adminVerified: true,
-        accountStatus: 'active',
-        createdAt: serverTimestamp(),
-        profilePhotoURL: null
       });
-      await deleteDoc(doc(db, 'recruiterRequests', req.id));
-      await signOut(secondaryAuth);
-      await deleteApp(secondaryApp);
-      messageBox.showSuccess(`Recruiter created successfully!\nEmail: ${req.email}\nPassword: ${tempPassword}`);
+
+      try {
+        await rds.updateUser(created.uid, {
+          fullname: req.fullname,
+          experience: req.experience || 0,
+          adminVerified: true,
+          accountStatus: 'active',
+        });
+      } catch (_) {
+        // user row may already be complete from auth API
+      }
+      await rds.deleteRecruiterRequest(req.id);
+      setRequests((prev) => prev.filter((r) => r.id !== req.id));
+      messageBox.showSuccess(`Recruiter created in Cognito + RDS!\nEmail: ${req.email}\nPassword: ${tempPassword}`);
     } catch (error: any) {
       console.error("Error approving recruiter:", error);
       messageBox.showError("Failed to create recruiter: " + error.message);
-      await deleteApp(secondaryApp);
     } finally {
       setProcessingId(null);
     }
@@ -287,39 +266,71 @@ const AdminDashboard: React.FC = () => {
 
   const handleRejectRequest = (id: string) => {
     messageBox.showConfirm("Are you sure you want to reject this request?", async () => {
-      try { await deleteDoc(doc(db, 'recruiterRequests', id)); } catch (error) { console.error("Error rejecting:", error); }
+      try {
+        await rds.deleteRecruiterRequest(id);
+        setRequests((prev) => prev.filter((r) => r.id !== id));
+      } catch (error) {
+        console.error("Error rejecting:", error);
+      }
     });
   };
 
-  const toggleUserStatus = async (user: any) => {
-    if (user.role === 'admin') return;
-    const newStatus = user.accountStatus === 'active' ? 'disabled' : 'active';
-    try { await updateDoc(doc(db, 'users', user.id), { accountStatus: newStatus }); } catch (error) { console.error("Error updating status:", error); }
+  const toggleUserStatus = async (userRow: any) => {
+    if (userRow.role === 'admin') return;
+    const newStatus = userRow.accountStatus === 'active' ? 'disabled' : 'active';
+    try {
+      await rds.updateUser(userRow.id, { accountStatus: newStatus });
+      setUsers((prev) => prev.map((u) => (u.id === userRow.id ? { ...u, accountStatus: newStatus } : u)));
+      if (userRow.email) {
+        try {
+          await setCognitoUserEnabled(userRow.email, newStatus === 'active');
+        } catch (cognitoErr) {
+          console.warn('Cognito enable/disable failed (RDS status still updated):', cognitoErr);
+        }
+      }
+    } catch (error) {
+      console.error("Error updating status:", error);
+    }
   };
 
   const handleDeleteJob = (jobId: string) => {
     messageBox.showConfirm("Are you sure you want to delete this job posting?", async () => {
-      try { await deleteDoc(doc(db, 'jobs', jobId)); } catch (error) { console.error("Error deleting job:", error); }
+      try {
+        await rds.deleteInterview(jobId);
+        setJobs((prev) => prev.filter((j) => j.id !== jobId));
+        setInterviews((prev) => prev.filter((j) => j.id !== jobId));
+      } catch (error) {
+        console.error("Error deleting job:", error);
+      }
     });
   };
 
   const handleDeleteUser = (userId: string) => {
     messageBox.showConfirm("Are you sure you want to delete this user?", async () => {
       try {
-        await deleteDoc(doc(db, 'users', userId));
-        try { await deleteDoc(doc(db, 'profiles', userId)); } catch (e) { }
-      } catch (error) { console.error("Error deleting user:", error); messageBox.showError("Failed to delete user."); }
+        await rds.deleteUser(userId);
+        setUsers((prev) => prev.filter((u) => u.id !== userId));
+      } catch (error) {
+        console.error("Error deleting user:", error);
+        messageBox.showError("Failed to delete user.");
+      }
     });
   };
 
-  const toggleEmailVerification = async (user: any) => {
-    const newStatus = !user.adminVerified;
-    try { await updateDoc(doc(db, 'users', user.id), { adminVerified: newStatus }); } catch (error) { console.error("Error updating verification:", error); }
+  const toggleEmailVerification = async (userRow: any) => {
+    const newStatus = !userRow.adminVerified;
+    try {
+      await rds.updateUser(userRow.id, { adminVerified: newStatus });
+      setUsers((prev) => prev.map((u) => (u.id === userRow.id ? { ...u, adminVerified: newStatus } : u)));
+    } catch (error) {
+      console.error("Error updating verification:", error);
+    }
   };
 
   const handleMarkContactRead = async (id: string) => {
     try {
-      await updateDoc(doc(db, 'contactSubmissions', id), { status: 'read' });
+      await rds.updateContactSubmission(id, { status: 'read' });
+      setContactSubmissions((prev) => prev.map((c) => (c.id === id ? { ...c, status: 'read' } : c)));
       messageBox.showSuccess("Marked as read");
     } catch (error) {
       console.error("Error updating contact:", error);
@@ -329,7 +340,8 @@ const AdminDashboard: React.FC = () => {
 
   const handleMarkBugFixed = async (id: string) => {
     try {
-      await updateDoc(doc(db, 'bugReports', id), { status: 'fixed' });
+      await rds.updateBugReport(id, { status: 'fixed' });
+      setBugReports((prev) => prev.map((b) => (b.id === id ? { ...b, status: 'fixed' } : b)));
       messageBox.showSuccess("Marked as fixed");
     } catch (error) {
       console.error("Error updating bug:", error);
@@ -339,7 +351,10 @@ const AdminDashboard: React.FC = () => {
 
   const handleApproveReview = async (reviewId: string, currentStatus: boolean) => {
     try {
-      await updateDoc(doc(db, 'reviews', reviewId), { approved: !currentStatus });
+      await rds.updateReview(reviewId, { approved: !currentStatus });
+      setAllReviews((prev) =>
+        prev.map((r) => (r.id === reviewId ? { ...r, approved: !currentStatus } : r))
+      );
       messageBox.showSuccess(`Review status updated to ${!currentStatus ? 'Approved' : 'Pending'}.`);
     } catch (error) {
       console.error("Error updating review status:", error);
@@ -350,7 +365,8 @@ const AdminDashboard: React.FC = () => {
   const handleDeleteReview = (reviewId: string) => {
     messageBox.showConfirm("Are you sure you want to delete this review permanently?", async () => {
       try {
-        await deleteDoc(doc(db, 'reviews', reviewId));
+        await rds.deleteReview(reviewId);
+        setAllReviews((prev) => prev.filter((r) => r.id !== reviewId));
         messageBox.showSuccess("Review deleted.");
       } catch (error) {
         console.error("Error deleting review:", error);
@@ -772,7 +788,7 @@ const AdminDashboard: React.FC = () => {
                 👤 View Profile
               </a>
               <button
-                onClick={() => signOut(auth)}
+                onClick={() => signOut()}
                 className="w-full text-left px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors flex items-center gap-2"
               >
                 <Trash2 size={14} className="rotate-180" /> Sign Out

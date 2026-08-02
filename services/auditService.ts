@@ -1,13 +1,12 @@
-import { collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
-import { db } from './firebase';
 import { AuditLog } from '../types';
+import { poll, rds } from './rdsApi';
 
 /**
- * Log a team activity event to Cloud Firestore
+ * Log a team activity event to Postgres via the data API.
  */
 export async function logTeamActivity(
   teamId: string,
-  action: 'job_created' | 'interview_created' | 'candidate_added' | 'candidate_invited' | 'candidate_whatsapp_invited' | 'candidate_reminder_sent' | 'test_created' | 'secondary_recruiter_added' | 'status_updated' | 'resume_uploaded' | string,
+  action: string,
   details: string,
   performedBy: {
     uid: string;
@@ -20,7 +19,7 @@ export async function logTeamActivity(
   if (!teamId) return;
 
   try {
-    await addDoc(collection(db, 'auditLogs'), {
+    await rds.createAuditLog({
       teamId,
       action,
       details,
@@ -29,10 +28,9 @@ export async function logTeamActivity(
         name: performedBy.name || performedBy.email || 'Team Member',
         email: performedBy.email || '',
         role: performedBy.role || 'recruiter',
-        designation: performedBy.designation || 'Recruiter'
+        designation: performedBy.designation || 'Recruiter',
       },
-      createdAt: serverTimestamp(),
-      isoTimestamp: new Date().toISOString()
+      isoTimestamp: new Date().toISOString(),
     });
   } catch (err) {
     console.error('[Audit Log Error]', err);
@@ -40,7 +38,7 @@ export async function logTeamActivity(
 }
 
 /**
- * Subscribe to real-time audit logs for a specific team
+ * Poll audit logs for a team (replaces Firestore onSnapshot).
  */
 export function subscribeTeamAuditLogs(
   teamId: string,
@@ -51,46 +49,24 @@ export function subscribeTeamAuditLogs(
     return () => {};
   }
 
-  const q = query(
-    collection(db, 'auditLogs'),
-    where('teamId', '==', teamId),
-    orderBy('createdAt', 'desc')
-  );
-
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const logs: AuditLog[] = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          teamId: data.teamId,
-          action: data.action,
-          details: data.details,
-          performedBy: data.performedBy || {},
-          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.isoTimestamp || new Date().toISOString()
-        };
-      });
-      callback(logs);
+  return poll(
+    () => rds.listAuditLogs(teamId),
+    ({ logs }) => {
+      callback(
+        (logs || []).map((row: any) => ({
+          id: row.id,
+          teamId: row.team_id || row.teamId,
+          action: row.action,
+          details: row.details,
+          performedBy: row.performed_by || row.performedBy || {},
+          createdAt: row.created_at || row.iso_timestamp || row.isoTimestamp || new Date().toISOString(),
+        }))
+      );
     },
     (err) => {
       console.warn('[Audit Logs Subscription Warning]', err);
-      // Fallback query without orderBy if index is building
-      const fallbackQuery = query(collection(db, 'auditLogs'), where('teamId', '==', teamId));
-      getDocs(fallbackQuery).then(snapshot => {
-        const logs: AuditLog[] = snapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            teamId: data.teamId,
-            action: data.action,
-            details: data.details,
-            performedBy: data.performedBy || {},
-            createdAt: data.isoTimestamp || new Date().toISOString()
-          };
-        }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        callback(logs);
-      }).catch(() => callback([]));
-    }
+      callback([]);
+    },
+    10000
   );
 }

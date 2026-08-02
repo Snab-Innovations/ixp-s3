@@ -1,13 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, deleteDoc, doc, getDocs, onSnapshot } from 'firebase/firestore';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
-import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { InterviewOverviewSkeleton } from '../components/ui/interview-loading-skeleton';
 import { Interview } from '../types';
 import EditJobModal from './EditJob';
+import { poll, rds } from '../services/rdsApi';
 
 const formatDate = (value: any) => {
   if (!value) return 'N/A';
@@ -121,43 +120,48 @@ const InterviewOverview: React.FC = () => {
       return;
     }
 
-    const unsubscribe = onSnapshot(
-      doc(db, 'interviews', interviewId),
-      async (snapshot) => {
-        if (!snapshot.exists()) {
+    return poll(
+      async () => {
+        const [{ interview: row }, { attempts }] = await Promise.all([
+          rds.getInterview(interviewId),
+          rds.listAttempts(interviewId),
+        ]);
+        return { row, attempts: attempts || [] };
+      },
+      ({ row, attempts }) => {
+        if (!row) {
           setInterview(null);
+          setResponsesCount(0);
           setLoading(false);
           return;
         }
 
-        const data = { id: snapshot.id, ...snapshot.data() } as Interview;
+        const data = { ...row, id: row.id } as Interview;
         const currentTeamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
         const interviewTeamId = (data as any).teamId || (data as any).recruiterUID;
-        const isTeamMember = interviewTeamId === currentTeamId || (data as any).recruiterUID === user.uid || userProfile?.role === 'admin';
+        const isTeamMember =
+          interviewTeamId === currentTeamId ||
+          (data as any).recruiterUID === user.uid ||
+          userProfile?.role === 'admin';
 
         if (!isTeamMember) {
           setInterview(null);
+          setResponsesCount(0);
           setLoading(false);
           return;
         }
 
         setInterview(data);
-        try {
-          const attempts = await getDocs(collection(db, 'interviews', interviewId, 'attempts'));
-          setResponsesCount(attempts.size);
-        } catch (error) {
-          console.error('Error loading interview attempts:', error);
-        }
+        setResponsesCount(attempts.length);
         setLoading(false);
       },
       (error) => {
         console.error('Error loading interview:', error);
         setLoading(false);
-      }
+      },
+      8000
     );
-
-    return () => unsubscribe();
-  }, [interviewId, user]);
+  }, [interviewId, user, userProfile?.teamId, userProfile?.parentRecruiterId, userProfile?.role]);
 
   const details = useMemo(() => {
     if (!interview) return [];
@@ -184,7 +188,7 @@ const InterviewOverview: React.FC = () => {
     if (!interview) return;
     messageBox.showConfirm('Are you sure you want to delete this interview?', async () => {
       try {
-        await deleteDoc(doc(db, 'interviews', interview.id));
+        await rds.deleteInterview(interview.id);
         messageBox.showSuccess('Interview deleted.');
         navigate('/recruiter/interviews');
       } catch (error) {

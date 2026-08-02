@@ -6,12 +6,20 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "auth:server": "node api-server/server.js",
+    "auth:bootstrap-admin": "node scripts/bootstrap-cognito-admin.mjs",
+    "auth:migrate-users": "node scripts/migrate-users-to-cognito.mjs",
+    "db:migrate": "node api-server/db/migrate.js",
+    "db:ping": "node -e \"import('./api-server/db/pool.js').then(async m=>{console.log(await m.pingDb()); await m.pool?.end()})\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.1101.0",
     "@aws-sdk/client-s3": "^3.1101.0",
     "@aws-sdk/client-sesv2": "^3.1101.0",
+    "amazon-cognito-identity-js": "^6.3.20",
+    "aws-jwt-verify": "^5.2.1",
     "clsx": "^2.1.1",
     "convertapi-js": "^1.0.8",
     "cors": "^2.8.6",
@@ -28,6 +36,7 @@
     "node-fetch": "^3.3.2",
     "openai": "^7.3.0",
     "pdfjs-dist": "^5.4.530",
+    "pg": "^8.22.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.6",
@@ -38,6 +47,7 @@
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.2",
     "@types/node": "^22.14.0",
+    "@types/pg": "^8.20.3",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.23",
     "postcss": "^8.5.6",

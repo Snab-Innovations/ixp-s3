@@ -9,18 +9,20 @@ export const GShapeAnimation: React.FC = () => {
         if (!svg) return;
 
         const ctx = gsap.context(() => {
-            // Create a timeline for the G shape drawing
+            const paths = svg.querySelectorAll('.g-path');
+            const group = svg.querySelector('.g-group');
+            if (!paths.length || !group) return;
+
             const tl = gsap.timeline({ repeat: -1, yoyo: true, defaults: { ease: "power2.inOut" } });
 
-            tl.fromTo(".g-path",
+            tl.fromTo(paths,
                 { strokeDasharray: 300, strokeDashoffset: 300, opacity: 0.2 },
                 { strokeDashoffset: 0, opacity: 1, duration: 2, stagger: 0.2 }
             )
-                .to(".g-path", { stroke: "#a855f7", duration: 1 }, "-=1") // Purple tint (primary)
-                .to(".g-path", { stroke: "#ffffff", duration: 1 }, "-=0.5");
+                .to(paths, { stroke: "#a855f7", duration: 1 }, "-=1")
+                .to(paths, { stroke: "#ffffff", duration: 1 }, "-=0.5");
 
-            // Rotate the whole group slowly
-            gsap.to(".g-group", { rotation: 360, transformOrigin: "center", duration: 20, repeat: -1, ease: "none" });
+            gsap.to(group, { rotation: 360, transformOrigin: "center", duration: 20, repeat: -1, ease: "none" });
 
         }, svg);
 

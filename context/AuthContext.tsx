@@ -1,15 +1,28 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { auth, db } from '../services/firebase';
 import { UserProfile } from '../types';
+import {
+  clearCognitoSession,
+  loadStoredCognitoSession,
+  refreshCognitoSession,
+  signOutAll,
+} from '../services/authService';
+import { ApiError, rds, poll } from '../services/rdsApi';
+
+/** Lightweight user shape replacing Firebase Auth User for Cognito + RDS. */
+export type AuthUser = {
+  uid: string;
+  email: string | null;
+  displayName?: string | null;
+  phoneNumber?: string | null;
+};
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   userProfile: UserProfile | null;
   loading: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  setSessionUser: (user: AuthUser | null, profile?: UserProfile | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -18,115 +31,144 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   signOut: async () => {},
   refreshProfile: async () => {},
+  setSessionUser: () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (uid: string) => {
-    try {
-      const profileSnap = await getDoc(doc(db, 'profiles', uid));
-      const userSnap = await getDoc(doc(db, 'users', uid));
-
-      let merged: any = {};
-      if (userSnap.exists()) {
-        merged = { ...userSnap.data() };
-      }
-      if (profileSnap.exists()) {
-        merged = { ...merged, ...profileSnap.data() };
-      }
-
-      if (merged.email || merged.name || merged.displayName || merged.phoneNumber) {
-        setUserProfile({
-          ...merged,
-          name: merged.name || merged.displayName || 'Recruiter',
-          phone: merged.phoneNumber || merged.phone || merged.contactNumber || '',
-        } as UserProfile);
-      }
-    } catch (err) {
-      console.error("Error fetching profile:", err);
-    }
+  const setSessionUser = (nextUser: AuthUser | null, profile?: UserProfile | null) => {
+    setUser(nextUser);
+    if (profile !== undefined) setUserProfile(profile);
   };
 
-  useEffect(() => {
-    let unSubProfile: (() => void) | null = null;
-    let unSubUser: (() => void) | null = null;
-
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (unSubProfile) { unSubProfile(); unSubProfile = null; }
-      if (unSubUser) { unSubUser(); unSubUser = null; }
-
-      setUser(currentUser);
-      if (currentUser) {
-        let profileData: any = {};
-        let userData: any = {};
-
-        const updateCombined = () => {
-          const combined = { ...userData, ...profileData };
-          const resolvedName = combined.name || combined.displayName || currentUser.displayName || 'Recruiter';
-          const resolvedPhone = combined.phoneNumber || combined.phone || combined.contactNumber || currentUser.phoneNumber || '';
-
-          setUserProfile({
-            ...combined,
-            uid: currentUser.uid,
-            email: currentUser.email || combined.email || '',
-            name: resolvedName,
-            phone: resolvedPhone,
-            phoneNumber: resolvedPhone,
-          } as UserProfile);
-        };
-
-        unSubProfile = onSnapshot(
-          doc(db, 'profiles', currentUser.uid),
-          (docSnap) => {
-            if (docSnap.exists()) profileData = docSnap.data();
-            updateCombined();
-            setLoading(false);
-          },
-          async () => {
-            await fetchProfile(currentUser.uid);
-            setLoading(false);
-          }
-        );
-
-        unSubUser = onSnapshot(
-          doc(db, 'users', currentUser.uid),
-          (docSnap) => {
-            if (docSnap.exists()) userData = docSnap.data();
-            updateCombined();
-            setLoading(false);
-          },
-          () => {}
-        );
-      } else {
-        setUserProfile(null);
-      }
-      setLoading(false);
-    });
-
-    return () => {
-      unsubscribe();
-      if (unSubProfile) unSubProfile();
-      if (unSubUser) unSubUser();
-    };
-  }, []);
-
-  const signOut = async () => {
-    await firebaseSignOut(auth);
+  const clearLocalSession = () => {
+    clearCognitoSession();
     setUser(null);
     setUserProfile(null);
   };
 
   const refreshProfile = async () => {
-    if (user) await fetchProfile(user.uid);
+    try {
+      const { user: profile } = await rds.me();
+      setUserProfile(profile as UserProfile);
+      setUser({
+        uid: profile.uid || profile.id,
+        email: profile.email || null,
+        displayName: profile.name || profile.displayName || profile.fullname || null,
+        phoneNumber: profile.phone || profile.phoneNumber || null,
+      });
+    } catch (err) {
+      console.error('Error refreshing profile from RDS:', err);
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        clearLocalSession();
+      }
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    let stopPoll: (() => void) | null = null;
+    let refreshTimer: number | undefined;
+
+    const scheduleTokenRefresh = () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      const stored = loadStoredCognitoSession();
+      if (!stored?.refreshToken) return;
+      const expiresAt = stored.expiresAt || Date.now() + 50 * 60 * 1000;
+      const delay = Math.max(30_000, expiresAt - Date.now() - 60_000);
+      refreshTimer = window.setTimeout(async () => {
+        const ok = await refreshCognitoSession();
+        if (!ok) {
+          if (!cancelled) clearLocalSession();
+          return;
+        }
+        if (!cancelled) scheduleTokenRefresh();
+      }, delay);
+    };
+
+    const bootstrap = async () => {
+      const stored = loadStoredCognitoSession();
+      if (!stored?.idToken) {
+        if (!cancelled) {
+          setUser(null);
+          setUserProfile(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (stored.expiresAt && stored.expiresAt < Date.now() + 60_000) {
+        const refreshed = await refreshCognitoSession();
+        if (!refreshed) {
+          if (!cancelled) {
+            clearLocalSession();
+            setLoading(false);
+          }
+          return;
+        }
+      }
+
+      try {
+        const { user: profile } = await rds.me();
+        if (cancelled) return;
+        setUser({
+          uid: profile.uid || profile.id,
+          email: profile.email || null,
+          displayName: profile.name || profile.displayName || profile.fullname || null,
+          phoneNumber: profile.phone || null,
+        });
+        setUserProfile(profile as UserProfile);
+        scheduleTokenRefresh();
+
+        stopPoll = poll(
+          () => rds.me(),
+          ({ user: next }) => {
+            setUserProfile(next as UserProfile);
+          },
+          (err) => {
+            if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+              if (stopPoll) {
+                stopPoll();
+                stopPoll = null;
+              }
+              if (!cancelled) clearLocalSession();
+            }
+          },
+          15000
+        );
+      } catch (err) {
+        console.warn('Session restore failed:', err);
+        if (!cancelled) clearLocalSession();
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void bootstrap();
+
+    return () => {
+      cancelled = true;
+      if (stopPoll) stopPoll();
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+    };
+  }, []);
+
+  const signOut = async () => {
+    await signOutAll();
+    clearCognitoSession();
+    setUser(null);
+    setUserProfile(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, signOut, refreshProfile }}>
+    <AuthContext.Provider
+      value={{ user, userProfile, loading, signOut, refreshProfile, setSessionUser }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import {
-  buildCompanyRateLimitStatus,
   CompanyRateLimitStatus,
   loadCompanyRateLimitStatus,
+  subscribeCompanyRateLimits,
 } from '../services/rateLimitService';
 
 export const useCompanyRateLimits = () => {
@@ -29,18 +27,20 @@ export const useCompanyRateLimits = () => {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, 'rateLimits', 'company'), snapshot => {
-      setStatus(buildCompanyRateLimitStatus(snapshot.data(), snapshot.exists()));
-      setError(null);
-      setLoading(false);
-    }, snapshotError => {
-      console.error('Unable to watch company rate limits:', snapshotError);
-      setError('Unable to verify the company rate limit. Please try again.');
-      setLoading(false);
-    });
-    return unsubscribe;
+    const stop = subscribeCompanyRateLimits(
+      (next) => {
+        setStatus(next);
+        setError(null);
+        setLoading(false);
+      },
+      (snapshotError) => {
+        console.error('Unable to watch company rate limits:', snapshotError);
+        setError('Unable to verify the company rate limit. Please try again.');
+        setLoading(false);
+      }
+    );
+    return stop;
   }, []);
 
   return { status, loading, error, refresh };
 };
-

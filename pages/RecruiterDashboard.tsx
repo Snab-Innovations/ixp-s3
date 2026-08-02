@@ -1,11 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  collection,
-  onSnapshot,
-  query,
-  where,
-} from 'firebase/firestore';
-import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { Interview } from '../types';
@@ -27,6 +20,7 @@ import {
   ChartTooltipContent,
 } from '../components/ui/line-chart';
 import { RecruiterTeamPanel } from '../components/RecruiterTeamPanel';
+import { poll, rds } from '../services/rdsApi';
 
 type TimestampLike =
   | {
@@ -270,77 +264,59 @@ const RecruiterDashboard: React.FC = () => {
 
     const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
 
-    const jobsQuery = teamId
-      ? query(collection(db, 'jobs'), where('teamId', '==', teamId))
-      : query(collection(db, 'jobs'), where('recruiterUID', '==', user.uid));
-
-    const interviewsQuery = teamId
-      ? query(collection(db, 'interviews'), where('teamId', '==', teamId))
-      : query(collection(db, 'interviews'), where('recruiterUID', '==', user.uid));
-
-    const testsQuery = teamId
-      ? query(collection(db, 'tests'), where('teamId', '==', teamId))
-      : query(collection(db, 'tests'), where('recruiterUID', '==', user.uid));
-
-    const unsubscribeJobs = onSnapshot(
-      jobsQuery,
-      (snapshot) => {
-        const records = snapshot.docs.map((snapshotDoc) => ({
-          id: snapshotDoc.id,
-          ...snapshotDoc.data(),
-        } as RecruiterJobRecord));
-        setJobDocs(records);
-        setLoadingJobs(false);
-      },
-      (error) => {
-        console.error('Error fetching recruiter jobs:', error);
-        setJobDocs([]);
-        setLoadingJobs(false);
-      }
-    );
-
-    const unsubscribeInterviews = onSnapshot(
-      interviewsQuery,
-      (snapshot) => {
-        const records = snapshot.docs
-          .map((snapshotDoc) => ({
-            id: snapshotDoc.id,
-            ...snapshotDoc.data(),
-          } as RecruiterInterviewRecord))
+    const stopInterviews = poll(
+      () => rds.listInterviews({ teamId }),
+      ({ interviews: rows }) => {
+        const records = (rows || [])
+          .map((row: any) => ({ ...row, id: row.id } as RecruiterInterviewRecord))
           .filter((record) => record.isMock !== true);
         setInterviews(records);
+        // Jobs tab historically mirrored interviews as roles
+        setJobDocs(
+          records.map((record) => ({
+            id: record.id,
+            title: record.title,
+            location: (record as any).location,
+            employmentType: (record as any).employmentType,
+            createdAt: record.createdAt,
+            updatedAt: (record as any).updatedAt,
+            applyDeadline: (record as any).deadline,
+            companyName: (record as any).companyName,
+            category: (record as any).department,
+          } as RecruiterJobRecord))
+        );
         setLoadingInterviews(false);
+        setLoadingJobs(false);
       },
       (error) => {
         console.error('Error fetching recruiter interviews:', error);
         setInterviews([]);
+        setJobDocs([]);
         setLoadingInterviews(false);
-      }
+        setLoadingJobs(false);
+      },
+      8000
     );
 
-    const unsubscribeTests = onSnapshot(
-      testsQuery,
-      (snapshot) => {
-        const records = snapshot.docs.map((snapshotDoc) => ({
-          id: snapshotDoc.id,
-          ...snapshotDoc.data(),
-        } as RecruiterTestRecord));
-        setTests(records);
+    const stopTests = poll(
+      () => rds.listTests(teamId),
+      ({ tests: rows }) => {
+        setTests((rows || []).map((row: any) => ({ ...row, id: row.id } as RecruiterTestRecord)));
         setLoadingTests(false);
       },
       (error) => {
         console.error('Error fetching recruiter tests:', error);
         setTests([]);
         setLoadingTests(false);
-      }
+      },
+      8000
     );
 
     return () => {
-      unsubscribeJobs();
-      unsubscribeInterviews();
-      unsubscribeTests();
+      stopInterviews();
+      stopTests();
     };
-  }, [user]);
+  }, [user, userProfile?.teamId, userProfile?.parentRecruiterId]);
 
   useEffect(() => {
     if (!user) {
@@ -349,65 +325,26 @@ const RecruiterDashboard: React.FC = () => {
       return;
     }
 
-    const interviewIds = interviews.map((interview) => interview.id);
-    if (interviewIds.length === 0) {
-      setAttempts([]);
-      setLoadingAttempts(false);
-      return;
-    }
-
+    const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
     setLoadingAttempts(true);
 
-    const attemptsByInterview = new Map<string, InterviewAttemptRecord[]>();
-    const initializedInterviews = new Set<string>();
-
-    const syncAttemptState = () => {
-      const mergedAttempts = Array.from(attemptsByInterview.values())
-        .flat()
-        .sort((left, right) => toMillis(right.submittedAt) - toMillis(left.submittedAt));
-      setAttempts(mergedAttempts);
-    };
-
-    const unsubscribers = interviewIds.map((interviewId) => {
-      const attemptsQuery = collection(db, 'interviews', interviewId, 'attempts');
-      return onSnapshot(
-        attemptsQuery,
-        (snapshot) => {
-          attemptsByInterview.set(
-            interviewId,
-            snapshot.docs.map((snapshotDoc) => ({
-              id: snapshotDoc.id,
-              ...snapshotDoc.data(),
-            } as InterviewAttemptRecord))
-          );
-          syncAttemptState();
-
-          if (!initializedInterviews.has(interviewId)) {
-            initializedInterviews.add(interviewId);
-            if (initializedInterviews.size === interviewIds.length) {
-              setLoadingAttempts(false);
-            }
-          }
-        },
-        (error) => {
-          console.error('Error fetching interview attempts:', error);
-          attemptsByInterview.set(interviewId, []);
-          syncAttemptState();
-
-          if (!initializedInterviews.has(interviewId)) {
-            initializedInterviews.add(interviewId);
-            if (initializedInterviews.size === interviewIds.length) {
-              setLoadingAttempts(false);
-            }
-          }
-        }
-      );
-    });
-
-    return () => {
-      unsubscribers.forEach((unsubscribe) => unsubscribe());
-    };
-  }, [interviews, user]);
+    return poll(
+      () => rds.listAttemptsByRecruiter(teamId),
+      ({ attempts: rows }) => {
+        const merged = (rows || [])
+          .map((row: any) => ({ ...row, id: row.id } as InterviewAttemptRecord))
+          .sort((left, right) => toMillis(right.submittedAt) - toMillis(left.submittedAt));
+        setAttempts(merged);
+        setLoadingAttempts(false);
+      },
+      (error) => {
+        console.error('Error fetching interview attempts:', error);
+        setAttempts([]);
+        setLoadingAttempts(false);
+      },
+      8000
+    );
+  }, [user, userProfile?.teamId, userProfile?.parentRecruiterId]);
 
   const dashboardRoles = useMemo<DashboardRoleEntry[]>(() => {
     const roleMap = new Map<string, DashboardRoleEntry>();

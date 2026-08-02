@@ -1,23 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { initializeApp, deleteApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut as secondarySignOut } from 'firebase/auth';
-import { db } from '../services/firebase';
+import { createCognitoUser } from '../services/authService';
+import { poll, rds } from '../services/rdsApi';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from './MessageBox';
 import { subscribeTeamAuditLogs, logTeamActivity } from '../services/auditService';
 import { AuditLog, UserProfile } from '../types';
 import { Users, UserPlus, Shield, Activity, Clock, CheckCircle2, AlertCircle, X, Sparkles, Briefcase, Mail, Phone, Key } from 'lucide-react';
-
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
-};
 
 export const RecruiterTeamPanel: React.FC = () => {
   const { user, userProfile } = useAuth();
@@ -47,39 +35,36 @@ export const RecruiterTeamPanel: React.FC = () => {
     return null;
   }
 
-  // Load team members
+  // Load team members from RDS
   useEffect(() => {
     if (!primaryUid) return;
 
     setLoadingMembers(true);
-    const membersQuery = query(
-      collection(db, 'users'),
-      where('teamId', '==', primaryUid)
+    return poll(
+      () => rds.teamUsers(primaryUid),
+      ({ users }) => {
+        const members: UserProfile[] = (users || []).map((row: any) => ({
+          ...(row as UserProfile),
+          uid: row.uid || row.id,
+        }));
+
+        if (userProfile && !members.some((m) => m.uid === primaryUid)) {
+          members.unshift({
+            ...userProfile,
+            uid: primaryUid,
+            designation: userProfile.designation || 'Primary Recruiter / Account Owner',
+          });
+        }
+
+        setTeamMembers(members);
+        setLoadingMembers(false);
+      },
+      (err) => {
+        console.warn('[Team Panel] Error loading team members:', err);
+        setLoadingMembers(false);
+      },
+      10000
     );
-
-    const unsubscribe = onSnapshot(membersQuery, (snapshot) => {
-      const members: UserProfile[] = snapshot.docs.map(doc => ({
-        uid: doc.id,
-        ...doc.data()
-      } as UserProfile));
-
-      // Also ensure primary recruiter is in the list if missing
-      if (userProfile && !members.some(m => m.uid === primaryUid)) {
-        members.unshift({
-          ...userProfile,
-          uid: primaryUid,
-          designation: userProfile.designation || 'Primary Recruiter / Account Owner'
-        });
-      }
-
-      setTeamMembers(members);
-      setLoadingMembers(false);
-    }, (err) => {
-      console.warn('[Team Panel] Error loading team members:', err);
-      setLoadingMembers(false);
-    });
-
-    return unsubscribe;
   }, [primaryUid, userProfile]);
 
   const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
@@ -103,47 +88,38 @@ export const RecruiterTeamPanel: React.FC = () => {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters and include upper, lower, and a number (Cognito policy).');
       return;
     }
 
     setCreating(true);
     setError(null);
 
-    let secondaryApp;
     try {
-      // 1. Initialize temporary secondary Firebase App to create user account
-      const appName = `SecondaryApp_${Date.now()}`;
-      secondaryApp = initializeApp(firebaseConfig, appName);
-      const secondaryAuth = getAuth(secondaryApp);
-
-      const userCred = await createUserWithEmailAndPassword(secondaryAuth, email.trim(), password);
-      const subUid = userCred.user.uid;
-
-      // 2. Write Secondary Recruiter doc to main Firestore database
-      const subData = {
-        uid: subUid,
+      const created = await createCognitoUser({
         email: email.trim(),
+        password,
         name: fullName.trim(),
-        displayName: fullName.trim(),
         role: 'recruiter',
-        isSecondary: true,
         parentRecruiterId: primaryUid,
         teamId: primaryUid,
+        isSecondary: true,
+        designation: designation.trim() || 'Secondary Recruiter',
+      });
+
+      const subUid = created.uid;
+
+      // Cognito /auth/create-user already upserts the Postgres users row.
+      await rds.updateUser(subUid, {
+        fullname: fullName.trim(),
+        displayName: fullName.trim(),
         designation: designation.trim() || 'Secondary Recruiter',
         whatsappSessionId: subWaSessionId.trim(),
         whatsappSessionPasscode: subWaPasscode.trim(),
         adminVerified: true,
-        createdAt: serverTimestamp()
-      };
+      });
 
-      await Promise.all([
-        setDoc(doc(db, 'users', subUid), subData, { merge: true }),
-        setDoc(doc(db, 'profiles', subUid), subData, { merge: true })
-      ]);
-
-      // 3. Log Audit Event
       await logTeamActivity(
         primaryUid,
         'secondary_recruiter_added',
@@ -157,10 +133,6 @@ export const RecruiterTeamPanel: React.FC = () => {
         }
       );
 
-      // Clean up secondary auth app instance
-      await secondarySignOut(secondaryAuth);
-      await deleteApp(secondaryApp);
-
       messageBox.showSuccess(`Secondary Recruiter "${fullName.trim()}" created successfully! They can now log in using ${email.trim()}.`);
       setShowAddModal(false);
       setFullName('');
@@ -170,9 +142,6 @@ export const RecruiterTeamPanel: React.FC = () => {
     } catch (err: any) {
       console.error('[Add Sub-Recruiter Error]', err);
       setError(err.message || 'Failed to create secondary recruiter account.');
-      if (secondaryApp) {
-        try { await deleteApp(secondaryApp); } catch (_) {}
-      }
     } finally {
       setCreating(false);
     }

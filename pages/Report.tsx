@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import { InterviewSubmission } from '../types';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +8,8 @@ import { jsPDF } from 'jspdf';
 import DayNightToggle from '../components/DayNightToggle';
 import { useMessageBox } from '../components/MessageBox';
 import { ArrowLeft, Download, Share2, User, FileText, MessageSquare, Brain, Shield, Video, VideoOff, Eye, EyeOff, CheckCircle, XCircle, Briefcase, MapPin, GraduationCap, DollarSign, Calendar, Award, Link as LinkIcon } from 'lucide-react';
+import { rds } from '../services/rdsApi';
+import { parseInterviewFeedback } from '../services/parseInterviewFeedback';
 
 // New component for radial score display
 const ScoreCircle: React.FC<{ score: number; denom: number; color: 'green' | 'yellow' | 'red'; label: string }> = ({ score, denom, color, label }) => {
@@ -77,11 +77,11 @@ const BehavioralStat: React.FC<{ icon: React.ReactNode, label: string, value: st
 };
 
 const ProfileDetailItem: React.FC<{ label: string; value?: string | React.ReactNode; fullWidth?: boolean }> = ({ label, value, fullWidth }) => {
-    if (!value && value !== 0) return null;
+    if (value === undefined || value === null || value === '') return null;
     return (
-        <div className={fullWidth ? 'col-span-1 md:col-span-2' : ''}>
+        <div className={`flex flex-col p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5 ${fullWidth ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
             <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wider">{label}</p>
-            <div className="font-semibold text-gray-800 dark:text-gray-200 mt-1 text-sm">{value}</div>
+            <div className="font-semibold text-gray-800 dark:text-gray-200 mt-1 text-sm break-words">{value}</div>
         </div>
     );
 };
@@ -138,15 +138,15 @@ const InterviewReport: React.FC = () => {
     const val = e.target.value;
     if (!interviewId || !submissionId || !submission) return;
     try {
-      const docRef = doc(db, 'interviews', interviewId, 'attempts', submissionId);
       const dateVal = val ? new Date(val) : null;
+      const iso = dateVal ? dateVal.toISOString() : null;
       
       setSubmission(prev => prev ? {
         ...prev,
         clientAccessExpiresAt: dateVal
       } : null);
       
-      await updateDoc(docRef, { clientAccessExpiresAt: dateVal });
+      await rds.updateAttempt(submissionId, { clientAccessExpiresAt: iso });
       messageBox.showSuccess(dateVal ? `Access expiration set to ${dateVal.toLocaleString()}` : "Access expiration removed.");
     } catch (err) {
       console.error("Error setting expiration:", err);
@@ -157,14 +157,12 @@ const InterviewReport: React.FC = () => {
   const handleClearExpiration = async () => {
     if (!interviewId || !submissionId || !submission) return;
     try {
-      const docRef = doc(db, 'interviews', interviewId, 'attempts', submissionId);
-      
       setSubmission(prev => prev ? {
         ...prev,
         clientAccessExpiresAt: null
       } : null);
       
-      await updateDoc(docRef, { clientAccessExpiresAt: null });
+      await rds.updateAttempt(submissionId, { clientAccessExpiresAt: null });
       messageBox.showSuccess("Access expiration limit removed.");
     } catch (err) {
       console.error("Error clearing expiration:", err);
@@ -175,7 +173,6 @@ const InterviewReport: React.FC = () => {
   const handleToggleVisibility = async (index: number, field: 'hiddenVideos' | 'hiddenQuestions', isHidden: boolean) => {
     if (!interviewId || !submissionId || !submission) return;
     try {
-      const docRef = doc(db, 'interviews', interviewId, 'attempts', submissionId);
       const currentSettings = submission.visibilitySettings || {};
       const fieldSettings = currentSettings[field] || {};
       
@@ -193,7 +190,7 @@ const InterviewReport: React.FC = () => {
         visibilitySettings: updatedSettings
       } : null);
       
-      await updateDoc(docRef, { visibilitySettings: updatedSettings });
+      await rds.updateAttempt(submissionId, { visibilitySettings: updatedSettings });
       messageBox.showSuccess("Visibility settings updated successfully!");
     } catch (err) {
       console.error("Error updating visibility setting:", err);
@@ -256,37 +253,32 @@ const InterviewReport: React.FC = () => {
       if (!interviewId) return;
       try {
         if (submissionId) {
-          const docRef = doc(db, 'interviews', interviewId, 'attempts', submissionId);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const submissionData = { id: docSnap.id, ...docSnap.data() } as InterviewSubmission;
-            
-            // Fallback check to global interview expiration if local is not set
-            const interviewDocSnap = await getDoc(doc(db, 'interviews', interviewId));
-            if (interviewDocSnap.exists()) {
-              const interviewData = interviewDocSnap.data();
-              if (!submissionData.clientAccessExpiresAt && interviewData.clientAccessExpiresAt) {
-                submissionData.clientAccessExpiresAt = interviewData.clientAccessExpiresAt;
-              }
+          const [{ attempt }, { interview }] = await Promise.all([
+            rds.getAttempt(submissionId),
+            rds.getInterview(interviewId),
+          ]);
+
+          if (attempt && (!attempt.interviewId || attempt.interviewId === interviewId)) {
+            const submissionData = { ...attempt, id: attempt.id } as InterviewSubmission;
+            if (
+              !submissionData.clientAccessExpiresAt &&
+              (interview?.clientAccessExpiresAt || interview?.raw?.clientAccessExpiresAt)
+            ) {
+              submissionData.clientAccessExpiresAt =
+                interview.clientAccessExpiresAt || interview.raw.clientAccessExpiresAt;
             }
-            
             setSubmission(submissionData);
+          } else {
+            setSubmission(null);
           }
         } else {
-          // Legacy: The report is embedded directly on the interview document
-          const docRef = doc(db, 'interviews', interviewId);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            // Map legacy fields to current InterviewSubmission format to avoid breaks
-            const mappedSubmission: any = {
-              id: docSnap.id,
-              ...data,
-              candidateInfo: data.candidateInfo || { name: data.candidateName || 'Candidate', email: data.candidateEmail || 'Unknown' },
-              feedback: data.feedback || (data.report && data.report.feedback) || '',
-              score: data.score || (data.report && data.report.score) || 0,
-            };
-            setSubmission(mappedSubmission as InterviewSubmission);
+          // Legacy URL without submissionId: load the latest attempt for this interview
+          const { attempts } = await rds.listAttempts(interviewId);
+          const latest = (attempts || [])[0];
+          if (latest) {
+            setSubmission({ ...latest, id: latest.id } as InterviewSubmission);
+          } else {
+            setSubmission(null);
           }
         }
         setLoading(false);
@@ -298,19 +290,37 @@ const InterviewReport: React.FC = () => {
     fetchSubmission();
   }, [interviewId, submissionId]);
 
+  const formatSubmittedAt = (value: any): string => {
+    if (!value) return 'N/A';
+    try {
+      const date = value?.toDate
+        ? value.toDate()
+        : value?.seconds
+          ? new Date(value.seconds * 1000)
+          : new Date(value);
+      if (Number.isNaN(date.getTime())) return 'N/A';
+      return date.toLocaleString('en-GB');
+    } catch {
+      return 'N/A';
+    }
+  };
+
   const getScoreValue = (score: unknown): string => {
     let value = 0;
     if (typeof score === 'string' && score.includes('/')) {
-      value = parseInt(score.split('/')[0], 10);
+      value = parseFloat(score.split('/')[0]);
     } else if (typeof score === 'number') {
-      value = Math.round(score);
+      value = score;
+    } else if (typeof score === 'string' && score.trim() !== '') {
+      value = parseFloat(score);
     }
-    // Convert score out of 100 to score out of 10
-    return (value / 10).toFixed(1); // Ensure one decimal place
+    if (!Number.isFinite(value)) value = 0;
+    // Scores may be stored on a 0–100 or 0–10 scale; normalize to /10 for display.
+    const normalized = value > 10 ? value / 10 : value;
+    return normalized.toFixed(1);
   };
 
-  const getScoreDenom = (score: unknown): string => {
-    // The new denominator should always be 10
+  const getScoreDenom = (_score?: unknown): string => {
     return '10';
   };
 
@@ -420,7 +430,17 @@ const InterviewReport: React.FC = () => {
         pdf.setTextColor(100, 116, 139);
         pdf.text(`Applying for: ${jobTitle}`, margin, y);
         y += 6;
-        const dateStr = submission.submittedAt?.toDate ? submission.submittedAt.toDate().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+        const dateStr = (() => {
+          const raw = formatSubmittedAt(submission.submittedAt);
+          if (raw === 'N/A') return 'N/A';
+          try {
+            const d = new Date(submission.submittedAt as any);
+            if (!Number.isNaN(d.getTime())) {
+              return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+            }
+          } catch { /* ignore */ }
+          return raw;
+        })();
         pdf.setFontSize(10);
         pdf.text(`Date: ${dateStr} | Email: ${submission.candidateInfo?.email || 'N/A'}`, margin, y);
         y += 15;
@@ -430,7 +450,8 @@ const InterviewReport: React.FC = () => {
         const { 
             verdict, 
             summary, 
-            roleFit, 
+            roleFit,
+            answerQuality,
             communicationSkills, 
             technicalSkills,
             hasDetailedComms,
@@ -507,8 +528,8 @@ const InterviewReport: React.FC = () => {
         const aiSections = [
             { title: 'Executive Summary', body: summary },
             { title: 'Role & Resume Fit', body: roleFit },
-            { title: 'Role Fit as per AI Interview', body: hasDetailedComms ? 'N/A' : communicationSkills },
-            { title: 'Technical / Domain Skills', body: technicalSkills },
+            { title: 'Answer Quality / Technical Skills', body: answerQuality !== 'N/A' ? answerQuality : technicalSkills },
+            { title: 'Communication Skills', body: hasDetailedComms ? 'N/A' : communicationSkills },
         ];
 
         aiSections.forEach(sec => {
@@ -665,108 +686,7 @@ const InterviewReport: React.FC = () => {
     }
   };
 
-  const parseFeedback = (feedback: unknown) => {
-    if (typeof feedback !== 'string') {
-      return {
-        summary: 'N/A',
-        roleFit: 'N/A',
-        communicationSkills: 'N/A',
-        technicalSkills: 'N/A',
-        verdict: 'Not Available',
-        hasDetailedComms: false,
-        communicationDetails: {},
-        overallCommsRating: 'N/A',
-        detailedStyleAnalysis: 'N/A'
-      };
-    }
-
-    const summaryMatch = feedback.match(/\*\*Overall Evaluation:\*\*([\s\S]*?)(?=\*\*Verdict:\*\*|\*\*Scores:\*\*|$)/);
-    const roleFitMatch = feedback.match(/\*\*Resume Analysis:\*\*([\s\S]*?)(?=\*\*Answer Quality:\*\*|\*\*Scores:\*\*|$)/);
-    const answerQualityBlock = feedback.match(/\*\*Answer Quality:\*\*([\s\S]*?)(?=\*\*Communication Skills:\*\*|\*\*Overall Evaluation:\*\*|\*\*Scores:\*\*|$)/);
-    
-    let communicationSkills = 'N/A';
-    let technicalSkills = 'N/A';
-    if (answerQualityBlock && answerQualityBlock[1]) {
-      const commsMatch = answerQualityBlock[1].match(/\*\*Communication Skills:\*\*([\s\S]*?)(?=\*\*Technical Skills:\*\*|$)/);
-      const techMatch = answerQualityBlock[1].match(/\*\*Technical Skills:\*\*([\s\S]*)/);
-      communicationSkills = commsMatch ? commsMatch[1].trim() : 'N/A';
-      technicalSkills = techMatch ? techMatch[1].trim() : 'N/A';
-      // Fallback if sub-headings are not present in older reports
-      if (communicationSkills === 'N/A' && technicalSkills === 'N/A') {
-        communicationSkills = answerQualityBlock[1].trim();
-      }
-    }
-
-    // Parse Detailed Communication Skills if present
-    const commsBlockMatch = feedback.match(/\*\*Communication Skills:\*\*([\s\S]*?)(?=\*\*Overall Evaluation:\*\*|\*\*Verdict:\*\*|\*\*Scores:\*\*|$)/i);
-    const communicationDetails: Record<string, { rating: string; comment: string }> = {};
-    let overallCommsRating = 'N/A';
-    let detailedStyleAnalysis = 'N/A';
-    let hasDetailedComms = false;
-
-    if (commsBlockMatch && commsBlockMatch[1]) {
-        hasDetailedComms = true;
-        const blockText = commsBlockMatch[1];
-        
-        const params = [
-            { key: 'fluency', label: 'Fluency in English / Hindi / Marathi', pattern: /(?:Fluency in English \/ Hindi \/ Marathi):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'clarity', label: 'Clarity of Speech', pattern: /(?:Clarity of Speech):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'confidence', label: 'Confidence Level', pattern: /(?:Confidence Level):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'grammar', label: 'Grammar & Vocabulary', pattern: /(?:Grammar & Vocabulary):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'listening', label: 'Listening Skills', pattern: /(?:Listening Skills):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'tone', label: 'Professional Tone', pattern: /(?:Professional Tone):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'accent', label: 'Pronunciation \/ Accent Neutrality', pattern: /(?:Pronunciation \/ Accent Neutrality):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'explainExp', label: 'Ability to Explain Experience', pattern: /(?:Ability to Explain Experience):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'presence', label: 'Response Speed & Presence of Mind', pattern: /(?:Response Speed & Presence of Mind):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'etiquette', label: 'Telephone Etiquette', pattern: /(?:Telephone Etiquette):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'interpersonal', label: 'Interpersonal Skills', pattern: /(?:Interpersonal Skills):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im }
-        ];
-
-        params.forEach(p => {
-            const lines = blockText.split('\n');
-            let matched = false;
-            for (const line of lines) {
-                const m = line.match(p.pattern);
-                if (m) {
-                    communicationDetails[p.key] = {
-                        rating: m[1]?.trim() || 'N/A',
-                        comment: m[2]?.trim() || ''
-                    };
-                    matched = true;
-                    break;
-                }
-            }
-            if (!matched) {
-                communicationDetails[p.key] = { rating: 'N/A', comment: '' };
-            }
-        });
-
-        const overallRatingMatch = blockText.match(/Overall Communication Rating:\s*([^\n]*)/i);
-        overallCommsRating = overallRatingMatch ? overallRatingMatch[1].trim() : 'N/A';
-
-        const styleMatch = blockText.match(/Detailed Style Analysis:\s*([\s\S]*)/i);
-        detailedStyleAnalysis = styleMatch ? styleMatch[1].trim() : 'N/A';
-    }
-
-    const verdictMatch = feedback.match(/\*\*Verdict:\*\*\s*(.*)/);
-    
-    const keyStrengthMatch = feedback.match(/(?:-\s*)?Key strength:\s*([^\n]*)/i);
-    const keyWeaknessMatch = feedback.match(/(?:-\s*)?Key weakness:\s*([^\n]*)/i);
-
-    return {
-        summary: summaryMatch ? summaryMatch[1].trim() : 'N/A',
-        roleFit: roleFitMatch ? roleFitMatch[1].trim() : 'N/A',
-        communicationSkills,
-        technicalSkills,
-        verdict: verdictMatch ? verdictMatch[1].trim() : 'Not Available',
-        keyStrength: keyStrengthMatch ? keyStrengthMatch[1].trim() : null,
-        keyWeakness: keyWeaknessMatch ? keyWeaknessMatch[1].trim() : null,
-        hasDetailedComms,
-        communicationDetails,
-        overallCommsRating,
-        detailedStyleAnalysis
-    };
-  };
+  const parseFeedback = parseInterviewFeedback;
 
   if (loading) {
     return (
@@ -826,7 +746,8 @@ const InterviewReport: React.FC = () => {
 
   const { 
       summary, 
-      roleFit, 
+      roleFit,
+      answerQuality,
       communicationSkills, 
       technicalSkills, 
       verdict, 
@@ -897,7 +818,7 @@ const InterviewReport: React.FC = () => {
                     </h1>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                         <div className="flex items-center gap-2"><i className="fas fa-envelope"></i> {submission.candidateInfo?.email || 'N/A'}</div>
-                        <div className="flex items-center gap-2"><i className="fas fa-calendar-alt"></i> {submission.submittedAt?.toDate ? submission.submittedAt.toDate().toLocaleString('en-GB') : 'N/A'}</div>
+                        <div className="flex items-center gap-2"><i className="fas fa-calendar-alt"></i> {formatSubmittedAt(submission.submittedAt)}</div>
                         {submission.candidateResumeURL && !submission.candidateResumeURL.startsWith('data:text/plain') && (
                             <div className="flex items-center gap-2 max-w-xs sm:max-w-sm">
                                 <i className="fas fa-eye text-blue-500"></i> 
@@ -977,22 +898,28 @@ const InterviewReport: React.FC = () => {
                         <div className="space-y-8">
                             <div>
                                 <strong className="text-gray-800 dark:text-gray-200 block mb-2 text-base">Summary:</strong> 
-                                <div className="bg-blue-50 dark:bg-blue-900/20 p-5 rounded-xl border border-blue-100 dark:border-blue-800/50 text-base text-blue-800 dark:text-blue-200 leading-relaxed whitespace-pre-wrap">{summary}</div>
+                                <div className="bg-blue-50 dark:bg-blue-900/20 p-5 rounded-xl border border-blue-100 dark:border-blue-800/50 text-base text-blue-800 dark:text-blue-200 leading-relaxed whitespace-pre-wrap">
+                                  {summary !== 'N/A' ? summary : (submission.feedback || 'AI summary was not generated for this report.')}
+                                </div>
                             </div>
                             <div>
                                 <strong className="text-gray-800 dark:text-gray-200 block mb-2 text-base">Role Fit:</strong> 
-                                <div className="bg-gray-50 dark:bg-black/20 p-4 rounded-xl border border-gray-100 dark:border-white/5 text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{roleFit}</div>
-                            </div>
-                            {!hasDetailedComms && (
-                                <div>
-                                    <strong className="text-gray-800 dark:text-gray-200 block mb-2 text-base">Role Fit as per AI Interview:</strong> 
-                                    <div className="bg-gray-50 dark:bg-black/20 p-4 rounded-xl border border-gray-100 dark:border-white/5 text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{communicationSkills}</div>
+                                <div className="bg-gray-50 dark:bg-black/20 p-4 rounded-xl border border-gray-100 dark:border-white/5 text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+                                  {roleFit !== 'N/A' ? roleFit : 'Role-fit analysis was not available in the AI response.'}
                                 </div>
-                            )}
-                            {technicalSkills && technicalSkills !== 'N/A' && (
+                            </div>
+                            {(answerQuality && answerQuality !== 'N/A') || (technicalSkills && technicalSkills !== 'N/A') ? (
                                 <div>
-                                    <strong className="text-gray-800 dark:text-gray-200 block mb-2 text-base">Technical / Domain Skills:</strong> 
-                                    <div className="bg-gray-50 dark:bg-black/20 p-4 rounded-xl border border-gray-100 dark:border-white/5 text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{technicalSkills}</div>
+                                    <strong className="text-gray-800 dark:text-gray-200 block mb-2 text-base">Answer Quality / Technical Skills:</strong> 
+                                    <div className="bg-gray-50 dark:bg-black/20 p-4 rounded-xl border border-gray-100 dark:border-white/5 text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+                                      {answerQuality !== 'N/A' ? answerQuality : technicalSkills}
+                                    </div>
+                                </div>
+                            ) : null}
+                            {!hasDetailedComms && communicationSkills && communicationSkills !== 'N/A' && (
+                                <div>
+                                    <strong className="text-gray-800 dark:text-gray-200 block mb-2 text-base">Communication Skills:</strong> 
+                                    <div className="bg-gray-50 dark:bg-black/20 p-4 rounded-xl border border-gray-100 dark:border-white/5 text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{communicationSkills}</div>
                                 </div>
                             )}
                             {keyStrength && (
@@ -1078,43 +1005,61 @@ const InterviewReport: React.FC = () => {
                         </div>
                     )}
 
-                    {/* Professional Details Card */}
+                    {/* Onboarding Details Card — always show fields collected during candidate form */}
                     {submission.candidateInfo && (
                         <div className="bg-white dark:bg-white/5 rounded-2xl p-6 md:p-8 border border-gray-200 dark:border-white/10 shadow-sm">
-                            <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><Briefcase size={24} className="text-primary"/> Professional Details</h2>
-                            {submission.candidateInfo.isFresher ? (
-                                <div className="flex flex-col items-center justify-center py-8 text-center bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
-                                    <Briefcase size={32} className="text-gray-300 dark:text-gray-600 mb-3" />
-                                    <span className="text-base font-semibold text-gray-500 dark:text-gray-400">Candidate is a Fresher</span>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    <div className="flex flex-col p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
-                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Total Experience</span>
-                                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{submission.candidateInfo.totalExperienceYears}y {submission.candidateInfo.totalExperienceMonths}m</span>
-                                    </div>
-                                    <div className="flex flex-col p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
-                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Current Company</span>
-                                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate" title={submission.candidateInfo.currentCompanyName || 'N/A'}>{submission.candidateInfo.currentCompanyName || 'N/A'}</span>
-                                    </div>
-                                    <div className="flex flex-col p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
-                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Designation</span>
-                                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate" title={submission.candidateInfo.designation || 'N/A'}>{submission.candidateInfo.designation || 'N/A'}</span>
-                                    </div>
-                                    <div className="flex flex-col p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
-                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Current Salary</span>
-                                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{submission.candidateInfo.currentSalary || 'N/A'}</span>
-                                    </div>
-                                    <div className="flex flex-col p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
-                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Notice Period</span>
-                                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{submission.candidateInfo.noticePeriodDays ? `${submission.candidateInfo.noticePeriodDays} Days` : 'N/A'}</span>
-                                    </div>
-                                    <div className="flex flex-col p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
-                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Reason for job change</span>
-                                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate" title={submission.candidateInfo.reasonForJobChange || 'N/A'}>{submission.candidateInfo.reasonForJobChange || 'N/A'}</span>
-                                    </div>
-                                </div>
-                            )}
+                            <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><Briefcase size={24} className="text-primary"/> Onboarding Details</h2>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                <ProfileDetailItem label="Full Name" value={submission.candidateInfo.name} />
+                                <ProfileDetailItem label="Email" value={submission.candidateInfo.email} />
+                                <ProfileDetailItem label="Phone" value={submission.candidateInfo.phone} />
+                                <ProfileDetailItem label="Gender" value={submission.candidateInfo.gender} />
+                                <ProfileDetailItem
+                                  label="Date of Birth"
+                                  value={
+                                    submission.candidateInfo.dob
+                                      ? new Date(submission.candidateInfo.dob).toLocaleDateString('en-GB', {
+                                          day: '2-digit',
+                                          month: 'short',
+                                          year: 'numeric',
+                                        })
+                                      : undefined
+                                  }
+                                />
+                                <ProfileDetailItem label="Age" value={submission.candidateInfo.age} />
+                                <ProfileDetailItem label="Marital Status" value={submission.candidateInfo.maritalStatus} />
+                                <ProfileDetailItem label="Current City" value={submission.candidateInfo.currentCity} />
+                                <ProfileDetailItem label="Native Place" value={submission.candidateInfo.nativePlace} />
+                                <ProfileDetailItem label="Basic Qualification" value={submission.candidateInfo.qualificationBasic} />
+                                <ProfileDetailItem label="PG Qualification" value={submission.candidateInfo.qualificationPG} />
+                                <ProfileDetailItem
+                                  label="Experience Type"
+                                  value={submission.candidateInfo.isFresher ? 'Fresher' : 'Experienced'}
+                                />
+                                {!submission.candidateInfo.isFresher && (
+                                  <>
+                                    <ProfileDetailItem
+                                      label="Total Experience"
+                                      value={`${submission.candidateInfo.totalExperienceYears || 0}y ${submission.candidateInfo.totalExperienceMonths || 0}m`}
+                                    />
+                                    <ProfileDetailItem label="Current Company" value={submission.candidateInfo.currentCompanyName} />
+                                    <ProfileDetailItem label="Designation" value={submission.candidateInfo.designation} />
+                                    <ProfileDetailItem label="Current Salary" value={submission.candidateInfo.currentSalary} />
+                                    <ProfileDetailItem
+                                      label="Notice Period"
+                                      value={
+                                        submission.candidateInfo.noticePeriodDays
+                                          ? `${submission.candidateInfo.noticePeriodDays} Days`
+                                          : undefined
+                                      }
+                                    />
+                                    <ProfileDetailItem label="Reason for Job Change" value={submission.candidateInfo.reasonForJobChange} fullWidth />
+                                  </>
+                                )}
+                                <ProfileDetailItem label="Resume Updated" value={submission.candidateInfo.resumeUpdated} />
+                                <ProfileDetailItem label="Highlighted Skills" value={submission.candidateInfo.highlightedSkillsForJob} fullWidth />
+                                <ProfileDetailItem label="Interview Language" value={submission.candidateInfo.language} />
+                            </div>
                         </div>
                     )}
                 </div>

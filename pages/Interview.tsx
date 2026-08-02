@@ -11,7 +11,8 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import DayNightToggle from '../components/DayNightToggle';
 import * as pdfjsLib from 'pdfjs-dist';
-import { getCandidateRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus, recordCandidateSubmission } from '../services/rateLimitService';
+import { getCandidateRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus, assertCompanyRateLimit } from '../services/rateLimitService';
+import { rds } from '../services/rdsApi';
 import { analyzeResumeText, readResumeText, saveResumeDumpCandidate } from '../services/resumeService';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { saveCandidateConsent } from '../services/candidateConsent';
@@ -253,40 +254,43 @@ const CandidateInfoForm: React.FC<{
   const { isDark } = useTheme();
   const [language, setLanguage] = useState('en');
 
-  // Debounced check in Firestore to see if this email or phone is already used
+  // Debounced check to see if this email or phone is already used
   useEffect(() => {
     if (!email.trim() && !phone.trim()) return;
 
     let isCancelled = false;
     const checkDuplicate = async () => {
       try {
-        const attemptsRef = collection(db, 'interviews', interviewId, 'attempts');
+        const emailReady = email.trim().includes('@') && email.trim().includes('.');
+        const phoneReady = phone.trim().replace(/\D/g, '').length >= 8;
+        if (!emailReady && !phoneReady) {
+          if (!isCancelled) setShowDuplicatePopup(false);
+          return;
+        }
 
-        // Check email
-        if (email.trim()) {
-          const emailQuery = query(attemptsRef, where('candidateInfo.email', '==', email.trim()));
-          const emailSnap = await getDocs(emailQuery);
-          if (!emailSnap.empty && !isCancelled) {
-            const hasReattempt = emailSnap.docs.some(doc => doc.data().allowReattempt === true);
-            if (!hasReattempt) {
-              setShowDuplicatePopup(true);
-              return;
-            }
+        const { attempts } = await rds.listAttempts(interviewId);
+        const rows = attempts || [];
+        let blocked = false;
+
+        if (emailReady) {
+          const emailMatches = rows.filter(
+            (attempt: any) => (attempt.candidateInfo?.email || '').toLowerCase() === email.trim().toLowerCase()
+          );
+          if (emailMatches.length > 0) {
+            blocked = !emailMatches.some((attempt: any) => attempt.allowReattempt === true);
           }
         }
 
-        // Check phone
-        if (phone.trim()) {
-          const phoneQuery = query(attemptsRef, where('candidateInfo.phone', '==', phone.trim()));
-          const phoneSnap = await getDocs(phoneQuery);
-          if (!phoneSnap.empty && !isCancelled) {
-            const hasReattempt = phoneSnap.docs.some(doc => doc.data().allowReattempt === true);
-            if (!hasReattempt) {
-              setShowDuplicatePopup(true);
-              return;
-            }
+        if (!blocked && phoneReady) {
+          const phoneMatches = rows.filter(
+            (attempt: any) => (attempt.candidateInfo?.phone || '') === phone.trim()
+          );
+          if (phoneMatches.length > 0) {
+            blocked = !phoneMatches.some((attempt: any) => attempt.allowReattempt === true);
           }
         }
+
+        if (!isCancelled) setShowDuplicatePopup(blocked);
       } catch (err) {
         console.error("Auto duplicate check failed:", err);
       }
@@ -1615,6 +1619,17 @@ const AccessCodeVerificationScreen: React.FC<{
   );
 };
 
+// Stable shell — must live outside the wizard so auth/rate-limit re-renders
+// do not remount children and wipe candidate form state mid-typing.
+const InterviewFlowShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="interview-flow-shell fixed inset-0 z-[9999] overflow-y-auto bg-gray-50 dark:bg-slate-950 text-gray-800 dark:text-gray-100 flex flex-col items-center justify-start py-12 px-4 transition-colors duration-500">
+    <div className="absolute top-4 right-4 z-[10000]">
+      <DayNightToggle />
+    </div>
+    {children}
+  </div>
+);
+
 // --- Main Wizard Component ---
 const CandidateInterviewFlow: React.FC = () => {
   const { interviewId } = useParams();
@@ -1657,39 +1672,32 @@ const CandidateInterviewFlow: React.FC = () => {
         return;
       }
       try {
-        const interviewDocRef = doc(db, 'interviews', interviewId);
-        const interviewDoc = await getDoc(interviewDocRef);
+        const { interview: interviewData } = await rds.getInterview(interviewId);
 
-        if (!interviewDoc.exists()) {
+        if (!interviewData) {
           throw new Error("This interview does not exist or has been closed.");
         }
-        
-         const interviewData = { id: interviewDoc.id, ...interviewDoc.data() } as any;
 
          const rateLimitStatus = await loadCompanyRateLimitStatus();
          if (isRateLimitReached(rateLimitStatus, 'interviews')) {
            throw new Error(getCandidateRateLimitReachedMessage('interviews'));
          }
 
-
-
-        // If we reach here, access is granted. Now load the interview data.
-        const jobDocRef = doc(db, 'jobs', interviewId);
-        const jobDoc = await getDoc(jobDocRef);
-        const jobData = jobDoc.exists() ? jobDoc.data() : {};
-        const combinedData = { ...interviewData, isMock: jobData.isMock || false };
+        const combinedData = { ...interviewData, id: interviewData.id, isMock: Boolean(interviewData.isMock) };
 
         setInterview(combinedData as Interview);
         setInterviewState(prev => ({ ...prev, jobTitle: combinedData.title, jobDescription: combinedData.description, isMock: combinedData.isMock, strictness: combinedData.strictness || 'Medium' }));
-        setStep('welcome');
+        // Only advance from the initial validating state — never kick the candidate
+        // back to welcome after they have already progressed in the wizard.
+        setStep((prev) => (prev === 'validating' ? 'welcome' : prev));
 
       } catch (err: any) { 
         setErrorMsg(err.message); 
-        setStep('collect-info'); // Fallback to show error
+        setStep((prev) => (prev === 'validating' ? 'collect-info' : prev));
       }
     };
     validateAndInit();
-  }, [interviewId, searchParams]);
+  }, [interviewId]);
 
   // 2. Handle Candidate Info Submission
   const handleInfoSubmit = async (submittedInfo: CandidateInfo, submittedFile: File | null, existingResumeUrl?: string, cloudinaryUrl?: string) => {
@@ -1706,33 +1714,35 @@ const CandidateInterviewFlow: React.FC = () => {
       });
 
       setLoadingMsg("Verifying attempt eligibility...");
-      const attemptsRef = collection(db, 'interviews', interviewId!, 'attempts');
+      const { attempts } = await rds.listAttempts(interviewId!);
+      const attemptRows = attempts || [];
       
       let hasAttempted = false;
       let reattemptDocsToConsume: string[] = [];
       try {
-        const emailQuery = query(attemptsRef, where('candidateInfo.email', '==', submittedInfo.email));
-        const emailSnap = await getDocs(emailQuery);
-        const emailReattempts = emailSnap.docs.filter(doc => doc.data().allowReattempt === true);
+        const emailMatches = attemptRows.filter(
+          (attempt: any) => (attempt.candidateInfo?.email || '').toLowerCase() === submittedInfo.email.toLowerCase()
+        );
+        const emailReattempts = emailMatches.filter((attempt: any) => attempt.allowReattempt === true);
         
+        let phoneMatches: any[] = [];
         let phoneReattempts: any[] = [];
-        let phoneSnapDocs: any[] = [];
         if (submittedInfo.phone) {
-          const phoneQuery = query(attemptsRef, where('candidateInfo.phone', '==', submittedInfo.phone));
-          const phoneSnap = await getDocs(phoneQuery);
-          phoneSnapDocs = phoneSnap.docs;
-          phoneReattempts = phoneSnap.docs.filter(doc => doc.data().allowReattempt === true);
+          phoneMatches = attemptRows.filter(
+            (attempt: any) => (attempt.candidateInfo?.phone || '') === submittedInfo.phone
+          );
+          phoneReattempts = phoneMatches.filter((attempt: any) => attempt.allowReattempt === true);
         }
 
-        const totalAttemptsCount = emailSnap.size + phoneSnapDocs.length;
+        const totalAttemptsCount = emailMatches.length + phoneMatches.length;
         const totalReattemptsCount = emailReattempts.length + phoneReattempts.length;
 
         if (totalAttemptsCount > 0) {
           if (totalReattemptsCount > 0) {
             // Collect the doc IDs of the attempts that granted the reattempt permission
             reattemptDocsToConsume = [
-              ...emailReattempts.map(d => d.id),
-              ...phoneReattempts.map(d => d.id)
+              ...emailReattempts.map((d: any) => d.id),
+              ...phoneReattempts.map((d: any) => d.id)
             ];
           } else {
             hasAttempted = true;
@@ -1756,9 +1766,9 @@ const CandidateInterviewFlow: React.FC = () => {
         setLoadingMsg("Consuming reattempt permission...");
         for (const docId of reattemptDocsToConsume) {
           try {
-            await updateDoc(doc(db, 'interviews', interviewId!, 'attempts', docId), {
+            await rds.updateAttempt(docId, {
               allowReattempt: false
-            });
+            }, { public: true });
           } catch (e) {
             console.error("Failed to consume reattempt on doc", docId, e);
           }
@@ -1902,17 +1912,9 @@ const CandidateInterviewFlow: React.FC = () => {
   };
 
   // --- RENDER ---
-  const Container = ({ children }: { children: React.ReactNode }) => (
-    <div className="interview-flow-shell fixed inset-0 z-[9999] overflow-y-auto bg-gray-50 dark:bg-slate-950 text-gray-800 dark:text-gray-100 flex flex-col items-center justify-start py-12 px-4 transition-colors duration-500">
-      <div className="absolute top-4 right-4 z-[10000]">
-        <DayNightToggle />
-      </div>      {children}
-    </div>
-  );
-
   if (rateLimitStopMessage) {
     return (
-      <Container>
+      <InterviewFlowShell>
         <div role="alert" className="mt-[12vh] w-full max-w-lg overflow-hidden rounded-[14px] border border-red-500/25 bg-white p-8 text-center shadow-[0_24px_80px_rgba(0,0,0,0.12)] dark:bg-[#0a0a0a]">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-red-500/25 bg-red-500/10 text-red-500">
             <i className="fas fa-triangle-exclamation text-lg" aria-hidden="true"></i>
@@ -1923,13 +1925,13 @@ const CandidateInterviewFlow: React.FC = () => {
             Return home
           </button>
         </div>
-      </Container>
+      </InterviewFlowShell>
     );
   }
 
   if (!interview) {
     return (
-      <Container>
+      <InterviewFlowShell>
         {errorMsg ? 
           <div className="interview-state-card interview-state-error text-red-500 bg-red-100 dark:bg-red-900/20 p-4 rounded-lg">{errorMsg}</div> : 
           <div className="interview-state-loader relative w-20 h-20">
@@ -1937,24 +1939,24 @@ const CandidateInterviewFlow: React.FC = () => {
             <div className="absolute inset-3 border-t-4 border-purple-500 rounded-full animate-spin reverse"></div>
           </div>
         }
-      </Container>
+      </InterviewFlowShell>
     );
   }
 
   if (step === 'validating') {
     return (
-      <Container>
+      <InterviewFlowShell>
         <div className="interview-state-loader relative w-20 h-20">
           <div className="absolute inset-0 border-t-4 border-blue-500 rounded-full animate-spin"></div>
           <div className="absolute inset-3 border-t-4 border-purple-500 rounded-full animate-spin reverse"></div>
         </div>
-      </Container>
+      </InterviewFlowShell>
     );
   }
 
   if (step === 'welcome') {
     return (
-      <Container>
+      <InterviewFlowShell>
         <InterviewWelcomeScreen 
           interview={interview}
           onProceed={() => {
@@ -1965,25 +1967,25 @@ const CandidateInterviewFlow: React.FC = () => {
             }
           }}
         />
-      </Container>
+      </InterviewFlowShell>
     );
   }
 
   if (step === 'enter-code') {
     return (
-      <Container>
+      <InterviewFlowShell>
         <AccessCodeVerificationScreen 
           interviewId={interviewId!}
           initialToken={searchParams.get('token') || ''}
           onSuccess={() => setStep('collect-info')}
         />
-      </Container>
+      </InterviewFlowShell>
     );
   }
 
   if (step === 'collect-info') {
     return (
-      <Container>
+      <InterviewFlowShell>
         {step === 'collect-info' && (
           <CandidateInfoForm 
             jobTitle={interviewState.jobTitle}
@@ -1995,7 +1997,7 @@ const CandidateInterviewFlow: React.FC = () => {
             userProfile={userProfile}
           />
         )}
-      </Container>
+      </InterviewFlowShell>
     );
   }
 
@@ -2010,7 +2012,7 @@ const CandidateInterviewFlow: React.FC = () => {
     };
 
     return (
-      <Container>
+      <InterviewFlowShell>
         <div className="w-full max-w-3xl mx-auto px-4 py-2 animate-in fade-in slide-in-from-bottom-6 duration-500">
           {/* Header Banner */}
           <div className="text-center mb-8">
@@ -2098,13 +2100,13 @@ const CandidateInterviewFlow: React.FC = () => {
             </button>
           </div>
         </div>
-      </Container>
+      </InterviewFlowShell>
     );
   }
 
   if (step === 'instructions') {
     return (
-      <Container>
+      <InterviewFlowShell>
         <div className="flex items-center justify-center min-h-[70vh] w-full px-4">
           <InterviewReadinessOnboarding
             interview={interview}
@@ -2112,13 +2114,13 @@ const CandidateInterviewFlow: React.FC = () => {
             onStart={() => setStep('interview')}
           />
         </div>
-      </Container>
+      </InterviewFlowShell>
     );
   }
 
   if (step === 'setup' || step === 'processing') {
     return (
-      <Container>
+      <InterviewFlowShell>
         <div className="interview-state-card flex flex-col items-center max-w-md text-center">
           <div className="interview-state-loader relative w-24 h-24 mb-6">
             <div className="absolute inset-0 border-4 border-gray-200 dark:border-gray-700 rounded-full"></div>
@@ -2128,7 +2130,7 @@ const CandidateInterviewFlow: React.FC = () => {
           <h3 className="text-xl font-bold text-gray-800 dark:text-white">{loadingMsg}</h3>
           <p className="mt-4 text-gray-500 dark:text-gray-400 text-sm">Please wait while the interview is prepared.</p>
         </div>
-      </Container>
+      </InterviewFlowShell>
     );
   }
 
@@ -3012,27 +3014,36 @@ const InterviewSubmission: React.FC<{
 
         setStatus("Saving Report...");
         const attemptData = {
-            ...finalState,
-            candidateResumeBase64: null, // Do not bloat Firebase storage
+            jobTitle: finalState.jobTitle,
+            jobDescription: finalState.jobDescription,
+            questions: finalState.questions,
+            answers: finalState.answers,
+            videoURLs: finalState.videoURLs,
+            transcriptIds: finalState.transcriptIds,
             transcriptTexts,
+            candidateResumeURL: finalState.candidateResumeURL,
+            candidateResumeMimeType: finalState.candidateResumeMimeType,
+            candidateResumeText: resumeTextContent || finalState.candidateResumeText || null,
+            language: finalState.language || candidateInfo.language || 'en',
+            strictness: finalState.strictness || 'Medium',
             pendingResponseCount: 0,
             feedback: feedbackRaw,
             score: `${overallScoreNum}/100`,
-            resumeScore: `${resumeScoreNum}/100`,
-            qnaScore: `${qnaScoreNum}/100`,
+            resumeScore: resumeScoreNum,
+            qnaScore: qnaScoreNum,
             candidateInfo,
             status: terminated ? 'Terminated' : 'Completed',
-            submittedAt: serverTimestamp(), 
             candidateUID: user?.uid || null,
-             interviewId: interviewId,
-             recruiterUID: recruiterUID || null,
+            interviewId: interviewId,
+            recruiterUID: recruiterUID || null,
             jobId: interviewId,
             isMock: state.isMock || false,
-            meta: { tabSwitchCount: tabSwitches }
-        }
-        const docRef = doc(collection(db, 'interviews', interviewId, 'attempts'));
-        await recordCandidateSubmission('interviews', docRef, attemptData);
-        setReportUrl(`/report/${interviewId}/${docRef.id}`);
+            terminated: Boolean(terminated),
+            meta: { tabSwitchCount: tabSwitches },
+        };
+        await assertCompanyRateLimit('interviews');
+        const { attempt } = await rds.createAttempt(interviewId, attemptData);
+        setReportUrl(`/report/${interviewId}/${attempt.id}`);
         setShowCompletionPopup(true);
         setStatus('Successfully Submitted!');
       } catch (err) { 

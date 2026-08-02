@@ -44,8 +44,16 @@ export default function AdminStorage() {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [deleteConfirmKey, setDeleteConfirmKey] = useState<string | null>(null);
+  const [deleteConfirmBucket, setDeleteConfirmBucket] = useState<string | null>(null);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState<boolean>(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  const fileId = (file: S3FileItem) => `${file.bucket}::${file.key}`;
+  const parseFileId = (id: string) => {
+    const idx = id.indexOf('::');
+    if (idx === -1) return { bucket: undefined as string | undefined, key: id };
+    return { bucket: id.slice(0, idx), key: id.slice(idx + 2) };
+  };
 
   // Test Upload State
   const [testFile, setTestFile] = useState<File | null>(null);
@@ -130,7 +138,7 @@ export default function AdminStorage() {
     if (selectedKeys.size === filteredFiles.length) {
       setSelectedKeys(new Set());
     } else {
-      setSelectedKeys(new Set(filteredFiles.map(f => f.key)));
+      setSelectedKeys(new Set(filteredFiles.map(f => fileId(f))));
     }
   };
 
@@ -145,11 +153,12 @@ export default function AdminStorage() {
   };
 
   // Single delete
-  const handleDeleteSingle = async (key: string) => {
+  const handleDeleteSingle = async (key: string, bucket?: string) => {
     setIsDeleting(true);
-    const ok = await deleteS3Object(key);
+    const ok = await deleteS3Object(key, bucket);
     setIsDeleting(false);
     setDeleteConfirmKey(null);
+    setDeleteConfirmBucket(null);
     if (ok) {
       showToast(`Deleted file: ${key}`);
       fetchFiles();
@@ -160,14 +169,24 @@ export default function AdminStorage() {
 
   // Bulk delete
   const handleDeleteSelected = async () => {
-    const keysArray = Array.from(selectedKeys);
-    if (keysArray.length === 0) return;
-    
+    const ids = Array.from(selectedKeys);
+    if (ids.length === 0) return;
+
     setIsDeleting(true);
-    const deletedCount = await deleteS3Objects(keysArray);
+    let deletedCount = 0;
+    const byBucket = new Map<string | undefined, string[]>();
+    for (const id of ids) {
+      const { bucket, key } = parseFileId(id);
+      const list = byBucket.get(bucket) || [];
+      list.push(key);
+      byBucket.set(bucket, list);
+    }
+    for (const [bucket, keys] of byBucket.entries()) {
+      deletedCount += await deleteS3Objects(keys, bucket);
+    }
     setIsDeleting(false);
     setShowBulkDeleteConfirm(false);
-    
+
     if (deletedCount > 0) {
       showToast(`Successfully deleted ${deletedCount} files from Amazon S3 bucket.`);
       fetchFiles();
@@ -454,14 +473,15 @@ export default function AdminStorage() {
                 </thead>
                 <tbody className={`divide-y ${isDark ? 'divide-white/5' : 'divide-gray-100'}`}>
                   {filteredFiles.map((file) => {
-                    const isSelected = selectedKeys.has(file.key);
+                    const id = fileId(file);
+                    const isSelected = selectedKeys.has(id);
                     return (
                       <tr 
-                        key={file.key} 
+                        key={id} 
                         className={`transition-colors ${isSelected ? (isDark ? 'bg-blue-500/10' : 'bg-blue-50/60') : (isDark ? 'hover:bg-white/5' : 'hover:bg-gray-50')}`}
                       >
                         <td className="p-4 text-center">
-                          <button onClick={() => toggleSelectKey(file.key)} className="cursor-pointer">
+                          <button onClick={() => toggleSelectKey(id)} className="cursor-pointer">
                             {isSelected ? (
                               <CheckSquare size={16} className="text-blue-500" />
                             ) : (
@@ -510,7 +530,10 @@ export default function AdminStorage() {
                               <ExternalLink size={16} />
                             </a>
                             <button
-                              onClick={() => setDeleteConfirmKey(file.key)}
+                              onClick={() => {
+                                setDeleteConfirmKey(file.key);
+                                setDeleteConfirmBucket(file.bucket);
+                              }}
                               className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
                               title="Delete File"
                             >
@@ -544,14 +567,17 @@ export default function AdminStorage() {
             </div>
             <div className="flex gap-3">
               <button 
-                onClick={() => setDeleteConfirmKey(null)}
+                onClick={() => {
+                  setDeleteConfirmKey(null);
+                  setDeleteConfirmBucket(null);
+                }}
                 disabled={isDeleting}
                 className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-white/20 font-bold text-xs hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
               >
                 Cancel
               </button>
-              <button 
-                onClick={() => handleDeleteSingle(deleteConfirmKey)}
+              <button
+                onClick={() => handleDeleteSingle(deleteConfirmKey, deleteConfirmBucket || undefined)}
                 disabled={isDeleting}
                 className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold text-xs hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
               >

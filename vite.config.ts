@@ -20,6 +20,8 @@ export default defineConfig(({ mode }) => {
         target: 'esnext',
       },
       define: {
+        // amazon-cognito-identity-js (via buffer) expects Node's `global` in the browser
+        global: 'globalThis',
         'process.env.ANTHROPIC_API_KEY': JSON.stringify(env.VITE_ANTHROPIC_API_KEY || env.ANTHROPIC_API_KEY),
         'process.env.ANTHROPIC_BASE_URL': JSON.stringify(env.VITE_ANTHROPIC_BASE_URL || env.ANTHROPIC_BASE_URL),
         'process.env.ANTHROPIC_WORKSPACE_ID': JSON.stringify(env.VITE_ANTHROPIC_WORKSPACE_ID || env.ANTHROPIC_WORKSPACE_ID || 'default'),

@@ -1,9 +1,8 @@
-import { collection, deleteDoc, doc, getDocs, limit, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import * as mammoth from 'mammoth';
 import * as pdfjsLib from 'pdfjs-dist';
-import { db } from './firebase';
 import { uploadToCloudinary } from './api';
 import { grokGenerateJson } from './grokService';
+import { rds } from './rdsApi';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
@@ -522,26 +521,24 @@ const resolveResumeDumpCandidateId = async (
   const stableId = `${safeDocumentKey(recruiterUID)}_${identityKey}`;
   const email = normalizeResumeEmail(profile.email);
 
-  // Prefer querying existing docs. Do NOT getDoc(stableId) when it may be missing —
-  // Firestore denies reads on non-existent docs when rules depend on resource.data.
   if (email) {
     try {
-      const legacySnap = await getDocs(query(
-        collection(db, 'resumeDumpCandidates'),
-        where('recruiterUID', '==', recruiterUID),
-        where('email', '==', email),
-        limit(25)
-      ));
-      if (!legacySnap.empty) {
-        const sorted = [...legacySnap.docs].sort(
-          (left, right) => toMillisSafe(right.data().updatedAt || right.data().createdAt) - toMillisSafe(left.data().updatedAt || left.data().createdAt)
-        );
+      const { candidates } = await rds.listResumeDump(recruiterUID);
+      const matches = (candidates || []).filter(
+        (c: any) => normalizeResumeEmail(c.email || '') === email
+      );
+      if (matches.length) {
+        const sorted = [...matches].sort((left, right) => {
+          const l = Date.parse(String(left.updatedAt || left.createdAt || 0)) || 0;
+          const r = Date.parse(String(right.updatedAt || right.createdAt || 0)) || 0;
+          return r - l;
+        });
         const primary = sorted.find((entry) => entry.id === stableId) || sorted[0];
         return {
           candidateId: primary.id,
           alreadyExists: true,
           duplicateIds: sorted.filter((entry) => entry.id !== primary.id).map((entry) => entry.id),
-          createdAt: primary.data()?.createdAt,
+          createdAt: primary.createdAt,
         };
       }
     } catch (error) {
@@ -587,28 +584,21 @@ export const saveResumeDumpCandidate = async ({
     phone: formatExtractedPhone(profile.phone),
   };
 
-  // Candidates are unauthenticated and cannot query/read the dump, so use a stable
-  // identity id and upsert. Recruiters can resolve legacy duplicates and clean them up.
   let candidateId: string;
-  let duplicateIds: string[] = [];
-  let existingCreatedAt: unknown;
 
   if (source === 'candidate_interview') {
     candidateId = `${safeDocumentKey(recruiterUID)}_${buildResumeDumpIdentityKey(normalizedProfile, fileName)}`;
   } else {
     const resolved = await resolveResumeDumpCandidateId(recruiterUID, normalizedProfile, fileName);
     candidateId = resolved.candidateId;
-    duplicateIds = resolved.duplicateIds;
-    existingCreatedAt = resolved.createdAt;
   }
 
-  const candidateRef = doc(db, 'resumeDumpCandidates', candidateId);
-
-  await setDoc(candidateRef, {
+  await rds.upsertResumeDump({
+    id: candidateId,
     ...normalizedProfile,
     recruiterUID,
     teamId: teamId || recruiterUID,
-    ...(createdBy ? { createdBy } : {}),
+    createdBy: createdBy?.uid || recruiterUID,
     resumeUrl,
     resumeFileName: fileName || 'resume',
     resumeMimeType: mimeType || 'application/octet-stream',
@@ -617,19 +607,7 @@ export const saveResumeDumpCandidate = async ({
     source,
     sourceInterviewId,
     sourceJobTitle,
-    ...(existingCreatedAt ? { createdAt: existingCreatedAt } : { createdAt: serverTimestamp() }),
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
-
-  if (duplicateIds.length > 0) {
-    await Promise.all(duplicateIds.map(async (duplicateId) => {
-      try {
-        await deleteDoc(doc(db, 'resumeDumpCandidates', duplicateId));
-      } catch (error) {
-        console.warn(`Could not remove duplicate resume dump entry ${duplicateId}:`, error);
-      }
-    }));
-  }
+  });
 
   return candidateId;
 };

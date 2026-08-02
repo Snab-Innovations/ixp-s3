@@ -11,8 +11,6 @@ import {
   Save,
   Video,
 } from 'lucide-react';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { auth, db } from '../services/firebase';
 import { useTheme } from '../context/ThemeContext';
 import { useMessageBox } from '../components/MessageBox';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
@@ -22,7 +20,9 @@ import {
   PRIMARY_RATE_LIMITS,
   RateLimitResource,
   loadCompanyRawUsage,
+  saveCompanyRateLimits,
 } from '../services/rateLimitService';
+import { useAuth } from '../context/AuthContext';
 
 const RESOURCE_META: Array<{
   key: RateLimitResource;
@@ -67,6 +67,7 @@ const AdminRateLimiting: React.FC = () => {
   const navigate = useNavigate();
   const { isDark } = useTheme();
   const messageBox = useMessageBox();
+  const { user } = useAuth();
   const { status, loading, error, refresh } = useCompanyRateLimits();
   const [draftLimits, setDraftLimits] = useState<Record<RateLimitResource, string>>({
     interviews: String(PRIMARY_RATE_LIMITS.interviews),
@@ -92,12 +93,12 @@ const AdminRateLimiting: React.FC = () => {
   }, [status]);
 
   const saveDocument = async (data: Record<string, unknown>) => {
-    await setDoc(doc(db, 'rateLimits', 'company'), {
-      ...data,
-      scope: 'company',
-      updatedAt: serverTimestamp(),
-      updatedBy: auth.currentUser?.uid || null,
-    }, { merge: true });
+    const payload: Record<string, unknown> = { ...data, scope: 'company', updatedBy: user?.uid || null };
+    // Flatten resource limit fields when present at top level
+    if (typeof data.interviews === 'number') payload.interviews = data.interviews;
+    if (typeof data.assessments === 'number') payload.assessments = data.assessments;
+    if (typeof data.codingAssessments === 'number') payload.codingAssessments = data.codingAssessments;
+    await saveCompanyRateLimits(payload);
   };
 
   useEffect(() => {
@@ -112,7 +113,7 @@ const AdminRateLimiting: React.FC = () => {
             usage: rawUsage,
             usageBaseline: EMPTY_RATE_LIMIT_USAGE,
             topUps: status.topUps,
-            initializedAt: serverTimestamp(),
+            initializedAt: new Date().toISOString(),
           });
           await refresh();
           return;
@@ -201,7 +202,7 @@ const AdminRateLimiting: React.FC = () => {
             usage: EMPTY_RATE_LIMIT_USAGE,
             usageBaseline: rawUsage,
             topUps: EMPTY_RATE_LIMIT_USAGE,
-            lastResetAt: serverTimestamp(),
+            lastResetAt: new Date().toISOString(),
           });
           await refresh();
           messageBox.showSuccess('Company limit cycle reset successfully.');

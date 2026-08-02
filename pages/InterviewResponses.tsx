@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { collection, query, onSnapshot, orderBy, doc, getDoc, runTransaction, updateDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import { InterviewSubmission } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { useTheme } from '../context/ThemeContext';
 import { InterviewResponsesSkeleton } from '../components/ui/interview-loading-skeleton';
+import { poll, rds } from '../services/rdsApi';
+import { dedupeCandidatesByIdentity } from '../services/candidateIdentity';
 
 type CandidateDecisionStatus = 'Hold' | 'Shortlist' | 'Reject';
 
@@ -33,12 +33,17 @@ const InterviewResponses: React.FC = () => {
 
   useEffect(() => {
     if (!interviewId) return;
-    getDoc(doc(db, 'interviews', interviewId)).then(snap => {
-      if (snap.exists()) {
-        setGlobalExpiry(snap.data().clientAccessExpiresAt || null);
-        setInterviewTitle(snap.data().title || 'Interview Responses');
-      }
-    }).catch(err => console.error("Error loading interview details:", err));
+    rds.getInterview(interviewId)
+      .then(({ interview }) => {
+        if (!interview) return;
+        setGlobalExpiry(
+          interview.clientAccessExpiresAt ||
+            interview.raw?.clientAccessExpiresAt ||
+            null
+        );
+        setInterviewTitle(interview.title || 'Interview Responses');
+      })
+      .catch((err) => console.error('Error loading interview details:', err));
   }, [interviewId]);
 
   const getExpirationDate = (field: any): Date | null => {
@@ -63,21 +68,21 @@ const InterviewResponses: React.FC = () => {
     if (!interviewId) return;
     try {
       const dateVal = val ? new Date(val) : null;
-      const interviewRef = doc(db, 'interviews', interviewId);
-      
-      // Update Interview Document
-      await updateDoc(interviewRef, { clientAccessExpiresAt: dateVal });
+      const iso = dateVal ? dateVal.toISOString() : null;
+
+      await rds.updateInterview(interviewId, {
+        raw: { clientAccessExpiresAt: iso },
+      });
       setGlobalExpiry(dateVal);
-      
-      // Batch update all currently loaded attempts/submissions in state
+
       if (submissions.length > 0) {
-        const promises = submissions.map(sub => {
-          const attemptRef = doc(db, 'interviews', interviewId, 'attempts', sub.id);
-          return updateDoc(attemptRef, { clientAccessExpiresAt: dateVal });
-        });
-        await Promise.all(promises);
+        await Promise.all(
+          submissions.map((sub) =>
+            rds.updateAttempt(sub.id, { clientAccessExpiresAt: iso })
+          )
+        );
       }
-      
+
       messageBox.showSuccess(dateVal ? `Global expiration set to ${dateVal.toLocaleString()} for all reports.` : "Global expiration removed.");
     } catch (err) {
       console.error("Error setting global expiration:", err);
@@ -88,21 +93,19 @@ const InterviewResponses: React.FC = () => {
   const handleClearGlobalExpiry = async () => {
     if (!interviewId) return;
     try {
-      const interviewRef = doc(db, 'interviews', interviewId);
-      
-      // Update Interview Document
-      await updateDoc(interviewRef, { clientAccessExpiresAt: null });
+      await rds.updateInterview(interviewId, {
+        raw: { clientAccessExpiresAt: null },
+      });
       setGlobalExpiry(null);
-      
-      // Clear expiry on all currently loaded attempts
+
       if (submissions.length > 0) {
-        const promises = submissions.map(sub => {
-          const attemptRef = doc(db, 'interviews', interviewId, 'attempts', sub.id);
-          return updateDoc(attemptRef, { clientAccessExpiresAt: null });
-        });
-        await Promise.all(promises);
+        await Promise.all(
+          submissions.map((sub) =>
+            rds.updateAttempt(sub.id, { clientAccessExpiresAt: null })
+          )
+        );
       }
-      
+
       messageBox.showSuccess("Global expiration removed from all reports.");
     } catch (err) {
       console.error("Error clearing global expiration:", err);
@@ -111,31 +114,31 @@ const InterviewResponses: React.FC = () => {
   };
 
   useEffect(() => {
-    if (user?.uid) {
-      getDoc(doc(db, 'profiles', user.uid)).then(snap => {
-        if (snap.exists()) setRecruiterProfile(snap.data());
-      }).catch(console.error);
-    }
-  }, [user]);
+    setRecruiterProfile(userProfile || null);
+  }, [userProfile]);
 
   useEffect(() => {
     if (!interviewId) return;
 
-    const submissionsQuery = query(
-      collection(db, 'interviews', interviewId, 'attempts'),
-      orderBy('submittedAt', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(submissionsQuery, (querySnapshot) => {
-      const submissionsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InterviewSubmission));
-      setSubmissions(submissionsData);
-      setLoading(false);
-    }, (err) => {
-        console.error("Error fetching submissions:", err);
+    return poll(
+      () => rds.listAttempts(interviewId),
+      ({ attempts }) => {
+        const submissionsData = dedupeCandidatesByIdentity(
+          (attempts || []).map((row: any) => ({ ...row, id: row.id } as InterviewSubmission)),
+          (attempt: any) => {
+            const ts = attempt.submittedAt ? new Date(attempt.submittedAt).getTime() : 0;
+            return Number.isFinite(ts) ? ts : 0;
+          }
+        );
+        setSubmissions(submissionsData);
         setLoading(false);
-    });
-
-    return () => unsubscribe();
+      },
+      (err) => {
+        console.error('Error fetching submissions:', err);
+        setLoading(false);
+      },
+      8000
+    );
   }, [interviewId]);
 
   const getScoreValue = (score: unknown): number => {
@@ -329,17 +332,16 @@ const InterviewResponses: React.FC = () => {
   const handleStatusChange = async (submissionId: string, newStatus: CandidateDecisionStatus) => {
     if (!interviewId) return;
     try {
-      const submissionRef = doc(db, 'interviews', interviewId, 'attempts', submissionId);
-      await runTransaction(db, async (transaction) => {
-        const submissionSnapshot = await transaction.get(submissionRef);
-        if (!submissionSnapshot.exists()) throw new Error('Candidate response no longer exists.');
+      const existing = submissions.find((s) => s.id === submissionId);
+      if (!existing) throw new Error('Candidate response no longer exists.');
+      if (getCandidateDecisionStatus(existing.status) === 'Shortlist' && newStatus !== 'Shortlist') {
+        throw new Error('A shortlisted candidate is permanent and cannot be changed.');
+      }
 
-        if (submissionSnapshot.data().status === 'Shortlist' && newStatus !== 'Shortlist') {
-          throw new Error('A shortlisted candidate is permanent and cannot be changed.');
-        }
-
-        transaction.update(submissionRef, { status: newStatus });
-      });
+      await rds.updateAttempt(submissionId, { status: newStatus });
+      setSubmissions((prev) =>
+        prev.map((s) => (s.id === submissionId ? { ...s, status: newStatus } : s))
+      );
 
       messageBox.showSuccess(
         newStatus === 'Shortlist'
@@ -350,7 +352,7 @@ const InterviewResponses: React.FC = () => {
       console.error("Error updating status:", err);
       const message = err instanceof Error ? err.message : '';
       messageBox.showError(
-        message.includes('permanent')
+        message.includes('permanent') || message.includes('no longer exists')
           ? message
           : 'Failed to update candidate status.'
       );
@@ -663,8 +665,12 @@ const InterviewResponses: React.FC = () => {
                     onClick={async () => {
                       try {
                         const nextVal = !(submission as any).allowReattempt;
-                        const submissionRef = doc(db, 'interviews', interviewId!, 'attempts', submission.id);
-                        await updateDoc(submissionRef, { allowReattempt: nextVal });
+                        await rds.updateAttempt(submission.id, { allowReattempt: nextVal });
+                        setSubmissions((prev) =>
+                          prev.map((s) =>
+                            s.id === submission.id ? { ...s, allowReattempt: nextVal } as any : s
+                          )
+                        );
                         messageBox.showSuccess(nextVal ? "Reattempt permission granted!" : "Reattempt permission removed.");
                       } catch (err) {
                         console.error("Error updating reattempt status:", err);

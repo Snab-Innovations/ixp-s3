@@ -2,8 +2,6 @@ import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationCenter from './NotificationCenter';
-import { signOut } from 'firebase/auth';
-import { auth } from '../services/firebase';
 import { useTheme } from '../context/ThemeContext';
 import { Sun, Moon, Menu, X, Monitor, Mail, Bug, MessageSquare } from 'lucide-react';
 import ConnectionStatus from './ConnectionStatus';
@@ -14,14 +12,14 @@ import RecruiterRateLimitBanner from './RecruiterRateLimitBanner';
 
 
 const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, userProfile, loading: authLoading } = useAuth();
+  const { user, userProfile, loading: authLoading, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await signOut();
       navigate('/');
     } catch (error) {
       console.error("Logout failed", error);

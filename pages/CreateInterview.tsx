@@ -1,6 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, collectionGroup, doc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { SKILL_OPTIONS } from './Profile';
@@ -23,6 +21,7 @@ import {
   type ResumeDumpRecord,
 } from '../services/resumeService';
 import { logTeamActivity } from '../services/auditService';
+import { poll, rds } from '../services/rdsApi';
 
 // Setup PDF.js worker to enable PDF parsing
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -188,47 +187,45 @@ const CreateInterview: React.FC = () => {
     }
 
     setLoadingResumeDumpCandidates(true);
-    const resumeDumpQuery = query(
-      collection(db, 'resumeDumpCandidates'),
-      where('recruiterUID', '==', user.uid)
-    );
+    const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
 
-    const unsubscribe = onSnapshot(
-      resumeDumpQuery,
-      (snapshot) => {
-        const mapped = snapshot.docs.map((candidateDoc) => {
-          const data = candidateDoc.data();
-          return {
-            id: candidateDoc.id,
-            recruiterUID: typeof data.recruiterUID === 'string' ? data.recruiterUID : user.uid,
-            name: typeof data.name === 'string' ? data.name : '',
-            email: typeof data.email === 'string' ? data.email : '',
-            phone: typeof data.phone === 'string' ? data.phone : '',
-            location: typeof data.location === 'string' ? data.location : '',
-            currentTitle: typeof data.currentTitle === 'string' ? data.currentTitle : '',
-            summary: typeof data.summary === 'string' ? data.summary : '',
-            totalExperienceYears: typeof data.totalExperienceYears === 'number' ? data.totalExperienceYears : 0,
-            skills: Array.isArray(data.skills) ? data.skills.filter((skill: unknown): skill is string => typeof skill === 'string' && skill.trim().length > 0) : [],
-            experience: Array.isArray(data.experience) ? data.experience : [],
-            education: Array.isArray(data.education) ? data.education : [],
-            certifications: Array.isArray(data.certifications) ? data.certifications : [],
-            languages: Array.isArray(data.languages) ? data.languages : [],
-            keywords: Array.isArray(data.keywords) ? data.keywords : [],
-            linkedinUrl: typeof data.linkedinUrl === 'string' ? data.linkedinUrl : '',
-            portfolioUrl: typeof data.portfolioUrl === 'string' ? data.portfolioUrl : '',
-            parsingMethod: data.parsingMethod === 'hybrid' ? 'hybrid' : 'deterministic',
-            parserVersion: typeof data.parserVersion === 'number' ? data.parserVersion : 1,
-            resumeUrl: typeof data.resumeUrl === 'string' ? data.resumeUrl : '',
-            resumeFileName: typeof data.resumeFileName === 'string' ? data.resumeFileName : '',
-            resumeText: typeof data.resumeText === 'string' ? data.resumeText : '',
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
-          };
-        });
+    return poll(
+      () => rds.listResumeDump(teamId),
+      ({ candidates }) => {
+        const mapped = (candidates || []).map((data: any) => ({
+          id: data.id,
+          recruiterUID: typeof data.recruiterUID === 'string' ? data.recruiterUID : user.uid,
+          name: typeof data.name === 'string' ? data.name : '',
+          email: typeof data.email === 'string' ? data.email : '',
+          phone: typeof data.phone === 'string' ? data.phone : '',
+          location: typeof data.location === 'string' ? data.location : '',
+          currentTitle: typeof data.currentTitle === 'string' ? data.currentTitle : '',
+          summary: typeof data.summary === 'string' ? data.summary : '',
+          totalExperienceYears: typeof data.totalExperienceYears === 'number' ? data.totalExperienceYears : 0,
+          skills: Array.isArray(data.skills) ? data.skills.filter((skill: unknown): skill is string => typeof skill === 'string' && skill.trim().length > 0) : [],
+          experience: Array.isArray(data.experience) ? data.experience : [],
+          education: Array.isArray(data.education) ? data.education : [],
+          certifications: Array.isArray(data.certifications) ? data.certifications : [],
+          languages: Array.isArray(data.languages) ? data.languages : [],
+          keywords: Array.isArray(data.keywords) ? data.keywords : [],
+          linkedinUrl: typeof data.linkedinUrl === 'string' ? data.linkedinUrl : '',
+          portfolioUrl: typeof data.portfolioUrl === 'string' ? data.portfolioUrl : '',
+          parsingMethod: data.parsingMethod === 'hybrid' ? 'hybrid' : 'deterministic',
+          parserVersion: typeof data.parserVersion === 'number' ? data.parserVersion : 1,
+          resumeUrl: typeof data.resumeUrl === 'string' ? data.resumeUrl : '',
+          resumeFileName: typeof data.resumeFileName === 'string' ? data.resumeFileName : '',
+          resumeText: typeof data.resumeText === 'string' ? data.resumeText : '',
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+        }));
         setResumeDumpCandidates(dedupeCandidatesByIdentity(mapped, (candidate) => {
           const stamp = candidate.updatedAt || candidate.createdAt;
           if (stamp && typeof stamp === 'object' && 'toMillis' in stamp && typeof (stamp as { toMillis?: unknown }).toMillis === 'function') {
             return (stamp as { toMillis: () => number }).toMillis();
+          }
+          if (typeof stamp === 'string') {
+            const parsed = Date.parse(stamp);
+            return Number.isNaN(parsed) ? 0 : parsed;
           }
           return 0;
         }));
@@ -237,11 +234,10 @@ const CreateInterview: React.FC = () => {
       (error) => {
         console.error('Failed to load resume dump candidates:', error);
         setLoadingResumeDumpCandidates(false);
-      }
+      },
+      10000
     );
-
-    return unsubscribe;
-  }, [user]);
+  }, [user, userProfile?.teamId, userProfile?.parentRecruiterId]);
 
   useEffect(() => {
     if (!user) {
@@ -253,19 +249,14 @@ const CreateInterview: React.FC = () => {
 
     setLoadingShortlistedCandidates(true);
     setShortlistedCandidatesError(false);
-    const shortlistedCandidatesQuery = query(
-      collectionGroup(db, 'attempts'),
-      where('recruiterUID', '==', user.uid),
-      where('status', '==', 'Shortlist')
-    );
+    const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
 
-    const unsubscribe = onSnapshot(
-      shortlistedCandidatesQuery,
-      (snapshot) => {
+    return poll(
+      () => rds.listAttemptsByRecruiter(teamId, 'Shortlist'),
+      ({ attempts }) => {
         const identityKeys = new Set<string>();
-        snapshot.docs.forEach((attemptDoc) => {
-          const candidateInfo = attemptDoc.data().candidateInfo;
-          getCandidateIdentityKeys(candidateInfo).forEach((key) => identityKeys.add(key));
+        (attempts || []).forEach((attempt: any) => {
+          getCandidateIdentityKeys(attempt.candidateInfo).forEach((key) => identityKeys.add(key));
         });
         setShortlistedCandidateIdentityKeys(identityKeys);
         setLoadingShortlistedCandidates(false);
@@ -275,11 +266,10 @@ const CreateInterview: React.FC = () => {
         setShortlistedCandidateIdentityKeys(new Set());
         setShortlistedCandidatesError(true);
         setLoadingShortlistedCandidates(false);
-      }
+      },
+      10000
     );
-
-    return unsubscribe;
-  }, [user]);
+  }, [user, userProfile?.teamId, userProfile?.parentRecruiterId]);
 
   const requiredSkillSignals = useMemo(() => {
     const explicitSkills = splitCommaList(formData.skills);
@@ -613,7 +603,7 @@ const CreateInterview: React.FC = () => {
       const newInterviewLink = `${window.location.origin}/#/interview/${newRand}`;
       const newAccessCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-      // 2. Save to Firestore
+      // 2. Save to Postgres via data API
       const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
       const creatorInfo = {
         uid: user.uid,
@@ -623,7 +613,8 @@ const CreateInterview: React.FC = () => {
         designation: userProfile?.designation || 'Recruiter'
       };
 
-      await setDoc(doc(db, 'interviews', newRand), {
+      await rds.createInterview({
+        id: newRand,
         ...formData,
         manualQuestions,
         customFields,
@@ -634,7 +625,6 @@ const CreateInterview: React.FC = () => {
         recruiterUID: user.uid,
         teamId,
         createdBy: creatorInfo,
-        createdAt: serverTimestamp(),
         isMock: false,
       });
 
@@ -648,15 +638,13 @@ const CreateInterview: React.FC = () => {
 
       if (uploadedResumeCandidateIds.length > 0) {
         try {
-          await Promise.all(uploadedResumeCandidateIds.map((candidateId) => setDoc(
-            doc(db, 'resumeDumpCandidates', candidateId),
-            {
-              sourceInterviewId: newRand,
-              sourceJobTitle: formData.title,
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true }
-          )));
+          await Promise.all(uploadedResumeCandidateIds.map((candidateId) => rds.upsertResumeDump({
+            id: candidateId,
+            recruiterUID: user.uid,
+            teamId,
+            sourceInterviewId: newRand,
+            sourceJobTitle: formData.title,
+          })));
         } catch (resumeLinkError) {
           console.error('Interview created, but one or more Resume Dump source links could not be updated:', resumeLinkError);
         }

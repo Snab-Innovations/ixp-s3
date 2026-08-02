@@ -135,10 +135,50 @@ export async function callBedrockApi(
     }
   }
 
-  const text = response.choices?.[0]?.message?.content?.trim() || '';
+  const text =
+    extractBedrockMessageText(response.choices?.[0]?.message) ||
+    '';
   if (!text) {
     throw new Error(`No text content returned from Bedrock model ${model}.`);
   }
+  return text;
+}
+
+/** MiniMax / reasoning models may put the answer in content, reasoning, or array parts. */
+function extractBedrockMessageText(message: any): string {
+  if (!message) return '';
+
+  const fromPart = (part: any): string => {
+    if (!part) return '';
+    if (typeof part === 'string') return part;
+    if (typeof part.text === 'string') return part.text;
+    if (typeof part.content === 'string') return part.content;
+    return '';
+  };
+
+  let content = '';
+  if (typeof message.content === 'string') {
+    content = message.content;
+  } else if (Array.isArray(message.content)) {
+    content = message.content.map(fromPart).filter(Boolean).join('\n');
+  }
+
+  // Some Mantle reasoning models return the usable report outside `content`.
+  const reasoning =
+    (typeof message.reasoning === 'string' && message.reasoning) ||
+    (typeof message.reasoning_content === 'string' && message.reasoning_content) ||
+    '';
+
+  let text = (content || '').trim();
+  if (!text && reasoning) text = reasoning.trim();
+
+  // Strip common think / reasoning wrappers if the model embeds them.
+  text = text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/```thinking[\s\S]*?```/gi, '')
+    .trim();
+
   return text;
 }
 
@@ -168,7 +208,7 @@ export async function callBedrockChat(
     max_tokens: maxTokens,
   });
 
-  const text = response.choices?.[0]?.message?.content?.trim() || '';
+  const text = extractBedrockMessageText(response.choices?.[0]?.message);
   if (!text) {
     throw new Error(`No text content returned from Bedrock chat model ${model}.`);
   }

@@ -8,38 +8,39 @@
 
 import express from 'express';
 import cors from 'cors';
+import fs from 'fs';
 import admin from 'firebase-admin';
 import fetch from 'node-fetch'; // Standard node fetch for webhook delivery
 import { createRequire } from 'module';
+import './cognitoConfig.js'; // load env before auth routes / Cognito client init
+import authRoutes from './authRoutes.js';
+import dataRoutes from './routes/dataRoutes.js';
+import { pingDb, dbReady, query as pgQuery } from './db/pool.js';
 
 const require = createRequire(import.meta.url);
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
 
-// Initialize Firebase Admin SDK
-// Make sure to set the environment variable FIREBASE_SERVICE_ACCOUNT_KEY or place serviceAccountKey.json in this directory
+// Cognito auth bridge (login, password reset, user provisioning, Firebase custom tokens)
+app.use('/auth', authRoutes);
+
+// PostgreSQL data API (replaces Firestore client access)
+app.use('/api/db', dataRoutes);
+
+// Optional legacy Firebase Admin (custom tokens / migration helpers only).
+// Cognito + Postgres are the primary stack — skip quietly when no key is present.
 const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_KEY || './serviceAccountKey.json';
-
-try {
-  const serviceAccount = require(serviceAccountPath);
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-  });
-  console.log("✅ Firebase Admin SDK initialized successfully.");
-} catch (error) {
-  console.warn("⚠️ Firebase service account key missing or invalid. Set FIREBASE_SERVICE_ACCOUNT_KEY env var or provide serviceAccountKey.json.");
-  console.warn("⚠️ Firestore operations will fail until credentials are provided.");
-}
-
-let db = null;
-try {
-  if (admin.apps.length > 0) {
-    db = admin.firestore();
+if (fs.existsSync(serviceAccountPath)) {
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert(require(serviceAccountPath)),
+    });
+    console.log('✅ Firebase Admin SDK initialized (optional legacy bridge).');
+  } catch (error) {
+    console.warn('⚠️ Firebase Admin key found but invalid; continuing without Firebase Admin.');
   }
-} catch (e) {
-  console.warn("⚠️ Firestore database reference could not be loaded on boot.");
 }
 
 // Mock API Key database for validation (In production, load from a Firestore collection 'api_keys')
@@ -97,15 +98,15 @@ app.post('/api/jobs/receive', authenticateApiKey, async (req, res) => {
     });
   }
 
-  if (!db) {
-    console.warn("⚠️ Firestore connection unavailable. Returning mock response for testing/demo.");
+  if (!dbReady()) {
+    console.warn("⚠️ Postgres unavailable. Returning mock response for testing/demo.");
     const mockRand = Math.random().toString(36).substring(2, 15);
     const mockLink = `http://localhost:3000/#/interview/${mockRand}`;
     const mockCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     
     return res.status(201).json({
       success: true,
-      message: "Job description received and interview successfully scheduled inside InterviewXpert! (MOCK MODE: Firestore key missing)",
+      message: "Job description received and interview successfully scheduled inside InterviewXpert! (MOCK MODE: Postgres not configured)",
       data: {
         interviewId: mockRand,
         accessCode: mockCode,
@@ -122,32 +123,37 @@ app.post('/api/jobs/receive', authenticateApiKey, async (req, res) => {
     const newInterviewLink = `${process.env.IX_FRONTEND_URL || 'http://localhost:5173'}/#/interview/${newRand}`;
     const newAccessCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-    const jobData = {
-      title,
-      description,
-      department,
-      employmentType,
-      experience: Number(experience),
-      skills,
-      education,
-      deadline,
-      numQuestions: Number(numQuestions),
-      difficulty,
-      strictness,
-      manualQuestions: [],
-      customFields: [],
-      candidateEmails,
-      interviewLink: newInterviewLink,
-      accessCode: newAccessCode,
-      recruiterUID,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      isMock: false
-    };
+    await pgQuery(
+      `INSERT INTO interviews (
+        id, recruiter_uid, team_id, title, description, department, employment_type,
+        experience, skills, education, deadline, num_questions, difficulty, strictness,
+        manual_questions, custom_fields, candidate_emails, candidate_data,
+        interview_link, access_code, is_mock
+      ) VALUES (
+        $1,$2,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
+        '[]'::jsonb,'[]'::jsonb,$14::jsonb,'[]'::jsonb,$15,$16,false
+      )`,
+      [
+        newRand,
+        recruiterUID,
+        title,
+        description,
+        department,
+        employmentType,
+        Number(experience),
+        skills,
+        education,
+        deadline,
+        Number(numQuestions),
+        difficulty,
+        strictness,
+        JSON.stringify(candidateEmails || []),
+        newInterviewLink,
+        newAccessCode,
+      ]
+    );
 
-    // Save to Firestore
-    await db.collection('interviews').doc(newRand).set(jobData);
-
-    console.log(`[REST API] New Job created from external DB: ${title} (Access Code: ${newAccessCode})`);
+    console.log(`[REST API] New Job created in Postgres: ${title} (Access Code: ${newAccessCode})`);
 
     res.status(201).json({
       success: true,
@@ -187,25 +193,45 @@ app.post('/api/reports/dispatch', authenticateApiKey, async (req, res) => {
     });
   }
 
-  if (!db) {
+  if (!dbReady()) {
     return res.status(503).json({
       success: false,
-      error: "Firestore database connection is currently unavailable."
+      error: "PostgreSQL database connection is currently unavailable."
     });
   }
 
   try {
-    // 1. Fetch Candidate Submission Data from Firestore
-    const attemptSnap = await db.collection('interviews').doc(interviewId).collection('attempts').doc(submissionId).get();
-    
-    if (!attemptSnap.exists()) {
+    // 1. Fetch Candidate Submission Data from Postgres
+    const attemptRes = await pgQuery(
+      `SELECT * FROM interview_attempts WHERE interview_id = $1 AND id = $2 LIMIT 1`,
+      [interviewId, submissionId]
+    );
+
+    if (!attemptRes.rows[0]) {
       return res.status(404).json({
         success: false,
         error: `Submission with ID ${submissionId} not found under Interview ID ${interviewId}.`
       });
     }
 
-    const submissionData = attemptSnap.data();
+    const row = attemptRes.rows[0];
+    const reportData = {
+      id: row.id,
+      interviewId: row.interview_id,
+      recruiterUID: row.recruiter_uid,
+      status: row.status,
+      score: row.score,
+      feedback: row.feedback,
+      questions: row.questions,
+      answers: row.answers,
+      videoURLs: row.video_urls,
+      transcriptTexts: row.transcript_texts,
+      candidateInfo: row.candidate_info,
+      submittedAt: row.submitted_at,
+      ...(row.raw || {}),
+    };
+
+    const submissionData = reportData;
 
     // 2. Format Payload for External Database Ingestion
     const payload = {
@@ -223,7 +249,7 @@ app.post('/api/reports/dispatch', authenticateApiKey, async (req, res) => {
         score: submissionData.score || 0,
         feedbackSummary: submissionData.feedback || "No feedback generated.",
         questionsAsked: submissionData.questions || [],
-        transcripts: submissionData.transcripts || [],
+        transcripts: submissionData.transcriptTexts || [],
         videoURLs: submissionData.videoURLs || []
       }
     };
@@ -263,8 +289,15 @@ app.post('/api/reports/dispatch', authenticateApiKey, async (req, res) => {
 });
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: "healthy", service: "InterviewXpert REST Integration API" });
+app.get('/api/health', async (req, res) => {
+  const db = dbReady() ? await pingDb() : { ok: false, reason: 'not_configured' };
+  res.json({
+    status: "healthy",
+    service: "InterviewXpert REST Integration API",
+    authBridge: "/auth/health",
+    dataApi: "/api/db/health",
+    postgres: db,
+  });
 });
 
 const PORT = process.env.PORT || 8080;

@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { doc, getDoc, updateDoc, serverTimestamp, Timestamp, setDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext'; // Assuming userProfile is available here
 import { createPortal } from 'react-dom';
 import { SKILL_OPTIONS, JOB_CATEGORIES } from './Profile';
 import { parseJobDescriptionText, ParsedJdResult } from '../services/geminiService';
 import * as pdfjsLib from 'pdfjs-dist';
+import { rds } from '../services/rdsApi';
 
 interface EditJobModalProps {
   jobId: string;
@@ -143,61 +142,58 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         if (!jobId || !user) {
             return;
         }
-        const jobDocRef = doc(db, 'jobs', jobId);
-        const interviewDocRef = doc(db, 'interviews', jobId);
 
-        const [jobDocSnap, interviewDocSnap] = await Promise.all([
-          getDoc(jobDocRef),
-          getDoc(interviewDocRef)
-        ]);
-
-        if (jobDocSnap.exists() || interviewDocSnap.exists()) {
-            const jobData = jobDocSnap.data() || {};
-            const interviewData = interviewDocSnap.data() || {};
-            const sourceData = jobDocSnap.exists() ? jobData : interviewData;
-
-            if (sourceData.recruiterUID !== user.uid) {
-                alert("You do not have permission to edit this item.");
-                onClose();
-                return;
-            }
-
-            setAccessCode(sourceData.accessCode || '');
-
-            let deadlineStr = '';
-            const deadlineSource = jobData.applyDeadline || interviewData.deadline;
-            if (deadlineSource) {
-                if (deadlineSource.toDate) { // Timestamp
-                    deadlineStr = deadlineSource.toDate().toISOString().split('T')[0];
-                } else if (typeof deadlineSource === 'string') { // String 'YYYY-MM-DD'
-                    deadlineStr = deadlineSource;
-                }
-            }
-
-          setFormData({
-            title: jobData.title || interviewData.title?.replace(' Interview', '') || '',
-            companyName: jobData.companyName || 'N/A', // Company name might not be on interview doc
-            qualifications: jobData.qualifications || interviewData.education || '',
-            deadline: deadlineStr,
-            description: jobData.description || interviewData.description || '',
-            permission: jobData.interviewPermission || 'anyone',
-            skills: jobData.skills || interviewData.skills || '',
-            category: jobData.category || interviewData.department || '',
-            numQuestions: jobData.numQuestions || interviewData.numQuestions || 5,
-            employmentType: interviewData.employmentType || 'Full-time',
-            minExperience: interviewData.minExperience || interviewData.experience || 0,
-            maxExperience: interviewData.maxExperience || interviewData.experience || 0,
-            experience: interviewData.experience || 0,
-            difficulty: jobData.difficulty || interviewData.difficulty || 'Medium',
-          });
-          setCustomFields(jobData.customFields || interviewData.customFields || []);
-          setManualQuestions(interviewData.manualQuestions || []);
-          setCandidateEmails(interviewData.candidateEmails || []);
-
-        } else {
+        const { interview } = await rds.getInterview(jobId);
+        if (!interview) {
           alert("Job or Interview not found.");
           onClose();
+          return;
         }
+
+        const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
+        const canEdit =
+          interview.recruiterUID === user.uid ||
+          interview.teamId === user.uid ||
+          interview.teamId === teamId;
+        if (!canEdit) {
+          alert("You do not have permission to edit this item.");
+          onClose();
+          return;
+        }
+
+        setAccessCode(interview.accessCode || '');
+
+        let deadlineStr = '';
+        const deadlineSource = interview.deadline || interview.applyDeadline;
+        if (deadlineSource) {
+          if (typeof deadlineSource === 'string') {
+            deadlineStr = deadlineSource.includes('T')
+              ? deadlineSource.split('T')[0]
+              : deadlineSource;
+          } else if (deadlineSource?.toDate) {
+            deadlineStr = deadlineSource.toDate().toISOString().split('T')[0];
+          }
+        }
+
+        setFormData({
+          title: (interview.title || '').replace(/ Interview$/i, ''),
+          companyName: interview.companyName || userProfile?.company || 'N/A',
+          qualifications: interview.education || interview.qualifications || '',
+          deadline: deadlineStr,
+          description: interview.description || '',
+          permission: interview.interviewPermission || 'anyone',
+          skills: interview.skills || '',
+          category: interview.department || interview.category || '',
+          numQuestions: interview.numQuestions || 5,
+          employmentType: interview.employmentType || 'Full-time',
+          minExperience: interview.minExperience || interview.experience || 0,
+          maxExperience: interview.maxExperience || interview.experience || 0,
+          experience: interview.experience || 0,
+          difficulty: interview.difficulty || 'Medium',
+        });
+        setCustomFields(interview.customFields || []);
+        setManualQuestions(interview.manualQuestions || []);
+        setCandidateEmails(interview.candidateEmails || []);
       } catch (err) {
         console.error("Error fetching job:", err);
         alert("Error loading job details");
@@ -208,7 +204,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     };
 
     fetchJob();
-  }, [jobId, user, onClose]);
+  }, [jobId, user, userProfile, onClose]);
 
   const handleAddCustomField = () => {
     if (tempCustomField.key.trim() && tempCustomField.value.trim()) {
@@ -297,53 +293,32 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     setSaving(true);
 
     try {
-      const deadlineDate = new Date(formData.deadline);
-      const jobDocRef = doc(db, 'jobs', jobId);
-      const interviewDocRef = doc(db, 'interviews', jobId);
-
-      const jobPayload = {
+      await rds.updateInterview(jobId, {
         title: formData.title,
-        companyName: formData.companyName,
-        qualifications: formData.qualifications,
-        description: formData.description,
-        interviewPermission: formData.permission,
-        skills: formData.skills,
-        numQuestions: Number(formData.numQuestions),
-        customFields,
-        category: formData.category,
-        applyDeadline: Timestamp.fromDate(deadlineDate),
-        difficulty: formData.difficulty,
-        updatedAt: serverTimestamp(),
-        // Fields needed if we are creating the job doc for the first time
-        recruiterUID: user.uid,
-        recruiterName: userProfile?.fullname || user.email,
-        recruiterEmail: user.email,
-        interviewLink: `${window.location.origin}/#/interview/${jobId}`,
-        accessCode: accessCode,
-        isMock: false,
-      };
-
-      const interviewPayload = {
-        title: `${formData.title} Interview`,
         description: formData.description,
         department: formData.category,
         employmentType: formData.employmentType,
         minExperience: Number(formData.minExperience),
         maxExperience: Number(formData.maxExperience),
-        experience: Number(formData.minExperience), // keep backward compatibility
+        experience: Number(formData.minExperience),
         skills: formData.skills,
         education: formData.qualifications,
-        deadline: formData.deadline,
+        deadline: formData.deadline || null,
         numQuestions: Number(formData.numQuestions),
         customFields,
         difficulty: formData.difficulty,
         manualQuestions,
         candidateEmails,
-        updatedAt: serverTimestamp(),
-      };
-
-      await setDoc(jobDocRef, jobPayload, { merge: true });
-      await updateDoc(interviewDocRef, interviewPayload);
+        raw: {
+          companyName: formData.companyName,
+          interviewPermission: formData.permission,
+          category: formData.category,
+          applyDeadline: formData.deadline || null,
+          recruiterName: userProfile?.fullname || user.email,
+          recruiterEmail: user.email,
+          accessCode,
+        },
+      });
 
       onClose();
     } catch (err) {

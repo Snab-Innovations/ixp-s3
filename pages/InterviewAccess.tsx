@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import { ThemeProvider } from '../context/ThemeContext';
 import { Interview } from '../types';
 import DayNightToggle from '../components/DayNightToggle';
@@ -9,6 +7,7 @@ import gsap from 'gsap';
 import { ChevronDown } from 'lucide-react';
 import { getRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus } from '../services/rateLimitService';
 import { stageCandidateConsent } from '../services/candidateConsent';
+import { rds } from '../services/rdsApi';
 
 const InterviewAccess: React.FC = () => {
   const { interviewId } = useParams<{ interviewId: string }>();
@@ -32,10 +31,9 @@ const InterviewAccess: React.FC = () => {
       if (!interviewId || hasFetchedInterview.current) return;
       hasFetchedInterview.current = true;
       try {
-        const interviewDoc = await getDoc(doc(db, 'interviews', interviewId));
-        if (interviewDoc.exists()) {
-           const interviewData = interviewDoc.data() as Interview;
-           setInterview(interviewData);
+        const { interview: interviewData } = await rds.getInterview(interviewId);
+        if (interviewData) {
+           setInterview({ ...interviewData, id: interviewData.id } as Interview);
            setInterviewTitle(interviewData.title);
            const rateLimitStatus = await loadCompanyRateLimitStatus();
            if (isRateLimitReached(rateLimitStatus, 'interviews')) {
@@ -55,6 +53,7 @@ const InterviewAccess: React.FC = () => {
           setError('Interview not found.');
         }
       } catch (err) {
+        console.error('Failed to fetch interview details:', err);
         setError('Failed to fetch interview details.');
       }
     };

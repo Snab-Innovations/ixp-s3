@@ -1,10 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import * as pdfjsLib from 'pdfjs-dist';
 import * as mammoth from 'mammoth';
 import { Archive, CheckCircle2, ExternalLink, FileText, Search, Trash2, UploadCloud, UserCheck, UserX, XCircle } from 'lucide-react';
-import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { SKILL_OPTIONS } from './Profile';
@@ -12,6 +10,7 @@ import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeSer
 import { logTeamActivity } from '../services/auditService';
 import { dedupeCandidatesByIdentity } from '../services/candidateIdentity';
 import { deleteFileFromS3ByUrl } from '../services/s3Service';
+import { poll, rds } from '../services/rdsApi';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
@@ -474,32 +473,25 @@ const ResumeDump: React.FC = () => {
     }
 
     setLoading(true);
-    const candidatesQuery = teamId
-      ? query(collection(db, 'resumeDumpCandidates'), where('teamId', '==', teamId))
-      : query(collection(db, 'resumeDumpCandidates'), where('recruiterUID', '==', user.uid));
+    const scope = teamId || user.uid;
 
-    const unsubscribe = onSnapshot(
-      candidatesQuery,
-      (snapshot) => {
-        const records = snapshot.docs
-          .map((snapshotDoc) => {
-            const data = snapshotDoc.data();
-            return {
-              ...data,
-              id: snapshotDoc.id,
-              name: typeof data.name === 'string' ? data.name : '',
-              email: typeof data.email === 'string' ? data.email : '',
-              phone: typeof data.phone === 'string' ? data.phone : '',
-              skills: Array.isArray(data.skills) ? data.skills : [],
-              experience: Array.isArray(data.experience) ? data.experience : [],
-              education: Array.isArray(data.education) ? data.education : [],
-              certifications: Array.isArray(data.certifications) ? data.certifications : [],
-              languages: Array.isArray(data.languages) ? data.languages : [],
-              resumeUrl: typeof data.resumeUrl === 'string' ? data.resumeUrl : '',
-              resumeFileName: typeof data.resumeFileName === 'string' ? data.resumeFileName : 'resume',
-            } as ResumeDumpCandidate;
-          })
-          .sort((left, right) => toMillis(right.updatedAt || right.createdAt) - toMillis(left.updatedAt || left.createdAt));
+    return poll(
+      () => rds.listResumeDump(scope),
+      ({ candidates }) => {
+        const records = (candidates || []).map((data: any) => ({
+          ...data,
+          id: data.id,
+          name: typeof data.name === 'string' ? data.name : '',
+          email: typeof data.email === 'string' ? data.email : '',
+          phone: typeof data.phone === 'string' ? data.phone : '',
+          skills: Array.isArray(data.skills) ? data.skills : [],
+          experience: Array.isArray(data.experience) ? data.experience : [],
+          education: Array.isArray(data.education) ? data.education : [],
+          certifications: Array.isArray(data.certifications) ? data.certifications : [],
+          languages: Array.isArray(data.languages) ? data.languages : [],
+          resumeUrl: typeof data.resumeUrl === 'string' ? data.resumeUrl : '',
+          resumeFileName: typeof data.resumeFileName === 'string' ? data.resumeFileName : 'resume',
+        }));
         setCandidates(dedupeCandidatesByIdentity(records, (candidate) => toMillis(candidate.updatedAt || candidate.createdAt)));
         setLoading(false);
       },
@@ -507,11 +499,10 @@ const ResumeDump: React.FC = () => {
         console.error('Error loading resume dump:', error);
         setCandidates([]);
         setLoading(false);
-      }
+      },
+      8000
     );
-
-    return () => unsubscribe();
-  }, [user]);
+  }, [user, teamId]);
 
   const filteredCandidates = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
@@ -616,8 +607,8 @@ const ResumeDump: React.FC = () => {
   const deleteCandidate = async (candidate: ResumeDumpCandidate) => {
     setDeletingCandidateId(candidate.id);
     try {
-      // 1. Delete candidate document from Firestore
-      await deleteDoc(doc(db, 'resumeDumpCandidates', candidate.id));
+      // 1. Delete candidate record from PostgreSQL (via api-server)
+      await rds.deleteResumeDump(candidate.id, teamId);
 
       // 2. Delete candidate resume file from Amazon S3 Bucket
       if (candidate.resumeUrl) {
@@ -658,10 +649,10 @@ const ResumeDump: React.FC = () => {
   const toggleHiredStatus = async (candidate: ResumeDumpCandidate) => {
     const newStatus = !(candidate.isHired || candidate.doNotSuggest);
     try {
-      await updateDoc(doc(db, 'resumeDumpCandidates', candidate.id), {
+      await rds.updateResumeDump(candidate.id, {
         isHired: newStatus,
         doNotSuggest: newStatus,
-        updatedAt: serverTimestamp(),
+        recruiterUID: teamId,
       });
       const creatorInfo = {
         uid: user?.uid || '',

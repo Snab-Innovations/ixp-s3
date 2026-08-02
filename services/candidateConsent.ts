@@ -1,5 +1,4 @@
-import { collection, doc, serverTimestamp, setDoc, Timestamp } from 'firebase/firestore';
-import { db } from './firebase';
+import { rds } from './rdsApi';
 
 export const CANDIDATE_CONSENT_VERSION = '2026-07-17';
 
@@ -44,7 +43,7 @@ const resolvePublicIp = async (): Promise<string | null> => {
 
 export const stageCandidateConsent = async (interviewId: string, interviewTitle: string) => {
   const pending: PendingCandidateConsent = {
-    consentId: doc(collection(db, 'candidateConsents')).id,
+    consentId: crypto.randomUUID().replace(/-/g, '').slice(0, 24),
     interviewId,
     interviewTitle: interviewTitle.trim().slice(0, 300),
     acceptedAt: new Date().toISOString(),
@@ -74,19 +73,19 @@ export const saveCandidateConsent = async (
   const pending = readPendingConsent(interviewId);
   if (!pending) return null;
 
-  await setDoc(doc(db, 'candidateConsents', pending.consentId), {
+  await rds.createConsent({
+    id: pending.consentId,
     interviewId,
     interviewTitle: pending.interviewTitle,
     candidateName: candidate.name.trim().slice(0, 200),
-    candidateEmail: candidate.email.trim().toLowerCase().slice(0, 320),
+    candidateEmail: candidate.email.trim().slice(0, 320),
     ipAddress: pending.ipAddress,
     acceptedItemIds: [...ACCEPTED_ITEM_IDS],
     acceptedAll: true,
     consentVersion: CANDIDATE_CONSENT_VERSION,
     consentMethod: 'web_checkboxes',
     status: 'accepted',
-    acceptedAt: Timestamp.fromDate(new Date(pending.acceptedAt)),
-    createdAt: serverTimestamp(),
+    acceptedAt: pending.acceptedAt,
   });
 
   sessionStorage.removeItem(sessionKey(interviewId));

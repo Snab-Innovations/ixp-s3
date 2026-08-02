@@ -9,7 +9,8 @@ import { useTheme } from '../context/ThemeContext';
 import { AlertTriangle, Clock, Code, Terminal, Play, FileCode, Settings, CheckCircle, Calculator as CalculatorIcon, Flag, X } from 'lucide-react';
 import { sendInterviewInvitations } from '../services/brevoService';
 import { grokGenerateJson } from '../services/grokService';
-import { getCandidateRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus, recordCandidateSubmission, RateLimitResource } from '../services/rateLimitService';
+import { getCandidateRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus, assertCompanyRateLimit, RateLimitResource } from '../services/rateLimitService';
+import { rds } from '../services/rdsApi';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 
 const TestInfoForm: React.FC<{ onSubmit: (info: {name: string, email: string}) => void }> = ({ onSubmit }) => {
@@ -588,8 +589,8 @@ const TakeTest: React.FC = () => {
 
     console.log('[Assessment] Final email status - Sent:', emailSent, '| Error:', emailError || 'none');
 
-    const submissionRef = doc(collection(db, 'testSubmissions'));
-    await recordCandidateSubmission(test.type === 'coding' ? 'codingAssessments' : 'assessments', submissionRef, {
+    await assertCompanyRateLimit(test.type === 'coding' ? 'codingAssessments' : 'assessments');
+    await rds.createTestSubmission({
       testId,
       candidateUID: user?.uid || candidateInfo.email,
       candidateName: candidateInfo.name,
@@ -603,7 +604,6 @@ const TakeTest: React.FC = () => {
       emailError,
       recruiterUID: fullTestData.recruiterUID || null,
       type: fullTestData.type === 'coding' ? 'coding' : 'aptitude',
-      submittedAt: serverTimestamp()
     });
 
     if (document.fullscreenElement) {
