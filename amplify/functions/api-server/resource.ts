@@ -19,7 +19,6 @@ export const apiServer = defineFunction({
     format: 'esm',
   },
   environment: {
-    AWS_REGION: process.env.AWS_REGION || 'ap-south-1',
     COGNITO_REGION: process.env.COGNITO_REGION || process.env.VITE_COGNITO_REGION || 'ap-south-1',
     COGNITO_USER_POOL_ID:
       process.env.COGNITO_USER_POOL_ID || process.env.VITE_COGNITO_USER_POOL_ID || 'ap-south-1_RPHo5WjDk',
