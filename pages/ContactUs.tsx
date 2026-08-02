@@ -4,8 +4,7 @@ import { motion } from 'framer-motion';
 import { Sun, Moon, ArrowLeft, Send } from 'lucide-react';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import Logo from '../components/Logo';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 import { useMessageBox } from '../components/MessageBox';
 
 const ContactUsContent: React.FC = () => {
@@ -22,11 +21,7 @@ const ContactUsContent: React.FC = () => {
         }
         setLoading(true);
         try {
-            await addDoc(collection(db, 'contactSubmissions'), {
-                ...formData,
-                createdAt: serverTimestamp(),
-                status: 'new'
-            });
+            await rds.createContact({ ...formData });
             messageBox.showSuccess("Your message has been sent successfully!");
             setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
         } catch (error) {

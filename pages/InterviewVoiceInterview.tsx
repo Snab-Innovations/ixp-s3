@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
 import { Link, useParams } from 'react-router-dom';
-import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
+import { rds, poll } from '../services/rdsApi';
+import { loadStoredCognitoSession } from '../services/authService';
 import { Interview } from '../types';
 import { InterviewOverviewSkeleton } from '../components/ui/interview-loading-skeleton';
 
@@ -18,32 +18,33 @@ const InterviewVoiceInterview: React.FC = () => {
       return;
     }
 
-    const unsubscribe = onSnapshot(
-      doc(db, 'interviews', interviewId),
-      (snapshot) => {
-        if (!snapshot.exists()) {
+    const uid = loadStoredCognitoSession()?.firebaseUid || '';
+    const stop = poll(
+      () => rds.getInterview(interviewId),
+      ({ interview }) => {
+        if (!interview) {
           setInterview(null);
           setLoading(false);
           return;
         }
 
-        const data = { id: snapshot.id, ...snapshot.data() } as Interview;
-        if ((data as any).recruiterUID !== user.uid) {
+        if (interview.recruiterUID !== uid) {
           setInterview(null);
           setLoading(false);
           return;
         }
 
-        setInterview(data);
+        setInterview(interview as Interview);
         setLoading(false);
       },
       (error) => {
         console.error('Error loading interview voice page:', error);
         setLoading(false);
-      }
+      },
+      4000
     );
 
-    return () => unsubscribe();
+    return () => stop();
   }, [interviewId, user]);
 
   if (loading) {

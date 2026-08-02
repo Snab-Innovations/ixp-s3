@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
+import { rds } from '../services/rdsApi';
+import { loadStoredCognitoSession } from '../services/authService';
 
 interface Interview {
   id: string;
@@ -26,14 +26,16 @@ const CandidateInterviews: React.FC = () => {
 
     const fetchInterviews = async () => {
       try {
-        const q = query(
-          collection(db, 'interviews'),
-          where('candidateUID', '==', user.uid),
-          orderBy('submittedAt', 'desc')
-        );
-        const snap = await getDocs(q);
+        const { interviews } = await rds.listInterviews({
+          candidateUID: loadStoredCognitoSession()?.firebaseUid || ''
+        });
         setInterviews(
-          snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interview))
+          (interviews || [])
+            .sort((a: any, b: any) =>
+              (b.submittedAt ? new Date(b.submittedAt).getTime() : 0) -
+              (a.submittedAt ? new Date(a.submittedAt).getTime() : 0)
+            )
+            .map(i => i as Interview)
         );
       } catch (err) {
         console.error(err);
@@ -57,8 +59,8 @@ const CandidateInterviews: React.FC = () => {
       (i.jobTitle || '').toLowerCase().includes(searchTerm.toLowerCase())
     )
     .sort((a, b) => {
-      const aDate = a.submittedAt?.toDate?.().getTime() || 0;
-      const bDate = b.submittedAt?.toDate?.().getTime() || 0;
+      const aDate = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+      const bDate = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
       return sortOrder === 'newest' ? bDate - aDate : aDate - bDate;
     });
 
@@ -169,8 +171,8 @@ const CandidateInterviews: React.FC = () => {
                   </h3>
                   <p className="text-sm text-gray-500 dark:text-slate-400 mt-1 flex items-center gap-2">
                     <i className="far fa-calendar-alt"></i>
-                    {interview.submittedAt?.toDate
-                      ? interview.submittedAt.toDate().toLocaleDateString('en-GB')
+                    {interview.submittedAt
+                      ? new Date(interview.submittedAt).toLocaleDateString('en-GB')
                       : 'N/A'}
                   </p>
                 </div>

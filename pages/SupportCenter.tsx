@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import Layout from '../components/Layout';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 import { useAuth } from '../context/AuthContext';
 
 const SupportCenter: React.FC = () => {
@@ -20,13 +19,11 @@ const SupportCenter: React.FC = () => {
     setSuccess(false);
 
     try {
-      await addDoc(collection(db, 'supportTickets'), {
+      await rds.createSupportTicket({
         userId: user?.uid || 'anonymous',
         email: email,
         subject,
         message,
-        status: 'open',
-        createdAt: serverTimestamp(),
       });
       setSuccess(true);
       setSubject('');

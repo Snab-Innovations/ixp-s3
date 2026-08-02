@@ -1,5 +1,4 @@
 import express from 'express';
-import admin from 'firebase-admin';
 import {
   initiatePasswordAuth,
   respondToNewPasswordChallenge,
@@ -65,14 +64,6 @@ async function findAppUserByEmail(email) {
     if (r.rows[0]) return mapPgUser(r.rows[0]);
   }
 
-  // Legacy Firestore fallback during migration
-  if (!admin.apps.length) return null;
-  const db = admin.firestore();
-  const snap = await db.collection('users').where('email', '==', normalized).limit(1).get();
-  if (!snap.empty) {
-    const doc = snap.docs[0];
-    return { id: doc.id, uid: doc.id, ...doc.data() };
-  }
   return null;
 }
 
@@ -108,35 +99,6 @@ async function resolveAppUid(cognitoUser) {
   return cognitoUser.sub;
 }
 
-async function ensureFirebaseAuthUser({ uid, email, displayName }) {
-  if (!admin.apps.length) return null;
-
-  try {
-    const existing = await admin.auth().getUser(uid);
-    const updates = {};
-    if (email && existing.email !== email) updates.email = email;
-    if (displayName && existing.displayName !== displayName) updates.displayName = displayName;
-    if (Object.keys(updates).length) {
-      await admin.auth().updateUser(uid, updates);
-    }
-    return existing;
-  } catch (err) {
-    if (err.code !== 'auth/user-not-found') throw err;
-    return admin.auth().createUser({
-      uid,
-      email,
-      emailVerified: true,
-      displayName: displayName || undefined,
-      disabled: false,
-    });
-  }
-}
-
-async function mintFirebaseCustomToken(uid, claims = {}) {
-  if (!admin.apps.length) return null;
-  return admin.auth().createCustomToken(uid, claims);
-}
-
 async function buildSessionFromAuthResult(authResult) {
   const tokens = authResultPayload(authResult);
   const cognitoUser = await getUserFromAccessToken(tokens.accessToken);
@@ -155,24 +117,6 @@ async function buildSessionFromAuthResult(authResult) {
     }
   }
 
-  // Optional legacy Firebase custom token (only if Admin SDK present)
-  let firebaseToken = null;
-  if (admin.apps.length) {
-    try {
-      await ensureFirebaseAuthUser({
-        uid: appUid,
-        email: cognitoUser.email,
-        displayName: cognitoUser.name,
-      });
-      firebaseToken = await mintFirebaseCustomToken(appUid, {
-        role: cognitoUser.role || undefined,
-        cognito_sub: cognitoUser.sub,
-      });
-    } catch (err) {
-      console.warn('Firebase bridge skipped:', err.message);
-    }
-  }
-
   if (!profile) {
     profile = await findAppUserByEmail(cognitoUser.email);
   }
@@ -182,7 +126,6 @@ async function buildSessionFromAuthResult(authResult) {
     tokens,
     firebaseUid: appUid,
     uid: appUid,
-    firebaseToken,
     profile,
     passwordBridge: false,
   };
@@ -227,7 +170,6 @@ router.get('/health', async (_req, res) => {
     service: 'InterviewXpert Cognito Auth Bridge',
     userPoolId: cognitoConfig.userPoolId,
     region: cognitoConfig.region,
-    firebaseAdmin: admin.apps.length > 0,
     postgres: dbReady(),
   });
 });
@@ -466,20 +408,10 @@ router.post('/create-user', async (req, res) => {
     });
 
     const firebaseUid = cognitoUser.sub;
-    let firebaseProvisioned = false;
 
-    if (admin.apps.length) {
-      await ensureFirebaseAuthUser({
-        uid: firebaseUid,
-        email,
-        displayName: name,
-      });
-      firebaseProvisioned = true;
-
-      await adminUpdateCustomAttributes(email, {
-        'custom:legacyFirebaseUid': firebaseUid,
-      });
-    }
+    await adminUpdateCustomAttributes(email, {
+      'custom:legacyFirebaseUid': firebaseUid,
+    });
 
     if (dbReady()) {
       await query(
@@ -517,8 +449,6 @@ router.post('/create-user', async (req, res) => {
       teamId: teamId || null,
       isSecondary: Boolean(isSecondary),
       designation: designation || null,
-      firebaseProvisioned,
-      requiresClientFirebaseUser: false,
     });
   } catch (err) {
     console.error('[auth/create-user]', err);
@@ -527,7 +457,7 @@ router.post('/create-user', async (req, res) => {
 });
 
 /**
- * After client-side Firebase Auth user creation (no Admin SDK), attach legacyFirebaseUid.
+ * Attach a legacy Firebase UID to a Cognito user so their Postgres user id stays stable.
  */
 router.post('/link-firebase-uid', async (req, res) => {
   const caller = await requireCaller(req, res);
@@ -621,19 +551,6 @@ router.post('/migrate-user', async (req, res) => {
       legacyFirebaseUid: firebaseUid,
       suppressMessage: true,
     });
-
-    await ensureFirebaseAuthUser({ uid: firebaseUid, email, displayName: name });
-
-    if (admin.apps.length) {
-      await admin.firestore().collection('users').doc(firebaseUid).set(
-        {
-          cognitoSub: cognitoUser.sub,
-          authProvider: 'cognito',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-    }
 
     return res.status(201).json({
       success: true,

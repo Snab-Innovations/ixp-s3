@@ -4,8 +4,7 @@ import { motion } from 'framer-motion';
 import { Sun, Moon, ArrowLeft, BookOpen, Clock, Calendar, ChevronRight } from 'lucide-react';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import Logo from '../components/Logo';
-import { collection, query, orderBy, getDocs } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 
 interface BlogPost {
   id: string;
@@ -50,9 +49,8 @@ const BlogsContent: React.FC = () => {
     useEffect(() => {
         const fetchBlogs = async () => {
             try {
-                const q = query(collection(db, 'blogs'), orderBy('createdAt', 'desc'));
-                const snap = await getDocs(q);
-                setBlogs(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as BlogPost)));
+                const { blogs: fetched } = await rds.listBlogs();
+                setBlogs(fetched);
             } catch (error) {
                 console.error("Error fetching blogs:", error);
             } finally {
@@ -213,7 +211,7 @@ const BlogsContent: React.FC = () => {
                                 {/* Content */}
                                 <div className="p-6">
                                     <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 mb-3">
-                                        <span className="flex items-center gap-1"><Calendar size={12} /> {blog.createdAt?.toDate ? blog.createdAt.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent'}</span>
+                                        <span className="flex items-center gap-1"><Calendar size={12} /> {blog.createdAt ? new Date(blog.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent'}</span>
                                         <span className="flex items-center gap-1"><Clock size={12} /> {blog.readTime || '5 min read'}</span>
                                     </div>
                                     

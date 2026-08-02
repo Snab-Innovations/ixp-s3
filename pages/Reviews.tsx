@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 import { Star, MessageSquare, Quote, User, Briefcase, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/landing/Navbar';
@@ -37,17 +36,8 @@ const ReviewsPageContent: React.FC = () => {
     document.title = "User Reviews | InterviewXpert";
     const fetchReviews = async () => {
       try {
-        const q = query(
-          collection(db, 'reviews'),
-          where('approved', '==', true),
-          orderBy('createdAt', 'desc')
-        );
-        const querySnapshot = await getDocs(q);
-        const fetchedReviews = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Review[];
-        setReviews(fetchedReviews);
+        const { reviews: fetched } = await rds.listReviews();
+        setReviews(fetched);
       } catch (error) {
         console.error("Error fetching reviews:", error);
       } finally {
@@ -131,7 +121,7 @@ const ReviewsPageContent: React.FC = () => {
                           </span>
                       )}
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {review.createdAt?.toDate().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                        {review.createdAt ? new Date(review.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : ''}
                       </p>
                     </div>
                   </div>

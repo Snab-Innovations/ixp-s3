@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 import { Star, ArrowRight, Quote } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -32,18 +31,8 @@ const UserReviews: React.FC = () => {
   useEffect(() => {
     const fetchReviews = async () => {
       try {
-        const q = query(
-          collection(db, 'reviews'),
-          where('approved', '==', true),
-          orderBy('createdAt', 'desc'),
-          limit(6)
-        );
-        const querySnapshot = await getDocs(q);
-        const fetchedReviews = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Review[];
-        setReviews(fetchedReviews);
+        const { reviews: fetched } = await rds.listReviews();
+        setReviews(fetched.slice(0, 6));
       } catch (error) {
         console.error("Error fetching reviews:", error);
       } finally {

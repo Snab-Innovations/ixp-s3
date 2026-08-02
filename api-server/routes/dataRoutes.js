@@ -415,10 +415,18 @@ router.delete('/recruiter-requests/:id', requireAuth, requireRole('admin'), asyn
 // ─── Interviews ─────────────────────────────────────────────────────────────
 
 router.get('/interviews', requireAuth, async (req, res) => {
-  const { recruiterUID, teamId } = req.query;
+  const { recruiterUID, teamId, candidateUID } = req.query;
   let r;
-  if (req.caller.role === 'admin' && !recruiterUID && !teamId) {
+  if (req.caller.role === 'admin' && !recruiterUID && !teamId && !candidateUID) {
     r = await query(`SELECT * FROM interviews ORDER BY created_at DESC`);
+  } else if (candidateUID) {
+    if (req.caller.role !== 'admin' && req.caller.uid !== candidateUID) {
+      return res.status(403).json({ success: false, error: 'Forbidden' });
+    }
+    r = await query(
+      `SELECT * FROM interviews WHERE candidate_uid = $1 ORDER BY created_at DESC`,
+      [candidateUID]
+    );
   } else {
     const tid = teamId || recruiterUID || req.caller.user?.team_id || req.caller.uid;
     r = await query(
@@ -426,6 +434,14 @@ router.get('/interviews', requireAuth, async (req, res) => {
       [tid]
     );
   }
+  res.json({ success: true, interviews: r.rows.map(mapInterview) });
+});
+
+// Public career-portal listing (ActiveJobs / CareerHub equivalents).
+router.get('/interviews/public', optionalAuth, async (_req, res) => {
+  const r = await query(
+    `SELECT * FROM interviews WHERE COALESCE(is_mock, false) = false ORDER BY created_at DESC LIMIT 200`
+  );
   res.json({ success: true, interviews: r.rows.map(mapInterview) });
 });
 
@@ -553,6 +569,17 @@ router.patch('/interviews/:id', requireAuth, async (req, res) => {
 });
 
 router.delete('/interviews/:id', requireAuth, async (req, res) => {
+  const existing = await query(`SELECT * FROM interviews WHERE id = $1`, [req.params.id]);
+  if (!existing.rows[0]) return res.status(404).json({ success: false, error: 'Not found' });
+  const row = existing.rows[0];
+  if (
+    req.caller.role !== 'admin' &&
+    row.recruiter_uid !== req.caller.uid &&
+    row.team_id !== req.caller.uid &&
+    row.team_id !== req.caller.user?.team_id
+  ) {
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
   await query(`DELETE FROM interviews WHERE id = $1`, [req.params.id]);
   res.json({ success: true });
 });
@@ -968,6 +995,28 @@ router.put('/settings/:id', requireAuth, requireRole('admin'), async (req, res) 
 
 router.post('/candidate-consents', optionalAuth, async (req, res) => {
   const b = req.body || {};
+  // Port of firestore.rules isValidCandidateConsent validation.
+  const required = [
+    'interviewId', 'candidateName', 'candidateEmail', 'acceptedItemIds',
+    'acceptedAll', 'consentVersion', 'consentMethod', 'status', 'acceptedAt',
+  ];
+  for (const key of required) {
+    if (b[key] === undefined || b[key] === null) {
+      return res.status(400).json({ success: false, error: `${key} is required` });
+    }
+  }
+  const items = b.acceptedItemIds;
+  const ALLOWED_ITEMS = ['continuous_recording', 'ai_processing', 'recruiting_company_sharing'];
+  if (!Array.isArray(items) || items.some((i) => !ALLOWED_ITEMS.includes(i))) {
+    return res.status(400).json({ success: false, error: 'acceptedItemIds contains invalid items' });
+  }
+  if (b.acceptedAll !== true) {
+    return res.status(400).json({ success: false, error: 'acceptedAll must be true' });
+  }
+  const interviewCheck = await query(`SELECT 1 FROM interviews WHERE id = $1`, [b.interviewId]);
+  if (!interviewCheck.rows[0]) {
+    return res.status(400).json({ success: false, error: 'interview not found' });
+  }
   const r = await query(
     `INSERT INTO candidate_consents (
       id, interview_id, interview_title, candidate_name, candidate_email, ip_address,
@@ -1125,12 +1174,26 @@ router.get('/audit-logs', requireAuth, async (req, res) => {
   res.json({ success: true, logs: r.rows });
 });
 
+function mapNotification(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    userId: row.user_id,
+    message: row.message,
+    type: row.type,
+    read: row.read,
+    senderId: row.sender_id,
+    senderName: row.sender_name,
+    createdAt: row.created_at,
+  };
+}
+
 router.get('/notifications', requireAuth, async (req, res) => {
   const r = await query(
     `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100`,
     [req.caller.uid]
   );
-  res.json({ success: true, notifications: r.rows });
+  res.json({ success: true, notifications: r.rows.map(mapNotification) });
 });
 
 router.post('/notifications', requireAuth, async (req, res) => {
@@ -1140,7 +1203,16 @@ router.post('/notifications', requireAuth, async (req, res) => {
      VALUES ($1,$2,$3,$4,$5) RETURNING *`,
     [b.userId, b.message, b.type || null, b.senderId || req.caller.uid, b.senderName || null]
   );
-  res.status(201).json({ success: true, notification: r.rows[0] });
+  res.status(201).json({ success: true, notification: mapNotification(r.rows[0]) });
+});
+
+router.patch('/notifications/:id', requireAuth, async (req, res) => {
+  const r = await query(
+    `UPDATE notifications SET read = COALESCE($2, read) WHERE id = $1 AND user_id = $3 RETURNING *`,
+    [req.params.id, req.body?.read ?? null, req.caller.uid]
+  );
+  if (!r.rows[0]) return res.status(404).json({ success: false, error: 'Not found' });
+  res.json({ success: true, notification: mapNotification(r.rows[0]) });
 });
 
 router.post('/interview-access-tokens', optionalAuth, async (req, res) => {
@@ -1151,6 +1223,26 @@ router.post('/interview-access-tokens', optionalAuth, async (req, res) => {
     [b.testId || null, b.nextInterviewId || null, b.candidateEmail || null, b.candidateName || null]
   );
   res.status(201).json({ success: true, token: r.rows[0] });
+});
+
+// Validate + consume a one-time interview access token (token id = Firestore doc id).
+router.get('/interview-access-tokens/:id', optionalAuth, async (req, res) => {
+  const r = await query(`SELECT * FROM interview_access_tokens WHERE id = $1`, [req.params.id]);
+  if (!r.rows[0]) return res.status(404).json({ success: false, error: 'Token not found' });
+  const row = r.rows[0];
+  res.json({
+    success: true,
+    token: {
+      id: row.id,
+      testId: row.test_id,
+      nextInterviewId: row.next_interview_id,
+      candidateEmail: row.candidate_email,
+      candidateName: row.candidate_name,
+      isUsed: row.is_used,
+      usedAt: row.used_at,
+      generatedAt: row.generated_at,
+    },
+  });
 });
 
 router.patch('/interview-access-tokens/:id', optionalAuth, async (req, res) => {
@@ -1165,7 +1257,279 @@ router.patch('/interview-access-tokens/:id', optionalAuth, async (req, res) => {
 // Public CMS / contact
 router.get('/blogs', optionalAuth, async (_req, res) => {
   const r = await query(`SELECT * FROM blogs ORDER BY created_at DESC`);
-  res.json({ success: true, blogs: r.rows });
+  res.json({ success: true, blogs: r.rows.map(mapBlog) });
+});
+
+router.get('/blogs/:id', optionalAuth, async (req, res) => {
+  const r = await query(`SELECT * FROM blogs WHERE id = $1`, [req.params.id]);
+  if (!r.rows[0]) return res.status(404).json({ success: false, error: 'Not found' });
+  res.json({ success: true, blog: mapBlog(r.rows[0]) });
+});
+
+function mapBlog(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    excerpt: row.excerpt,
+    content: row.content,
+    imageUrl: row.image_url,
+    tags: row.tags,
+    readTime: row.read_time,
+    author: row.author,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+// Blogs write endpoints (admin) — replaces Firestore AdminBlogs CRUD.
+router.post('/blogs', requireAuth, requireRole('admin'), async (req, res) => {
+  const b = req.body || {};
+  const r = await query(
+    `INSERT INTO blogs (id, title, excerpt, content, image_url, tags, read_time, author, created_at, updated_at)
+     VALUES (COALESCE($1, encode(gen_random_bytes(12),'hex')), $2,$3,$4,$5,$6::jsonb,$7,$8, COALESCE($9, NOW()), COALESCE($10, NOW()))
+     RETURNING *`,
+    [
+      b.id || null,
+      b.title,
+      b.excerpt || null,
+      b.content || null,
+      b.imageUrl || null,
+      JSON.stringify(b.tags || []),
+      b.readTime || null,
+      b.author || null,
+      b.createdAt ? new Date(b.createdAt).toISOString() : null,
+      b.updatedAt ? new Date(b.updatedAt).toISOString() : null,
+    ]
+  );
+  res.status(201).json({ success: true, blog: mapBlog(r.rows[0]) });
+});
+
+router.put('/blogs/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  const b = req.body || {};
+  const r = await query(
+    `UPDATE blogs SET
+      title = COALESCE($2, title),
+      excerpt = COALESCE($3, excerpt),
+      content = COALESCE($4, content),
+      image_url = COALESCE($5, image_url),
+      tags = COALESCE($6::jsonb, tags),
+      read_time = COALESCE($7, read_time),
+      author = COALESCE($8, author),
+      updated_at = NOW()
+     WHERE id = $1 RETURNING *`,
+    [
+      req.params.id,
+      b.title ?? null,
+      b.excerpt ?? null,
+      b.content ?? null,
+      b.imageUrl ?? null,
+      b.tags ? JSON.stringify(b.tags) : null,
+      b.readTime ?? null,
+      b.author ?? null,
+    ]
+  );
+  if (!r.rows[0]) return res.status(404).json({ success: false, error: 'Not found' });
+  res.json({ success: true, blog: mapBlog(r.rows[0]) });
+});
+
+router.delete('/blogs/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  await query(`DELETE FROM blogs WHERE id = $1`, [req.params.id]);
+  res.json({ success: true });
+});
+
+// ─── Support tickets (replaces Firestore supportTickets collection) ─────────
+
+router.post('/support-tickets', optionalAuth, async (req, res) => {
+  const b = req.body || {};
+  const r = await query(
+    `INSERT INTO support_tickets (user_id, email, subject, message)
+     VALUES ($1,$2,$3,$4) RETURNING *`,
+    [b.userId || null, b.email || null, b.subject || null, b.message || null]
+  );
+  res.status(201).json({ success: true, ticket: r.rows[0] });
+});
+
+router.get('/support-tickets', requireAuth, requireRole('admin'), async (_req, res) => {
+  const r = await query(`SELECT * FROM support_tickets ORDER BY created_at DESC`);
+  res.json({ success: true, tickets: r.rows });
+});
+
+router.patch('/support-tickets/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  const status = req.body?.status || 'open';
+  const r = await query(`UPDATE support_tickets SET status = $2 WHERE id = $1 RETURNING *`, [
+    req.params.id,
+    status,
+  ]);
+  if (!r.rows[0]) return res.status(404).json({ success: false, error: 'Not found' });
+  res.json({ success: true, ticket: r.rows[0] });
+});
+
+// ─── Profiles (replaces Firestore profiles/{uid} docs) ──────────────────────
+
+// Rules allowed public read; writes by owner only.
+router.get('/profiles/:id', optionalAuth, async (req, res) => {
+  const r = await query(`SELECT * FROM profiles WHERE id = $1`, [req.params.id]);
+  if (!r.rows[0]) return res.status(404).json({ success: false, error: 'Not found' });
+  res.json({ success: true, profile: { id: r.rows[0].id, ...r.rows[0].data, updatedAt: r.rows[0].updated_at } });
+});
+
+router.put('/profiles/:id', requireAuth, async (req, res) => {
+  const isAdmin = req.caller.role === 'admin' || (req.caller.groups || []).includes('admin');
+  if (!isAdmin && req.caller.uid !== req.params.id) {
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
+  const data = req.body || {};
+  delete data.id;
+  delete data.updatedAt;
+  const r = await query(
+    `INSERT INTO profiles (id, data, updated_at) VALUES ($1, $2::jsonb, NOW())
+     ON CONFLICT (id) DO UPDATE SET data = profiles.data || EXCLUDED.data, updated_at = NOW()
+     RETURNING *`,
+    [req.params.id, JSON.stringify(data)]
+  );
+  res.json({ success: true, profile: { id: r.rows[0].id, ...r.rows[0].data, updatedAt: r.rows[0].updated_at } });
+});
+
+// ─── Jobs (replaces Firestore jobs collection for CareerHub) ────────────────
+
+function mapJob(row) {
+  return {
+    id: row.id,
+    recruiterUID: row.recruiter_uid,
+    title: row.title,
+    companyName: row.company_name,
+    description: row.description,
+    qualifications: row.qualifications,
+    skills: row.skills,
+    category: row.category,
+    numQuestions: row.num_questions,
+    difficulty: row.difficulty,
+    applyDeadline: row.apply_deadline,
+    interviewPermission: row.interview_permission,
+    interviewLink: row.interview_link,
+    accessCode: row.access_code,
+    customFields: row.custom_fields,
+    recruiterName: row.recruiter_name,
+    recruiterEmail: row.recruiter_email,
+    isMock: row.is_mock,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    ...(row.raw || {}),
+  };
+}
+
+router.get('/jobs', optionalAuth, async (_req, res) => {
+  const r = await query(
+    `SELECT * FROM jobs WHERE COALESCE(is_mock, false) = false ORDER BY created_at DESC LIMIT 200`
+  );
+  res.json({ success: true, jobs: r.rows.map(mapJob) });
+});
+
+router.post('/jobs', requireAuth, async (req, res) => {
+  const b = req.body || {};
+  const r = await query(
+    `INSERT INTO jobs (
+      id, recruiter_uid, title, company_name, description, qualifications, skills, category,
+      num_questions, difficulty, apply_deadline, interview_permission, interview_link, access_code,
+      custom_fields, recruiter_name, recruiter_email, is_mock, raw
+    ) VALUES (
+      COALESCE($1, encode(gen_random_bytes(12),'hex')), $2,$3,$4,$5,$6,$7,$8,
+      $9,$10,$11,$12,$13,$14,$15::jsonb,$16,$17,COALESCE($18,false),$19::jsonb
+    ) RETURNING *`,
+    [
+      b.id || null,
+      b.recruiterUID || req.caller.uid,
+      b.title,
+      b.companyName || null,
+      b.description || null,
+      b.qualifications || null,
+      b.skills || null,
+      b.category || null,
+      b.numQuestions ?? null,
+      b.difficulty || null,
+      b.applyDeadline || null,
+      b.interviewPermission || null,
+      b.interviewLink || null,
+      b.accessCode || null,
+      JSON.stringify(b.customFields || []),
+      b.recruiterName || null,
+      b.recruiterEmail || null,
+      Boolean(b.isMock),
+      JSON.stringify(b.raw || {}),
+    ]
+  );
+  res.status(201).json({ success: true, job: mapJob(r.rows[0]) });
+});
+
+router.put('/jobs/:id', requireAuth, async (req, res) => {
+  const b = req.body || {};
+  const r = await query(
+    `UPDATE jobs SET
+      title = COALESCE($2, title),
+      company_name = COALESCE($3, company_name),
+      description = COALESCE($4, description),
+      qualifications = COALESCE($5, qualifications),
+      skills = COALESCE($6, skills),
+      category = COALESCE($7, category),
+      num_questions = COALESCE($8, num_questions),
+      difficulty = COALESCE($9, difficulty),
+      apply_deadline = COALESCE($10, apply_deadline),
+      custom_fields = COALESCE($11::jsonb, custom_fields),
+      updated_at = NOW()
+     WHERE id = $1 RETURNING *`,
+    [
+      req.params.id,
+      b.title ?? null,
+      b.companyName ?? null,
+      b.description ?? null,
+      b.qualifications ?? null,
+      b.skills ?? null,
+      b.category ?? null,
+      b.numQuestions ?? null,
+      b.difficulty ?? null,
+      b.applyDeadline ?? null,
+      b.customFields ? JSON.stringify(b.customFields) : null,
+    ]
+  );
+  if (!r.rows[0]) return res.status(404).json({ success: false, error: 'Not found' });
+  res.json({ success: true, job: mapJob(r.rows[0]) });
+});
+
+router.delete('/jobs/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  await query(`DELETE FROM jobs WHERE id = $1`, [req.params.id]);
+  res.json({ success: true });
+});
+
+// ─── Admin stats aggregate (replaces AdminStats Firestore onSnapshot) ───────
+
+router.get('/admin/stats', requireAuth, requireRole('admin'), async (_req, res) => {
+  const interviews = await query(`SELECT COUNT(*)::int AS total FROM interviews`);
+  const attempts = await query(`SELECT COUNT(*)::int AS total FROM interview_attempts`);
+  const tests = await query(`SELECT COUNT(*)::int AS total FROM tests`);
+  const testSubmissions = await query(`SELECT COUNT(*)::int AS total FROM test_submissions`);
+  const users = await query(`SELECT COUNT(*)::int AS total FROM users`);
+  const blogs = await query(`SELECT COUNT(*)::int AS total FROM blogs`);
+  const jobs = await query(`SELECT COUNT(*)::int AS total FROM jobs`);
+  const reviews = await query(`SELECT COUNT(*)::int AS total FROM reviews`);
+  const contactSubmissions = await query(`SELECT COUNT(*)::int AS total FROM contact_submissions`);
+  const bugReports = await query(`SELECT COUNT(*)::int AS total FROM bug_reports`);
+  const supportTickets = await query(`SELECT COUNT(*)::int AS total FROM support_tickets`);
+  res.json({
+    success: true,
+    stats: {
+      interviews: interviews.rows[0].total,
+      attempts: attempts.rows[0].total,
+      tests: tests.rows[0].total,
+      testSubmissions: testSubmissions.rows[0].total,
+      users: users.rows[0].total,
+      blogs: blogs.rows[0].total,
+      jobs: jobs.rows[0].total,
+      reviews: reviews.rows[0].total,
+      contactSubmissions: contactSubmissions.rows[0].total,
+      bugReports: bugReports.rows[0].total,
+      supportTickets: supportTickets.rows[0].total,
+    },
+  });
 });
 
 router.post('/contact-submissions', optionalAuth, async (req, res) => {
@@ -1213,10 +1577,26 @@ router.get('/reviews', optionalAuth, async (req, res) => {
 
 router.post('/reviews', optionalAuth, async (req, res) => {
   const b = req.body || {};
+  // Port of firestore.rules /reviews create validation.
+  const name = typeof b.name === 'string' ? b.name.trim() : '';
+  const review = typeof b.review === 'string' ? b.review.trim() : '';
+  const rating = b.rating;
+  const userType = b.userType;
+  if (!name) return res.status(400).json({ success: false, error: 'name is required' });
+  if (!review) return res.status(400).json({ success: false, error: 'review is required' });
+  if (typeof rating !== 'number' || rating < 1 || rating > 5) {
+    return res.status(400).json({ success: false, error: 'rating must be a number between 1 and 5' });
+  }
+  if (!['student', 'candidate', 'recruiter'].includes(userType)) {
+    return res.status(400).json({ success: false, error: 'userType must be student, candidate or recruiter' });
+  }
+  if (b.approved !== false && b.approved !== undefined) {
+    return res.status(400).json({ success: false, error: 'approved must be false on create' });
+  }
   const r = await query(
     `INSERT INTO reviews (name, email, contact, review, rating, user_type, approved)
      VALUES ($1,$2,$3,$4,$5,$6,false) RETURNING *`,
-    [b.name, b.email || null, b.contact || null, b.review, b.rating, b.userType || null]
+    [name, b.email || null, b.contact || null, review, rating, userType]
   );
   res.status(201).json({ success: true, review: r.rows[0] });
 });

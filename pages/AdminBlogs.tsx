@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
-import { db, auth } from '../services/firebase';
+import { rds, poll } from '../services/rdsApi';
+import { loadStoredCognitoSession } from '../services/authService';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Edit, X, Image as ImageIcon, Type, FileText, Tag, Clock, LayoutDashboard } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
@@ -32,12 +32,11 @@ const AdminBlogs: React.FC = () => {
   });
 
   useEffect(() => {
-    const q = query(collection(db, 'blogs'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setBlogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BlogPost)));
+    const stop = poll(() => rds.listBlogs(), ({ blogs }) => {
+      setBlogs(blogs as BlogPost[]);
       setLoading(false);
-    });
-    return () => unsubscribe();
+    }, (err) => console.error(err), 10000);
+    return () => stop();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,19 +46,17 @@ const AdminBlogs: React.FC = () => {
     try {
       const blogData = {
         ...formData,
-        tags: formData.tags.split(',').map(t => t.trim()).filter(t => t),
-        updatedAt: serverTimestamp()
+        tags: formData.tags.split(',').map(t => t.trim()).filter(t => t)
       };
 
       if (editingId) {
-        await updateDoc(doc(db, 'blogs', editingId), blogData);
+        await rds.updateBlog(editingId, blogData);
         alert('Blog post updated successfully!');
         setEditingId(null);
       } else {
-        await addDoc(collection(db, 'blogs'), {
+        await rds.createBlog({
           ...blogData,
-          author: auth.currentUser?.displayName || 'Admin',
-          createdAt: serverTimestamp()
+          author: loadStoredCognitoSession()?.email || 'Admin'
         });
         alert('Blog post published successfully!');
       }
@@ -72,7 +69,7 @@ const AdminBlogs: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this blog post?')) {
-      await deleteDoc(doc(db, 'blogs', id));
+      await rds.deleteBlog(id);
     }
   };
 
@@ -251,7 +248,7 @@ const AdminBlogs: React.FC = () => {
                   <div className="flex items-center gap-2 text-[10px] opacity-50">
                     <span className="flex items-center gap-1"><Clock size={10} /> {blog.readTime || '3 min'}</span>
                     <span>•</span>
-                    <span>{blog.createdAt?.toDate ? blog.createdAt.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Just now'}</span>
+                    <span>{blog.createdAt ? new Date(blog.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Just now'}</span>
                   </div>
                   {blog.tags && (
                     <div className="flex gap-1 mt-2">

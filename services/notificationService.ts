@@ -1,8 +1,5 @@
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from './firebase';
+import { rds } from './rdsApi';
 
-// Helper function to send notifications
-// Use this for Recruiter Messages AND Job Status Updates
 export const sendNotification = async (
   recipientId: string, 
   message: string, 
@@ -15,12 +12,10 @@ export const sendNotification = async (
     throw new Error("Recipient ID is required");
   }
   try {
-    await addDoc(collection(db, 'notifications'), {
+    await rds.createNotification({
       userId: recipientId,
       message,
       type,
-      read: false,
-      createdAt: serverTimestamp(),
       senderId: senderId || null,
       senderName: senderName || 'System'
     });

@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db, auth } from '../services/firebase';
 
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -306,9 +304,8 @@ const TakeTest: React.FC = () => {
   useEffect(() => {
     const fetchTest = async () => {
       if (!testId) return;
-      const snap = await getDoc(doc(db, 'tests', testId));
-      if (snap.exists()) {
-        const testData = { id: snap.id, ...snap.data() } as any;
+      const { test: testData } = await rds.getTest(testId);
+      if (testData) {
         const resource: RateLimitResource = testData.type === 'coding' ? 'codingAssessments' : 'assessments';
         const rateLimitStatus = await loadCompanyRateLimitStatus();
         if (isRateLimitReached(rateLimitStatus, resource)) {
@@ -490,8 +487,7 @@ const TakeTest: React.FC = () => {
     }
 
     // Fetch the full test data again to get passingScore and nextInterviewId
-    const testDoc = await getDoc(doc(db, 'tests', testId!));
-    const fullTestData = testDoc.data() as any;
+    const { test: fullTestData } = await rds.getTest(testId!);
 
     console.log('[Assessment] Score:', score, '| Passing Score:', fullTestData.passingScore);
     console.log('[Assessment] Next Interview ID:', fullTestData.nextInterviewId || 'none');
@@ -513,12 +509,15 @@ const TakeTest: React.FC = () => {
         console.log('[Assessment] Internal interview flow. Interview ID:', fullTestData.nextInterviewId);
         try {
           // Step 1: Fetch the interview details FIRST (read-only, allowed by rules)
-          const interviewDoc = await getDoc(doc(db, 'interviews', fullTestData.nextInterviewId));
-          if (!interviewDoc.exists()) {
+          let interviewData: any = null;
+          try {
+            const { interview } = await rds.getInterview(fullTestData.nextInterviewId);
+            interviewData = interview;
+          } catch (interviewErr) {
             console.error('[Assessment] Interview document not found for ID:', fullTestData.nextInterviewId);
             emailError = 'Interview not found in database';
-          } else {
-            const interviewData = interviewDoc.data() as any;
+          }
+          if (interviewData) {
             const nextRoundAccessCode = interviewData?.accessCode || '';
             const interviewTitle = interviewData?.title || test.title;
             // Build the interview link directly (no token needed for access-code-based interviews)
@@ -529,15 +528,13 @@ const TakeTest: React.FC = () => {
             // Step 2: Try to create a one-time access token (optional, may fail for anonymous users)
             let finalLink = interviewLink;
             try {
-              const tokenDocRef = await addDoc(collection(db, 'interviewAccessTokens'), {
+              const { token } = await rds.createAccessToken({
                 testId,
                 nextInterviewId: fullTestData.nextInterviewId,
                 candidateEmail: candidateInfo.email,
                 candidateName: candidateInfo.name,
-                generatedAt: serverTimestamp(),
-                isUsed: false,
               });
-              finalLink = `${interviewLink}?token=${tokenDocRef.id}`;
+              finalLink = `${interviewLink}?token=${token.id}`;
               console.log('[Assessment] Token created. Final link:', finalLink);
             } catch (tokenErr) {
               console.warn('[Assessment] Token creation failed (permissions), using direct link instead:', tokenErr);

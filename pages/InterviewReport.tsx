@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 import { jsPDF } from 'jspdf';
 
 const InterviewReport: React.FC = () => {
@@ -13,10 +12,9 @@ const InterviewReport: React.FC = () => {
     const fetchInterview = async () => {
       if (!interviewId) return;
       try {
-        const docRef = doc(db, 'interviews', interviewId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setInterview({ id: docSnap.id, ...docSnap.data() });
+        const { interview } = await rds.getInterview(interviewId);
+        if (interview) {
+          setInterview(interview);
         }
       } catch (err) {
         console.error(err);
@@ -65,8 +63,8 @@ const InterviewReport: React.FC = () => {
     pdf.setFontSize(10);
     pdf.setFont('helvetica', 'normal');
     pdf.text('AI-Powered Interview Report', margin, 21);
-    const dateStr = interview.submittedAt?.toDate
-      ? interview.submittedAt.toDate().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    const dateStr = interview.submittedAt
+      ? new Date(interview.submittedAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
       : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     pdf.text(dateStr, pageW - margin - pdf.getTextWidth(dateStr), 21);
     y = 40;
@@ -224,7 +222,7 @@ const InterviewReport: React.FC = () => {
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{interview.jobTitle}</h1>
           <p className="text-gray-500 dark:text-slate-400 mt-1">
-            Interviewed on {interview.submittedAt?.toDate().toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            Interviewed on {interview.submittedAt ? new Date(interview.submittedAt).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A'}
           </p>
         </div>
         <button 

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds, ApiError } from '../services/rdsApi';
 import gsap from 'gsap';
 import { useTheme } from '../context/ThemeContext';
 import Logo from '../components/Logo';
@@ -24,9 +23,8 @@ const TestAccess: React.FC = () => {
     const fetchTestDetails = async () => {
       if (!testId) return;
       try {
-        const testDoc = await getDoc(doc(db, 'tests', testId));
-        if (testDoc.exists()) {
-          const testData = testDoc.data() as any;
+        const { test: testData } = await rds.getTest(testId);
+        if (testData) {
            setTestDetails({
              title: testData.title || 'Assessment',
              duration: testData.duration || 0,
@@ -43,7 +41,11 @@ const TestAccess: React.FC = () => {
           setError('Assessment not found.');
         }
       } catch (err) {
-        setError('Failed to fetch Assessment details.');
+        if (err instanceof ApiError && err.status === 404) {
+          setError('Assessment not found.');
+        } else {
+          setError('Failed to fetch Assessment details.');
+        }
       }
     };
     fetchTestDetails();
@@ -71,10 +73,9 @@ const TestAccess: React.FC = () => {
       if (!testId) {
         throw new Error('Test ID is missing.');
       }
-      const testDoc = await getDoc(doc(db, 'tests', testId));
+      const { test: testData } = await rds.getTest(testId);
 
-      if (testDoc.exists()) {
-        const testData = testDoc.data() as any;
+      if (testData) {
         const resource: RateLimitResource = testData.type === 'coding' ? 'codingAssessments' : 'assessments';
         const rateLimitStatus = await loadCompanyRateLimitStatus();
         if (isRateLimitReached(rateLimitStatus, resource)) {
@@ -92,7 +93,11 @@ const TestAccess: React.FC = () => {
         setError('This assessment is no longer available.');
       }
     } catch (err) {
-      setError('An unexpected error occurred. Please try again later.');
+      if (err instanceof ApiError && err.status === 404) {
+        setError('This assessment is no longer available.');
+      } else {
+        setError('An unexpected error occurred. Please try again later.');
+      }
       console.error(err);
     } finally {
       setIsLoading(false);

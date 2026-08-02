@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { collection, onSnapshot, query, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds, poll } from '../services/rdsApi';
 import Logo from '../components/Logo';
 import { useTheme } from '../context/ThemeContext';
 import { useMessageBox } from '../components/MessageBox';
@@ -120,11 +119,7 @@ const ActiveJobsPage: React.FC = () => {
 
     setSubmittingContact(true);
     try {
-      await addDoc(collection(db, 'contactSubmissions'), {
-        ...contactForm,
-        createdAt: serverTimestamp(),
-        status: 'new'
-      });
+      await rds.createContact({ ...contactForm });
       messageBox.showSuccess('Your message has been sent successfully! Our team will get back to you soon.');
       setShowContactModal(false);
       setContactForm({ name: '', email: '', phone: '', subject: '', message: '' });
@@ -137,19 +132,17 @@ const ActiveJobsPage: React.FC = () => {
   };
 
   useEffect(() => {
-    const q = query(collection(db, 'interviews'));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const fetched: ActiveJobItem[] = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        const contactPerson = data.contactPerson || 
-                              data.contactPersonName || 
-                              data.uploadedBy || 
-                              data.createdBy?.name || 
-                              data.recruiterName || 
+    const stop = poll(() => rds.listPublicInterviews(), ({ interviews }) => {
+      const fetched: ActiveJobItem[] = (interviews || []).map((data) => {
+        const contactPerson = data.contactPerson ||
+                              data.contactPersonName ||
+                              data.uploadedBy ||
+                              data.createdBy?.name ||
+                              data.recruiterName ||
                               'Hiring Team';
 
         return {
-          id: doc.id,
+          id: data.id,
           title: data.title || 'Untitled Role',
           contactPerson: contactPerson,
           description: data.description || data.jobDescription || '',
@@ -166,7 +159,7 @@ const ActiveJobsPage: React.FC = () => {
           qualification: data.qualification || data.education || 'Diploma / Graduate',
           skills: data.skills || [],
           deadline: data.deadline || data.applyDeadline || data.interviewDates,
-          accessCode: data.accessCode || doc.id.slice(0, 6).toUpperCase(),
+          accessCode: data.accessCode || data.id.slice(0, 6).toUpperCase(),
           createdBy: data.createdBy,
           createdAt: data.createdAt,
           isMock: Boolean(data.isMock),
@@ -188,9 +181,9 @@ const ActiveJobsPage: React.FC = () => {
     }, (error) => {
       console.error('Error fetching active jobs:', error);
       setLoading(false);
-    });
+    }, 30000);
 
-    return () => unsub();
+    return () => stop();
   }, []);
 
   const categories = useMemo(() => {

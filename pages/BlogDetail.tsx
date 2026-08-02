@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 import { ArrowLeft, Calendar, Clock, User, Share2, BookOpen } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useMessageBox } from '../components/MessageBox';
@@ -63,7 +62,7 @@ const BlogDetail: React.FC = () => {
                     '@type': 'Person',
                     'name': blog.author || 'InterviewXpert Team'
                 },
-                'datePublished': blog.createdAt?.toDate ? blog.createdAt.toDate().toISOString() : new Date().toISOString(),
+                'datePublished': blog.createdAt ? new Date(blog.createdAt).toISOString() : new Date().toISOString(),
                 'description': blog.excerpt,
                 'publisher': {
                     '@type': 'Organization',
@@ -88,10 +87,8 @@ const BlogDetail: React.FC = () => {
         const fetchBlog = async () => {
             if (!id) return;
             try {
-                const docSnap = await getDoc(doc(db, 'blogs', id));
-                if (docSnap.exists()) {
-                    setBlog({ id: docSnap.id, ...docSnap.data() });
-                }
+                const { blog: fetched } = await rds.getBlog(id);
+                setBlog(fetched);
             } catch (error) {
                 console.error("Error fetching blog:", error);
             } finally {
@@ -182,7 +179,7 @@ const BlogDetail: React.FC = () => {
                     </div>
                     <h1 className="text-3xl md:text-5xl font-bold mb-6 leading-tight tracking-tight">{blog.title}</h1>
                     <div className={`flex flex-wrap items-center justify-center gap-6 text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        <span className="flex items-center gap-2"><Calendar size={16} /> {blog.createdAt?.toDate ? blog.createdAt.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent'}</span>
+                        <span className="flex items-center gap-2"><Calendar size={16} /> {blog.createdAt ? new Date(blog.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent'}</span>
                         <span className="flex items-center gap-2"><Clock size={16} /> {blog.readTime || '5 min read'}</span>
                         <span className="flex items-center gap-2"><User size={16} /> {blog.author || 'Admin'}</span>
                     </div>

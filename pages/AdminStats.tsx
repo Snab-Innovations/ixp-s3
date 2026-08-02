@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, getDocs } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds, poll } from '../services/rdsApi';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, LayoutDashboard, Video, Users, Calendar, Clock, Printer, X, Settings, Plus, Mail, Phone, FileText, Image as ImageIcon, Building, Hash, Globe, Tag } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
@@ -94,109 +93,101 @@ const AdminStats: React.FC = () => {
   });
 
   useEffect(() => {
-    let isMounted = true;
     setLoading(true);
 
-    const unsubInterviews = onSnapshot(collection(db, 'interviews'), async (snapshot) => {
-      if (!isMounted) return;
+    const load = async () => {
+      const [interviewsRes, attemptsRes] = await Promise.all([
+        rds.listInterviews(),
+        rds.listAttemptsByRecruiter()
+      ]);
+      return {
+        interviews: interviewsRes.interviews || [],
+        attempts: attemptsRes.attempts || []
+      };
+    };
+
+    const process = ({ interviews, attempts }: { interviews: any[]; attempts: any[] }) => {
       const now = new Date();
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
+
       const [year, month] = selectedMonth.split('-').map(Number);
       const startOfSelectedMonth = new Date(year, month - 1, 1);
       const endOfSelectedMonth = new Date(year, month, 0, 23, 59, 59, 999);
 
       let todayCount = 0;
       let monthCount = 0;
-      let totalCount = snapshot.size;
+      let totalCount = interviews.length;
 
       let tempInterviews: any[] = [];
-      const attemptPromises: Promise<any>[] = [];
 
-      snapshot.docs.forEach(doc => {
-        const data = doc.data();
-        const timestamp = data.createdAt || data.submittedAt;
-        const date = timestamp?.toDate ? timestamp.toDate() : null;
-        
+      interviews.forEach(inv => {
+        const timestamp = inv.createdAt || inv.submittedAt;
+        const date = timestamp ? new Date(timestamp) : null;
+
         if (date) {
           if (date >= startOfToday) todayCount++;
           if (date >= startOfSelectedMonth && date <= endOfSelectedMonth) monthCount++;
         }
-        
+
         tempInterviews.push({
-          id: doc.id,
-          title: data.title || data.jobTitle || 'Untitled Interview',
+          id: inv.id,
+          title: inv.title || inv.jobTitle || 'Untitled Interview',
           createdAt: timestamp || null,
           responses: 0
         });
-
-        attemptPromises.push(getDocs(collection(db, 'interviews', doc.id, 'attempts')));
       });
 
       setInterviewsStats({ today: todayCount, thisMonth: monthCount, total: totalCount });
-      
-      try {
-        const attemptSnaps = await Promise.all(attemptPromises);
-        let respToday = 0;
-        let respMonth = 0;
-        let respTotal = 0;
-        let tempResponses: ResponseDetail[] = [];
 
-        attemptSnaps.forEach((snap, idx) => {
-          respTotal += snap.size;
-          let interviewRespMonth = 0;
+      let respToday = 0;
+      let respMonth = 0;
+      let respTotal = attempts.length;
+      let tempResponses: ResponseDetail[] = [];
 
-          snap.docs.forEach(doc => {
-            const data = doc.data();
-            const timestamp = data.submittedAt || data.createdAt;
-            const date = timestamp?.toDate ? timestamp.toDate() : null;
-            if (date) {
-              if (date >= startOfToday) respToday++;
-              if (date >= startOfSelectedMonth && date <= endOfSelectedMonth) {
-                respMonth++;
-                interviewRespMonth++;
-                tempResponses.push({
-                  id: doc.id,
-                  candidateName: data.candidateInfo?.name || 'Unknown Candidate',
-                  candidateEmail: data.candidateInfo?.email || 'N/A',
-                  interviewTitle: tempInterviews[idx].title,
-                  submittedAt: timestamp || null
-                });
-              }
-            }
-          });
-          
-          tempInterviews[idx].responses = interviewRespMonth;
-        });
-        
-        tempResponses.sort((a, b) => {
-          const dateA = a.submittedAt?.toDate ? a.submittedAt.toDate().getTime() : 0;
-          const dateB = b.submittedAt?.toDate ? b.submittedAt.toDate().getTime() : 0;
-          return dateB - dateA;
-        });
-
-        const filteredInterviews = tempInterviews.filter(inv => {
-           const invDate = inv.createdAt?.toDate ? inv.createdAt.toDate() : null;
-           const createdInMonth = invDate && invDate >= startOfSelectedMonth && invDate <= endOfSelectedMonth;
-           return createdInMonth || inv.responses > 0;
-        });
-
-        if (isMounted) {
-          setResponsesStats({ today: respToday, thisMonth: respMonth, total: respTotal });
-          setInterviewsList(filteredInterviews);
-          setResponsesList(tempResponses);
+      attempts.forEach(attempt => {
+        const timestamp = attempt.submittedAt || attempt.createdAt;
+        const date = timestamp ? new Date(timestamp) : null;
+        if (date) {
+          if (date >= startOfToday) respToday++;
+          if (date >= startOfSelectedMonth && date <= endOfSelectedMonth) {
+            respMonth++;
+            const interviewIdx = tempInterviews.findIndex(inv => inv.id === attempt.interviewId);
+            if (interviewIdx !== -1) tempInterviews[interviewIdx].responses++;
+            tempResponses.push({
+              id: attempt.id,
+              candidateName: attempt.candidateInfo?.name || 'Unknown Candidate',
+              candidateEmail: attempt.candidateInfo?.email || 'N/A',
+              interviewTitle: interviewIdx !== -1 ? tempInterviews[interviewIdx].title : 'Unknown Interview',
+              submittedAt: timestamp || null
+            });
+          }
         }
-      } catch (error) {
-        console.error("Error fetching responses:", error);
-      }
-      
-      if (isMounted) setLoading(false);
-    });
+      });
 
-    return () => {
-      isMounted = false;
-      unsubInterviews();
+      tempResponses.sort((a, b) => {
+        const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+        const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+        return dateB - dateA;
+      });
+
+      const filteredInterviews = tempInterviews.filter(inv => {
+        const invDate = inv.createdAt ? new Date(inv.createdAt) : null;
+        const createdInMonth = invDate && invDate >= startOfSelectedMonth && invDate <= endOfSelectedMonth;
+        return createdInMonth || inv.responses > 0;
+      });
+
+      setResponsesStats({ today: respToday, thisMonth: respMonth, total: respTotal });
+      setInterviewsList(filteredInterviews);
+      setResponsesList(tempResponses);
+      setLoading(false);
     };
+
+    const stop = poll(load, process, (error) => {
+      console.error("Error fetching responses:", error);
+      setLoading(false);
+    }, 30000);
+
+    return () => stop();
   }, [selectedMonth]);
 
   const addBillItem = () => {
@@ -404,7 +395,7 @@ const AdminStats: React.FC = () => {
                   <p className="font-bold text-black text-base leading-tight">{item.title}</p>
                 </td>
                 <td className="py-3 text-center text-sm font-medium text-black">
-                   {item.createdAt?.toDate ? item.createdAt.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
+                   {item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
                 </td>
                 <td className="py-3 text-right text-base font-black text-black">{item.responses}</td>
               </tr>
@@ -485,7 +476,7 @@ const AdminStats: React.FC = () => {
                   <p className="text-sm font-medium text-gray-800">{item.interviewTitle}</p>
                 </td>
                 <td className="py-3 text-right text-sm font-medium text-black">
-                   {item.submittedAt?.toDate ? item.submittedAt.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
+                   {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
                 </td>
               </tr>
             ))}
@@ -998,7 +989,7 @@ const AdminStats: React.FC = () => {
                       <tr key={interview.id} className="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
                          <td className="py-4 dark:text-white font-bold">{interview.title}</td>
                          <td className="py-4 text-gray-500 dark:text-gray-400 text-sm font-medium">
-                            {interview.createdAt?.toDate ? interview.createdAt.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
+                            {interview.createdAt ? new Date(interview.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
                          </td>
                          <td className="py-4 text-center">
                             <span className="inline-flex items-center justify-center min-w-[2.5rem] px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full font-black text-sm shadow-sm border border-emerald-200 dark:border-emerald-800">
@@ -1059,7 +1050,7 @@ const AdminStats: React.FC = () => {
                             {item.interviewTitle}
                          </td>
                          <td className="py-4 text-right text-gray-500 dark:text-gray-400 text-sm font-medium">
-                            {item.submittedAt?.toDate ? item.submittedAt.toDate().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
+                            {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
                          </td>
                       </tr>
                     ))}

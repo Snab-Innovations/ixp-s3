@@ -4,8 +4,7 @@ import { motion } from 'framer-motion';
 import { Sun, Moon, ArrowLeft, Bug } from 'lucide-react';
 import { ThemeProvider, useTheme } from '../context/ThemeContext';
 import Logo from '../components/Logo';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 import { useMessageBox } from '../components/MessageBox';
 
 const ReportBugContent: React.FC = () => {
@@ -44,11 +43,7 @@ const ReportBugContent: React.FC = () => {
         }
         setLoading(true);
         try {
-            await addDoc(collection(db, 'bugReports'), {
-                ...formData,
-                createdAt: serverTimestamp(),
-                status: 'new'
-            });
+            await rds.createBugReport({ ...formData });
             messageBox.showSuccess("Bug report submitted successfully. Thank you!");
             setFormData({ name: '', email: '', feature: '', description: '', steps: '', severity: 'medium', type: 'functional' });
         } catch (error) {

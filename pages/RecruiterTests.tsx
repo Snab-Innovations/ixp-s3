@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
-import { db, auth } from '../services/firebase';
 import { Link, useNavigate } from 'react-router-dom';
+import { rds } from '../services/rdsApi';
+import { loadStoredCognitoSession } from '../services/authService';
 import {
   ArrowLeft,
   BarChart3,
@@ -48,12 +48,6 @@ const formatDate = (value: TimestampLike): string => {
   return new Date(millis).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-const chunkArray = <T,>(items: T[], size: number) => {
-  const chunks: T[][] = [];
-  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
-  return chunks;
-};
-
 const getAssessmentLink = (testId: string) => `${window.location.origin}/#/test/${testId}`;
 
 const getStats = (test: any, submissions: any[]) => {
@@ -94,29 +88,22 @@ const RecruiterTests: React.FC = () => {
 
   useEffect(() => {
     const fetchTests = async () => {
-      if (!auth.currentUser) {
+      const session = loadStoredCognitoSession();
+      if (!session?.firebaseUid) {
         setLoading(false);
         return;
       }
 
       try {
-        const q = query(
-          collection(db, 'tests'),
-          where('recruiterUID', '==', auth.currentUser.uid)
-        );
-        const snap = await getDocs(q);
-        const fetchedTests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        fetchedTests.sort((a: any, b: any) => toMillis(b.createdAt) - toMillis(a.createdAt));
+        const { tests } = await rds.listTests(session.firebaseUid);
+        const fetchedTests = tests.sort((a: any, b: any) => toMillis(b.createdAt) - toMillis(a.createdAt));
         setTests(fetchedTests);
 
         const nextSubmissionsMap: Record<string, any[]> = Object.fromEntries(fetchedTests.map((test: any) => [test.id, []]));
-        const idChunks = chunkArray(fetchedTests.map((test: any) => test.id), 10);
 
-        for (const idChunk of idChunks) {
-          const submissionsQuery = query(collection(db, 'testSubmissions'), where('testId', 'in', idChunk));
-          const submissionsSnap = await getDocs(submissionsQuery);
-          submissionsSnap.docs.forEach((submissionDoc) => {
-            const submission = { id: submissionDoc.id, ...submissionDoc.data() } as any;
+        for (const test of fetchedTests) {
+          const { submissions } = await rds.listTestSubmissions(test.id);
+          submissions.forEach((submission) => {
             if (!nextSubmissionsMap[submission.testId]) nextSubmissionsMap[submission.testId] = [];
             nextSubmissionsMap[submission.testId].push(submission);
           });
@@ -137,7 +124,7 @@ const RecruiterTests: React.FC = () => {
   const handleDelete = async (id: string) => {
     showConfirm('Delete this assessment and remove it from your workspace?', async () => {
       try {
-        await deleteDoc(doc(db, 'tests', id));
+        await rds.deleteTest(id);
         setTests((currentTests) => currentTests.filter(test => test.id !== id));
         setSubmissionsMap((currentMap) => {
           const nextMap = { ...currentMap };

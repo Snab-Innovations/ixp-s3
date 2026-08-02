@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
+import { loadStoredCognitoSession } from '../services/authService';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -67,23 +67,28 @@ const Profile: React.FC = () => {
   const [testMessage, setTestMessage] = useState('Hello! This is a test message from SNAB Innovations WhatsApp API system.');
   const [savingWaCredentials, setSavingWaCredentials] = useState(false);
   const [testingWa, setTestingWa] = useState(false);
+  const [tempExp, setTempExp] = useState<ExperienceItem>({ id: 0, role: '', company: '', duration: '', description: '' });
+  const [tempEdu, setTempEdu] = useState<EducationItem>({ id: 0, degree: '', school: '', year: '' });
+  const [tempProject, setTempProject] = useState<ProjectItem>({ id: 0, title: '', link: '', description: '' });
+  const [tempCert, setTempCert] = useState<CertificationItem>({ id: 0, name: '', issuer: '', year: '' });
+  const [tempVol, setTempVol] = useState<VolunteeringItem>({ id: 0, role: '', organization: '', duration: '', description: '' });
+  const [tempCustom, setTempCustom] = useState<CustomSection>({ id: 0, title: '', content: '' });
+  const [skillSearch, setSkillSearch] = useState('');
 
   const handleSaveWaCredentials = async () => {
-    const user = auth.currentUser;
-    if (!user) return;
+    const user = loadStoredCognitoSession();
+    if (!user?.firebaseUid) return;
     setSavingWaCredentials(true);
     try {
       await Promise.all([
-        setDoc(doc(db, 'profiles', user.uid), {
+        rds.putProfile(user.firebaseUid, {
           whatsappSessionId: formData.whatsappSessionId || '',
-          whatsappSessionPasscode: formData.whatsappSessionPasscode || '',
-          updatedAt: new Date()
-        }, { merge: true }),
-        setDoc(doc(db, 'users', user.uid), {
+          whatsappSessionPasscode: formData.whatsappSessionPasscode || ''
+        }),
+        rds.updateUser(user.firebaseUid, {
           whatsappSessionId: formData.whatsappSessionId || '',
-          whatsappSessionPasscode: formData.whatsappSessionPasscode || '',
-          updatedAt: new Date()
-        }, { merge: true })
+          whatsappSessionPasscode: formData.whatsappSessionPasscode || ''
+        })
       ]);
       messageBox.showSuccess('✅ WhatsApp Session Credentials saved successfully!');
     } catch (err: any) {
@@ -140,30 +145,28 @@ const Profile: React.FC = () => {
   ];
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      const loggedInUser = user;
-      const profileUserId = userId || loggedInUser?.uid;
+    const loggedInUser = loadStoredCognitoSession();
+    const loggedInUid = loggedInUser?.firebaseUid;
+    const profileUserId = userId || loggedInUid;
 
-      setIsOwnProfile(!userId || (loggedInUser?.uid === userId));
+    setIsOwnProfile(!userId || (loggedInUid === userId));
 
-      if (profileUserId) {
+    if (profileUserId) {
+      (async () => {
         try {
-          const profileDocRef = doc(db, 'profiles', profileUserId);
-          const userDocRef = doc(db, 'users', profileUserId);
-
-          const [profileDocSnap, userDocSnap] = await Promise.all([
-            getDoc(profileDocRef),
-            getDoc(userDocRef)
+          const [profileRes, meRes] = await Promise.all([
+            rds.getProfile(profileUserId).catch(() => null),
+            profileUserId === loggedInUid ? rds.me().catch(() => null) : Promise.resolve(null)
           ]);
 
-          const profileInfo = profileDocSnap.exists() ? profileDocSnap.data() : {};
-          const userInfo = userDocSnap.exists() ? userDocSnap.data() : {};
+          const profileInfo = profileRes?.profile || {};
+          const userInfo = meRes?.user || {};
 
           setFormData({
             displayName: profileInfo.displayName || userInfo.fullname || '',
             email: userInfo.email || '',
             phoneNumber: profileInfo.phoneNumber || userInfo.phone || '',
-            photoURL: profileInfo.photoURL || userInfo.profilePhotoURL || '',
+            photoURL: profileInfo.photoURL || userInfo.photoURL || '',
             location: profileInfo.location || '',
             bio: profileInfo.bio || '',
             linkedin: profileInfo.linkedin || '',
@@ -184,14 +187,15 @@ const Profile: React.FC = () => {
             whatsappSessionId: profileInfo.whatsappSessionId || userInfo.whatsappSessionId || '',
             whatsappSessionPasscode: profileInfo.whatsappSessionPasscode || userInfo.whatsappSessionPasscode || ''
           });
-
         } catch (err) {
           console.error("Error fetching profile:", err);
+        } finally {
+          setLoading(false);
         }
-      }
+      })();
+    } else {
       setLoading(false);
-    });
-    return () => unsubscribe();
+    }
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -411,20 +415,16 @@ const Profile: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const user = auth.currentUser;
-    if (!user) return;
+    const user = loadStoredCognitoSession();
+    if (!user?.firebaseUid) return;
     setSaving(true);
     try {
       await Promise.all([
-        setDoc(doc(db, 'profiles', user.uid), {
-          ...formData,
-          updatedAt: new Date()
-        }, { merge: true }),
-        setDoc(doc(db, 'users', user.uid), {
+        rds.putProfile(user.firebaseUid, { ...formData }),
+        rds.updateUser(user.firebaseUid, {
           whatsappSessionId: formData.whatsappSessionId || '',
-          whatsappSessionPasscode: formData.whatsappSessionPasscode || '',
-          updatedAt: new Date()
-        }, { merge: true })
+          whatsappSessionPasscode: formData.whatsappSessionPasscode || ''
+        })
       ]);
       messageBox.showSuccess('Profile & WhatsApp credentials updated successfully!');
       setIsEditing(false); // Switch back to view mode after saving

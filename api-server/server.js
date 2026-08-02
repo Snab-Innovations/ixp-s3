@@ -8,42 +8,23 @@
 
 import express from 'express';
 import cors from 'cors';
-import fs from 'fs';
-import admin from 'firebase-admin';
 import fetch from 'node-fetch'; // Standard node fetch for webhook delivery
-import { createRequire } from 'module';
 import './cognitoConfig.js'; // load env before auth routes / Cognito client init
 import authRoutes from './authRoutes.js';
 import dataRoutes from './routes/dataRoutes.js';
 import { pingDb, dbReady, query as pgQuery } from './db/pool.js';
 
-const require = createRequire(import.meta.url);
-
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 
-// Cognito auth bridge (login, password reset, user provisioning, Firebase custom tokens)
+// Cognito auth bridge (login, password reset, user provisioning)
 app.use('/auth', authRoutes);
 
-// PostgreSQL data API (replaces Firestore client access)
+// PostgreSQL data API
 app.use('/api/db', dataRoutes);
 
-// Optional legacy Firebase Admin (custom tokens / migration helpers only).
-// Cognito + Postgres are the primary stack — skip quietly when no key is present.
-const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_KEY || './serviceAccountKey.json';
-if (fs.existsSync(serviceAccountPath)) {
-  try {
-    admin.initializeApp({
-      credential: admin.credential.cert(require(serviceAccountPath)),
-    });
-    console.log('✅ Firebase Admin SDK initialized (optional legacy bridge).');
-  } catch (error) {
-    console.warn('⚠️ Firebase Admin key found but invalid; continuing without Firebase Admin.');
-  }
-}
-
-// Mock API Key database for validation (In production, load from a Firestore collection 'api_keys')
+// Mock API Key database for validation
 const MOCK_API_KEYS = new Set(['ix_live_test_api_key_123456789']);
 
 // Middleware to authenticate external database REST requests

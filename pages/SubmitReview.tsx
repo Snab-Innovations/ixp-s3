@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 import { useMessageBox } from '../components/MessageBox';
 import { Star, Send, ArrowLeft, Home } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
@@ -42,15 +41,13 @@ const SubmitReviewContent: React.FC = () => {
     }
     setLoading(true);
     try {
-      await addDoc(collection(db, 'reviews'), {
+      await rds.createReview({
         name,
         email,
         contact,
         review,
         rating,
         userType,
-        approved: false, // All reviews require manual approval from Firestore
-        createdAt: serverTimestamp(),
       });
       messageBox.showSuccess('Thank you! Your review has been submitted for approval.');
       navigate('/'); // Navigate to home after submission

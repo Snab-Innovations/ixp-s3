@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { addDoc, collection, getDocs, orderBy, query, serverTimestamp } from 'firebase/firestore';
-import { db, auth } from '../services/firebase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { rds } from '../services/rdsApi';
+import { loadStoredCognitoSession } from '../services/authService';
 import {
   ArrowLeft,
   Bot,
@@ -84,11 +84,11 @@ const CreateTest: React.FC = () => {
 
   useEffect(() => {
     const fetchInterviews = async () => {
-      if (!auth.currentUser) return;
+      const session = loadStoredCognitoSession();
+      if (!session?.firebaseUid) return;
       try {
-        const q = query(collection(db, 'interviews'), orderBy('createdAt', 'desc'));
-        const snap = await getDocs(q);
-        setRecruiterInterviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const { interviews } = await rds.listInterviews({ recruiterUID: session.firebaseUid });
+        setRecruiterInterviews(interviews);
       } catch (error) {
         console.error('Error loading interviews:', error);
       }
@@ -212,14 +212,13 @@ const CreateTest: React.FC = () => {
     try {
       const accessCode = Math.random().toString(36).substring(2, 8).toUpperCase();
       const testData: any = {
-        recruiterUID: auth.currentUser?.uid,
+        recruiterUID: loadStoredCognitoSession()?.firebaseUid,
         title: title.trim(),
         type,
         duration: Number(duration),
         questions,
         accessCode,
         passingScore: Number(passingScore),
-        createdAt: serverTimestamp(),
       };
 
       if (automationType === 'internal' && nextInterviewId) {
@@ -229,7 +228,7 @@ const CreateTest: React.FC = () => {
         testData.externalAccessCode = externalAccessCode.trim();
       }
 
-      await addDoc(collection(db, 'tests'), testData);
+      await rds.createTest(testData);
       showSuccess('Assessment created.');
       navigate('/recruiter/tests');
     } catch (error) {

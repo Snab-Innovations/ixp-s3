@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { collection, query, where, getDocs, updateDoc, doc, arrayUnion } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { useMessageBox } from '../components/MessageBox';
 import { Interview, InterviewSubmission } from '../types';
+import { rds } from '../services/rdsApi';
+import { loadStoredCognitoSession } from '../services/authService';
 import { sendInterviewInvitations } from '../services/brevoService';
 import { sendWhatsAppMessage, sendBulkWhatsAppInvites, sendInterviewWhatsAppInvite } from '../services/waSenderService';
 import { evaluateResumeForMultipleJobs } from '../services/api';
@@ -104,7 +104,7 @@ const InvitedCandidates: React.FC = () => {
                 });
             }
 
-            await updateDoc(doc(db, 'interviews', interviewId), {
+            await rds.updateInterview(interviewId, {
                 candidateEmails: updatedEmails,
                 candidateData: updatedCandData
             });
@@ -242,13 +242,19 @@ const InvitedCandidates: React.FC = () => {
             if (result.success && result.totalEmails > 0) emailSent = true;
 
             if (phone) {
-                const waRes = await sendBulkWhatsAppInvites({
-                    recruiterName: user?.displayName || user?.email || 'Recruiter',
-                    candidates: [{ email, phone, name: candidateData?.name || email }],
-                    jobTitle: selectedInterview.title,
-                    interviewLink: selectedInterview.interviewLink || '',
-                    accessCode: selectedInterview.accessCode
-                });
+                const waRes = await sendBulkWhatsAppInvites(
+                    [{ email, phone, name: candidateData?.name || email }],
+                    selectedInterview.title,
+                    selectedInterview.interviewLink || '',
+                    selectedInterview.accessCode,
+                    false,
+                    undefined,
+                    {
+                        recruiterName: user?.displayName || user?.email || 'Recruiter',
+                        whatsappSessionId: userProfile?.whatsappSessionId || '',
+                        whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
+                    }
+                );
                 if (waRes.success) waSent = true;
             }
 
@@ -273,17 +279,16 @@ const InvitedCandidates: React.FC = () => {
         const fetchData = async () => {
             try {
                 // 1. Fetch all interviews for this team
-                const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
-                const q = teamId
-                    ? query(collection(db, 'interviews'), where('teamId', '==', teamId))
-                    : query(collection(db, 'interviews'), where('recruiterUID', '==', user.uid));
-                const snapshot = await getDocs(q);
-                const fetchedInterviews = snapshot.docs
-                    .map(d => ({id: d.id, ...d.data()} as Interview))
+                const firebaseUid = loadStoredCognitoSession()?.firebaseUid || '';
+                const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || firebaseUid;
+                const { interviews } = teamId
+                    ? await rds.listInterviews({ teamId })
+                    : await rds.listInterviews({ recruiterUID: firebaseUid });
+                const fetchedInterviews = (interviews || [])
                     .filter(interview => interview.isMock !== true)
                     .sort((a, b) => {
-                        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0;
-                        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0;
+                        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
                         return timeB - timeA;
                     });
                 setInterviews(fetchedInterviews);
@@ -291,14 +296,14 @@ const InvitedCandidates: React.FC = () => {
                 // 2. Fetch submissions for all interviews
                 const allCands: GlobalCandidate[] = [];
                 for (const interview of fetchedInterviews) {
-                    const attemptsSnap = await getDocs(collection(db, 'interviews', interview.id, 'attempts'));
-                    const attempts = attemptsSnap.docs.map(d => ({id: d.id, ...d.data()} as InterviewSubmission));
+                    const { attempts } = await rds.listAttempts(interview.id);
+                    const attemptsList = (attempts || []) as InterviewSubmission[];
                     
                     const candidateDataArray = (interview as any).candidateData || []; // New schema field we will use moving forward
                     const explicitEmails = (interview.candidateEmails || []).map((e:string) => e.toLowerCase());
                     
                     // Pass 1: Everyone who actually submitted
-                    attempts.forEach(submission => {
+                    attemptsList.forEach(submission => {
                         const email = (submission.candidateInfo?.email || 'unknown').toLowerCase();
                         const enhancedData = candidateDataArray.find((c: any) => c.email.toLowerCase() === email);
 
@@ -450,9 +455,24 @@ const InvitedCandidates: React.FC = () => {
             const validPhoneCandidates = newCandidates.filter(c => c.phone && c.phone !== 'N/A');
 
             // Update Database
-            await updateDoc(doc(db, 'interviews', selectedInterviewId), { 
-                candidateEmails: validEmails.length > 0 ? arrayUnion(...validEmails) : arrayUnion(),
-                candidateData: arrayUnion(...newCandidates)
+            const { interview: latestInterview } = await rds.getInterview(selectedInterviewId);
+            const existingEmails = ((latestInterview?.candidateEmails || []) as string[]).map(e => e.toLowerCase());
+            const mergedEmails = Array.from(new Set([
+                ...existingEmails,
+                ...validEmails.map(e => e.toLowerCase())
+            ]));
+            const existingCandData = (latestInterview?.candidateData || []) as any[];
+            const mergedCandData = [...existingCandData];
+            for (const candidate of newCandidates) {
+                const idx = mergedCandData.findIndex(
+                    (c: any) => (c.email || '').toLowerCase() === (candidate.email || '').toLowerCase()
+                );
+                if (idx >= 0) mergedCandData[idx] = { ...mergedCandData[idx], ...candidate };
+                else mergedCandData.push(candidate);
+            }
+            await rds.updateInterview(selectedInterviewId, {
+                candidateEmails: mergedEmails,
+                candidateData: mergedCandData
             });
             
             let emailCount = 0;
@@ -1101,9 +1121,8 @@ const InvitedCandidates: React.FC = () => {
                                         return;
                                     }
                                     
-                                    // Save phone to Firestore under candidateData array
+                                    // Save phone under candidateData array
                                     try {
-                                        const intRef = doc(db, 'interviews', whatsappModal.interview.id);
                                         const currentCandData = (whatsappModal.interview as any).candidateData || [];
                                         const index = currentCandData.findIndex((c: any) => c.email.toLowerCase() === whatsappModal.email.toLowerCase());
                                         
@@ -1114,7 +1133,7 @@ const InvitedCandidates: React.FC = () => {
                                             updatedCandData.push({ email: whatsappModal.email, phone: whatsappModal.phone });
                                         }
                                         
-                                        await updateDoc(intRef, {
+                                        await rds.updateInterview(whatsappModal.interview.id, {
                                             candidateData: updatedCandData
                                         });
                                         
@@ -1134,7 +1153,7 @@ const InvitedCandidates: React.FC = () => {
                                             return c;
                                         }));
                                     } catch (err) {
-                                        console.error("Error updating phone in Firestore:", err);
+                                        console.error("Error updating phone:", err);
                                     }
                                     
                                     // Send message via WhatsApp API

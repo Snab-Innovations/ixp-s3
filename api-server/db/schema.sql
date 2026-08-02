@@ -382,3 +382,12 @@ CREATE TABLE IF NOT EXISTS support_tickets (
   status        TEXT DEFAULT 'open',
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Rich per-user profile (replaces Firestore `profiles/{uid}` docs).
+-- Mirrors the structure written by pages/Profile.tsx: the full document is
+-- stored as JSONB plus a few indexed columns used for lookups.
+CREATE TABLE IF NOT EXISTS profiles (
+  id            TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  data          JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

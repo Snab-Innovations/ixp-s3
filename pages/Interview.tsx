@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { doc, getDoc, collection, serverTimestamp, updateDoc, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import { uploadToCloudinary, generateInterviewQuestions, requestTranscription, fetchTranscriptText, generateFeedback } from '../services/api';
+import { loadStoredCognitoSession } from '../services/authService';
 import { speak } from '../lib/tts';
 import { Interview, InterviewState } from '../types';
 import { createPortal } from 'react-dom';
@@ -1540,14 +1539,12 @@ const AccessCodeVerificationScreen: React.FC<{
     setError(null);
 
     try {
-      const tokenDocRef = doc(db, 'interviewAccessTokens', token.trim());
-      const tokenDoc = await getDoc(tokenDocRef);
+      const { token: tokenData } = await rds.getAccessToken(token.trim());
 
-      if (!tokenDoc.exists()) {
+      if (!tokenData) {
         throw new Error("Invalid or expired access code. Please check the code sent to your email.");
       }
 
-      const tokenData = tokenDoc.data();
       if (tokenData.isUsed) {
         throw new Error("This access code has already been used. Please contact your recruiter.");
       }
@@ -1557,7 +1554,7 @@ const AccessCodeVerificationScreen: React.FC<{
       }
 
       // Mark token as used
-      await updateDoc(tokenDocRef, { isUsed: true, usedAt: serverTimestamp() });
+      await rds.updateAccessToken(token.trim(), { isUsed: true, usedAt: new Date().toISOString() });
       
       onSuccess();
     } catch (err: any) {
@@ -2878,7 +2875,6 @@ const InterviewSubmission: React.FC<{
   candidateInfo: CandidateInfo;
   terminated: boolean;
 }> = ({ state, tabSwitches, interviewId, recruiterUID, candidateInfo, terminated }) => {
-  const { user } = useAuth();
   const [status, setStatus] = useState("Finalizing transcripts...");
   const [showCompletionPopup, setShowCompletionPopup] = useState(false);
   const [reportUrl, setReportUrl] = useState('');
@@ -3033,7 +3029,7 @@ const InterviewSubmission: React.FC<{
             qnaScore: qnaScoreNum,
             candidateInfo,
             status: terminated ? 'Terminated' : 'Completed',
-            candidateUID: user?.uid || null,
+            candidateUID: loadStoredCognitoSession()?.firebaseUid || null,
             interviewId: interviewId,
             recruiterUID: recruiterUID || null,
             jobId: interviewId,

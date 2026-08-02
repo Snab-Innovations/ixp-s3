@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -164,20 +163,16 @@ const TestResults: React.FC = () => {
       if (!testId) return;
 
       try {
-        const testSnap = await getDoc(doc(db, 'tests', testId));
-        if (testSnap.exists()) {
-          setTest({ id: testSnap.id, ...testSnap.data() });
+        try {
+          const { test } = await rds.getTest(testId);
+          if (test) {
+            setTest(test);
+          }
+        } catch (error) {
+          console.error('Error fetching test:', error);
         }
 
-        const submissionsQuery = query(
-          collection(db, 'testSubmissions'),
-          where('testId', '==', testId)
-        );
-        const submissionsSnap = await getDocs(submissionsQuery);
-        const fetchedSubmissions = submissionsSnap.docs.map((submissionDoc) => ({
-          id: submissionDoc.id,
-          ...submissionDoc.data(),
-        }));
+        const { submissions: fetchedSubmissions } = await rds.listTestSubmissions(testId);
 
         fetchedSubmissions.sort((a: any, b: any) => toMillis(b.submittedAt) - toMillis(a.submittedAt));
         setSubmissions(fetchedSubmissions);

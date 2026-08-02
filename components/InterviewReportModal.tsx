@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 import { Interview } from '../types';
 import { useTheme } from '../context/ThemeContext';
 
@@ -21,9 +20,10 @@ const InterviewReportModal: React.FC<InterviewReportModalProps> = ({ interview, 
             setLoading(true);
             try {
                 if (interview.jobId) {
-                    const jobSnap = await getDoc(doc(db, 'jobs', interview.jobId));
-                    if (jobSnap.exists()) {
-                        setCompanyName(jobSnap.data().companyName);
+                    const { jobs } = await rds.listJobs();
+                    const job = (jobs || []).find((j: any) => j.id === interview.jobId);
+                    if (job?.companyName) {
+                        setCompanyName(job.companyName);
                     }
                 }
             } catch (e) {
@@ -71,7 +71,7 @@ const InterviewReportModal: React.FC<InterviewReportModalProps> = ({ interview, 
                             <span>•</span>
                             <span>{companyName || 'Interview Report'}</span>
                             <span>•</span>
-                            <span>{interview.submittedAt?.toDate?.().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) || 'N/A'}</span>
+                            <span>{interview.submittedAt ? new Date(interview.submittedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}</span>
                         </div>
                     </div>
                     <button onClick={onClose} className={`w-10 h-10 rounded-full ${isDark ? 'bg-white/10 text-gray-400 hover:bg-white/20' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'} flex items-center justify-center transition-colors`}>

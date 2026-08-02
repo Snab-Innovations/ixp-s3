@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 
 interface ServiceStatus {
   name: string;
@@ -13,7 +13,7 @@ interface ServiceStatus {
 const INITIAL_SERVICES: ServiceStatus[] = [
   { name: 'Brevo API', description: 'Email delivery & candidate invitations', status: 'checking', iconUrl: 'https://www.google.com/s2/favicons?domain=brevo.com&sz=128' },
   { name: 'Sarvam API', description: 'AI-powered speech & language services', status: 'checking', iconUrl: 'https://www.google.com/s2/favicons?domain=sarvam.ai&sz=128' },
-  { name: 'Firebase API', description: 'Authentication, database & storage', status: 'checking', iconUrl: 'https://www.google.com/s2/favicons?domain=firebase.google.com&sz=128' },
+  { name: 'AWS RDS Database', description: 'PostgreSQL data store (Cognito-authenticated app data)', status: 'checking', iconUrl: 'https://www.google.com/s2/favicons?domain=aws.amazon.com&sz=128' },
   { name: 'Cloudinary API', description: 'Media uploads & asset management', status: 'checking', iconUrl: 'https://www.google.com/s2/favicons?domain=cloudinary.com&sz=128' },
   { name: 'Grok API', description: 'AI interview question generation & evaluation', status: 'checking', iconUrl: 'https://www.google.com/s2/favicons?domain=x.ai&sz=128', modelStatus: '...' },
 ];
@@ -63,18 +63,14 @@ const checkSarvam = async (): Promise<{ ok: boolean; ms: number }> => {
   }
 };
 
-const checkFirebase = async (): Promise<{ ok: boolean; ms: number }> => {
+const checkRds = async (): Promise<{ ok: boolean; ms: number }> => {
   const start = performance.now();
   try {
-    // Firebase SDK — uses the public API key (safe by design, security comes from rules).
-    // Reads from 'blogs' collection which has public read access (allow read: if true).
-    const { getDocs, collection, query, limit: limitFn } = await import('firebase/firestore');
-    const q = query(collection(db, 'blogs'), limitFn(1));
-    await withTimeout(getDocs(q));
-    return { ok: true, ms: Math.round(performance.now() - start) };
+    // Hits the api-server Postgres health endpoint (no secrets sent).
+    const health = await withTimeout(rds.health());
+    return { ok: Boolean(health?.postgres), ms: Math.round(performance.now() - start) };
   } catch {
-    // Even errors (permission-denied, etc.) mean Firebase is reachable
-    return { ok: true, ms: Math.round(performance.now() - start) };
+    return { ok: false, ms: Math.round(performance.now() - start) };
   }
 };
 
@@ -132,7 +128,7 @@ const StatusPage: React.FC = () => {
     // Reset to checking
     setServices((prev) => prev.map((s) => ({ ...s, status: 'checking' as const })));
 
-    const checkers = [checkBrevo, checkSarvam, checkFirebase, checkCloudinary, checkGrok];
+    const checkers = [checkBrevo, checkSarvam, checkRds, checkCloudinary, checkGrok];
 
     const results = await Promise.allSettled(checkers.map((fn) => fn()));
 

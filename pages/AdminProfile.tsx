@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { doc, onSnapshot, updateDoc, setDoc } from 'firebase/firestore';
-import { db, auth } from '../services/firebase';
-import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
+import { rds, poll } from '../services/rdsApi';
+import { loadStoredCognitoSession } from '../services/authService';
+import { useTheme } from '../context/ThemeContext';import { useAuth } from '../context/AuthContext';
 import { User, Mail, Calendar, Shield, Sun, Moon, Monitor, ArrowLeft, Edit2, Save, X, FileText, DollarSign } from 'lucide-react';
 import gsap from 'gsap';
 
@@ -24,15 +23,7 @@ const AdminProfile: React.FC = () => {
     const handleSavePrice = async () => {
         try {
             const priceVal = Number(editPrice) || 150;
-            try {
-                await updateDoc(doc(db, 'settings', 'pricing'), {
-                    perInterviewPrice: priceVal
-                });
-            } catch (e) {
-                await setDoc(doc(db, 'settings', 'pricing'), {
-                    perInterviewPrice: priceVal
-                });
-            }
+            await rds.putSettings('pricing', { perInterviewPrice: priceVal });
             setPerInterviewPrice(priceVal);
             setIsEditingPrice(false);
         } catch (error) {
@@ -47,18 +38,17 @@ const AdminProfile: React.FC = () => {
 
     // Real-time Admin Data Listener
     useEffect(() => {
-        const user = auth.currentUser;
-        if (!user) {
+        const user = loadStoredCognitoSession();
+        if (!user?.firebaseUid) {
             setLoading(false);
             return;
         }
 
-        const unsubscribe = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setAdminData(data);
+        const stopUser = poll(() => rds.me(), (data) => {
+            if (data.user) {
+                setAdminData(data.user);
                 setEditData({
-                    fullname: data.fullname || 'Admin User'
+                    fullname: data.user.fullname || 'Admin User'
                 });
             }
             setLoading(false);
@@ -67,9 +57,9 @@ const AdminProfile: React.FC = () => {
             setLoading(false);
         });
 
-        const unsubscribePricing = onSnapshot(doc(db, 'settings', 'pricing'), (docSnap) => {
-            if (docSnap.exists()) {
-                const price = docSnap.data().perInterviewPrice || 150;
+        const stopPricing = poll(() => rds.getSettings('pricing'), (data) => {
+            if (data.settings) {
+                const price = data.settings.perInterviewPrice || 150;
                 setPerInterviewPrice(price);
                 setEditPrice(price.toString());
             }
@@ -78,8 +68,8 @@ const AdminProfile: React.FC = () => {
         });
 
         return () => {
-            unsubscribe();
-            unsubscribePricing();
+            stopUser();
+            stopPricing();
         };
     }, []);
 
@@ -119,9 +109,9 @@ const AdminProfile: React.FC = () => {
 
     const handleSave = async () => {
         try {
-            const user = auth.currentUser;
-            if (user) {
-                await updateDoc(doc(db, 'users', user.uid), {
+            const user = loadStoredCognitoSession();
+            if (user?.firebaseUid) {
+                await rds.updateUser(user.firebaseUid, {
                     fullname: editData.fullname
                 });
                 setAdminData({ ...adminData, ...editData });
@@ -286,7 +276,7 @@ const AdminProfile: React.FC = () => {
                                     <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />
                                 </div>
                                 <span className="text-sm sm:text-base font-medium text-gray-700 dark:text-zinc-300">
-                                    {adminData?.createdAt?.toDate ? adminData.createdAt.toDate().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Recently Activated'}
+                                    {adminData?.createdAt ? new Date(adminData.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Recently Activated'}
                                 </span>
                             </div>
                         </div>

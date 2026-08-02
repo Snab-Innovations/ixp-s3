@@ -3,8 +3,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/landing/Navbar';
 import { Target, TrendingUp, Users, Cpu, Award, Code2, AlertTriangle, Lightbulb, ShieldCheck, Send } from 'lucide-react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 import { useMessageBox } from '../components/MessageBox';
 
 const TEAM = [
@@ -71,11 +70,7 @@ const OurJourneyContent: React.FC = () => {
       }
       setLoading(true);
       try {
-          await addDoc(collection(db, 'contactSubmissions'), {
-              ...formData,
-              createdAt: serverTimestamp(),
-              status: 'new'
-          });
+          await rds.createContact({ ...formData });
           messageBox.showSuccess("Your message has been sent successfully!");
           setFormData({ name: '', email: '', phone: '', subject: 'Industrial Support Inquiry', message: '' });
       } catch (error) {

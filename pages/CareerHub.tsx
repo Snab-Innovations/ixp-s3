@@ -5,8 +5,7 @@ import Navbar from '../components/landing/Navbar';
 
 import { useAnimatedText } from '../hooks/useAnimatedText';
 import mermaid from 'mermaid';
-import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { rds } from '../services/rdsApi';
 import { grokChat } from '../services/grokService';
 
 // --- Types & Data Arrays ---
@@ -27,7 +26,8 @@ interface Job {
   qualifications: string;
   skills: string;
   category: string;
-  applyDeadline: Timestamp;
+  applyDeadline?: string;
+  isMock?: boolean;
   location?: string;
   employmentType?: string;
   salaryRange?: string;
@@ -396,16 +396,12 @@ const CareerHub: React.FC<{ isDarkTheme: boolean }> = ({ isDarkTheme }) => {
     const fetchJobs = async () => {
         setLoadingJobs(true);
         try {
-            const now = Timestamp.now();
-            const q = query(
-                collection(db, 'jobs'), 
-                where('applyDeadline', '>', now),
-                orderBy('applyDeadline', 'asc')
-            );
-            const snapshot = await getDocs(q);
-            const fetchedJobs = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() } as Job))
-                .filter(job => job.isMock !== true);
+            const { jobs: fetched } = await rds.listJobs();
+            const now = new Date();
+            const fetchedJobs = (fetched as Job[])
+                .filter(job => job.isMock !== true)
+                .filter(job => !job.applyDeadline || new Date(job.applyDeadline) >= now)
+                .sort((a, b) => (a.applyDeadline || '').localeCompare(b.applyDeadline || ''));
             setJobs(fetchedJobs);
         } catch (error) {
             console.error("Error fetching jobs:", error);
@@ -699,7 +695,7 @@ const CareerHub: React.FC<{ isDarkTheme: boolean }> = ({ isDarkTheme }) => {
                                   <div className="flex items-center gap-2 text-slate-500 dark:text-gray-400 text-xs uppercase font-bold mb-1">
                                       <Clock className="w-3.5 h-3.5" /> Deadline
                                   </div>
-                                  <div className="text-slate-900 dark:text-white font-medium">{selectedJob.applyDeadline?.toDate ? selectedJob.applyDeadline.toDate().toLocaleDateString() : 'Open'}</div>
+                                  <div className="text-slate-900 dark:text-white font-medium">{selectedJob.applyDeadline ? new Date(selectedJob.applyDeadline).toLocaleDateString() : 'Open'}</div>
                               </div>
                           </div>
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../services/firebase';
+import { rds, poll } from '../services/rdsApi';
+import { loadStoredCognitoSession } from '../services/authService';
 import { sendNotification } from '../services/notificationService';
 import { useMessageBox } from './MessageBox';
 
@@ -28,37 +28,31 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ label }) => {
   // Reply Modal State
   const [replyState, setReplyState] = useState<{ isOpen: boolean; recipientId: string; recipientName: string }>({ isOpen: false, recipientId: '', recipientName: '' });
   const [replyMessage, setReplyMessage] = useState('');
-  const user = auth.currentUser;
+  const user = loadStoredCognitoSession();
+  const userUid = user?.firebaseUid;
   const messageBox = useMessageBox();
 
   useEffect(() => {
-    if (!user) return;
+    if (!userUid) return;
 
-    // Listen for real-time notification updates
-    const q = query(
-      collection(db, 'notifications'),
-      where('userId', '==', user.uid),
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const notifs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
+    const stop = poll(() => rds.listNotifications(), ({ notifications }) => {
+      const notifs = (notifications || []).map(n => ({
+        id: n.id,
+        ...n
       } as Notification));
 
-      // Sort client-side to avoid Firestore index requirements
       notifs.sort((a, b) => {
-        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date();
-        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date();
-        return dateB.getTime() - dateA.getTime();
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
       });
 
       setNotifications(notifs);
       setUnreadCount(notifs.filter(n => !n.read).length);
-    });
+    }, (err) => console.error("Error fetching notifications:", err), 8000);
 
-    return () => unsubscribe();
-  }, [user]);
+    return () => stop();
+  }, [userUid]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -73,8 +67,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ label }) => {
 
   const markAsRead = async (notificationId: string) => {
     try {
-      const notifRef = doc(db, 'notifications', notificationId);
-      await updateDoc(notifRef, { read: true });
+      await rds.updateNotification(notificationId, { read: true });
     } catch (err) {
       console.error("Error marking read:", err);
     }
@@ -94,9 +87,9 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ label }) => {
   };
 
   const sendReply = async () => {
-    if (!replyMessage.trim() || !user) return;
+    if (!replyMessage.trim() || !userUid) return;
     try {
-      await sendNotification(replyState.recipientId, replyMessage, 'message', user.uid, user.displayName || 'Candidate');
+      await sendNotification(replyState.recipientId, replyMessage, 'message', userUid, user?.email || 'Candidate');
       messageBox.showSuccess('Reply sent!');
       setReplyState({ isOpen: false, recipientId: '', recipientName: '' });
       setReplyMessage('');
@@ -151,7 +144,7 @@ const NotificationCenter: React.FC<NotificationCenterProps> = ({ label }) => {
                       <p className="text-sm text-gray-800 dark:text-slate-200">{notif.message}</p>
                       <div className="flex items-center gap-2 mt-1">
                         <p className="text-xs text-gray-400">
-                          {notif.createdAt?.toDate ? notif.createdAt.toDate().toLocaleDateString() : 'Just now'}
+                          {notif.createdAt ? new Date(notif.createdAt).toLocaleDateString() : 'Just now'}
                         </p>
                         {notif.type === 'message' && notif.senderId && (
                           <button

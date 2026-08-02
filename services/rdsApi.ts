@@ -57,10 +57,11 @@ export const rds = {
   deleteRecruiterRequest: (id: string) =>
     api(`/recruiter-requests/${id}`, { method: 'DELETE' }),
 
-  listInterviews: (params?: { recruiterUID?: string; teamId?: string }) => {
+  listInterviews: (params?: { recruiterUID?: string; teamId?: string; candidateUID?: string }) => {
     const q = new URLSearchParams();
     if (params?.recruiterUID) q.set('recruiterUID', params.recruiterUID);
     if (params?.teamId) q.set('teamId', params.teamId);
+    if (params?.candidateUID) q.set('candidateUID', params.candidateUID);
     const qs = q.toString();
     return api<{ interviews: any[] }>(`/interviews${qs ? `?${qs}` : ''}`);
   },
@@ -130,13 +131,42 @@ export const rds = {
 
   listNotifications: () => api<{ notifications: any[] }>('/notifications'),
   createNotification: (body: any) => api('/notifications', { method: 'POST', body }),
+  updateNotification: (id: string, body: any) =>
+    api(`/notifications/${id}`, { method: 'PATCH', body }),
 
   createAccessToken: (body: any) =>
     api('/interview-access-tokens', { method: 'POST', body, public: true }),
+  getAccessToken: (id: string) =>
+    api<{ token: any }>(`/interview-access-tokens/${id}`, { public: true }),
   updateAccessToken: (id: string, body: any) =>
     api(`/interview-access-tokens/${id}`, { method: 'PATCH', body, public: true }),
 
   listBlogs: () => api<{ blogs: any[] }>('/blogs', { public: true }),
+  getBlog: (id: string) => api<{ blog: any }>(`/blogs/${id}`, { public: true }),
+  createBlog: (body: any) => api('/blogs', { method: 'POST', body }),
+  updateBlog: (id: string, body: any) => api(`/blogs/${id}`, { method: 'PUT', body }),
+  deleteBlog: (id: string) => api(`/blogs/${id}`, { method: 'DELETE' }),
+
+  listJobs: () => api<{ jobs: any[] }>('/jobs', { public: true }),
+  createJob: (body: any) => api('/jobs', { method: 'POST', body }),
+  updateJob: (id: string, body: any) => api(`/jobs/${id}`, { method: 'PUT', body }),
+  deleteJob: (id: string) => api(`/jobs/${id}`, { method: 'DELETE' }),
+
+  listPublicInterviews: () =>
+    api<{ interviews: any[] }>('/interviews/public', { public: true }),
+
+  getProfile: (id: string) =>
+    api<{ profile: any }>(`/profiles/${id}`, { public: true }),
+  putProfile: (id: string, body: any) =>
+    api(`/profiles/${id}`, { method: 'PUT', body }),
+
+  createSupportTicket: (body: any) =>
+    api('/support-tickets', { method: 'POST', body, public: true }),
+  listSupportTickets: () => api<{ tickets: any[] }>('/support-tickets'),
+  updateSupportTicket: (id: string, body: any) =>
+    api(`/support-tickets/${id}`, { method: 'PATCH', body }),
+
+  getAdminStats: () => api<{ stats: any }>('/admin/stats'),
   createContact: (body: any) =>
     api('/contact-submissions', { method: 'POST', body, public: true }),
   listContactSubmissions: () =>
