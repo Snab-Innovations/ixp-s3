@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { arrayUnion, collection, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { arrayUnion, collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { Link, useParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
+import { Sparkles, Check, UserPlus, ExternalLink, X, Search } from 'lucide-react';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { sendInterviewInvitations } from '../services/brevoService';
 import { sendWhatsAppMessage, sendBulkWhatsAppInvites, sendInterviewWhatsAppInvite, buildWhatsAppInviteText } from '../services/waSenderService';
 import { evaluateResumeMatch } from '../services/api';
-import { formatExtractedPhone, ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
+import { formatExtractedPhone, ingestResumeFile, saveResumeDumpCandidate, scoreCandidateForRole, extractSkillSignals, ResumeDumpRecord } from '../services/resumeService';
 import { parseCandidateDocument } from '../services/candidateFileParser';
 import { InterviewCandidatesSkeleton } from '../components/ui/interview-loading-skeleton';
 import { logTeamActivity } from '../services/auditService';
@@ -53,6 +54,116 @@ const InterviewCandidates: React.FC = () => {
     message: string;
     interview: Interview;
   } | null>(null);
+
+  const [showSuggestModal, setShowSuggestModal] = useState(false);
+  const [resumeDumpCandidates, setResumeDumpCandidates] = useState<ResumeDumpRecord[]>([]);
+  const [loadingResumeDump, setLoadingResumeDump] = useState(false);
+  const [suggestSearchTerm, setSuggestSearchTerm] = useState('');
+
+  useEffect(() => {
+    if (!user) return;
+    setLoadingResumeDump(true);
+    const q = query(collection(db, 'resumeDumpCandidates'), where('recruiterUID', '==', user.uid));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list: ResumeDumpRecord[] = snapshot.docs.map(candidateDoc => {
+        const data = candidateDoc.data();
+        return {
+          id: candidateDoc.id,
+          recruiterUID: data.recruiterUID || user.uid,
+          name: data.name || '',
+          email: data.email || '',
+          phone: data.phone || '',
+          location: data.location || '',
+          currentTitle: data.currentTitle || '',
+          summary: data.summary || '',
+          totalExperienceYears: data.totalExperienceYears || 0,
+          skills: Array.isArray(data.skills) ? data.skills : [],
+          experience: Array.isArray(data.experience) ? data.experience : [],
+          education: Array.isArray(data.education) ? data.education : [],
+          certifications: Array.isArray(data.certifications) ? data.certifications : [],
+          languages: Array.isArray(data.languages) ? data.languages : [],
+          keywords: Array.isArray(data.keywords) ? data.keywords : [],
+          linkedinUrl: data.linkedinUrl || '',
+          portfolioUrl: data.portfolioUrl || '',
+          parsingMethod: data.parsingMethod || 'deterministic',
+          parserVersion: data.parserVersion || 1,
+          resumeUrl: data.resumeUrl || '',
+          resumeFileName: data.resumeFileName || '',
+          isHired: Boolean(data.isHired),
+          doNotSuggest: Boolean(data.doNotSuggest),
+        };
+      });
+      setResumeDumpCandidates(list);
+      setLoadingResumeDump(false);
+    }, (err) => {
+      console.error("Failed to load resume dump candidates for suggestions:", err);
+      setLoadingResumeDump(false);
+    });
+    return () => unsub();
+  }, [user]);
+
+  const suggestedCandidatesForInterview = useMemo(() => {
+    if (!interview) return [];
+
+    const roleText = `${interview.title || ''} ${interview.description || ''} ${interview.skills || ''}`;
+    const requiredSkills = extractSkillSignals(roleText);
+    const invitedEmails = new Set((interview.candidateEmails || []).map(e => e.toLowerCase()));
+    const queuedEmails = new Set(newEmails.map(e => e.toLowerCase()));
+    const queuedPhones = new Set(parsedCandidates.map(c => c.phone).filter(Boolean));
+
+    return resumeDumpCandidates
+      .filter(c => !c.isHired && !c.doNotSuggest)
+      .filter(c => {
+        const emailLower = (c.email || '').toLowerCase();
+        if (emailLower && (invitedEmails.has(emailLower) || queuedEmails.has(emailLower))) return false;
+        if (c.phone && queuedPhones.has(c.phone)) return false;
+        return true;
+      })
+      .map(candidate => {
+        return scoreCandidateForRole(candidate, {
+          title: interview.title || '',
+          description: interview.description || '',
+          requiredSkills: requiredSkills.length > 0 ? requiredSkills : (interview.skills ? interview.skills.split(',').map(s => s.trim()) : []),
+          minExperience: (interview as any).minExperience || 0,
+          maxExperience: (interview as any).maxExperience || 0,
+        });
+      })
+      .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate))
+      .sort((a, b) => b.matchScore - a.matchScore);
+  }, [interview, resumeDumpCandidates, newEmails, parsedCandidates]);
+
+  const filteredSuggestedCandidates = useMemo(() => {
+    if (!suggestSearchTerm.trim()) return suggestedCandidatesForInterview;
+    const term = suggestSearchTerm.toLowerCase();
+    return suggestedCandidatesForInterview.filter(c => 
+      c.name.toLowerCase().includes(term) ||
+      c.email.toLowerCase().includes(term) ||
+      c.phone.toLowerCase().includes(term) ||
+      c.skills.some(s => s.toLowerCase().includes(term))
+    );
+  }, [suggestedCandidatesForInterview, suggestSearchTerm]);
+
+  const addSuggestedCandidateToQueue = (candidate: { email: string; phone: string; name?: string; matchScore?: number }) => {
+    const email = (candidate.email || '').trim().toLowerCase();
+    const phone = candidate.phone ? formatExtractedPhone(candidate.phone) : 'N/A';
+    const scoreStr = candidate.matchScore ? `${candidate.matchScore}%` : 'N/A';
+
+    if (email && !newEmails.includes(email)) {
+      setNewEmails(prev => [...prev, email]);
+    }
+
+    setParsedCandidates(prev => {
+      const exists = prev.some(c => (email && c.email.toLowerCase() === email) || (phone && phone !== 'N/A' && c.phone === phone));
+      if (exists) return prev;
+      return [...prev, { email: email || `${phone.replace(/[^0-9]/g, '')}@whatsapp.local`, phone, matchScore: scoreStr }];
+    });
+  };
+
+  const addAllSuggestedToQueue = () => {
+    if (filteredSuggestedCandidates.length === 0) return;
+    filteredSuggestedCandidates.forEach(candidate => addSuggestedCandidateToQueue(candidate));
+    messageBox.showSuccess(`Added ${filteredSuggestedCandidates.length} matched candidate(s) to invite queue!`);
+  };
 
   useEffect(() => {
     if (!interviewId || !user) {
@@ -676,6 +787,14 @@ const InterviewCandidates: React.FC = () => {
           </div>
 
           <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <button 
+              onClick={() => setShowSuggestModal(true)}
+              className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-blue-500/40 bg-blue-500/10 px-3 font-medium text-blue-400 hover:bg-blue-500/20 active:scale-95 transition-all shadow-sm"
+              title="Suggest best matching candidates from Resume Dump for this JD"
+            >
+              <Sparkles size={13} className="text-blue-400 animate-pulse" />
+              <span>Suggest Candidates {suggestedCandidatesForInterview.length > 0 ? `(${suggestedCandidatesForInterview.length})` : ''}</span>
+            </button>
             <span className="geist-label rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1 uppercase tracking-[0.18em] text-[#d4d4d4]">
               {interview.accessCode}
             </span>
@@ -992,6 +1111,166 @@ const InterviewCandidates: React.FC = () => {
                 <button onClick={handleWhatsAppSend} className="flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition-colors hover:bg-emerald-500">
                   <i className="fab fa-whatsapp"></i>
                   <span>Send WhatsApp Invite</span>
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+      {showSuggestModal &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={() => setShowSuggestModal(false)}>
+            <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-white/[0.15] bg-[#0c0c0c] text-white shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-white/[0.11] bg-[#141414] px-6 py-4">
+                <div>
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <Sparkles className="text-blue-400 size-4 animate-pulse" />
+                    Suggested Candidates for "{interview.title}"
+                  </h2>
+                  <p className="geist-small text-[#8f8f8f] mt-0.5">
+                    Matched from your Resume Dump based on JD & skills. Excludes hired candidates and already invited candidates.
+                  </p>
+                </div>
+                <button onClick={() => setShowSuggestModal(false)} className="text-[#8f8f8f] hover:text-white transition-colors">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Search & Batch Actions bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.11] bg-[#050505] px-6 py-3">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8f8f8f]" />
+                  <input
+                    type="text"
+                    placeholder="Filter candidate suggestions by name, email, or skill..."
+                    value={suggestSearchTerm}
+                    onChange={e => setSuggestSearchTerm(e.target.value)}
+                    className="geist-caption h-8 w-full rounded-[6px] border border-white/[0.11] bg-[#111] pl-8 pr-3 text-white outline-none focus:border-blue-500/50"
+                  />
+                </div>
+                
+                {filteredSuggestedCandidates.length > 0 && (
+                  <button
+                    onClick={addAllSuggestedToQueue}
+                    className="geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-blue-500/40 bg-blue-600/20 px-3 font-semibold text-blue-300 hover:bg-blue-600/30 transition-colors"
+                  >
+                    <UserPlus size={13} />
+                    <span>Add All Matched ({filteredSuggestedCandidates.length}) to Queue</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Candidate Suggestions List */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar">
+                {loadingResumeDump ? (
+                  <div className="py-12 text-center text-[#8f8f8f] geist-caption">
+                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                    Matching candidate resumes against job description...
+                  </div>
+                ) : filteredSuggestedCandidates.length === 0 ? (
+                  <div className="py-12 text-center space-y-2">
+                    <p className="geist-caption font-semibold text-white">No candidate suggestions found matching this role</p>
+                    <p className="geist-small text-[#8f8f8f] max-w-md mx-auto">
+                      Upload candidate resumes into <Link to="/recruiter/resume-dump" onClick={() => setShowSuggestModal(false)} className="text-blue-400 underline">Resume Dump</Link> or try clearing your search filter.
+                    </p>
+                  </div>
+                ) : (
+                  filteredSuggestedCandidates.map((candidate) => {
+                    const emailLower = (candidate.email || '').toLowerCase();
+                    const isQueued = (emailLower && newEmails.includes(emailLower)) || 
+                                     parsedCandidates.some(c => (emailLower && c.email.toLowerCase() === emailLower) || (candidate.phone && c.phone === candidate.phone));
+
+                    return (
+                      <div key={candidate.id} className="rounded-[8px] border border-white/[0.11] bg-[#121212] p-4 hover:border-white/[0.2] transition-colors">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="geist-caption font-bold text-white truncate">{candidate.name || 'Candidate'}</h4>
+                              <span className="geist-small rounded-full border border-blue-500/40 bg-blue-500/10 px-2.5 py-0.5 text-[11px] font-bold text-blue-400">
+                                {candidate.matchScore}% Match
+                              </span>
+                            </div>
+
+                            <div className="geist-small mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[#8bbde8]">
+                              {candidate.email && <span>✉️ {candidate.email}</span>}
+                              {candidate.phone && <span>📱 {candidate.phone}</span>}
+                            </div>
+
+                            {(candidate.currentTitle || candidate.totalExperienceYears > 0) && (
+                              <p className="geist-small mt-1 text-[#8f8f8f]">
+                                {[candidate.currentTitle, candidate.totalExperienceYears > 0 ? `${candidate.totalExperienceYears} yrs experience` : ''].filter(Boolean).join(' · ')}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {candidate.resumeUrl && (
+                              <a
+                                href={candidate.resumeUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2.5 text-[#d4d4d4] hover:text-white hover:bg-white/[0.06] transition-colors"
+                              >
+                                <ExternalLink size={13} />
+                                <span>Resume</span>
+                              </a>
+                            )}
+
+                            <button
+                              type="button"
+                              disabled={isQueued}
+                              onClick={() => addSuggestedCandidateToQueue(candidate)}
+                              className={`geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] px-3 font-semibold transition-colors ${
+                                isQueued
+                                  ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 cursor-default'
+                                  : 'border border-white bg-white text-black hover:bg-[#eaeaea]'
+                              }`}
+                            >
+                              {isQueued ? (
+                                <>
+                                  <Check size={13} />
+                                  <span>Added</span>
+                                </>
+                              ) : (
+                                <>
+                                  <UserPlus size={13} />
+                                  <span>Add to Queue</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {candidate.matchedSkills && candidate.matchedSkills.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-1.5 pt-2 border-t border-white/[0.06]">
+                            <span className="geist-small text-[#6b7280] self-center mr-1">Matched Skills:</span>
+                            {candidate.matchedSkills.slice(0, 6).map(skill => (
+                              <span key={skill} className="geist-small rounded-[4px] border border-white/[0.11] bg-white/[0.04] px-2 py-0.5 text-[#d4d4d4]">
+                                {skill}
+                              </span>
+                            ))}
+                            {candidate.matchedSkills.length > 6 && (
+                              <span className="geist-small text-[#8f8f8f] self-center ml-1">+{candidate.matchedSkills.length - 6} more</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between border-t border-white/[0.11] bg-[#141414] px-6 py-3">
+                <span className="geist-small text-[#8f8f8f]">
+                  Candidates added to queue will appear in your invitation queue for 1-click Email & WhatsApp sending.
+                </span>
+                <button
+                  onClick={() => setShowSuggestModal(false)}
+                  className="geist-caption rounded-[6px] border border-white bg-white px-4 py-1.5 font-bold text-black hover:bg-[#eaeaea] transition-colors"
+                >
+                  Done
                 </button>
               </div>
             </div>
