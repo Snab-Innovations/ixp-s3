@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from './MessageBox';
 import { subscribeTeamAuditLogs, logTeamActivity } from '../services/auditService';
 import { AuditLog, UserProfile } from '../types';
-import { Users, UserPlus, Shield, Activity, Clock, CheckCircle2, AlertCircle, X, Sparkles, Briefcase, Mail, Key } from 'lucide-react';
+import { Users, UserPlus, Shield, Activity, Clock, CheckCircle2, AlertCircle, X, Sparkles, Briefcase, Mail, Phone, Key } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
