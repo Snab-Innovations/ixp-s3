@@ -501,12 +501,108 @@ const ResumeDump: React.FC = () => {
   const [addCandidateFile, setAddCandidateFile] = useState<File | null>(null);
   const [isSavingCandidate, setIsSavingCandidate] = useState(false);
 
-  // Edit notes state
-  const [isEditingNotes, setIsEditingNotes] = useState(false);
-  const [editingNotesText, setEditingNotesText] = useState('');
-  const [isSavingNotes, setIsSavingNotes] = useState(false);
+  // Edit Candidate Info State
+  const [editingCandidate, setEditingCandidate] = useState<ResumeDumpCandidate | null>(null);
+  const [editingCandidateForm, setEditingCandidateForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    currentTitle: '',
+    totalExperienceYears: '',
+    location: '',
+    skills: '',
+    education: '',
+    summary: '',
+    additionalText: ''
+  });
+  const [isSavingCandidateEdit, setIsSavingCandidateEdit] = useState(false);
+
+  const handleOpenEditCandidateModal = (candidate: ResumeDumpCandidate) => {
+    setEditingCandidate(candidate);
+    setEditingCandidateForm({
+      name: candidate.name || '',
+      email: candidate.email || '',
+      phone: candidate.phone || '',
+      currentTitle: candidate.currentTitle || '',
+      totalExperienceYears: candidate.totalExperienceYears !== undefined && candidate.totalExperienceYears !== null ? String(candidate.totalExperienceYears) : '',
+      location: candidate.location || '',
+      skills: (candidate.skills || []).join(', '),
+      education: (candidate.education || []).map(e => [e.degree, e.institution, e.year].filter(Boolean).join(' - ')).join('; ') || '',
+      summary: candidate.summary || '',
+      additionalText: candidate.additionalText || ''
+    });
+  };
+
+  const handleSaveCandidateEdit = async () => {
+    if (!editingCandidate || !user) return;
+    setIsSavingCandidateEdit(true);
+
+    try {
+      const parsedExp = editingCandidateForm.totalExperienceYears.trim()
+        ? parseFloat(editingCandidateForm.totalExperienceYears.trim())
+        : undefined;
+
+      const updatedSkills = editingCandidateForm.skills
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      const eduArray = editingCandidateForm.education.trim()
+        ? editingCandidateForm.education.split(';').map(part => {
+            const trimmed = part.trim();
+            return { degree: trimmed };
+          })
+        : (editingCandidate.education || []);
+
+      const updateData: any = {
+        name: editingCandidateForm.name.trim(),
+        email: editingCandidateForm.email.trim(),
+        phone: editingCandidateForm.phone.trim(),
+        currentTitle: editingCandidateForm.currentTitle.trim(),
+        totalExperienceYears: parsedExp !== undefined && !isNaN(parsedExp) ? parsedExp : null,
+        location: editingCandidateForm.location.trim(),
+        skills: updatedSkills,
+        education: eduArray,
+        summary: editingCandidateForm.summary.trim(),
+        additionalText: editingCandidateForm.additionalText.trim(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await updateDoc(doc(db, 'resumeDumpCandidates', editingCandidate.id), updateData);
+
+      // Update local candidates state
+      setCandidates(prev => prev.map(c => c.id === editingCandidate.id ? { ...c, ...updateData } : c));
+
+      if (skillsPanelCandidate && skillsPanelCandidate.id === editingCandidate.id) {
+        setSkillsPanelCandidate(prev => prev ? ({ ...prev, ...updateData }) : null);
+      }
+
+      const creatorInfo = {
+        uid: user.uid,
+        name: userProfile?.name || user.email || 'Recruiter',
+        email: user.email || '',
+        role: userProfile?.role || 'recruiter',
+        designation: userProfile?.designation || 'Recruiter'
+      };
+      logTeamActivity(
+        teamId,
+        'candidate_updated',
+        `Updated candidate profile info for "${editingCandidateForm.name || editingCandidateForm.email}"`,
+        creatorInfo
+      );
+
+      messageBox.showSuccess('Candidate details updated successfully!');
+      setEditingCandidate(null);
+    } catch (err) {
+      console.error('Failed to update candidate details:', err);
+      messageBox.showError('Failed to update candidate details.');
+    } finally {
+      setIsSavingCandidateEdit(false);
+    }
+  };
 
   const [currentPage, setCurrentPage] = useState(1);
+
   const CANDIDATES_PER_PAGE = 10;
 
   const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user?.uid || '';
@@ -1678,6 +1774,19 @@ const ResumeDump: React.FC = () => {
                         </button>
                         <button
                           type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEditCandidateModal(candidate);
+                          }}
+                          className="geist-caption inline-flex h-7 items-center justify-center gap-1 rounded-[6px] border border-white/[0.16] bg-white/[0.04] px-2 font-medium text-[#d4d4d4] shrink-0 transition-colors hover:bg-white/[0.08] hover:text-white"
+                          title="Edit candidate information"
+                        >
+                          <Edit3 size={12} strokeWidth={1.8} className="shrink-0 text-emerald-400" />
+                          <span className="whitespace-nowrap">Edit</span>
+                        </button>
+
+                        <button
+                          type="button"
                           onClick={(e) => { e.stopPropagation(); confirmDeleteCandidate(candidate); }}
                           disabled={deletingCandidateId === candidate.id}
                           className="geist-caption inline-flex h-7 items-center justify-center gap-1 rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-2 font-medium text-[#ff8f8f] shrink-0 transition-colors hover:bg-[#260b0b] disabled:cursor-not-allowed disabled:opacity-40"
@@ -1800,7 +1909,17 @@ const ResumeDump: React.FC = () => {
                   )}
                   <button
                     type="button"
+                    onClick={() => handleOpenEditCandidateModal(skillsPanelCandidate)}
+                    className="geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-white/[0.15] bg-white/[0.04] px-3 font-semibold text-xs text-[#d4d4d4] transition-colors hover:bg-white/[0.08] hover:text-white"
+                    title="Edit candidate details"
+                  >
+                    <Edit3 size={13} className="text-emerald-400" strokeWidth={1.8} />
+                    <span>Edit Info</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setSkillsPanelCandidate(null)}
+
                     className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white"
                     title="Close details popup"
                   >
@@ -2273,8 +2392,204 @@ const ResumeDump: React.FC = () => {
           </div>,
           document.body
         )}
+
+      {/* Full Edit Candidate Info Modal */}
+      {editingCandidate &&
+        createPortal(
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200" onClick={() => setEditingCandidate(null)}>
+            <div className="relative w-full max-w-2xl bg-[#090909] border border-white/[0.15] rounded-[12px] shadow-2xl flex flex-col text-white max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-5 py-4 bg-[#0d0d0d] border-b border-white/[0.11] shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-[6px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                    <Edit3 size={16} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-white">Edit Candidate Information</h3>
+                    <p className="geist-small text-[#8f8f8f]">Update candidate profile, experience, skills, and contact details</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingCandidate(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white"
+                >
+                  <span className="text-xl leading-none">&times;</span>
+                </button>
+              </div>
+
+              {/* Modal Body / Form */}
+              <div className="p-5 space-y-4 overflow-y-auto max-h-[70vh] geist-small">
+                {/* 1. Personal & Contact Info */}
+                <div className="space-y-3 p-3.5 bg-white/[0.02] border border-white/[0.08] rounded-[8px]">
+                  <p className="geist-label uppercase text-emerald-400 font-semibold text-[11px]">Personal & Contact Details</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[#a1a1aa] mb-1 font-medium">Candidate Name</label>
+                      <input
+                        type="text"
+                        value={editingCandidateForm.name}
+                        onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder="e.g. Rahul Sharma"
+                        className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[#a1a1aa] mb-1 font-medium">Email Address</label>
+                      <input
+                        type="email"
+                        value={editingCandidateForm.email}
+                        onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, email: e.target.value }))}
+                        placeholder="e.g. candidate@example.com"
+                        className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[#a1a1aa] mb-1 font-medium">Phone / WhatsApp Number</label>
+                      <input
+                        type="text"
+                        value={editingCandidateForm.phone}
+                        onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, phone: e.target.value }))}
+                        placeholder="e.g. +91 9876543210"
+                        className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[#a1a1aa] mb-1 font-medium">City / Location</label>
+                      <input
+                        type="text"
+                        value={editingCandidateForm.location}
+                        onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, location: e.target.value }))}
+                        placeholder="e.g. Mumbai, Maharashtra"
+                        className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Professional Details */}
+                <div className="space-y-3 p-3.5 bg-white/[0.02] border border-white/[0.08] rounded-[8px]">
+                  <p className="geist-label uppercase text-emerald-400 font-semibold text-[11px]">Professional Profile & Skills</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[#a1a1aa] mb-1 font-medium">Current Designation / Role</label>
+                      <input
+                        type="text"
+                        value={editingCandidateForm.currentTitle}
+                        onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, currentTitle: e.target.value }))}
+                        placeholder="e.g. Full Stack Developer"
+                        className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[#a1a1aa] mb-1 font-medium">Total Experience (Years)</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max="50"
+                        value={editingCandidateForm.totalExperienceYears}
+                        onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, totalExperienceYears: e.target.value }))}
+                        placeholder="e.g. 3.5"
+                        className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[#a1a1aa] mb-1 font-medium">Skills (Comma Separated)</label>
+                    <input
+                      type="text"
+                      value={editingCandidateForm.skills}
+                      onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, skills: e.target.value }))}
+                      placeholder="e.g. React, Node.js, Python, PostgreSQL, AWS"
+                      className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                    />
+                    {editingCandidateForm.skills.trim() && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {editingCandidateForm.skills.split(',').map(s => s.trim()).filter(Boolean).map(skill => (
+                          <span key={skill} className="px-2 py-0.5 rounded bg-white/[0.06] border border-white/10 text-[10px] text-white">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[#a1a1aa] mb-1 font-medium font-medium">Degree / Education Qualification</label>
+                    <input
+                      type="text"
+                      value={editingCandidateForm.education}
+                      onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, education: e.target.value }))}
+                      placeholder="e.g. B.Tech Computer Science - IIT Bombay"
+                      className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* 3. Summary & Recruiter Notes */}
+                <div className="space-y-3 p-3.5 bg-white/[0.02] border border-white/[0.08] rounded-[8px]">
+                  <p className="geist-label uppercase text-emerald-400 font-semibold text-[11px]">Summary & Recruiter Notes</p>
+                  <div>
+                    <label className="block text-[#a1a1aa] mb-1 font-medium font-medium">Professional Summary</label>
+                    <textarea
+                      rows={3}
+                      value={editingCandidateForm.summary}
+                      onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, summary: e.target.value }))}
+                      placeholder="Enter candidate profile summary or background..."
+                      className="w-full rounded-[6px] border border-white/[0.11] bg-[#111] p-2.5 text-white outline-none focus:border-white/30 text-xs resize-y"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[#a1a1aa] mb-1 font-medium font-medium">Recruiter Notes / Additional Details</label>
+                    <textarea
+                      rows={2}
+                      value={editingCandidateForm.additionalText}
+                      onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, additionalText: e.target.value }))}
+                      placeholder="Add recruiter notes, expected salary, notice period, interview feedback..."
+                      className="w-full rounded-[6px] border border-white/[0.11] bg-[#111] p-2.5 text-white outline-none focus:border-white/30 text-xs resize-y"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-end gap-2 px-5 py-3.5 bg-[#0d0d0d] border-t border-white/[0.11] shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEditingCandidate(null)}
+                  className="geist-caption h-9 px-4 rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#d4d4d4] font-medium text-xs hover:bg-white/[0.06] hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveCandidateEdit}
+                  disabled={isSavingCandidateEdit}
+                  className="geist-caption inline-flex items-center gap-1.5 h-9 px-4 rounded-[6px] bg-emerald-500 text-black font-bold text-xs hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-emerald-500/20"
+                >
+                  {isSavingCandidateEdit ? (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" strokeWidth={2.5} />
+                      <span>Save Candidate Info</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
 
 export default ResumeDump;
+
