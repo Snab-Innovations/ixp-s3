@@ -827,6 +827,57 @@ const Profile: React.FC = () => {
                         </button>
                       </div>
 
+                      {/* Step-by-Step Setup Guide Box */}
+                      <div className="p-4 rounded-xl bg-white/80 dark:bg-slate-900/90 border border-emerald-500/30 shadow-sm space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                          <span className="flex items-center gap-1.5 text-sm font-bold">
+                            <i className="fas fa-info-circle text-emerald-500"></i>
+                            How to get your WhatsApp API Credentials
+                          </span>
+                          <a
+                            href="https://whatsapp-sending-api.onrender.com/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-bold transition-all border border-emerald-500/30"
+                          >
+                            <span>Open WhatsApp API Portal</span>
+                            <i className="fas fa-external-link-alt text-[11px]"></i>
+                          </a>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                          <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-500/20 space-y-1">
+                            <div className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                              <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] flex items-center justify-center font-bold flex-shrink-0">1</span>
+                              <span>Go to API Portal</span>
+                            </div>
+                            <p className="text-[11px] text-gray-600 dark:text-slate-400 leading-snug">
+                              Open <a href="https://whatsapp-sending-api.onrender.com/" target="_blank" rel="noopener noreferrer" className="text-emerald-600 dark:text-emerald-400 font-semibold underline hover:text-emerald-500">whatsapp-sending-api.onrender.com</a> in your browser.
+                            </p>
+                          </div>
+
+                          <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-500/20 space-y-1">
+                            <div className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                              <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] flex items-center justify-center font-bold flex-shrink-0">2</span>
+                              <span>Scan WhatsApp QR</span>
+                            </div>
+                            <p className="text-[11px] text-gray-600 dark:text-slate-400 leading-snug">
+                              Open WhatsApp on phone &gt; <strong>Linked Devices</strong> &gt; scan the QR code displayed on the site.
+                            </p>
+                          </div>
+
+                          <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-500/20 space-y-1">
+                            <div className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                              <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] flex items-center justify-center font-bold flex-shrink-0">3</span>
+                              <span>Insert Credentials</span>
+                            </div>
+                            <p className="text-[11px] text-gray-600 dark:text-slate-400 leading-snug">
+                              Copy your generated <strong>Session ID</strong> &amp; <strong>Passcode</strong> and paste them in the fields below.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
                       {/* Credentials Inputs */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>

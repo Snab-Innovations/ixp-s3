@@ -539,8 +539,29 @@ export const RecruiterTeamPanel: React.FC = () => {
               </div>
 
               <div className="border-t border-white/[0.1] pt-3 space-y-3">
-                <div className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
-                  <Phone size={14} /> WhatsApp Credentials (Optional)
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                    <Phone size={14} /> WhatsApp Credentials (Optional)
+                  </div>
+                  <a
+                    href="https://whatsapp-sending-api.onrender.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-emerald-400 hover:text-emerald-300 underline flex items-center gap-1 font-medium"
+                  >
+                    Open API Site ↗
+                  </a>
+                </div>
+
+                <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[11px] text-[#d1d5db] space-y-1.5 leading-relaxed">
+                  <div className="font-semibold text-emerald-300">
+                    Steps to get credentials:
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1 text-[#9ca3af]">
+                    <li>Go to site <a href="https://whatsapp-sending-api.onrender.com/" target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline font-medium">whatsapp-sending-api.onrender.com</a></li>
+                    <li>Scan WhatsApp QR code using WhatsApp app on phone (Linked Devices)</li>
+                    <li>Get &amp; copy your API Credentials (Session ID &amp; Passcode) and insert them below</li>
+                  </ol>
                 </div>
                 <div className="grid grid-cols-2 gap-2.5">
                   <div>
