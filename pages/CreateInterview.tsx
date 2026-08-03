@@ -769,7 +769,8 @@ const CreateInterview: React.FC = () => {
   const helperTextClass = "geist-small mt-1 max-w-2xl text-[#8f8f8f]";
 
   return (
-    <div className="-mx-4 -my-8 min-h-[calc(100dvh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8">
+    <div className="w-full min-h-[calc(100dvh-3.5rem)] bg-[#000] text-white">
+
       <header className="border-b border-white/[0.11]">
         <div className="px-4 py-5 sm:px-6 lg:px-7">
           <p className="geist-label uppercase text-[#6b7280]">Interview setup</p>

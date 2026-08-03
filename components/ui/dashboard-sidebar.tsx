@@ -35,6 +35,13 @@ const recruiterNavGroups: NavGroupData[] = [
         match: (path) => path === '/recruiter/jobs',
       },
       {
+        id: 'all-jobs',
+        title: 'All Jobs',
+        icon: BriefcaseBusiness,
+        href: '/recruiter/all-jobs',
+        match: (path) => path === '/recruiter/all-jobs',
+      },
+      {
         id: 'interviews',
         title: 'My Interviews',
         icon: Video,

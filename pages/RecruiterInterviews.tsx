@@ -3,12 +3,14 @@ import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, arrayUnion, w
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, Sparkles } from 'lucide-react';
+
 import { Interview } from '../types';
 import { useMessageBox } from '../components/MessageBox';
 import { createPortal } from 'react-dom';
 import { sendInterviewInvitations } from '../services/brevoService';
-import { sendWhatsAppMessage, sendInterviewWhatsAppInvite, buildWhatsAppInviteText } from '../services/waSenderService';
+import { sendWhatsAppMessage, sendInterviewWhatsAppInvite, buildWhatsAppInviteText, openWhatsAppWebInvite, formatPhoneForWhatsApp } from '../services/waSenderService';
+
 import EditJobModal from './EditJob';
 
 import { evaluateResumeMatch } from '../services/api';
@@ -147,6 +149,85 @@ export const RecruiterInterviewsSkeleton = () => (
   </div>
 );
 
+function getAISuggestedCandidatesForJob(job: any, candidates: any[], alreadyInvitedEmails: string[]) {
+  if (!job || !candidates || candidates.length === 0) return [];
+
+  const jobTitle = (job.title || job.jobRole || '').toLowerCase();
+
+  let jobSkills: string[] = [];
+  if (Array.isArray(job.requiredSkills)) {
+    jobSkills = job.requiredSkills.map((s: any) => String(s).toLowerCase().trim());
+  } else if (typeof job.requiredSkills === 'string') {
+    jobSkills = job.requiredSkills.split(',').map((s: string) => s.toLowerCase().trim()).filter(Boolean);
+  } else if (Array.isArray(job.skills)) {
+    jobSkills = job.skills.map((s: any) => String(s).toLowerCase().trim());
+  }
+
+  const jobDescText = (job.description || job.jdText || job.jobDescription || '').toLowerCase();
+  const normalizedInvited = (alreadyInvitedEmails || []).map(e => e.toLowerCase().trim());
+
+  return candidates
+    .filter(c => {
+      const email = (c.email || '').toLowerCase().trim();
+      const phone = (c.phone || '').trim();
+      const pseudoEmail = phone ? `${phone.replace(/[^0-9]/g, '')}@whatsapp.local` : '';
+      if (normalizedInvited.includes(email) || (pseudoEmail && normalizedInvited.includes(pseudoEmail))) {
+        return false;
+      }
+      return true;
+    })
+    .map(candidate => {
+      const candSkills = (candidate.skills || []).map((s: any) => String(s).toLowerCase().trim());
+      const candTitle = (candidate.currentTitle || candidate.sourceJobTitle || candidate.title || '').toLowerCase().trim();
+      const candText = `${candidate.summary || ''} ${candidate.resumeText || ''}`.toLowerCase();
+
+      let skillScore = 0;
+      if (jobSkills.length > 0) {
+        let matchCount = 0;
+        jobSkills.forEach(js => {
+          if (candSkills.some((cs: string) => cs.includes(js) || js.includes(cs)) || candText.includes(js)) {
+            matchCount++;
+          }
+        });
+        skillScore = (matchCount / jobSkills.length) * 100;
+      } else {
+        let matchCount = 0;
+        candSkills.forEach((cs: string) => {
+          if (jobTitle.includes(cs) || jobDescText.includes(cs)) matchCount++;
+        });
+        skillScore = Math.min(100, matchCount * 25);
+      }
+
+      let titleScore = 0;
+      if (candTitle && jobTitle) {
+        if (candTitle === jobTitle || jobTitle.includes(candTitle) || candTitle.includes(jobTitle)) {
+          titleScore = 100;
+        } else {
+          const titleWords = jobTitle.split(/\s+/).filter((w: string) => w.length > 3);
+          const matchedWords = titleWords.filter((w: string) => candTitle.includes(w));
+          if (titleWords.length > 0) {
+            titleScore = (matchedWords.length / titleWords.length) * 80;
+          }
+        }
+      }
+
+      const matchScore = Math.round(Math.min(100, Math.max(20, (skillScore * 0.7) + (titleScore * 0.3))));
+
+      return {
+        id: candidate.id,
+        name: candidate.name || 'Candidate',
+        email: candidate.email || (candidate.phone ? `${candidate.phone.replace(/[^0-9]/g, '')}@whatsapp.local` : ''),
+        phone: candidate.phone || 'N/A',
+        experience: candidate.totalExperienceYears !== undefined && candidate.totalExperienceYears !== null
+          ? `${candidate.totalExperienceYears} yrs`
+          : 'N/A',
+        skills: candidate.skills || [],
+        matchScore
+      };
+    })
+    .sort((a, b) => b.matchScore - a.matchScore);
+}
+
 const RecruiterInterviews: React.FC = () => {
   const { user, userProfile } = useAuth();
   const [interviews, setInterviews] = useState<Interview[]>([]);
@@ -156,8 +237,9 @@ const RecruiterInterviews: React.FC = () => {
   const [selectedInterview, setSelectedInterview] = useState<Interview | null>(null);
   const [newEmail, setNewEmail] = useState('');
   const [manualPhone, setManualPhone] = useState('');
+  const [manualExp, setManualExp] = useState('');
   const [newEmails, setNewEmails] = useState<string[]>([]);
-  const [parsedCandidates, setParsedCandidates] = useState<{email: string, phone: string, matchScore?: string}[]>([]);
+  const [parsedCandidates, setParsedCandidates] = useState<{email: string, phone: string, name?: string, experience?: string, matchScore?: string}[]>([]);
   const [submissionsMap, setSubmissionsMap] = useState<Record<string, any[]>>({});
   const [parsingResumes, setParsingResumes] = useState(false);
   const [sendingEmails, setSendingEmails] = useState(false);
@@ -173,6 +255,138 @@ const RecruiterInterviews: React.FC = () => {
       message: string;
       interview: Interview;
   } | null>(null);
+
+  // AI Single Candidate Resume Upload & Suggestion State
+  const [inviteMode, setInviteMode] = useState<'single' | 'bulk' | 'invited' | 'ai_suggest'>('single');
+  const [dumpCandidates, setDumpCandidates] = useState<any[]>([]);
+  const [loadingDumpCandidates, setLoadingDumpCandidates] = useState(false);
+
+  const [selectedResumeFile, setSelectedResumeFile] = useState<File | null>(null);
+  const [resumeExtraText, setResumeExtraText] = useState('');
+  const [analyzingResumeAI, setAnalyzingResumeAI] = useState(false);
+
+  useEffect(() => {
+    if (!selectedInterview || !user) return;
+    setLoadingDumpCandidates(true);
+    const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
+    const q = teamId
+      ? query(collection(db, 'resumeDumpCandidates'), where('teamId', '==', teamId))
+      : query(collection(db, 'resumeDumpCandidates'), where('recruiterUID', '==', user.uid));
+
+    getDocs(q).then((snap) => {
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setDumpCandidates(list);
+    }).catch((err) => {
+      console.error("Error fetching candidates for AI suggestions:", err);
+    }).finally(() => {
+      setLoadingDumpCandidates(false);
+    });
+  }, [selectedInterview, user, userProfile]);
+
+  const aiSuggestedCandidates = React.useMemo(() => {
+    if (!selectedInterview) return [];
+    const alreadyInvited = selectedInterview.candidateEmails || [];
+    return getAISuggestedCandidatesForJob(selectedInterview, dumpCandidates, alreadyInvited);
+  }, [selectedInterview, dumpCandidates]);
+
+
+
+
+  const handleAnalyzeAndSaveResumeCandidate = async () => {
+    if (!selectedResumeFile || !user || !selectedInterview) {
+      messageBox.showError("Please select a candidate resume file first.");
+      return;
+    }
+
+    setAnalyzingResumeAI(true);
+    try {
+      const { profile, resumeText, resumeUrl } = await ingestResumeFile(
+        selectedResumeFile,
+        {},
+        '',
+        resumeExtraText
+      );
+
+      if (manualExp.trim()) {
+        const parsedExpNum = parseFloat(manualExp.trim());
+        if (!isNaN(parsedExpNum)) {
+          profile.totalExperienceYears = parsedExpNum;
+        }
+      }
+
+      await saveResumeDumpCandidate({
+        recruiterUID: user.uid,
+        teamId: userProfile?.teamId || userProfile?.parentRecruiterId || user.uid,
+        createdBy: {
+          uid: user.uid,
+          name: userProfile?.name || user?.displayName || 'Recruiter',
+          email: user.email || '',
+          role: userProfile?.role || 'recruiter',
+        },
+        profile,
+        resumeText,
+        resumeUrl,
+        fileName: selectedResumeFile.name,
+        mimeType: selectedResumeFile.type,
+        fileSize: selectedResumeFile.size,
+        additionalText: resumeExtraText.trim(),
+        source: 'interview_creation',
+        sourceInterviewId: selectedInterview.id,
+        sourceJobTitle: selectedInterview.title,
+      });
+
+      const candidateEmail = (profile.email || '').toLowerCase().trim();
+      const candExpText = profile.totalExperienceYears !== undefined && profile.totalExperienceYears !== null
+        ? `${profile.totalExperienceYears} yrs`
+        : 'N/A';
+
+      if (candidateEmail) {
+        if (!newEmails.includes(candidateEmail)) {
+          setNewEmails(prev => [...prev, candidateEmail]);
+          setParsedCandidates(prev => [...prev, {
+            email: candidateEmail,
+            phone: profile.phone || 'N/A',
+            name: profile.name || 'Candidate',
+            experience: candExpText,
+            matchScore: 'N/A'
+          }]);
+        }
+        messageBox.showSuccess(
+          `✅ Candidate "${profile.name || candidateEmail}" (${candExpText} Exp) analyzed using AI, saved to Resume Dump, and added to invite list!`
+        );
+      } else if (profile.phone) {
+        const pseudoEmail = `${profile.phone.replace(/[^0-9]/g, '')}@whatsapp.local`;
+        if (!newEmails.includes(pseudoEmail)) {
+          setNewEmails(prev => [...prev, pseudoEmail]);
+          setParsedCandidates(prev => [...prev, {
+            email: pseudoEmail,
+            phone: profile.phone,
+            name: profile.name || 'Candidate',
+            experience: candExpText,
+            matchScore: 'N/A'
+          }]);
+        }
+        messageBox.showSuccess(
+          `✅ Candidate "${profile.name || 'Candidate'}" (Phone: ${profile.phone}, ${candExpText} Exp) analyzed using AI, saved to Resume Dump, and added to invite list!`
+        );
+      } else {
+        messageBox.showSuccess(
+          `✅ Candidate "${profile.name || 'Candidate'}" analyzed using AI and saved to Resume Dump!`
+        );
+      }
+
+      setSelectedResumeFile(null);
+      setResumeExtraText('');
+      setManualExp('');
+    } catch (err: any) {
+      console.error("Error analyzing candidate resume:", err);
+      messageBox.showError(`AI extraction failed: ${err.message || 'Failed to analyze candidate resume.'}`);
+    } finally {
+      setAnalyzingResumeAI(false);
+    }
+  };
+
+
 
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -387,10 +601,17 @@ const RecruiterInterviews: React.FC = () => {
           });
         }
 
-        await updateDoc(doc(db, 'interviews', selectedInterview.id), { 
-            candidateEmails: updatedEmails,
-            candidateData: updatedCandData
-        });
+        const updatePayload = {
+          candidateEmails: updatedEmails,
+          candidateData: updatedCandData,
+          updatedAt: new Date()
+        };
+
+        await Promise.all([
+          updateDoc(doc(db, 'interviews', selectedInterview.id), updatePayload).catch(() => {}),
+          updateDoc(doc(db, 'jobs', selectedInterview.id), updatePayload).catch(() => {})
+        ]);
+
         
         setSelectedInterview({
           ...selectedInterview,
@@ -466,6 +687,73 @@ const RecruiterInterviews: React.FC = () => {
         setResendingEmail(null);
     }
   };
+
+  const handleSendWhatsAppReminder = async (candidateEmail: string, candidatePhone?: string) => {
+    if (!selectedInterview) return;
+
+    const candData = ((selectedInterview as any).candidateData || []).find(
+      (c: any) => c.email && c.email.toLowerCase() === candidateEmail.toLowerCase()
+    );
+    const rawPhone = candidatePhone || candData?.phone || parsedCandidates.find(c => c.email.toLowerCase() === candidateEmail.toLowerCase())?.phone || '';
+    const formattedPhone = formatPhoneForWhatsApp(rawPhone);
+
+    const recruiterName = userProfile?.name || userProfile?.displayName || userProfile?.fullName || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || user?.email?.split('@')[0] || 'Recruiter';
+    const recruiterPhone = userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || userProfile?.mobile || userProfile?.mobileNumber || userProfile?.whatsappPhone || (user as any)?.phoneNumber || '';
+
+    const inviteOptions = {
+      gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
+      location: (selectedInterview as any).location,
+      education: (selectedInterview as any).education || (selectedInterview as any).qualification,
+      qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
+      experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+      salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+      recruiterName,
+      recruiterPhone,
+      whatsappSessionId: userProfile?.whatsappSessionId || '',
+      whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
+    };
+
+    const messageText = buildWhatsAppInviteText({
+      candidateName: candidateEmail.split('@')[0] || 'Candidate',
+      jobTitle: selectedInterview.title,
+      interviewLink: selectedInterview.interviewLink || `${window.location.origin}/#/interview/${selectedInterview.id}`,
+      accessCode: selectedInterview.accessCode || '',
+      isReminder: true,
+      options: inviteOptions
+    });
+
+    if (!formattedPhone) {
+      messageBox.showError(`Phone number missing for ${candidateEmail}. Please click the edit icon to add candidate mobile number.`);
+      return;
+    }
+
+    setResendingEmail(candidateEmail);
+    try {
+      const res = await sendInterviewWhatsAppInvite({
+        phone: formattedPhone,
+        candidateName: candidateEmail.split('@')[0] || 'Candidate',
+        jobTitle: selectedInterview.title,
+        interviewLink: selectedInterview.interviewLink || `${window.location.origin}/#/interview/${selectedInterview.id}`,
+        accessCode: selectedInterview.accessCode || '',
+        isReminder: true,
+        options: inviteOptions
+      });
+
+
+      if (res.success) {
+        messageBox.showSuccess(`✅ WhatsApp reminder sent to ${formattedPhone}!`);
+      } else {
+        messageBox.showInfo(`Opening WhatsApp Web for ${formattedPhone}...`);
+        openWhatsAppWebInvite(formattedPhone, messageText);
+      }
+    } catch (err) {
+      console.error("WhatsApp reminder error:", err);
+      openWhatsAppWebInvite(formattedPhone, messageText);
+    } finally {
+      setResendingEmail(null);
+    }
+  };
+
 
   const handleAllowReattempt = async (interviewId: string, attemptId: string, currentAllowValue: boolean) => {
     try {
@@ -544,10 +832,17 @@ const RecruiterInterviews: React.FC = () => {
 
         const validEmails = newEmails.filter(e => !e.endsWith('@whatsapp.local'));
 
-        await updateDoc(doc(db, 'interviews', selectedInterview.id), { 
+        const inviteUpdatePayload = { 
             candidateEmails: validEmails.length > 0 ? arrayUnion(...validEmails) : arrayUnion(),
-            candidateData: arrayUnion(...candidateDataToAdd)
-        });
+            candidateData: arrayUnion(...candidateDataToAdd),
+            updatedAt: new Date()
+        };
+
+        await Promise.all([
+          updateDoc(doc(db, 'interviews', selectedInterview.id), inviteUpdatePayload).catch(() => {}),
+          updateDoc(doc(db, 'jobs', selectedInterview.id), inviteUpdatePayload).catch(() => {})
+        ]);
+
         
         let emailCount = 0;
         if (validEmails.length > 0) {
@@ -699,7 +994,8 @@ const RecruiterInterviews: React.FC = () => {
   const totalResponses = Object.values(submissionsMap).reduce((sum, arr) => sum + arr.length, 0);
 
   return (
-    <div className="-mx-4 -my-8 flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-hidden bg-[#000] text-white sm:-mx-6 lg:-mx-8">
+    <div className="w-full flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-hidden bg-[#000] text-white">
+
 
       {/* Header */}
       <section className="shrink-0 border-b border-white/[0.11] bg-[#000]">
@@ -965,7 +1261,7 @@ const RecruiterInterviews: React.FC = () => {
 
     {isInviteModalOpen && selectedInterview && createPortal(
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200" onClick={() => setIsInviteModalOpen(false)}>
-            <div className="bg-[#090909] border border-white/[0.13] rounded-[12px] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col text-white animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-[#090909] border border-white/[0.13] rounded-[12px] shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col text-white animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
                 {/* Modal Header */}
                 <div className="flex items-center justify-between px-5 py-4 bg-[#0d0d0d] border-b border-white/[0.11]">
                     <div className="flex items-center gap-2.5">
@@ -1025,23 +1321,447 @@ const RecruiterInterviews: React.FC = () => {
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block geist-label uppercase text-[#6b7280] mb-1.5">Upload Candidate File or Resumes</label>
-                        <label className="flex items-center justify-center gap-2 px-4 py-3 bg-white/[0.02] border-2 border-dashed border-white/[0.16] rounded-[8px] cursor-pointer hover:bg-white/[0.04] transition-colors">
-                            {parsingResumes ? (
-                              <>
-                                <ButtonBusySkeleton className="w-5 bg-white/30" />
-                                <ButtonBusySkeleton className="w-40 bg-white/30" />
-                              </>
-                            ) : (
-                              <>
-                                <i className="fas fa-file-excel text-emerald-400 text-lg"></i>
-                                <span className="geist-caption font-medium text-xs text-[#d4d4d4]">Upload Excel, CSV, PDF, DOCX, or TXT (Auto-extracts Name, Phone & Email)</span>
-                              </>
-                            )}
-                            <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,text/csv" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
-                        </label>
+                    {/* Mode Selector */}
+                    <div className="flex items-center gap-1 p-1 bg-white/[0.04] border border-white/[0.08] rounded-[6px] flex-wrap">
+                        <button
+                            type="button"
+                            onClick={() => setInviteMode('single')}
+                            className={`geist-caption flex-1 py-1.5 px-2 rounded-[4px] font-semibold text-xs transition-all flex items-center justify-center gap-1.5 min-w-[110px] ${
+                                inviteMode === 'single'
+                                    ? 'bg-white text-black shadow-sm'
+                                    : 'text-[#8f8f8f] hover:text-white hover:bg-white/[0.04]'
+                            }`}
+                        >
+                            <i className="fas fa-file-alt text-xs"></i>
+                            <span>Single Candidate</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setInviteMode('bulk')}
+                            className={`geist-caption flex-1 py-1.5 px-2 rounded-[4px] font-semibold text-xs transition-all flex items-center justify-center gap-1.5 min-w-[95px] ${
+                                inviteMode === 'bulk'
+                                    ? 'bg-white text-black shadow-sm'
+                                    : 'text-[#8f8f8f] hover:text-white hover:bg-white/[0.04]'
+                            }`}
+                        >
+                            <i className="fas fa-layer-group text-xs"></i>
+                            <span>Bulk Import</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setInviteMode('invited')}
+                            className={`geist-caption flex-1 py-1.5 px-2 rounded-[4px] font-semibold text-xs transition-all flex items-center justify-center gap-1.5 min-w-[130px] ${
+                                inviteMode === 'invited'
+                                    ? 'bg-white text-black shadow-sm'
+                                    : 'text-[#8f8f8f] hover:text-white hover:bg-white/[0.04]'
+                            }`}
+                        >
+                            <i className="fas fa-users text-xs"></i>
+                            <span>Invited Candidates ({(selectedInterview.candidateEmails || []).length})</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setInviteMode('ai_suggest')}
+                            className={`geist-caption flex-1 py-1.5 px-2 rounded-[4px] font-semibold text-xs transition-all flex items-center justify-center gap-1.5 min-w-[140px] ${
+                                inviteMode === 'ai_suggest'
+                                    ? 'bg-emerald-400 text-black shadow-sm font-bold'
+                                    : 'text-emerald-400 hover:text-emerald-300 hover:bg-white/[0.04]'
+                            }`}
+                        >
+                            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Suggest AI Candidates</span>
+                        </button>
                     </div>
+
+
+
+                    {inviteMode === 'single' && (
+                        <>
+                            {/* AI Single Candidate Resume Upload + Optional Extra Text Section */}
+                            <div className="p-3 bg-white/[0.02] border border-white/[0.11] rounded-[6px] space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5">
+                                        <Sparkles className="w-4 h-4 text-emerald-400" />
+                                        <span className="geist-caption font-semibold text-white">Upload Single Resume + AI Analysis</span>
+                                    </div>
+                                </div>
+
+                                <p className="geist-small text-[#8f8f8f]">
+                                    Upload candidate resume (PDF, DOCX, TXT) and add optional recruiter notes. AI analyzes details, extracts contact info, saves to <strong>Resume Dump</strong>, and adds candidate to invite roster.
+                                </p>
+
+                                <div>
+                                    <label className="geist-label uppercase text-[#6b7280] block mb-1">
+                                        Select Candidate Resume File
+                                    </label>
+                                    <input
+                                        type="file"
+                                        accept=".pdf,.docx,.txt"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) setSelectedResumeFile(file);
+                                        }}
+                                        className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-2 text-white outline-none focus:border-white/[0.28] file:mr-3 file:py-1 file:px-2.5 file:rounded-[4px] file:border-0 file:text-xs file:font-semibold file:bg-white file:text-black hover:file:bg-[#eaeaea] cursor-pointer"
+                                    />
+                                    {selectedResumeFile && (
+                                        <span className="geist-small text-emerald-400 block mt-1">
+                                            Selected: {selectedResumeFile.name} ({(selectedResumeFile.size / 1024).toFixed(1)} KB)
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="geist-label uppercase text-[#6b7280] block mb-1">
+                                        Experience (Years) (Optional)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="0.5"
+                                        min="0"
+                                        max="60"
+                                        placeholder="e.g. 3 or 5.5 (Leave blank for AI auto-extraction from resume)"
+                                        value={manualExp}
+                                        onChange={(e) => setManualExp(e.target.value)}
+                                        className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-2.5 text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="geist-label uppercase text-[#6b7280] block mb-1">
+                                        Optional Extra Text / Recruiter Notes (Analyzed with Resume)
+                                    </label>
+                                    <textarea
+                                        rows={2}
+                                        placeholder="Enter optional extra text (e.g. candidate phone/email, referral notes, cover letter, or additional info to analyze with resume)..."
+                                        value={resumeExtraText}
+                                        onChange={(e) => setResumeExtraText(e.target.value)}
+                                        className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-2.5 text-[#d4d4d4] outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
+                                    />
+                                </div>
+
+
+                                <button
+                                    type="button"
+                                    onClick={handleAnalyzeAndSaveResumeCandidate}
+                                    disabled={!selectedResumeFile || analyzingResumeAI}
+                                    className="geist-caption inline-flex h-8 w-full items-center justify-center gap-2 rounded-[6px] border border-emerald-500/40 bg-emerald-500/10 px-3 font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    <Sparkles className="w-3.5 h-3.5" />
+                                    <span>{analyzingResumeAI ? 'Analyzing with AI & Saving to Resume Dump...' : 'Analyze Resume with AI & Save to Resume Dump'}</span>
+                                </button>
+                            </div>
+
+                            <div className="relative border-t border-white/[0.08] my-1">
+                                <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 bg-[#000] px-2 text-[10px] uppercase text-[#6b7280] font-mono">
+                                    OR ADD MANUALLY
+                                </span>
+                            </div>
+
+                            <div>
+                                <label className="block geist-label uppercase text-[#6b7280] mb-1.5">Add Candidate Manually (Email & WhatsApp Phone)</label>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="email" 
+                                        value={newEmail} 
+                                        onChange={(e) => setNewEmail(e.target.value)} 
+                                        placeholder="Candidate email address" 
+                                        className="flex-1 p-2 rounded-[6px] bg-[#111111] border border-white/[0.11] text-xs text-white outline-none focus:border-white/30 placeholder:text-[#6b7280]" 
+                                    />
+                                    <input 
+                                        type="tel" 
+                                        value={manualPhone} 
+                                        onChange={(e) => setManualPhone(e.target.value)} 
+                                        placeholder="WhatsApp Phone (+91...)" 
+                                        className="w-2/5 p-2 rounded-[6px] bg-[#111111] border border-white/[0.11] text-xs text-white outline-none focus:border-white/30 placeholder:text-[#6b7280]" 
+                                    />
+                                    <button 
+                                        onClick={() => {
+                                            const trimmedEmail = newEmail.trim().toLowerCase();
+                                            const trimmedPhone = manualPhone.trim();
+                                            if (!trimmedEmail && !trimmedPhone) {
+                                                messageBox.showError("Please enter an email address or WhatsApp phone number.");
+                                                return;
+                                            }
+                                            const targetEmail = trimmedEmail || `${trimmedPhone.replace(/[^0-9]/g, '')}@whatsapp.local`;
+                                            if (!newEmails.includes(targetEmail)) {
+                                                setNewEmails(prev => [...prev, targetEmail]);
+                                            }
+                                            if (trimmedPhone) {
+                                                setParsedCandidates(prev => [
+                                                    ...prev.filter(c => c.email.toLowerCase() !== targetEmail.toLowerCase()),
+                                                    { email: targetEmail, phone: trimmedPhone, name: trimmedEmail ? trimmedEmail.split('@')[0] : 'Candidate', matchScore: 'N/A' }
+                                                ]);
+                                            }
+                                            setNewEmail('');
+                                            setManualPhone('');
+                                        }} 
+                                        className="geist-caption bg-white text-black font-semibold px-4 py-2 rounded-[6px] text-xs hover:bg-neutral-200 transition-colors shrink-0"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    )}
+
+
+                    {inviteMode === 'bulk' && (
+                        <div>
+                            <label className="block geist-label uppercase text-[#6b7280] mb-1.5">Bulk Upload Candidate File or Resumes</label>
+                            <label className="flex items-center justify-center gap-2 px-4 py-3 bg-white/[0.02] border-2 border-dashed border-white/[0.16] rounded-[8px] cursor-pointer hover:bg-white/[0.04] transition-colors">
+                                {parsingResumes ? (
+                                  <>
+                                    <ButtonBusySkeleton className="w-5 bg-white/30" />
+                                    <ButtonBusySkeleton className="w-40 bg-white/30" />
+                                  </>
+                                ) : (
+                                  <>
+                                    <i className="fas fa-file-excel text-emerald-400 text-lg"></i>
+                                    <span className="geist-caption font-medium text-xs text-[#d4d4d4]">Upload Excel, CSV, PDF, DOCX, or TXT (Auto-extracts Name, Phone & Email)</span>
+                                  </>
+                                )}
+                                <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,text/csv" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
+                            </label>
+                        </div>
+                    )}
+
+                    {inviteMode === 'invited' && (
+                        <div className="space-y-3">
+                            <h4 className="geist-label uppercase text-[#6b7280]">Invited Candidates Roster ({(selectedInterview.candidateEmails || []).length}):</h4>
+                            {(!selectedInterview.candidateEmails || selectedInterview.candidateEmails.length === 0) ? (
+                                <p className="geist-small text-[#6b7280] italic p-4 text-center border border-white/[0.08] rounded-[6px]">No candidates invited yet for this role.</p>
+                            ) : (
+                                <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-1">
+                                    {selectedInterview.candidateEmails.map((email) => {
+                                        const isEditing = editingCandidateEmail === email;
+                                        const isResending = resendingEmail === email;
+                                        const candData = ((selectedInterview as any).candidateData || []).find((c: any) => c.email && c.email.toLowerCase() === email.toLowerCase());
+                                        const candPhone = candData?.phone && candData.phone !== 'N/A' ? candData.phone : '';
+
+                                        return (
+                                            <div key={email} className="flex items-center justify-between text-xs bg-white/[0.025] border border-white/[0.11] rounded-[6px] px-3.5 py-2.5 shadow-sm">
+                                                {isEditing ? (
+                                                    <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mr-2">
+                                                        <input 
+                                                            type="email" 
+                                                            value={editedEmailValue} 
+                                                            onChange={(e) => setEditedEmailValue(e.target.value)} 
+                                                            placeholder="Candidate Email"
+                                                            className="flex-1 p-2 text-xs rounded-[6px] border border-white/[0.11] bg-[#111111] text-white outline-none focus:border-white/30"
+                                                            autoFocus
+                                                        />
+                                                        <input 
+                                                            type="tel" 
+                                                            value={editedPhoneValue} 
+                                                            onChange={(e) => setEditedPhoneValue(e.target.value)} 
+                                                            placeholder="Phone number (e.g. +91...)"
+                                                            className="w-full sm:w-2/5 p-2 text-xs rounded-[6px] border border-white/[0.11] bg-[#111111] text-white outline-none focus:border-white/30"
+                                                        />
+                                                        <div className="flex items-center gap-1.5 shrink-0">
+                                                            <button 
+                                                                onClick={() => handleEditAndResend(email, editedEmailValue, editedPhoneValue)}
+                                                                disabled={resendingEmail !== null}
+                                                                className="bg-white text-black hover:bg-neutral-200 px-3 py-1.5 rounded-[6px] text-xs font-semibold disabled:opacity-50 flex items-center gap-1 shrink-0 transition-colors"
+                                                            >
+                                                                {isResending ? <ButtonBusySkeleton className="w-12 bg-black/30" /> : <><i className="fas fa-save"></i> Save</>}
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => { setEditingCandidateEmail(null); setEditedEmailValue(''); setEditedPhoneValue(''); }}
+                                                                disabled={resendingEmail !== null}
+                                                                className="border border-white/[0.11] bg-white/[0.03] text-[#d4d4d4] hover:bg-white/[0.06] px-3 py-1.5 rounded-[6px] text-xs shrink-0 transition-colors"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <div className="flex flex-col min-w-0">
+                                                            <span className="font-semibold text-white truncate max-w-[240px]" title={email}>{email}</span>
+                                                            {candPhone ? (
+                                                                <span className="text-xs text-[#8bbde8] font-mono flex items-center gap-1.5 mt-0.5">
+                                                                    <i className="fas fa-phone-alt"></i> {candPhone}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[11px] text-[#6b7280] italic">No phone attached (Click pencil to edit)</span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 shrink-0">
+                                                            <button 
+                                                                onClick={() => { 
+                                                                    setEditingCandidateEmail(email); 
+                                                                    setEditedEmailValue(email); 
+                                                                    setEditedPhoneValue(candPhone);
+                                                                }}
+                                                                disabled={resendingEmail !== null}
+                                                                className="w-7 h-7 rounded border border-white/[0.11] bg-white/[0.03] text-[#d4d4d4] hover:bg-white/[0.08] hover:text-white transition-colors flex items-center justify-center" 
+                                                                title="Edit Candidate Contact Details"
+                                                            >
+                                                                <i className="fas fa-pencil-alt text-xs"></i>
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleResend(email)}
+                                                                disabled={resendingEmail !== null}
+                                                                className="w-7 h-7 rounded border border-white/[0.11] bg-white/[0.04] text-[#d4d4d4] hover:bg-white/[0.08] hover:text-white transition-colors flex items-center justify-center" 
+                                                                title="Mail Reminder"
+                                                            >
+                                                                <i className="fas fa-envelope text-blue-400 text-xs"></i>
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleSendWhatsAppReminder(email, candPhone)}
+                                                                disabled={resendingEmail !== null}
+                                                                className="w-7 h-7 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors flex items-center justify-center" 
+                                                                title="WhatsApp Reminder"
+                                                            >
+                                                                <i className="fab fa-whatsapp text-xs"></i>
+                                                            </button>
+                                                        </div>
+
+                                                    </>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* AI Candidate Suggestions Tab Panel */}
+                    {inviteMode === 'ai_suggest' && (
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-[6px]">
+                                <div>
+                                    <div className="flex items-center gap-1.5 text-emerald-400 font-semibold text-xs">
+                                        <Sparkles className="w-4 h-4" />
+                                        <span>AI Candidate Recommendations ({aiSuggestedCandidates.length})</span>
+                                    </div>
+                                    <p className="geist-small text-[#8f8f8f] mt-0.5 text-[11px]">
+                                        Best matched candidates from your candidate pool based on skills & interview requirements.
+                                    </p>
+                                </div>
+
+                                {aiSuggestedCandidates.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const top5 = aiSuggestedCandidates.slice(0, 5);
+                                            let addedCount = 0;
+                                            top5.forEach(cand => {
+                                                const targetEmail = cand.email;
+                                                if (targetEmail) {
+                                                    if (!newEmails.includes(targetEmail)) {
+                                                        setNewEmails(prev => [...prev, targetEmail]);
+                                                        addedCount++;
+                                                    }
+                                                    setParsedCandidates(prev => [
+                                                        ...prev.filter(c => c.email.toLowerCase() !== targetEmail.toLowerCase()),
+                                                        { email: targetEmail, phone: cand.phone || 'N/A', name: cand.name, experience: cand.experience, matchScore: `${cand.matchScore}%` }
+                                                    ]);
+                                                }
+                                            });
+                                            messageBox.showSuccess(`Added top ${addedCount > 0 ? addedCount : Math.min(5, aiSuggestedCandidates.length)} AI candidate matches to invite list!`);
+                                        }}
+                                        className="geist-caption inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] bg-emerald-500 text-black font-bold text-xs hover:bg-emerald-400 transition-colors shrink-0"
+                                    >
+                                        <Sparkles className="w-3 h-3" />
+                                        <span>+ Add Top 5</span>
+                                    </button>
+                                )}
+                            </div>
+
+                            {loadingDumpCandidates ? (
+                                <div className="py-8 text-center text-[#8f8f8f]">
+                                    <Sparkles className="w-5 h-5 animate-spin mx-auto text-emerald-400 mb-2" />
+                                    Analyzing candidate profiles against interview requirements...
+                                </div>
+                            ) : aiSuggestedCandidates.length === 0 ? (
+                                <div className="p-6 text-center border border-white/[0.08] rounded-[6px] bg-white/[0.02]">
+                                    <p className="geist-caption text-white font-medium">No new candidate recommendations found</p>
+                                    <p className="geist-small text-[#6b7280] mt-1 max-w-sm mx-auto">
+                                        All stored candidate profiles are already invited, or upload more resumes to generate matches.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1 geist-small">
+                                    {aiSuggestedCandidates.map((cand) => {
+                                        const isAdded = newEmails.includes(cand.email);
+                                        return (
+                                            <div
+                                                key={cand.id}
+                                                className="flex items-start justify-between gap-3 p-3 bg-white/[0.03] border border-white/[0.09] rounded-[6px] hover:border-white/[0.2] transition-colors"
+                                            >
+                                                <div className="space-y-1 min-w-0 flex-1">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="font-semibold text-white text-xs truncate">{cand.name}</span>
+                                                        <span className={`geist-small inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 font-bold text-[10px] ${
+                                                            cand.matchScore >= 75
+                                                                ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
+                                                                : cand.matchScore >= 50
+                                                                ? 'border border-blue-500/40 bg-blue-500/10 text-blue-400'
+                                                                : 'border border-white/[0.15] bg-white/[0.05] text-[#d4d4d4]'
+                                                        }`}>
+                                                            {cand.matchScore >= 75 ? '🔥' : '⚡'} {cand.matchScore}% Match
+                                                        </span>
+                                                        {cand.experience && cand.experience !== 'N/A' && (
+                                                            <span className="text-[10px] text-[#83d0a3] bg-emerald-950/40 border border-emerald-500/20 px-1.5 py-0.2 rounded font-mono">
+                                                                {cand.experience}
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="text-[11px] text-[#8f8f8f] truncate font-mono">
+                                                        {cand.email} {cand.phone && cand.phone !== 'N/A' ? `· ${cand.phone}` : ''}
+                                                    </div>
+
+                                                    {cand.skills && cand.skills.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                            {cand.skills.slice(0, 4).map((s: string) => (
+                                                                <span key={s} className="text-[10px] text-[#d4d4d4] bg-white/[0.04] border border-white/[0.08] px-1.5 py-0.2 rounded">
+                                                                    {s}
+                                                                </span>
+                                                            ))}
+                                                            {cand.skills.length > 4 && (
+                                                                <span className="text-[10px] text-[#6b7280] px-1 py-0.2">
+                                                                    +{cand.skills.length - 4} more
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const targetEmail = cand.email;
+                                                        if (targetEmail) {
+                                                            if (!newEmails.includes(targetEmail)) {
+                                                                setNewEmails(prev => [...prev, targetEmail]);
+                                                            }
+                                                            setParsedCandidates(prev => [
+                                                                ...prev.filter(c => c.email.toLowerCase() !== targetEmail.toLowerCase()),
+                                                                { email: targetEmail, phone: cand.phone || 'N/A', name: cand.name, experience: cand.experience, matchScore: `${cand.matchScore}%` }
+                                                            ]);
+                                                            messageBox.showSuccess(`Added "${cand.name}" (${cand.matchScore}% Match) to invite list!`);
+                                                        }
+                                                    }}
+                                                    disabled={isAdded}
+                                                    className={`geist-caption inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] text-xs font-semibold shrink-0 transition-colors ${
+                                                        isAdded
+                                                            ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 opacity-80 cursor-default'
+                                                            : 'border border-white/20 bg-white text-black hover:bg-neutral-200'
+                                                    }`}
+                                                >
+                                                    {isAdded ? '✓ Added' : '+ Add Candidate'}
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
 
                     {sendingProgressMsg && (
                         <div className="p-3 bg-white/[0.04] border border-white/[0.15] rounded-[6px] text-xs font-medium text-white flex items-center gap-2 animate-pulse">
@@ -1050,182 +1770,62 @@ const RecruiterInterviews: React.FC = () => {
                         </div>
                     )}
 
-                    <div>
-                        <label className="block geist-label uppercase text-[#6b7280] mb-1.5">Add Candidate Manually</label>
-                        <div className="flex gap-2">
-                            <input 
-                                type="email" 
-                                value={newEmail} 
-                                onChange={(e) => setNewEmail(e.target.value)} 
-                                placeholder="Candidate email" 
-                                className="flex-1 p-2 rounded-[6px] bg-[#111111] border border-white/[0.11] text-xs text-white outline-none focus:border-white/30 placeholder:text-[#6b7280]" 
-                            />
-                            <input 
-                                type="tel" 
-                                value={manualPhone} 
-                                onChange={(e) => setManualPhone(e.target.value)} 
-                                placeholder="Phone number (optional)" 
-                                className="w-1/3 p-2 rounded-[6px] bg-[#111111] border border-white/[0.11] text-xs text-white outline-none focus:border-white/30 placeholder:text-[#6b7280]" 
-                            />
-                            <button 
-                                onClick={() => {
-                                    if (!newEmail) return;
-                                    setNewEmails([...newEmails, newEmail]);
-                                    if (manualPhone) {
-                                        setParsedCandidates(prev => [...prev, { email: newEmail.toLowerCase(), phone: manualPhone, matchScore: 'N/A' }]);
-                                    }
-                                    setNewEmail('');
-                                    setManualPhone('');
-                                }} 
-                                className="geist-caption bg-white text-black font-semibold px-4 py-2 rounded-[6px] text-xs hover:bg-neutral-200 transition-colors shrink-0"
-                            >
-                                Add
-                            </button>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h4 className="geist-label uppercase text-[#6b7280] mb-1.5">New Candidates to Invite:</h4>
-                        {newEmails.length === 0 ? (
-                             <p className="geist-small text-[#6b7280] italic">No candidates added yet. Upload resumes or add manually above.</p>
-                        ) : (
-                            <div className="flex flex-col gap-2 max-h-[180px] overflow-y-auto pr-1">
-                                {newEmails.map(email => {
-                                    const parsedData = parsedCandidates.find(c => c.email === email);
-                                    
-                                    let ScoreBadge = null;
-                                    if (parsedData?.matchScore && parsedData.matchScore !== 'N/A') {
-                                        const numScore = parseFloat(parsedData.matchScore);
-                                        let badgeColor = 'bg-white/[0.04] text-[#8f8f8f] border-white/[0.08]';
-                                        let icon = 'fas fa-minus-circle';
+                    {inviteMode !== 'invited' && (
+                        <div>
+                            <h4 className="geist-label uppercase text-[#6b7280] mb-1.5">New Candidates to Invite:</h4>
+                            {newEmails.length === 0 ? (
+                                 <p className="geist-small text-[#6b7280] italic">No candidates added yet. Upload resumes or add manually above.</p>
+                            ) : (
+                                <div className="flex flex-col gap-2 max-h-[180px] overflow-y-auto pr-1">
+                                    {newEmails.map(email => {
+                                        const parsedData = parsedCandidates.find(c => c.email === email);
                                         
-                                        if (!isNaN(numScore)) {
-                                            if (numScore >= 75) {
-                                                badgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 font-semibold';
-                                                icon = 'fas fa-check-circle';
-                                            } else if (numScore >= 50) {
-                                                badgeColor = 'bg-white/[0.06] text-[#d4d4d4] border-white/[0.15]';
-                                                icon = 'fas fa-exclamation-circle';
-                                            } else {
-                                                badgeColor = 'bg-red-500/10 text-red-400 border-red-500/30';
-                                                icon = 'fas fa-times-circle';
+                                        let ScoreBadge = null;
+                                        if (parsedData?.matchScore && parsedData.matchScore !== 'N/A') {
+                                            const numScore = parseFloat(parsedData.matchScore);
+                                            let badgeColor = 'bg-white/[0.04] text-[#8f8f8f] border-white/[0.08]';
+                                            let icon = 'fas fa-minus-circle';
+                                            
+                                            if (!isNaN(numScore)) {
+                                                if (numScore >= 75) {
+                                                    badgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 font-semibold';
+                                                    icon = 'fas fa-check-circle';
+                                                } else if (numScore >= 50) {
+                                                    badgeColor = 'bg-white/[0.06] text-[#d4d4d4] border-white/[0.15]';
+                                                    icon = 'fas fa-exclamation-circle';
+                                                } else {
+                                                    badgeColor = 'bg-red-500/10 text-red-400 border-red-500/30';
+                                                    icon = 'fas fa-times-circle';
+                                                }
                                             }
+                                            
+                                            ScoreBadge = (
+                                                <div className={`mt-1 flex w-fit items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-xs border ${badgeColor}`} title="AI Resume Match Score vs Job Description">
+                                                    <i className={icon}></i> Match: {parsedData.matchScore}%
+                                                </div>
+                                            );
                                         }
-                                        
-                                        ScoreBadge = (
-                                            <div className={`mt-1 flex w-fit items-center gap-1.5 px-2 py-0.5 rounded-[4px] text-xs border ${badgeColor}`} title="AI Resume Match Score vs Job Description">
-                                                <i className={icon}></i> Match: {parsedData.matchScore}%
+
+                                        return (
+                                            <div key={email} className="flex items-start justify-between text-xs bg-white/[0.025] border border-white/[0.11] rounded-[6px] px-3.5 py-2.5 shadow-sm transition-colors hover:border-white/20">
+                                                <div className="flex flex-col min-w-0">
+                                                    <span className="font-semibold text-white truncate max-w-[260px]">{email}</span>
+                                                    {parsedData?.phone && parsedData.phone !== 'N/A' && (
+                                                        <span className="text-xs text-[#8bbde8] font-mono flex items-center gap-1.5 mt-0.5"><i className="fas fa-phone-alt"></i>{parsedData.phone}</span>
+                                                    )}
+                                                    {ScoreBadge}
+                                                </div>
+                                                <button onClick={() => handleRemoveNewEmail(email)} className="text-[#8f8f8f] hover:text-[#ff8f8f] transition-colors p-1.5 rounded hover:bg-white/[0.06]" title="Remove Candidate">
+                                                    <i className="fas fa-trash-alt"></i>
+                                                </button>
                                             </div>
                                         );
-                                    }
-
-                                    return (
-                                        <div key={email} className="flex items-start justify-between text-xs bg-white/[0.025] border border-white/[0.11] rounded-[6px] px-3.5 py-2.5 shadow-sm transition-colors hover:border-white/20">
-                                            <div className="flex flex-col min-w-0">
-                                                <span className="font-semibold text-white truncate max-w-[260px]">{email}</span>
-                                                {parsedData?.phone && parsedData.phone !== 'N/A' && (
-                                                    <span className="text-xs text-[#8bbde8] font-mono flex items-center gap-1.5 mt-0.5"><i className="fas fa-phone-alt"></i>{parsedData.phone}</span>
-                                                )}
-                                                {ScoreBadge}
-                                            </div>
-                                            <button onClick={() => handleRemoveNewEmail(email)} className="text-[#8f8f8f] hover:text-[#ff8f8f] transition-colors p-1.5 rounded hover:bg-white/[0.06]" title="Remove Candidate">
-                                                <i className="fas fa-trash-alt"></i>
-                                            </button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-
-                    {selectedInterview.candidateEmails && selectedInterview.candidateEmails.length > 0 && (
-                        <div className="pt-3 border-t border-white/[0.11]">
-                            <h4 className="geist-label uppercase text-[#6b7280] mb-2">Previously Invited Candidates:</h4>
-                            <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
-                                {selectedInterview.candidateEmails.map((email) => {
-                                    const isEditing = editingCandidateEmail === email;
-                                    const isResending = resendingEmail === email;
-                                    const candData = ((selectedInterview as any).candidateData || []).find((c: any) => c.email && c.email.toLowerCase() === email.toLowerCase());
-                                    const candPhone = candData?.phone && candData.phone !== 'N/A' ? candData.phone : '';
-
-                                    return (
-                                        <div key={email} className="flex items-center justify-between text-xs bg-white/[0.025] border border-white/[0.11] rounded-[6px] px-3.5 py-2.5 shadow-sm">
-                                            {isEditing ? (
-                                                <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mr-2">
-                                                    <input 
-                                                        type="email" 
-                                                        value={editedEmailValue} 
-                                                        onChange={(e) => setEditedEmailValue(e.target.value)} 
-                                                        placeholder="Candidate Email"
-                                                        className="flex-1 p-2 text-xs rounded-[6px] border border-white/[0.11] bg-[#111111] text-white outline-none focus:border-white/30"
-                                                        autoFocus
-                                                    />
-                                                    <input 
-                                                        type="tel" 
-                                                        value={editedPhoneValue} 
-                                                        onChange={(e) => setEditedPhoneValue(e.target.value)} 
-                                                        placeholder="Phone number (e.g. +91...)"
-                                                        className="w-full sm:w-2/5 p-2 text-xs rounded-[6px] border border-white/[0.11] bg-[#111111] text-white outline-none focus:border-white/30"
-                                                    />
-                                                    <div className="flex items-center gap-1.5 shrink-0">
-                                                        <button 
-                                                            onClick={() => handleEditAndResend(email, editedEmailValue, editedPhoneValue)}
-                                                            disabled={resendingEmail !== null}
-                                                            className="bg-white text-black hover:bg-neutral-200 px-3 py-1.5 rounded-[6px] text-xs font-semibold disabled:opacity-50 flex items-center gap-1 shrink-0 transition-colors"
-                                                        >
-                                                            {isResending ? <ButtonBusySkeleton className="w-12 bg-black/30" /> : <><i className="fas fa-save"></i> Save</>}
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => { setEditingCandidateEmail(null); setEditedEmailValue(''); setEditedPhoneValue(''); }}
-                                                            disabled={resendingEmail !== null}
-                                                            className="border border-white/[0.11] bg-white/[0.03] text-[#d4d4d4] hover:bg-white/[0.06] px-3 py-1.5 rounded-[6px] text-xs shrink-0 transition-colors"
-                                                        >
-                                                            Cancel
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <div className="flex flex-col min-w-0">
-                                                        <span className="font-semibold text-white truncate max-w-[240px]" title={email}>{email}</span>
-                                                        {candPhone ? (
-                                                            <span className="text-xs text-[#8bbde8] font-mono flex items-center gap-1.5 mt-0.5">
-                                                                <i className="fas fa-phone-alt"></i> {candPhone}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-[11px] text-[#6b7280] italic">No phone attached (Click pencil to add)</span>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex items-center gap-2 shrink-0">
-                                                        <button 
-                                                            onClick={() => { 
-                                                                setEditingCandidateEmail(email); 
-                                                                setEditedEmailValue(email); 
-                                                                setEditedPhoneValue(candPhone);
-                                                            }}
-                                                            disabled={resendingEmail !== null}
-                                                            className="text-[#8f8f8f] hover:text-white transition-colors p-1.5 rounded hover:bg-white/[0.06]" 
-                                                            title="Edit Email & Phone Number"
-                                                        >
-                                                            <i className="fas fa-pencil-alt text-xs"></i>
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => handleResend(email)}
-                                                            disabled={resendingEmail !== null}
-                                                            className="text-[#8f8f8f] hover:text-emerald-400 transition-colors p-1.5 rounded hover:bg-white/[0.06] flex items-center gap-1" 
-                                                            title="Resend Invitation"
-                                                        >
-                                                            {isResending ? <ButtonBusySkeleton className="w-5 bg-white/30" /> : <i className="fas fa-paper-plane text-xs"></i>}
-                                                        </button>
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                    })}
+                                </div>
+                            )}
                         </div>
                     )}
+
                 </div>
 
                 {/* Modal Footer */}

@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import * as pdfjsLib from 'pdfjs-dist';
 import * as mammoth from 'mammoth';
-import { Edit3, Plus, Archive, Briefcase, Check, CheckCircle2, CheckSquare, Copy, ExternalLink, FileText, Mail, MessageSquare, Search, Send, Sparkles, Square, Trash2, UploadCloud, UserCheck, UserX, XCircle } from 'lucide-react';
+import { Award, Clock, Edit3, Filter, GraduationCap, MapPin, Plus, Archive, Briefcase, Check, CheckCircle2, CheckSquare, Copy, ExternalLink, FileText, Mail, MessageSquare, RotateCcw, Search, Send, SlidersHorizontal, Sparkles, Square, Trash2, UploadCloud, UserCheck, UserX, XCircle } from 'lucide-react';
+
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
@@ -464,12 +465,21 @@ const ResumeDump: React.FC = () => {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [selectedUploadFiles, setSelectedUploadFiles] = useState<File[]>([]);
   const [uploadModalExtraInfo, setUploadModalExtraInfo] = useState('');
+  const [uploadModalExpYears, setUploadModalExpYears] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+
   const [deletingCandidateId, setDeletingCandidateId] = useState<string | null>(null);
   const [isDraggingResume, setIsDraggingResume] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'available' | 'hired'>('all');
   const [skillFilter, setSkillFilter] = useState<string>('all');
   const [titleFilter, setTitleFilter] = useState<string>('all');
+  const [expFilter, setExpFilter] = useState<string>('all');
+  const [locationFilter, setLocationFilter] = useState<string>('all');
+  const [matchScoreFilter, setMatchScoreFilter] = useState<string>('all');
+  const [educationFilter, setEducationFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
+  const [showMoreFilters, setShowMoreFilters] = useState<boolean>(false);
   const [skillsPanelCandidate, setSkillsPanelCandidate] = useState<ResumeDumpCandidate | null>(null);
   const [previewResumeCandidate, setPreviewResumeCandidate] = useState<ResumeDumpCandidate | null>(null);
 
@@ -504,7 +514,8 @@ const ResumeDump: React.FC = () => {
   // Reset page when search or filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, skillFilter, titleFilter, selectedJobId]);
+  }, [searchTerm, statusFilter, skillFilter, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, sourceFilter, dateFilter, selectedJobId]);
+
 
   // Fetch all platform jobs / interviews from Firestore
   useEffect(() => {
@@ -589,6 +600,60 @@ const ResumeDump: React.FC = () => {
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [candidates]);
+
+  const uniqueLocationsList = useMemo(() => {
+    const set = new Set<string>();
+    candidates.forEach(c => {
+      if (c.location && c.location.trim()) {
+        const parts = c.location.split(/[,/]/).map(p => p.trim()).filter(Boolean);
+        parts.forEach(p => set.add(p));
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [candidates]);
+
+  const uniqueEducationList = useMemo(() => {
+    const set = new Set<string>();
+    candidates.forEach(c => {
+      (c.education || []).forEach(e => {
+        if (e.degree && e.degree.trim()) set.add(e.degree.trim());
+      });
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [candidates]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (selectedJobId !== 'all') count++;
+    if (statusFilter !== 'all') count++;
+    if (skillFilter !== 'all') count++;
+    if (titleFilter !== 'all') count++;
+    if (expFilter !== 'all') count++;
+    if (locationFilter !== 'all') count++;
+    if (matchScoreFilter !== 'all') count++;
+    if (educationFilter !== 'all') count++;
+    if (sourceFilter !== 'all') count++;
+    if (dateFilter !== 'all') count++;
+    return count;
+  }, [selectedJobId, statusFilter, skillFilter, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, sourceFilter, dateFilter, searchTerm]);
+
+  const handleClearAllFilters = () => {
+
+    setSelectedJobId('all');
+    setStatusFilter('all');
+    setSkillFilter('all');
+    setTitleFilter('all');
+    setExpFilter('all');
+    setLocationFilter('all');
+    setMatchScoreFilter('all');
+    setEducationFilter('all');
+    setSourceFilter('all');
+    setDateFilter('all');
+    setSearchTerm('');
+    setSelectedCandidateIds([]);
+  };
+
+
 
   // Selected Job Object
   const activeSelectedJob = useMemo(() => {
@@ -692,6 +757,60 @@ const ResumeDump: React.FC = () => {
         if (!candidateTitle.includes(titleFilter.toLowerCase())) return false;
       }
 
+      // 5. Experience Filter
+      if (expFilter !== 'all') {
+        const expYears = candidate.totalExperienceYears !== undefined && candidate.totalExperienceYears !== null
+          ? candidate.totalExperienceYears
+          : (parseFloat((candidate as any).experienceYears || '0') || 0);
+        if (expFilter === '0-1' && (expYears < 0 || expYears > 1)) return false;
+        if (expFilter === '1-3' && (expYears < 1 || expYears > 3)) return false;
+        if (expFilter === '3-5' && (expYears < 3 || expYears > 5)) return false;
+        if (expFilter === '5-10' && (expYears < 5 || expYears > 10)) return false;
+        if (expFilter === '10+' && expYears < 10) return false;
+      }
+
+      // 6. Location Filter
+      if (locationFilter !== 'all') {
+        const candLoc = (candidate.location || '').toLowerCase();
+        if (!candLoc.includes(locationFilter.toLowerCase())) return false;
+      }
+
+      // 7. Match Score Filter
+      if (matchScoreFilter !== 'all') {
+        const score = candidate.matchScore || 0;
+        if (matchScoreFilter === '75+' && score < 75) return false;
+        if (matchScoreFilter === '50+' && score < 50) return false;
+        if (matchScoreFilter === '30+' && score < 30) return false;
+      }
+
+      // 8. Education / Degree Filter
+      if (educationFilter !== 'all') {
+        const candEdu = (candidate.education || []).map(e => `${e.degree || ''} ${e.institution || ''}`).join(' ').toLowerCase() + ' ' + (candidate.summary || '').toLowerCase();
+        if (!candEdu.includes(educationFilter.toLowerCase())) return false;
+      }
+
+      // 9. Source Filter
+      if (sourceFilter !== 'all') {
+        const candSource = ((candidate as any).source || '').toLowerCase();
+        if (sourceFilter === 'upload' && !candSource.includes('upload') && candSource !== 'resume_dump' && !candSource) return false;
+        if (sourceFilter === 'interview' && !candSource.includes('interview')) return false;
+        if (sourceFilter === 'manual' && candSource !== 'manual') return false;
+      }
+
+      // 10. Date Filter
+      if (dateFilter !== 'all') {
+        const createdTime = (candidate.createdAt as any)?.seconds
+          ? (candidate.createdAt as any).seconds * 1000
+          : (candidate.createdAt ? new Date(candidate.createdAt as any).getTime() : 0);
+        if (createdTime > 0) {
+          const now = Date.now();
+          const diffDays = (now - createdTime) / (1000 * 60 * 60 * 24);
+          if (dateFilter === '7d' && diffDays > 7) return false;
+          if (dateFilter === '30d' && diffDays > 30) return false;
+          if (dateFilter === '90d' && diffDays > 90) return false;
+        }
+      }
+
       return true;
     });
 
@@ -701,7 +820,7 @@ const ResumeDump: React.FC = () => {
     }
 
     return result;
-  }, [candidatesWithScores, searchTerm, statusFilter, skillFilter, titleFilter, selectedJobId]);
+  }, [candidatesWithScores, searchTerm, statusFilter, skillFilter, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, sourceFilter, dateFilter, selectedJobId]);
 
   const isSearchOrFilterActive = useMemo(() => {
     return Boolean(
@@ -709,9 +828,16 @@ const ResumeDump: React.FC = () => {
       searchTerm.trim() ||
       statusFilter !== 'all' ||
       skillFilter !== 'all' ||
-      titleFilter !== 'all'
+      titleFilter !== 'all' ||
+      expFilter !== 'all' ||
+      locationFilter !== 'all' ||
+      matchScoreFilter !== 'all' ||
+      educationFilter !== 'all' ||
+      sourceFilter !== 'all' ||
+      dateFilter !== 'all'
     );
-  }, [selectedJobId, searchTerm, statusFilter, skillFilter, titleFilter]);
+  }, [selectedJobId, searchTerm, statusFilter, skillFilter, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, sourceFilter, dateFilter]);
+
 
   const totalPages = isSearchOrFilterActive
     ? 1
@@ -740,6 +866,14 @@ const ResumeDump: React.FC = () => {
     const results = await Promise.all(files.map(async (file): Promise<UploadResult> => {
       try {
         const ingested = await ingestResumeFile(file, {}, '', extraInfoText);
+
+        if (uploadModalExpYears.trim()) {
+          const parsedExpNum = parseFloat(uploadModalExpYears.trim());
+          if (!isNaN(parsedExpNum)) {
+            ingested.profile.totalExperienceYears = parsedExpNum;
+          }
+        }
+
         const creatorInfo = {
           uid: user.uid,
           name: userProfile?.name || user.email || 'Recruiter',
@@ -761,6 +895,7 @@ const ResumeDump: React.FC = () => {
           additionalText: extraInfoText || undefined,
           source: 'resume_dump',
         });
+
 
         // Audit Logging
         logTeamActivity(
@@ -790,7 +925,9 @@ const ResumeDump: React.FC = () => {
     setUploadStatus('');
     setSelectedUploadFiles([]);
     setUploadModalExtraInfo('');
+    setUploadModalExpYears('');
     setIsUploadModalOpen(false);
+
   };
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1026,7 +1163,8 @@ const ResumeDump: React.FC = () => {
   }
 
   return (
-    <div className="-mx-4 -my-8 min-h-[calc(100vh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8">
+    <div className="w-full min-h-[calc(100vh-3.5rem)] bg-[#000] text-white">
+
       <section className="border-b border-white/[0.11] bg-[#000]">
         <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-7 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
@@ -1064,22 +1202,22 @@ const ResumeDump: React.FC = () => {
         </div>
       </section>
 
-      {/* Interactive Filter Bar */}
-      <section className="border-b border-white/[0.11] bg-[#050505] px-4 py-3 sm:px-6 lg:px-7">
+      {/* Interactive Naukri-Style Filter Bar */}
+      <section className="border-b border-white/[0.11] bg-[#050505] px-4 py-3 sm:px-6 lg:px-7 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
             {/* Select Job Role (Ranks candidates by Highest Match Score) */}
             <div className="flex items-center gap-1.5 shrink-0">
               <Briefcase size={14} className="text-[#8f8f8f] shrink-0" />
               <select
                 value={selectedJobId}
                 onChange={(e) => setSelectedJobId(e.target.value)}
-                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[210px]"
+                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[200px]"
               >
                 <option value="all" className="bg-[#111] text-white">Select Job Role ({jobs.length} Jobs)</option>
                 {jobs.map(j => (
                   <option key={j.id} value={j.id} className="bg-[#111] text-white">
-                    🎯 {j.title || j.jobRole || 'Job'} {j.accessCode ? `(${j.accessCode})` : ''}
+                    {j.title || j.jobRole || 'Job'} {j.accessCode ? `(${j.accessCode})` : ''}
                   </option>
                 ))}
               </select>
@@ -1090,21 +1228,21 @@ const ResumeDump: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setStatusFilter('all')}
-                className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${statusFilter === 'all' ? 'bg-white text-black font-semibold' : 'text-[#8f8f8f] hover:text-white'}`}
+                className={`px-2 py-1 rounded-[4px] font-medium transition-colors ${statusFilter === 'all' ? 'bg-white text-black font-semibold' : 'text-[#8f8f8f] hover:text-white'}`}
               >
                 All Status
               </button>
               <button
                 type="button"
                 onClick={() => setStatusFilter('available')}
-                className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${statusFilter === 'available' ? 'bg-white text-black font-semibold' : 'text-[#8f8f8f] hover:text-white'}`}
+                className={`px-2 py-1 rounded-[4px] font-medium transition-colors ${statusFilter === 'available' ? 'bg-white text-black font-semibold' : 'text-[#8f8f8f] hover:text-white'}`}
               >
                 Available
               </button>
               <button
                 type="button"
                 onClick={() => setStatusFilter('hired')}
-                className={`px-2.5 py-1 rounded-[4px] font-medium transition-colors ${statusFilter === 'hired' ? 'bg-emerald-500 text-white font-semibold' : 'text-[#8f8f8f] hover:text-white'}`}
+                className={`px-2 py-1 rounded-[4px] font-medium transition-colors ${statusFilter === 'hired' ? 'bg-emerald-500 text-white font-semibold' : 'text-[#8f8f8f] hover:text-white'}`}
               >
                 Hired
               </button>
@@ -1114,7 +1252,7 @@ const ResumeDump: React.FC = () => {
             <select
               value={skillFilter}
               onChange={(e) => setSkillFilter(e.target.value)}
-              className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer"
+              className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[170px]"
             >
               <option value="all">All Skills ({uniqueSkillsList.length})</option>
               {uniqueSkillsList.map(skill => (
@@ -1126,13 +1264,64 @@ const ResumeDump: React.FC = () => {
             <select
               value={titleFilter}
               onChange={(e) => setTitleFilter(e.target.value)}
-              className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[200px]"
+              className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[180px]"
             >
               <option value="all">All Roles / Industry ({uniqueTitlesList.length})</option>
               {uniqueTitlesList.map(title => (
                 <option key={title} value={title}>{title}</option>
               ))}
             </select>
+
+            {/* Experience Range Filter */}
+            <div className="flex items-center gap-1 shrink-0">
+              <Award size={13} className="text-[#8f8f8f] shrink-0" />
+              <select
+                value={expFilter}
+                onChange={(e) => setExpFilter(e.target.value)}
+                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[170px]"
+              >
+                <option value="all">All Experience</option>
+                <option value="0-1">0 - 1 Yrs (Freshers)</option>
+                <option value="1-3">1 - 3 Yrs (Junior)</option>
+                <option value="3-5">3 - 5 Yrs (Mid-Level)</option>
+                <option value="5-10">5 - 10 Yrs (Senior)</option>
+                <option value="10+">10+ Yrs (Lead / Exec)</option>
+              </select>
+            </div>
+
+            {/* Location / City Filter Dropdown */}
+            <div className="flex items-center gap-1 shrink-0">
+              <MapPin size={13} className="text-[#8f8f8f] shrink-0" />
+              <select
+                value={locationFilter}
+                onChange={(e) => setLocationFilter(e.target.value)}
+                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[160px]"
+              >
+                <option value="all">All Locations ({uniqueLocationsList.length})</option>
+                {uniqueLocationsList.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Toggle More Naukri Filters */}
+            <button
+              type="button"
+              onClick={() => setShowMoreFilters(prev => !prev)}
+              className={`geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-2.5 text-xs font-semibold transition-colors shrink-0 ${
+                showMoreFilters || activeFiltersCount > 0
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
+                  : 'border-white/[0.11] bg-[#111] text-[#8f8f8f] hover:text-white'
+              }`}
+            >
+              <SlidersHorizontal size={13} />
+              <span>{showMoreFilters ? 'Less Filters' : 'More Filters'}</span>
+              {activeFiltersCount > 0 && (
+                <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-black">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
@@ -1149,30 +1338,96 @@ const ResumeDump: React.FC = () => {
 
             <span className="text-xs text-[#8f8f8f] font-medium">
               {isSearchOrFilterActive ? (
-                <>Showing all <strong className="text-white">{filteredCandidates.length}</strong> matching results</>
+                <>Showing all <strong className="text-white">{filteredCandidates.length}</strong> matching candidates</>
               ) : (
                 <>Showing <strong className="text-white">{paginatedCandidates.length}</strong> of {filteredCandidates.length} candidates {totalPages > 1 ? `(Page ${currentPage} of ${totalPages})` : ''}</>
               )}
             </span>
-            {(searchTerm || statusFilter !== 'all' || skillFilter !== 'all' || titleFilter !== 'all' || selectedJobId !== 'all') && (
+
+            {activeFiltersCount > 0 && (
               <button
                 type="button"
-                onClick={() => {
-                  setSearchTerm('');
-                  setStatusFilter('all');
-                  setSkillFilter('all');
-                  setTitleFilter('all');
-                  setSelectedJobId('all');
-                  setSelectedCandidateIds([]);
-                }}
-                className="text-xs text-blue-400 hover:text-blue-300 font-semibold underline"
+                onClick={handleClearAllFilters}
+                className="geist-caption inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 font-semibold underline"
               >
-                Reset Filters
+                <RotateCcw size={12} />
+                <span>Reset All</span>
               </button>
             )}
           </div>
         </div>
+
+        {/* Row 2: Secondary / Advanced Naukri Recruiter Filters */}
+        {showMoreFilters && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/[0.08] animate-in fade-in duration-150">
+            {/* Match Score Filter */}
+            <div className="flex items-center gap-1 shrink-0">
+              <Sparkles size={13} className="text-emerald-400 shrink-0" />
+              <select
+                value={matchScoreFilter}
+                onChange={(e) => setMatchScoreFilter(e.target.value)}
+                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[170px]"
+              >
+                <option value="all">Match Score: All</option>
+                <option value="75+">🔥 High Match (75%+)</option>
+                <option value="50+">⚡ Good Match (50%+)</option>
+                <option value="30+">Fair Match (30%+)</option>
+              </select>
+            </div>
+
+            {/* Education / Qualification Filter */}
+            <div className="flex items-center gap-1 shrink-0">
+              <GraduationCap size={13} className="text-[#8f8f8f] shrink-0" />
+              <select
+                value={educationFilter}
+                onChange={(e) => setEducationFilter(e.target.value)}
+                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[180px]"
+              >
+                <option value="all">Education: All ({uniqueEducationList.length})</option>
+                <option value="B.Tech">B.Tech / B.E.</option>
+                <option value="M.Tech">M.Tech / M.E.</option>
+                <option value="MBA">MBA / PGDM</option>
+                <option value="BCA">BCA / MCA</option>
+                <option value="B.Sc">B.Sc / M.Sc</option>
+                {uniqueEducationList.map(edu => (
+                  <option key={edu} value={edu}>{edu}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Candidate Source Filter */}
+            <div className="flex items-center gap-1 shrink-0">
+              <FileText size={13} className="text-[#8f8f8f] shrink-0" />
+              <select
+                value={sourceFilter}
+                onChange={(e) => setSourceFilter(e.target.value)}
+                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[160px]"
+              >
+                <option value="all">Source: All</option>
+                <option value="upload">Direct Upload</option>
+                <option value="interview">Interview Creation</option>
+                <option value="manual">Manual Entry</option>
+              </select>
+            </div>
+
+            {/* Freshness / Added Date Filter */}
+            <div className="flex items-center gap-1 shrink-0">
+              <Clock size={13} className="text-[#8f8f8f] shrink-0" />
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[160px]"
+              >
+                <option value="all">Added: Any time</option>
+                <option value="7d">Last 7 Days</option>
+                <option value="30d">Last 30 Days</option>
+                <option value="90d">Last 90 Days</option>
+              </select>
+            </div>
+          </div>
+        )}
       </section>
+
 
       {uploading && (
         <section className="border-b border-white/[0.11] bg-white/[0.02] px-4 py-4 sm:px-6 lg:px-7">
@@ -1267,7 +1522,9 @@ const ResumeDump: React.FC = () => {
                     <th className="geist-label whitespace-nowrap px-4 py-2 uppercase text-[#6b7280]">Match Score</th>
                   )}
                   <th className="geist-label whitespace-nowrap px-4 py-2 uppercase text-[#6b7280]">Phone</th>
+                  <th className="geist-label whitespace-nowrap px-4 py-2 uppercase text-[#6b7280]">Experience</th>
                   <th className="geist-label whitespace-nowrap px-4 py-2 uppercase text-[#6b7280]">Skills</th>
+
                   <th className="geist-label whitespace-nowrap px-4 py-2 uppercase text-[#6b7280]">Suggestion Status</th>
                   <th className="geist-label whitespace-nowrap px-4 py-2 uppercase text-[#6b7280]">Uploaded</th>
                   <th className="geist-label whitespace-nowrap px-4 py-2 text-right uppercase text-[#6b7280] min-w-[280px]">Actions</th>
@@ -1327,7 +1584,7 @@ const ResumeDump: React.FC = () => {
                               ? 'border border-white/[0.15] bg-white/[0.04] text-[#d4d4d4]'
                               : 'border border-white/[0.08] bg-white/[0.02] text-[#6b7280]'
                           }`}>
-                            {candidate.matchScore >= 75 ? '🔥' : candidate.matchScore >= 45 ? '⚡' : '🎯'} {candidate.matchScore}% Match
+                            {candidate.matchScore >= 75 ? '🔥' : '⚡'} {candidate.matchScore}% Match
                           </span>
                         )}
                       </td>
@@ -1336,6 +1593,14 @@ const ResumeDump: React.FC = () => {
                     <td className="px-4 py-1.5 whitespace-nowrap">
                       <span className="geist-caption whitespace-nowrap text-[#d4d4d4]">{candidate.phone || 'N/A'}</span>
                     </td>
+                    <td className="px-4 py-1.5 whitespace-nowrap">
+                      <span className="geist-caption whitespace-nowrap text-[#83d0a3] font-semibold">
+                        {candidate.totalExperienceYears !== undefined && candidate.totalExperienceYears !== null && !isNaN(Number(candidate.totalExperienceYears))
+                          ? `${candidate.totalExperienceYears} Yrs`
+                          : 'N/A'}
+                      </span>
+                    </td>
+
                     <td className="px-4 py-1.5">
                       {candidate.skills.length > 0 ? (
                         <div className="flex max-w-[320px] flex-wrap items-center gap-1">
@@ -1545,12 +1810,20 @@ const ResumeDump: React.FC = () => {
               </div>
 
               <div className="max-h-[70vh] space-y-5 overflow-y-auto p-5">
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-4">
                   <div className="rounded-[8px] border border-white/[0.11] bg-white/[0.025] p-3 min-w-0 overflow-hidden">
                     <p className="geist-label uppercase text-[#6b7280]">Name & Contact</p>
                     <p className="geist-caption mt-1 font-semibold text-white truncate">{skillsPanelCandidate.name || 'N/A'}</p>
                     <p className="geist-small text-[#8bbde8] mt-0.5 truncate" title={skillsPanelCandidate.email}>{skillsPanelCandidate.email || 'N/A'}</p>
                     <p className="geist-small text-[#d4d4d4] mt-0.5 truncate">{skillsPanelCandidate.phone || 'N/A'}</p>
+                  </div>
+                  <div className="rounded-[8px] border border-white/[0.11] bg-white/[0.025] p-3 min-w-0 overflow-hidden">
+                    <p className="geist-label uppercase text-[#6b7280]">Experience</p>
+                    <p className="geist-caption mt-1 font-semibold text-[#83d0a3] truncate">
+                      {skillsPanelCandidate.totalExperienceYears !== undefined && skillsPanelCandidate.totalExperienceYears !== null && !isNaN(Number(skillsPanelCandidate.totalExperienceYears))
+                        ? `${skillsPanelCandidate.totalExperienceYears} Years`
+                        : 'N/A'}
+                    </p>
                   </div>
                   <div className="rounded-[8px] border border-white/[0.11] bg-white/[0.025] p-3 min-w-0 overflow-hidden">
                     <p className="geist-label uppercase text-[#6b7280]">Current Role</p>
@@ -1562,6 +1835,7 @@ const ResumeDump: React.FC = () => {
                     <p className="geist-small text-[#6b7280] mt-0.5 truncate" title={skillsPanelCandidate.resumeFileName}>{skillsPanelCandidate.resumeFileName}</p>
                   </div>
                 </div>
+
 
                 {skillsPanelCandidate.summary && (
                   <div className="min-w-0">
@@ -1733,7 +2007,7 @@ const ResumeDump: React.FC = () => {
                     <option value="all" disabled className="bg-[#111] text-white">-- Choose a Job Role to Invite Candidates --</option>
                     {jobs.map(j => (
                       <option key={j.id} value={j.id} className="bg-[#111] text-white">
-                        🎯 {j.title || j.jobRole || 'Untitled Job'} {j.accessCode ? `(Code: ${j.accessCode})` : ''}
+                        {j.title || j.jobRole || 'Untitled Job'} {j.accessCode ? `(Code: ${j.accessCode})` : ''}
                       </option>
                     ))}
                   </select>
@@ -1930,6 +2204,23 @@ const ResumeDump: React.FC = () => {
                   )}
                 </div>
 
+                {/* Optional Experience Years Input */}
+                <div>
+                  <label className="geist-label block uppercase text-[#9ca3af] mb-1.5 font-medium">
+                    Experience Years <span className="text-blue-400 font-normal lowercase">(Optional e.g. 3 or 5.5 — leave blank to auto-detect with AI)</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="60"
+                    value={uploadModalExpYears}
+                    onChange={(e) => setUploadModalExpYears(e.target.value)}
+                    placeholder="e.g. 3 or 5.5 (Optional)"
+                    className="w-full rounded-[8px] border border-white/[0.14] bg-[#050505] p-3 text-xs text-white outline-none focus:border-blue-400 placeholder:text-[#6b7280]"
+                  />
+                </div>
+
                 {/* Extra Info Input Field */}
                 <div>
                   <label className="geist-label block uppercase text-[#9ca3af] mb-1.5 font-medium">
@@ -1946,6 +2237,7 @@ const ResumeDump: React.FC = () => {
                     💡 Any text entered here will be combined with the extracted PDF/DOCX text before AI extraction.
                   </p>
                 </div>
+
 
                 {/* Submit Actions */}
                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/[0.1]">

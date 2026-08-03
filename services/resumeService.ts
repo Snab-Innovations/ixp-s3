@@ -4,6 +4,8 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { db } from './firebase';
 import { uploadToCloudinary } from './api';
 import { grokGenerateJson } from './grokService';
+import { geminiGenerateJson } from './geminiService';
+
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
@@ -408,12 +410,23 @@ export const analyzeResumeText = async (
   if (normalizeWhitespace(text).length < 80) return { ...fallback, ...overrides };
 
   try {
-    const ai = await grokGenerateJson<AIResumeProfile>(
-      'You extract factual resume data for recruiters. Never infer missing facts, protected traits, personality, or candidate quality. Return only valid JSON.',
-      `Extract this resume into the exact JSON shape below. Keep skills canonical and concise. Experience must contain only roles explicitly present in the resume. totalExperienceYears must be a number.\n\n{"name":"","email":"","phone":"","location":"","currentTitle":"","summary":"","totalExperienceYears":0,"skills":[],"experience":[{"title":"","company":"","startDate":"","endDate":"","highlights":[],"skills":[]}],"education":[{"degree":"","institution":"","year":""}],"certifications":[],"languages":[],"keywords":[],"linkedinUrl":"","portfolioUrl":""}\n\nRESUME:\n${text.slice(0, 18_000)}`,
-      0.1,
-      1800
-    );
+    let ai: AIResumeProfile;
+    try {
+      ai = await geminiGenerateJson<AIResumeProfile>(
+        'You extract factual resume data for recruiters. Never infer missing facts, protected traits, personality, or candidate quality. Return only valid JSON.',
+        `Extract this resume into the exact JSON shape below. Keep skills canonical and concise. Experience must contain only roles explicitly present in the resume. totalExperienceYears must be a number.\n\n{"name":"","email":"","phone":"","location":"","currentTitle":"","summary":"","totalExperienceYears":0,"skills":[],"experience":[{"title":"","company":"","startDate":"","endDate":"","highlights":[],"skills":[]}],"education":[{"degree":"","institution":"","year":""}],"certifications":[],"languages":[],"keywords":[],"linkedinUrl":"","portfolioUrl":""}\n\nRESUME & RECRUITER NOTES:\n${text.slice(0, 18_000)}`,
+        0.1
+      );
+    } catch (geminiError) {
+      console.warn('Gemini zai.glm-4.7-flash resume extraction failed, falling back to Grok:', geminiError);
+      ai = await grokGenerateJson<AIResumeProfile>(
+        'You extract factual resume data for recruiters. Never infer missing facts, protected traits, personality, or candidate quality. Return only valid JSON.',
+        `Extract this resume into the exact JSON shape below. Keep skills canonical and concise. Experience must contain only roles explicitly present in the resume. totalExperienceYears must be a number.\n\n{"name":"","email":"","phone":"","location":"","currentTitle":"","summary":"","totalExperienceYears":0,"skills":[],"experience":[{"title":"","company":"","startDate":"","endDate":"","highlights":[],"skills":[]}],"education":[{"degree":"","institution":"","year":""}],"certifications":[],"languages":[],"keywords":[],"linkedinUrl":"","portfolioUrl":""}\n\nRESUME & RECRUITER NOTES:\n${text.slice(0, 18_000)}`,
+        0.1,
+        1800
+      );
+    }
+
 
     const aiSkills = Array.isArray(ai.skills) ? ai.skills.map((skill) => canonicalizeSkill(safeString(skill, 60))) : [];
     const aiExperience = parseAIExperience(ai.experience);

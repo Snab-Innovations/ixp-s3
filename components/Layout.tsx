@@ -87,6 +87,9 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     <Link to="/recruiter/jobs" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${isActive('/recruiter/jobs') ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5'}`}>
                       Dashboard
                     </Link>
+                    <Link to="/recruiter/all-jobs" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${isActive('/recruiter/all-jobs') ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5'}`}>
+                      All Jobs
+                    </Link>
                     <Link to="/recruiter/interviews" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${isActive('/recruiter/interviews') ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5'}`}>
                       My Interviews
                     </Link>
@@ -247,7 +250,8 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <main className={`workspace-card flex-grow w-full mx-auto relative ${isRecruiterPath ? 'recruiter-workspace' : ''} ${isRecruiterDashboard ? 'max-w-none p-0' : `px-4 sm:px-6 lg:px-8 py-8 ${showRecruiterSidebar ? 'max-w-none' : 'max-w-7xl'}`}`}>
+          <main className={`workspace-card flex-grow w-full mx-auto relative ${isRecruiterPath ? 'recruiter-workspace' : ''} ${showRecruiterSidebar ? 'max-w-none p-0' : 'px-4 sm:px-6 lg:px-8 py-8 max-w-7xl'}`}>
+
             {children}
           </main>
 

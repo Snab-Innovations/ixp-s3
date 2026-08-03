@@ -395,7 +395,8 @@ const InterviewResponses: React.FC = () => {
   const primaryButtonClass = "geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea] disabled:cursor-not-allowed disabled:opacity-40";
 
   return (
-    <div className="-mx-4 -my-8 min-h-[calc(100vh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8">
+    <div className="w-full min-h-[calc(100vh-3.5rem)] bg-[#000] text-white">
+
       <section className="sticky top-14 z-20 border-b border-white/[0.11] bg-[#000]">
         <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-7 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">

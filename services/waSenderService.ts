@@ -49,9 +49,21 @@ export function formatPhoneForWhatsApp(phone: string): string {
 }
 
 /**
+ * Opens WhatsApp Web in a new browser tab with prefilled phone and message.
+ */
+export function openWhatsAppWebInvite(phone: string, text: string) {
+  const formatted = formatPhoneForWhatsApp(phone);
+  const digits = formatted.replace(/[^0-9]/g, '');
+  if (!digits) return;
+  const url = `https://web.whatsapp.com/send?phone=${digits}&text=${encodeURIComponent(text)}`;
+  window.open(url, '_blank');
+}
+
+/**
  * Sends a single WhatsApp message via WhatsApp Task Manager API using active recruiter's saved profile credentials.
  * DO NOT fallback to .env for WhatsApp session credentials.
  */
+
 export async function sendWhatsAppMessage(
   phone: string,
   text: string,
@@ -131,7 +143,8 @@ export function buildWhatsAppInviteText(params: {
 
   const headline = isReminder
     ? `⏳ *PENDING INTERVIEW REMINDER*`
-    : `🎯 *OFFICIAL INTERVIEW INVITATION*`;
+    : `💼 *OFFICIAL INTERVIEW INVITATION*`;
+
 
   const intro = isReminder
     ? `Dear *${candidateName}*,\n\nThis is a polite reminder to complete your AI video interview assessment for the post of *${jobTitle}* at *SNAB Innovations / Dsource*.`

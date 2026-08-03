@@ -49,6 +49,7 @@ import CareerHub from './pages/CareerHub';
 import StatusPage from './pages/Status';
 import ClientView from './pages/ClientView';
 import ActiveJobsPage from './pages/ActiveJobs';
+import RecruiterAllJobs from './pages/RecruiterAllJobs';
 
 const DefaultRouteLoader = () => (
   <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
@@ -235,7 +236,9 @@ const App: React.FC = () => {
                 <Routes>
                   {/* Recruiter Routes */}
                   <Route path="recruiter/jobs" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterDashboardSkeleton />}><RecruiterDashboard /></ProtectedRoute>} />
+                  <Route path="recruiter/all-jobs" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterDashboardSkeleton />}><RecruiterAllJobs /></ProtectedRoute>} />
                   <Route path="recruiter/interviews" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><RecruiterInterviews /></ProtectedRoute>} />
+
                   <Route path="recruiter/invites" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><InvitedCandidates /></ProtectedRoute>} />
                   <Route path="recruiter/resume-dump" element={<ProtectedRoute role="recruiter" loadingFallback={<ResumeDumpSkeleton />}><ResumeDump /></ProtectedRoute>} />
                   <Route path="recruiter/interview/:interviewId" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewOverviewSkeleton />}><InterviewOverview /></ProtectedRoute>} />

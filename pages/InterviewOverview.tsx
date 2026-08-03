@@ -220,7 +220,8 @@ const InterviewOverview: React.FC = () => {
   const description = interview.description || 'No description provided.';
 
   return (
-    <div className="-mx-4 -my-8 min-h-[calc(100vh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8">
+    <div className="w-full min-h-[calc(100vh-3.5rem)] bg-[#000] text-white">
+
       <section className="sticky top-14 z-20 border-b border-white/[0.11] bg-[#000]">
         <div className="px-4 py-5 sm:px-6 lg:px-7">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
