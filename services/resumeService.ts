@@ -40,6 +40,7 @@ export interface ParsedResumeProfile {
   keywords: string[];
   linkedinUrl: string;
   portfolioUrl: string;
+  additionalText?: string;
   parsingMethod: 'deterministic' | 'hybrid';
   parserVersion: number;
 }
@@ -52,6 +53,7 @@ export interface ResumeDumpRecord extends ParsedResumeProfile {
   resumeMimeType?: string;
   resumeSize?: number;
   resumeText?: string;
+  additionalText?: string;
   source?: ResumeSource;
   sourceInterviewId?: string;
   sourceJobTitle?: string;
@@ -468,14 +470,25 @@ export const readResumeText = async (fileOrBlob: Blob, fileName = '') => {
 export const ingestResumeFile = async (
   file: File,
   overrides: Partial<Pick<ParsedResumeProfile, 'name' | 'email' | 'phone'>> = {},
-  existingResumeUrl = ''
+  existingResumeUrl = '',
+  additionalText = ''
 ): Promise<ResumeIngestionResult> => {
   const resumeText = await readResumeText(file, file.name);
   if (!resumeText) throw new Error('No readable text was found in this resume.');
+
+  const textToAnalyze = additionalText.trim()
+    ? `${resumeText}\n\n[Additional Candidate Details & Recruiter Notes]:\n${additionalText.trim()}`
+    : resumeText;
+
   const [profile, uploadedUrl] = await Promise.all([
-    analyzeResumeText(resumeText, file.name, overrides),
+    analyzeResumeText(textToAnalyze, file.name, overrides),
     existingResumeUrl ? Promise.resolve(existingResumeUrl) : uploadToCloudinary(file, 'auto'),
   ]);
+
+  if (additionalText.trim()) {
+    profile.additionalText = additionalText.trim();
+  }
+
   return { profile, resumeText: resumeText.slice(0, MAX_RESUME_TEXT_CHARS), resumeUrl: uploadedUrl };
 };
 
@@ -562,6 +575,7 @@ export const saveResumeDumpCandidate = async ({
   fileName,
   mimeType,
   fileSize,
+  additionalText,
   source,
   sourceInterviewId = '',
   sourceJobTitle = '',
@@ -575,6 +589,7 @@ export const saveResumeDumpCandidate = async ({
   fileName: string;
   mimeType: string;
   fileSize?: number;
+  additionalText?: string;
   source: ResumeSource;
   sourceInterviewId?: string;
   sourceJobTitle?: string;
@@ -614,6 +629,7 @@ export const saveResumeDumpCandidate = async ({
     resumeMimeType: mimeType || 'application/octet-stream',
     resumeSize: Math.max(0, fileSize || 0),
     resumeText: normalizeWhitespace(resumeText).slice(0, MAX_RESUME_TEXT_CHARS),
+    ...(additionalText !== undefined ? { additionalText: normalizeWhitespace(additionalText).slice(0, 10000) } : {}),
     source,
     sourceInterviewId,
     sourceJobTitle,

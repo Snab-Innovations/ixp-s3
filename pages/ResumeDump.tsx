@@ -3,12 +3,12 @@ import { createPortal } from 'react-dom';
 import { collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import * as pdfjsLib from 'pdfjs-dist';
 import * as mammoth from 'mammoth';
-import { Archive, Briefcase, Check, CheckCircle2, CheckSquare, Copy, ExternalLink, FileText, Mail, MessageSquare, Search, Send, Sparkles, Square, Trash2, UploadCloud, UserCheck, UserX, XCircle } from 'lucide-react';
+import { Edit3, Plus, Archive, Briefcase, Check, CheckCircle2, CheckSquare, Copy, ExternalLink, FileText, Mail, MessageSquare, Search, Send, Sparkles, Square, Trash2, UploadCloud, UserCheck, UserX, XCircle } from 'lucide-react';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { SKILL_OPTIONS } from './Profile';
-import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
+import { analyzeResumeText, ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 import { logTeamActivity } from '../services/auditService';
 import { dedupeCandidatesByIdentity } from '../services/candidateIdentity';
 import { deleteFileFromS3ByUrl } from '../services/s3Service';
@@ -38,6 +38,7 @@ interface ResumeDumpCandidate {
   resumeMimeType?: string;
   resumeSize?: number;
   resumeText?: string;
+  additionalText?: string;
   location?: string;
   currentTitle?: string;
   summary?: string;
@@ -459,6 +460,10 @@ const ResumeDump: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('');
   const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
+  const [uploadExtraInfo, setUploadExtraInfo] = useState('');
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [selectedUploadFiles, setSelectedUploadFiles] = useState<File[]>([]);
+  const [uploadModalExtraInfo, setUploadModalExtraInfo] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [deletingCandidateId, setDeletingCandidateId] = useState<string | null>(null);
   const [isDraggingResume, setIsDraggingResume] = useState(false);
@@ -474,6 +479,22 @@ const ResumeDump: React.FC = () => {
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
+
+  // Add candidate with optional text modal state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addCandidateForm, setAddCandidateForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    additionalText: '',
+  });
+  const [addCandidateFile, setAddCandidateFile] = useState<File | null>(null);
+  const [isSavingCandidate, setIsSavingCandidate] = useState(false);
+
+  // Edit notes state
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [editingNotesText, setEditingNotesText] = useState('');
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const CANDIDATES_PER_PAGE = 10;
@@ -706,7 +727,7 @@ const ResumeDump: React.FC = () => {
     return filteredCandidates.slice(start, start + CANDIDATES_PER_PAGE);
   }, [filteredCandidates, currentPage, isSearchOrFilterActive]);
 
-  const processResumeFiles = async (files: File[]) => {
+  const processResumeFiles = async (files: File[], customExtraText?: string) => {
     if (!user || files.length === 0) return;
 
     setUploading(true);
@@ -714,9 +735,11 @@ const ResumeDump: React.FC = () => {
     setUploadResults([]);
     setUploadStatus(`Parsing and saving ${files.length} resume${files.length === 1 ? '' : 's'}...`);
 
+    const extraInfoText = (customExtraText !== undefined ? customExtraText : uploadExtraInfo).trim();
+
     const results = await Promise.all(files.map(async (file): Promise<UploadResult> => {
       try {
-        const ingested = await ingestResumeFile(file);
+        const ingested = await ingestResumeFile(file, {}, '', extraInfoText);
         const creatorInfo = {
           uid: user.uid,
           name: userProfile?.name || user.email || 'Recruiter',
@@ -735,6 +758,7 @@ const ResumeDump: React.FC = () => {
           fileName: file.name,
           mimeType: file.type,
           fileSize: file.size,
+          additionalText: extraInfoText || undefined,
           source: 'resume_dump',
         });
 
@@ -764,11 +788,18 @@ const ResumeDump: React.FC = () => {
     setUploadResults(results);
     setUploading(false);
     setUploadStatus('');
+    setSelectedUploadFiles([]);
+    setUploadModalExtraInfo('');
+    setIsUploadModalOpen(false);
   };
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    await processResumeFiles(Array.from(event.target.files || []));
+    const files = Array.from(event.target.files || []);
     event.target.value = '';
+    if (files.length > 0) {
+      setSelectedUploadFiles(files);
+      setIsUploadModalOpen(true);
+    }
   };
 
   const handleDragOver = (event: React.DragEvent<HTMLElement>) => {
@@ -787,7 +818,136 @@ const ResumeDump: React.FC = () => {
     event.preventDefault();
     setIsDraggingResume(false);
     if (uploading) return;
-    await processResumeFiles(Array.from(event.dataTransfer.files || []));
+    const droppedFiles = Array.from(event.dataTransfer.files || []);
+    if (droppedFiles.length > 0) {
+      setSelectedUploadFiles(droppedFiles);
+      setIsUploadModalOpen(true);
+    }
+  };
+
+  const handleSaveAddCandidate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    if (!addCandidateFile && !addCandidateForm.additionalText.trim()) {
+      messageBox.show({
+        title: 'Input Required',
+        message: 'Please attach a resume file or enter candidate text / details.',
+        variant: 'error',
+      });
+      return;
+    }
+
+    setIsSavingCandidate(true);
+    try {
+      const creatorInfo = {
+        uid: user.uid,
+        name: userProfile?.name || user.email || 'Recruiter',
+        email: user.email || '',
+        role: userProfile?.role || 'recruiter',
+        designation: userProfile?.designation || 'Recruiter',
+      };
+
+      let profile;
+      let resumeText = '';
+      let resumeUrl = '';
+      let fileName = 'Pasted Candidate Details';
+      let mimeType = 'text/plain';
+      let fileSize = 0;
+
+      const manualOverrides = {
+        ...(addCandidateForm.name.trim() ? { name: addCandidateForm.name.trim() } : {}),
+        ...(addCandidateForm.email.trim() ? { email: addCandidateForm.email.trim() } : {}),
+        ...(addCandidateForm.phone.trim() ? { phone: addCandidateForm.phone.trim() } : {}),
+      };
+
+      const extraText = addCandidateForm.additionalText.trim();
+
+      if (addCandidateFile) {
+        // If file is uploaded, pass extraText to ingestResumeFile so it gets parsed WITH the PDF data!
+        const ingested = await ingestResumeFile(addCandidateFile, manualOverrides, '', extraText);
+        profile = ingested.profile;
+        resumeText = ingested.resumeText;
+        resumeUrl = ingested.resumeUrl;
+        fileName = addCandidateFile.name;
+        mimeType = addCandidateFile.type || 'application/octet-stream';
+        fileSize = addCandidateFile.size;
+      } else {
+        profile = await analyzeResumeText(extraText, 'Pasted Details', manualOverrides);
+        resumeText = extraText;
+        fileSize = extraText.length;
+      }
+
+      await saveResumeDumpCandidate({
+        recruiterUID: user.uid,
+        teamId,
+        createdBy: creatorInfo,
+        profile,
+        resumeText,
+        resumeUrl,
+        fileName,
+        mimeType,
+        fileSize,
+        additionalText: extraText || undefined,
+        source: 'resume_dump',
+      });
+
+      logTeamActivity(
+        teamId,
+        'resume_uploaded',
+        `Added candidate "${profile.name || 'Candidate'}" with extra details to Resume Dump`,
+        creatorInfo
+      );
+
+      messageBox.show({
+        title: 'Candidate Saved',
+        message: `Successfully saved ${profile.name || 'Candidate'} to Resume Dump.`,
+        variant: 'success',
+      });
+
+      setIsAddModalOpen(false);
+      setAddCandidateForm({ name: '', email: '', phone: '', additionalText: '' });
+      setAddCandidateFile(null);
+    } catch (error: any) {
+      console.error('Failed to save candidate with text:', error);
+      messageBox.show({
+        title: 'Error Saving Candidate',
+        message: error?.message || 'Failed to save candidate. Please try again.',
+        variant: 'error',
+      });
+    } finally {
+      setIsSavingCandidate(false);
+    }
+  };
+
+  const handleSaveNotes = async () => {
+    if (!skillsPanelCandidate || !user) return;
+    setIsSavingNotes(true);
+    try {
+      const candidateRef = doc(db, 'resumeDumpCandidates', skillsPanelCandidate.id);
+      const updatedText = editingNotesText.trim();
+      await updateDoc(candidateRef, {
+        additionalText: updatedText,
+        updatedAt: serverTimestamp(),
+      });
+
+      setSkillsPanelCandidate((prev) => (prev ? { ...prev, additionalText: updatedText } : null));
+      setCandidates((prev) => prev.map((c) => (c.id === skillsPanelCandidate.id ? { ...c, additionalText: updatedText } : c)));
+      setIsEditingNotes(false);
+      messageBox.show({
+        title: 'Notes Saved',
+        message: 'Successfully updated candidate notes.',
+        variant: 'success',
+      });
+    } catch (err: any) {
+      console.error('Failed to update candidate notes:', err);
+      messageBox.show({
+        title: 'Error',
+        message: 'Could not update candidate notes.',
+        variant: 'error',
+      });
+    } finally {
+      setIsSavingNotes(false);
+    }
   };
 
   const deleteCandidate = async (candidate: ResumeDumpCandidate) => {
@@ -888,18 +1048,18 @@ const ResumeDump: React.FC = () => {
                 className="geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-[#050505] pl-9 pr-3 text-white outline-none placeholder:text-[#6b7280] focus:border-white/[0.24]"
               />
             </div>
-            <label className="geist-caption inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea]">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedUploadFiles([]);
+                setUploadModalExtraInfo('');
+                setIsUploadModalOpen(true);
+              }}
+              className="geist-caption inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3.5 font-semibold text-black transition-colors hover:bg-[#eaeaea]"
+            >
               <UploadCloud size={14} strokeWidth={1.8} />
               Upload resumes
-              <input
-                type="file"
-                multiple
-                accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-                className="hidden"
-                onChange={handleUpload}
-                disabled={uploading}
-              />
-            </label>
+            </button>
           </div>
         </div>
       </section>
@@ -1677,6 +1837,143 @@ const ResumeDump: React.FC = () => {
                   >
                     <Mail size={13} />
                     Send Invites
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* Upload Resumes Modal with Extra Info */}
+      {isUploadModalOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md" onClick={() => !uploading && setIsUploadModalOpen(false)}>
+            <div
+              className="w-full max-w-xl overflow-hidden rounded-[14px] border border-white/[0.15] bg-[#0c0c0d] text-white shadow-2xl animate-in fade-in zoom-in duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-white/[0.11] bg-[#111113] px-5 py-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <UploadCloud size={18} className="text-white" />
+                    Upload Candidate Resumes
+                  </h3>
+                  <p className="geist-small mt-0.5 text-[#8f8f8f]">
+                    Select or drop resume files and optionally attach extra details to parse together.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !uploading && setIsUploadModalOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] transition-colors hover:bg-white/[0.08] hover:text-white text-xl leading-none"
+                >
+                  &times;
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+                {/* File Selection Dropzone */}
+                <div>
+                  <label className="geist-label block uppercase text-[#9ca3af] mb-1.5 font-medium">
+                    Select Resume File(s) <span className="text-white font-semibold">*</span>
+                  </label>
+                  <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[8px] border border-dashed border-white/[0.18] bg-white/[0.025] p-5 text-center transition-colors hover:bg-white/[0.05] hover:border-white/40">
+                    <UploadCloud size={24} className="text-[#a1a1aa]" />
+                    <span className="geist-caption text-xs font-semibold text-white">
+                      {selectedUploadFiles.length > 0
+                        ? `Selected ${selectedUploadFiles.length} file${selectedUploadFiles.length > 1 ? 's' : ''}`
+                        : 'Click to select PDF, DOCX, or TXT resumes'}
+                    </span>
+                    <span className="geist-small text-[#6b7280]">
+                      Select single or multiple candidate resume files
+                    </span>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        if (files.length > 0) {
+                          setSelectedUploadFiles(files);
+                        }
+                      }}
+                      disabled={uploading}
+                    />
+                  </label>
+
+                  {/* List of Selected Files */}
+                  {selectedUploadFiles.length > 0 && (
+                    <div className="mt-3 space-y-1.5">
+                      <p className="geist-label uppercase text-[#6b7280] text-[10px]">Selected Files ({selectedUploadFiles.length}):</p>
+                      <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
+                        {selectedUploadFiles.map((file, idx) => (
+                          <div key={`${file.name}-${idx}`} className="flex items-center justify-between rounded-[6px] border border-white/[0.1] bg-white/[0.03] px-3 py-1.5 text-xs">
+                            <div className="flex items-center gap-2 truncate min-w-0">
+                              <FileText size={13} className="text-blue-400 shrink-0" />
+                              <span className="truncate text-white font-medium">{file.name}</span>
+                              <span className="text-[#6b7280]">({(file.size / 1024).toFixed(0)} KB)</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedUploadFiles(prev => prev.filter((_, i) => i !== idx))}
+                              className="text-[#8f8f8f] hover:text-red-400 font-bold ml-2 text-base"
+                              disabled={uploading}
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Extra Info Input Field */}
+                <div>
+                  <label className="geist-label block uppercase text-[#9ca3af] mb-1.5 font-medium">
+                    Extra Info / Candidate Notes <span className="text-blue-400 font-normal lowercase">(Optional — will be parsed WITH PDF data)</span>
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={uploadModalExtraInfo}
+                    onChange={(e) => setUploadModalExtraInfo(e.target.value)}
+                    placeholder="Enter candidate bio, extra skills, recruiter notes, past performance, or details to combine with PDF parsing..."
+                    className="w-full rounded-[8px] border border-white/[0.14] bg-[#050505] p-3 text-xs text-white outline-none focus:border-blue-400 placeholder:text-[#6b7280] leading-relaxed"
+                  />
+                  <p className="geist-small mt-1 text-[#6b7280]">
+                    💡 Any text entered here will be combined with the extracted PDF/DOCX text before AI extraction.
+                  </p>
+                </div>
+
+                {/* Submit Actions */}
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/[0.1]">
+                  <button
+                    type="button"
+                    onClick={() => setIsUploadModalOpen(false)}
+                    disabled={uploading}
+                    className="geist-caption rounded-[6px] border border-white/[0.11] bg-white/[0.04] px-4 py-2 text-xs font-semibold text-[#d4d4d4] hover:bg-white/[0.08]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => processResumeFiles(selectedUploadFiles, uploadModalExtraInfo)}
+                    disabled={uploading || selectedUploadFiles.length === 0}
+                    className="geist-caption inline-flex items-center gap-2 rounded-[6px] bg-white px-4 py-2 text-xs font-bold text-black hover:bg-neutral-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {uploading ? (
+                      <>
+                        <Sparkles size={14} className="animate-spin text-black" />
+                        {uploadStatus || 'Processing Resumes...'}
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud size={14} strokeWidth={2} />
+                        Upload & Process {selectedUploadFiles.length > 0 ? `(${selectedUploadFiles.length})` : ''}
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
