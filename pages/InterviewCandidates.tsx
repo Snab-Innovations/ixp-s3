@@ -1007,7 +1007,7 @@ const InterviewCandidates: React.FC = () => {
 
                     <div>
                       <p className="geist-label mb-1 uppercase text-[#6b7280] lg:hidden">Status</p>
-                      <span className={`geist-caption inline-flex h-7 items-center gap-1.5 rounded-[6px] border px-2 font-medium ${candidate.hasSubmitted ? 'border-[#173d25] bg-[#071a10] text-[#7ee787]' : 'border-[#4b3a16] bg-[#181104] text-[#ffd166]'}`}>
+                      <span className={`geist-caption inline-flex h-7 items-center gap-1.5 rounded-[6px] border px-2 font-medium ${candidate.hasSubmitted ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:border-[#173d25] dark:bg-[#071a10] dark:text-[#7ee787]' : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:border-[#4b3a16] dark:bg-[#181104] dark:text-[#ffd166]'}`}>
                         <i className={candidate.hasSubmitted ? 'fas fa-check-circle text-[10px]' : 'fas fa-clock text-[10px]'}></i>
                         {candidate.hasSubmitted ? 'Submitted' : 'Pending'}
                       </span>
@@ -1037,7 +1037,7 @@ const InterviewCandidates: React.FC = () => {
                           type="button"
                           onClick={() => handleDirectWhatsAppInvite(candidate.email, candidateData?.phone)}
                           disabled={sendingWhatsAppEmail === candidate.email}
-                          className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-[#173d25] bg-[#071a10] px-3 font-medium text-[#7ee787] transition-colors hover:bg-[#0b2415] disabled:opacity-50"
+                          className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-emerald-500/30 bg-emerald-500/10 px-3 font-semibold text-emerald-700 hover:bg-emerald-600 hover:text-white dark:border-[#173d25] dark:bg-[#071a10] dark:text-[#7ee787] dark:hover:bg-[#0b2415] transition-colors disabled:opacity-50"
                         >
                           {sendingWhatsAppEmail === candidate.email ? (
                             <i className="fas fa-spinner fa-spin text-[11px]"></i>

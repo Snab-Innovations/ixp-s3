@@ -10,14 +10,14 @@ import ConnectionStatus from './ConnectionStatus';
 import Logo from './Logo';
 import DashboardSidebar from './ui/dashboard-sidebar';
 import RecruiterRateLimitBanner from './RecruiterRateLimitBanner';
-
-
+import WhatsAppConnectModal from './WhatsAppConnectModal';
 
 const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, userProfile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = React.useState(false);
 
   const handleLogout = async () => {
     try {
@@ -31,8 +31,8 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const { theme, setTheme } = useTheme();
 
   const isActive = (path: string) => location.pathname === path;
-  const isRecruiterPath = location.pathname.startsWith('/recruiter/');
-  const showRecruiterSidebar = isRecruiterPath || Boolean(user && userProfile?.role === 'recruiter');
+  const showRecruiterSidebar = location.pathname.startsWith('/recruiter/') || Boolean(user && userProfile?.role === 'recruiter');
+  const isRecruiterPath = showRecruiterSidebar;
   const isRecruiterDashboard = location.pathname === '/recruiter/jobs';
   const navigateFromSidebar = (href: string) => {
     navigate(href);
@@ -109,7 +109,24 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             <div className="flex items-center gap-2">
               {user ? (
                 <>
-
+                  {userProfile?.role === 'recruiter' && (
+                    <button
+                      type="button"
+                      onClick={() => setIsWhatsAppModalOpen(true)}
+                      title="Manage WhatsApp API Credentials & Connection"
+                      className={`geist-caption inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border px-2.5 text-xs font-semibold transition-all ${
+                        Boolean(userProfile?.whatsappSessionId && userProfile?.whatsappSessionPasscode)
+                          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20'
+                          : 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20'
+                      }`}
+                    >
+                      <i className="fab fa-whatsapp text-sm text-emerald-600 dark:text-emerald-400"></i>
+                      <span className="hidden md:inline">
+                        {Boolean(userProfile?.whatsappSessionId && userProfile?.whatsappSessionPasscode) ? 'WhatsApp Connected' : 'Connect WhatsApp'}
+                      </span>
+                      <span className={`h-2 w-2 rounded-full ${Boolean(userProfile?.whatsappSessionId && userProfile?.whatsappSessionPasscode) ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                    </button>
+                  )}
 
                   <NotificationCenter />
                 </>
@@ -370,9 +387,15 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               </div>
             )}
           </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
+    )}
+
+      {/* WhatsApp API Connect Credentials Modal */}
+      <WhatsAppConnectModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => setIsWhatsAppModalOpen(false)}
+      />
     </div>
   );
 };
