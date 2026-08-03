@@ -3181,6 +3181,8 @@ const InterviewSubmission: React.FC<{
             submittedAt: serverTimestamp(), 
             candidateUID: user?.uid || null,
             interviewId: interviewId,
+            interviewTitle: state.title || state.jobTitle || state.interviewTitle || 'Untitled Interview',
+            title: state.title || state.jobTitle || state.interviewTitle || 'Untitled Interview',
             recruiterUID: recruiterUID || null,
             jobId: interviewId,
             isMock: state.isMock || false,

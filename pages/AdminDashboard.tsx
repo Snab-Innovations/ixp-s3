@@ -147,45 +147,56 @@ const AdminDashboard: React.FC = () => {
     };
   }, []);
 
-  // Live tracking of all attempts across all recruiter interviews
+  // Live tracking of all attempts across all recruiter interviews (including deleted jobs)
   useEffect(() => {
-    if (interviews.length === 0) return;
+    const attemptsMap = new Map<string, any>();
+    const topLevelMap = new Map<string, any>();
 
-    const unsubs: (() => void)[] = [];
-    const attemptsMap = new Map<string, any[]>();
-
-    interviews.forEach(interview => {
-      const q = collection(db, 'interviews', interview.id, 'attempts');
-      const unsub = onSnapshot(q, (snap) => {
-        const list = snap.docs.map(doc => ({
-          id: doc.id,
-          interviewId: interview.id,
-          ...doc.data()
-        }));
-        attemptsMap.set(interview.id, list);
-
-        // Merge all lists and update state
-        const all: any[] = [];
-        attemptsMap.forEach(attemptsList => {
-          all.push(...attemptsList);
-        });
-        // Sort by submittedAt desc
-        all.sort((a, b) => {
-          const timeA = a.submittedAt?.seconds || 0;
-          const timeB = b.submittedAt?.seconds || 0;
-          return timeB - timeA;
-        });
-        setAllAttempts(all);
-      }, (err) => {
-        console.error(`Error loading attempts for interview ${interview.id}:`, err);
+    const updateAllAttemptsState = () => {
+      const mergedMap = new Map<string, any>();
+      attemptsMap.forEach((val, key) => mergedMap.set(key, val));
+      topLevelMap.forEach((val, key) => {
+        if (!mergedMap.has(key)) {
+          mergedMap.set(key, val);
+        } else {
+          mergedMap.set(key, { ...mergedMap.get(key), ...val });
+        }
       });
-      unsubs.push(unsub);
+
+      const all = Array.from(mergedMap.values());
+      all.sort((a, b) => {
+        const timeA = a.submittedAt?.seconds || (a.submittedAt?.toDate ? a.submittedAt.toDate().getTime() / 1000 : 0);
+        const timeB = b.submittedAt?.seconds || (b.submittedAt?.toDate ? b.submittedAt.toDate().getTime() / 1000 : 0);
+        return timeB - timeA;
+      });
+      setAllAttempts(all);
+    };
+
+    const unsubAttempts = onSnapshot(query(collectionGroup(db, 'attempts')), (snap) => {
+      attemptsMap.clear();
+      snap.docs.forEach(doc => {
+        attemptsMap.set(doc.id, { id: doc.id, ...doc.data() });
+      });
+      updateAllAttemptsState();
+    }, (err) => {
+      console.error("Error loading collectionGroup attempts:", err);
+    });
+
+    const unsubTopLevel = onSnapshot(collection(db, 'candidateResponses'), (snap) => {
+      topLevelMap.clear();
+      snap.docs.forEach(doc => {
+        topLevelMap.set(doc.id, { id: doc.id, ...doc.data() });
+      });
+      updateAllAttemptsState();
+    }, (err) => {
+      console.error("Error loading top-level candidateResponses:", err);
     });
 
     return () => {
-      unsubs.forEach(unsub => unsub());
+      unsubAttempts();
+      unsubTopLevel();
     };
-  }, [interviews]);
+  }, []);
 
   // GSAP Initial Page Animation
   useLayoutEffect(() => {

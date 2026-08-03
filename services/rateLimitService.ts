@@ -139,7 +139,8 @@ export const loadCompanyRawUsage = async (): Promise<CompanyRateLimitUsage> => {
 
   submissionsSnapshot.docs.forEach(submission => {
     const data = submission.data();
-    const type = data.type || testsById.get(data.testId)?.type;
+    const testData = testsById.get(data.testId) as Record<string, any> | undefined;
+    const type = data.type || testData?.type;
     if (type === 'coding') codingAssessments += 1;
     else assessments += 1;
   });
@@ -158,6 +159,13 @@ export const recordCandidateSubmission = async (
   submissionData: Record<string, unknown>,
 ) => {
   const limitRef = doc(db, 'rateLimits', 'company');
+  const permanentRecordRef = doc(db, 'candidateResponses', submissionRef.id);
+  const payload = {
+    ...submissionData,
+    attemptId: submissionRef.id,
+    savedAt: serverTimestamp(),
+  };
+
   try {
     await runTransaction(db, async transaction => {
       const snapshot = await transaction.get(limitRef);
@@ -167,7 +175,8 @@ export const recordCandidateSubmission = async (
         throw new Error(getRateLimitReachedMessage(resource));
       }
 
-      transaction.set(submissionRef, submissionData);
+      transaction.set(submissionRef, payload);
+      transaction.set(permanentRecordRef, payload, { merge: true });
       transaction.set(limitRef, {
         scope: 'company',
         ...status.limits,
@@ -192,7 +201,12 @@ export const recordCandidateSubmission = async (
     // Preserve the interview report when the optional company counter cannot
     // be read or updated. The admin page reconciles usage from actual reports.
     if (recoverableCounterError) {
-      await setDoc(submissionRef, submissionData);
+      await setDoc(submissionRef, payload);
+      try {
+        await setDoc(permanentRecordRef, payload, { merge: true });
+      } catch (err) {
+        console.warn('Failed to set top-level candidateResponses record:', err);
+      }
       console.warn('Candidate submission saved without updating the rate-limit counter; an administrator can reconcile it later.');
       return;
     }

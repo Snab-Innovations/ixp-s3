@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, getDocs, collectionGroup, query } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, LayoutDashboard, Video, Users, Calendar, Clock, Printer, X, Settings, Plus, Mail, Phone, FileText, Image as ImageIcon, Building, Hash, Globe, Tag } from 'lucide-react';
@@ -97,105 +97,169 @@ const AdminStats: React.FC = () => {
     let isMounted = true;
     setLoading(true);
 
-    const unsubInterviews = onSnapshot(collection(db, 'interviews'), async (snapshot) => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const startOfSelectedMonth = new Date(year, month - 1, 1);
+    const endOfSelectedMonth = new Date(year, month, 0, 23, 59, 59, 999);
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const activeInterviewsMap = new Map<string, any>();
+    const attemptsDocsMap = new Map<string, any>();
+    const topLevelResponsesMap = new Map<string, any>();
+
+    const recompute = () => {
       if (!isMounted) return;
-      const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
-      const [year, month] = selectedMonth.split('-').map(Number);
-      const startOfSelectedMonth = new Date(year, month - 1, 1);
-      const endOfSelectedMonth = new Date(year, month, 0, 23, 59, 59, 999);
 
-      let todayCount = 0;
-      let monthCount = 0;
-      let totalCount = snapshot.size;
+      // Merge attempts from collectionGroup and candidateResponses top-level collection
+      const mergedResponsesMap = new Map<string, any>();
 
-      let tempInterviews: any[] = [];
-      const attemptPromises: Promise<any>[] = [];
-
-      snapshot.docs.forEach(doc => {
-        const data = doc.data();
-        const timestamp = data.createdAt || data.submittedAt;
-        const date = timestamp?.toDate ? timestamp.toDate() : null;
-        
-        if (date) {
-          if (date >= startOfToday) todayCount++;
-          if (date >= startOfSelectedMonth && date <= endOfSelectedMonth) monthCount++;
-        }
-        
-        tempInterviews.push({
-          id: doc.id,
-          title: data.title || data.jobTitle || 'Untitled Interview',
-          createdAt: timestamp || null,
-          responses: 0
-        });
-
-        attemptPromises.push(getDocs(collection(db, 'interviews', doc.id, 'attempts')));
+      attemptsDocsMap.forEach((data, id) => {
+        mergedResponsesMap.set(id, data);
       });
 
-      setInterviewsStats({ today: todayCount, thisMonth: monthCount, total: totalCount });
-      
-      try {
-        const attemptSnaps = await Promise.all(attemptPromises);
-        let respToday = 0;
-        let respMonth = 0;
-        let respTotal = 0;
-        let tempResponses: ResponseDetail[] = [];
-
-        attemptSnaps.forEach((snap, idx) => {
-          respTotal += snap.size;
-          let interviewRespMonth = 0;
-
-          snap.docs.forEach(doc => {
-            const data = doc.data();
-            const timestamp = data.submittedAt || data.createdAt;
-            const date = timestamp?.toDate ? timestamp.toDate() : null;
-            if (date) {
-              if (date >= startOfToday) respToday++;
-              if (date >= startOfSelectedMonth && date <= endOfSelectedMonth) {
-                respMonth++;
-                interviewRespMonth++;
-                tempResponses.push({
-                  id: doc.id,
-                  candidateName: data.candidateInfo?.name || 'Unknown Candidate',
-                  candidateEmail: data.candidateInfo?.email || 'N/A',
-                  interviewTitle: tempInterviews[idx].title,
-                  submittedAt: timestamp || null
-                });
-              }
-            }
-          });
-          
-          tempInterviews[idx].responses = interviewRespMonth;
-        });
-        
-        tempResponses.sort((a, b) => {
-          const dateA = a.submittedAt?.toDate ? a.submittedAt.toDate().getTime() : 0;
-          const dateB = b.submittedAt?.toDate ? b.submittedAt.toDate().getTime() : 0;
-          return dateB - dateA;
-        });
-
-        const filteredInterviews = tempInterviews.filter(inv => {
-           const invDate = inv.createdAt?.toDate ? inv.createdAt.toDate() : null;
-           const createdInMonth = invDate && invDate >= startOfSelectedMonth && invDate <= endOfSelectedMonth;
-           return createdInMonth || inv.responses > 0;
-        });
-
-        if (isMounted) {
-          setResponsesStats({ today: respToday, thisMonth: respMonth, total: respTotal });
-          setInterviewsList(filteredInterviews);
-          setResponsesList(tempResponses);
+      topLevelResponsesMap.forEach((data, id) => {
+        if (!mergedResponsesMap.has(id)) {
+          mergedResponsesMap.set(id, data);
+        } else {
+          const existing = mergedResponsesMap.get(id);
+          mergedResponsesMap.set(id, { ...existing, ...data });
         }
-      } catch (error) {
-        console.error("Error fetching responses:", error);
-      }
-      
-      if (isMounted) setLoading(false);
-    });
+      });
+
+      // 1. Calculate Candidate Responses Statistics & List
+      let respToday = 0;
+      let respMonth = 0;
+      let respTotal = mergedResponsesMap.size;
+      let tempResponsesList: ResponseDetail[] = [];
+
+      // Map to count monthly responses per interview ID
+      const interviewMonthlyRespCounts = new Map<string, number>();
+      // Map to hold interview titles from attempts for deleted/missing jobs
+      const interviewTitlesFromAttempts = new Map<string, string>();
+      // Map to hold earliest attempt date for deleted/missing jobs
+      const interviewEarliestDateFromAttempts = new Map<string, Date>();
+
+      mergedResponsesMap.forEach((data, docId) => {
+        const timestamp = data.submittedAt || data.createdAt || data.savedAt;
+        const date = timestamp?.toDate ? timestamp.toDate() : (timestamp instanceof Date ? timestamp : null);
+
+        const interviewId = data.interviewId || data.jobId || 'unknown';
+        const rawTitle = data.interviewTitle || data.jobTitle || data.title || (activeInterviewsMap.get(interviewId)?.title) || 'Untitled Interview';
+        
+        if (!interviewTitlesFromAttempts.has(interviewId) && rawTitle) {
+          interviewTitlesFromAttempts.set(interviewId, rawTitle);
+        }
+
+        if (date) {
+          if (date >= startOfToday) {
+            respToday++;
+          }
+          if (date >= startOfSelectedMonth && date <= endOfSelectedMonth) {
+            respMonth++;
+            interviewMonthlyRespCounts.set(interviewId, (interviewMonthlyRespCounts.get(interviewId) || 0) + 1);
+
+            const isJobDeleted = interviewId !== 'unknown' && !activeInterviewsMap.has(interviewId);
+            const formattedTitle = isJobDeleted ? `${rawTitle} (Deleted Job)` : rawTitle;
+
+            tempResponsesList.push({
+              id: docId,
+              candidateName: data.candidateInfo?.name || data.candidateName || 'Unknown Candidate',
+              candidateEmail: data.candidateInfo?.email || data.candidateEmail || 'N/A',
+              interviewTitle: formattedTitle,
+              submittedAt: timestamp || null
+            });
+          }
+        }
+
+        if (date && interviewId !== 'unknown') {
+          const existingEarliest = interviewEarliestDateFromAttempts.get(interviewId);
+          if (!existingEarliest || date < existingEarliest) {
+            interviewEarliestDateFromAttempts.set(interviewId, date);
+          }
+        }
+      });
+
+      tempResponsesList.sort((a, b) => {
+        const dateA = a.submittedAt?.toDate ? a.submittedAt.toDate().getTime() : 0;
+        const dateB = b.submittedAt?.toDate ? b.submittedAt.toDate().getTime() : 0;
+        return dateB - dateA;
+      });
+
+      // 2. Build Interviews Statistics & List
+      // We combine active interviews with deleted/missing interviews that have candidate responses
+      const allInterviewIds = new Set<string>([
+        ...Array.from(activeInterviewsMap.keys()),
+        ...Array.from(interviewTitlesFromAttempts.keys())
+      ]);
+
+      let interviewsTodayCount = 0;
+      let interviewsMonthCount = 0;
+      let interviewsTotalCount = allInterviewIds.size;
+      let tempInterviewsList: InterviewDetail[] = [];
+
+      allInterviewIds.forEach(id => {
+        const activeData = activeInterviewsMap.get(id);
+        const isDeleted = !activeData;
+        const title = activeData?.title || activeData?.jobTitle || interviewTitlesFromAttempts.get(id) || 'Job (Deleted)';
+        const timestamp = activeData?.createdAt || activeData?.submittedAt || interviewEarliestDateFromAttempts.get(id);
+        const date = timestamp?.toDate ? timestamp.toDate() : (timestamp instanceof Date ? timestamp : null);
+        const monthResponsesCount = interviewMonthlyRespCounts.get(id) || 0;
+
+        const createdInMonth = date && date >= startOfSelectedMonth && date <= endOfSelectedMonth;
+        const createdToday = date && date >= startOfToday;
+
+        if (createdToday || monthResponsesCount > 0) {
+          interviewsTodayCount++;
+        }
+        if (createdInMonth || monthResponsesCount > 0) {
+          interviewsMonthCount++;
+          tempInterviewsList.push({
+            id,
+            title: isDeleted ? `${title} (Deleted Job)` : title,
+            createdAt: activeData?.createdAt || (date ? { toDate: () => date } : null),
+            responses: monthResponsesCount
+          });
+        }
+      });
+
+      tempInterviewsList.sort((a, b) => b.responses - a.responses);
+
+      setResponsesStats({ today: respToday, thisMonth: respMonth, total: respTotal });
+      setInterviewsStats({ today: interviewsTodayCount, thisMonth: interviewsMonthCount, total: interviewsTotalCount });
+      setInterviewsList(tempInterviewsList);
+      setResponsesList(tempResponsesList);
+      setLoading(false);
+    };
+
+    const unsubInterviews = onSnapshot(collection(db, 'interviews'), (snapshot) => {
+      activeInterviewsMap.clear();
+      snapshot.docs.forEach(doc => {
+        activeInterviewsMap.set(doc.id, { id: doc.id, ...doc.data() });
+      });
+      recompute();
+    }, (err) => console.error("Error fetching interviews snapshot:", err));
+
+    const unsubAttempts = onSnapshot(query(collectionGroup(db, 'attempts')), (snapshot) => {
+      attemptsDocsMap.clear();
+      snapshot.docs.forEach(doc => {
+        attemptsDocsMap.set(doc.id, doc.data());
+      });
+      recompute();
+    }, (err) => console.error("Error fetching attempts collectionGroup snapshot:", err));
+
+    const unsubTopResponses = onSnapshot(collection(db, 'candidateResponses'), (snapshot) => {
+      topLevelResponsesMap.clear();
+      snapshot.docs.forEach(doc => {
+        topLevelResponsesMap.set(doc.id, doc.data());
+      });
+      recompute();
+    }, (err) => console.error("Error fetching candidateResponses snapshot:", err));
 
     return () => {
       isMounted = false;
       unsubInterviews();
+      unsubAttempts();
+      unsubTopResponses();
     };
   }, [selectedMonth]);
 
