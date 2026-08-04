@@ -66,8 +66,8 @@ const recruiterNavGroups: NavGroupData[] = [
         match: (path) => path === '/recruiter/resume-dump',
       },
       {
-        id: 'create-interview',
-        title: 'Create Interview',
+        id: 'create-job',
+        title: 'Create Job',
         icon: BriefcaseBusiness,
         href: '/recruiter/interview/create',
         match: (path) => path === '/recruiter/interview/create',

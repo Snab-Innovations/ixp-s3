@@ -12,6 +12,9 @@ import { sendInterviewInvitations } from '../services/brevoService';
 import { sendWhatsAppMessage, sendInterviewWhatsAppInvite, buildWhatsAppInviteText, openWhatsAppWebInvite, formatPhoneForWhatsApp, sendBulkWhatsAppInvites } from '../services/waSenderService';
 
 import EditJobModal from './EditJob';
+import { useBackgroundSend } from '../context/BackgroundSendContext';
+import { LocationCityInput } from '../components/LocationCityInput';
+import { EducationInput } from '../components/EducationInput';
 
 import { evaluateResumeMatch } from '../services/api';
 import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
@@ -230,14 +233,18 @@ function getAISuggestedCandidatesForJob(job: any, candidates: any[], alreadyInvi
 
 const RecruiterInterviews: React.FC = () => {
   const { user, userProfile } = useAuth();
+  const { startBackgroundSend } = useBackgroundSend();
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [selectedInterview, setSelectedInterview] = useState<Interview | null>(null);
+  const [manualName, setManualName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [manualPhone, setManualPhone] = useState('');
   const [manualExp, setManualExp] = useState('');
+  const [manualLocation, setManualLocation] = useState('');
+  const [manualEducation, setManualEducation] = useState('B.Tech / B.E. (Bachelor of Engineering / Technology)');
   const [newEmails, setNewEmails] = useState<string[]>([]);
   const [parsedCandidates, setParsedCandidates] = useState<{email: string, phone: string, name?: string, experience?: string, matchScore?: string}[]>([]);
   const [submissionsMap, setSubmissionsMap] = useState<Record<string, any[]>>({});
@@ -268,6 +275,9 @@ const RecruiterInterviews: React.FC = () => {
   // Delivery Channels State
   const [sendEmailChannel, setSendEmailChannel] = useState(true);
   const [sendWhatsAppChannel, setSendWhatsAppChannel] = useState(true);
+  const [waMinDelay, setWaMinDelay] = useState<number | string>(15);
+  const [waMaxDelay, setWaMaxDelay] = useState<number | string>(25);
+  const [waDelayUnit, setWaDelayUnit] = useState<'sec' | 'min'>('sec');
   const [bulkPastedEmails, setBulkPastedEmails] = useState('');
 
   useEffect(() => {
@@ -303,6 +313,27 @@ const RecruiterInterviews: React.FC = () => {
       return;
     }
 
+    if (!manualLocation.trim()) {
+      messageBox.showError("Candidate Location / City is mandatory for proper filtering. Please enter or select a city.");
+      return;
+    }
+
+    if (!manualExp.trim()) {
+      messageBox.showError("Candidate Experience in Years is mandatory for proper filtering. Please enter experience.");
+      return;
+    }
+
+    if (!manualEducation.trim()) {
+      messageBox.showError("Highest Education Qualification is mandatory for proper filtering. Please select candidate education.");
+      return;
+    }
+
+    const parsedExpNum = parseFloat(manualExp.trim());
+    if (isNaN(parsedExpNum)) {
+      messageBox.showError("Please enter a valid numeric experience in years (e.g. 1.5 or 3).");
+      return;
+    }
+
     setAnalyzingResumeAI(true);
     try {
       const { profile, resumeText, resumeUrl } = await ingestResumeFile(
@@ -312,11 +343,15 @@ const RecruiterInterviews: React.FC = () => {
         resumeExtraText
       );
 
-      if (manualExp.trim()) {
-        const parsedExpNum = parseFloat(manualExp.trim());
-        if (!isNaN(parsedExpNum)) {
-          profile.totalExperienceYears = parsedExpNum;
-        }
+      profile.location = manualLocation.trim();
+      profile.totalExperienceYears = parsedExpNum;
+      if (manualEducation.trim()) {
+        const selectedDegree = manualEducation.trim();
+        const existingEdu = profile.education || [];
+        profile.education = [
+          { degree: selectedDegree, institution: 'Verified Qualification', year: '' },
+          ...existingEdu.filter(e => e.degree.toLowerCase() !== selectedDegree.toLowerCase())
+        ];
       }
 
       await saveResumeDumpCandidate({
@@ -383,6 +418,7 @@ const RecruiterInterviews: React.FC = () => {
       setSelectedResumeFile(null);
       setResumeExtraText('');
       setManualExp('');
+      setManualLocation('');
     } catch (err: any) {
       console.error("Error analyzing candidate resume:", err);
       messageBox.showError(`AI extraction failed: ${err.message || 'Failed to analyze candidate resume.'}`);
@@ -846,23 +882,23 @@ const RecruiterInterviews: React.FC = () => {
     }
   };
 
-  const handleSendInvites = async () => {
-    if (!selectedInterview || (newEmails.length === 0 && parsedCandidates.length === 0)) return;
+  const handleSendInvites = async (isReminder = false) => {
+    if (!selectedInterview) return;
 
     if (!sendEmailChannel && !sendWhatsAppChannel) {
         messageBox.showError("Please select at least one delivery channel (Email or WhatsApp).");
         return;
     }
-    
+
     setSendingEmails(true);
-    setSendingProgressMsg('Preparing candidate invitations...');
+    setSendingProgressMsg(`Preparing candidate ${isReminder ? 'reminders' : 'invitations'}...`);
 
     try {
         const candidateDataToAdd = newEmails.map(email => {
             const parsed = parsedCandidates.find(c => c.email.toLowerCase() === email.toLowerCase());
             return {
                 email: email.toLowerCase(),
-                name: (parsed as any)?.name || 'Candidate',
+                name: (parsed as any)?.name || email.split('@')[0] || 'Candidate',
                 phone: parsed?.phone || 'N/A',
                 matchScore: parsed?.matchScore || 'N/A'
             };
@@ -881,74 +917,46 @@ const RecruiterInterviews: React.FC = () => {
           updateDoc(doc(db, 'jobs', selectedInterview.id), inviteUpdatePayload).catch(() => {})
         ]);
 
-        let emailCount = 0;
-        if (sendEmailChannel && validEmails.length > 0) {
-            setSendingProgressMsg(`Sending ${validEmails.length} invitation email(s)...`);
-            const result = await sendInterviewInvitations(
-                validEmails,
-                selectedInterview.title,
-                selectedInterview.interviewLink || '',
-                selectedInterview.accessCode,
-                false,
-                {
-                  gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
-                  location: (selectedInterview as any).location,
-                  education: (selectedInterview as any).education || (selectedInterview as any).qualification,
-                  qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-                  experience: ((selectedInterview as any).maxExperience > (selectedInterview as any).minExperience)
-                    ? `${(selectedInterview as any).minExperience} - ${(selectedInterview as any).maxExperience} Years`
-                    : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
-                  minExperience: (selectedInterview as any).minExperience,
-                  maxExperience: (selectedInterview as any).maxExperience,
-                  salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
-                  salaryRange: (selectedInterview as any).salaryRange || (selectedInterview as any).salary,
-                  employmentType: (selectedInterview as any).employmentType,
-                  customFields: (selectedInterview as any).customFields,
-                  recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
-                  recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
-                }
-            );
-            if (result.success) emailCount = result.totalEmails;
-        }
+        const targetLink = selectedInterview.interviewLink || `${window.location.origin}/#/interview/${selectedInterview.id}`;
+        const candidatesPayload = candidateDataToAdd.map(c => ({
+          email: c.email,
+          phone: c.phone,
+          name: c.name
+        }));
 
-        let waCount = 0;
-        const candidatesWithPhones = parsedCandidates.filter(c => c.phone && c.phone !== 'N/A');
-        if (sendWhatsAppChannel && candidatesWithPhones.length > 0) {
-            setSendingProgressMsg(`Sending WhatsApp invites one-by-one with 10s anti-spam delay...`);
-            const waResult = await sendBulkWhatsAppInvites(
-                candidatesWithPhones,
-                selectedInterview.title,
-                selectedInterview.interviewLink || '',
-                selectedInterview.accessCode,
-                false,
-                (sentCount, totalCount, currentCandidate, isWaiting) => {
-                    if (isWaiting) {
-                        setSendingProgressMsg(`⏳ Sent WhatsApp to ${currentCandidate} (${sentCount}/${totalCount}). Waiting 10s delay to protect WhatsApp number...`);
-                    } else {
-                        setSendingProgressMsg(`📱 Sending WhatsApp invite ${sentCount}/${totalCount} to ${currentCandidate}...`);
-                    }
-                },
-                {
-                  gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
-                  location: (selectedInterview as any).location,
-                  education: (selectedInterview as any).education || (selectedInterview as any).qualification,
-                  qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-                  experience: ((selectedInterview as any).maxExperience > (selectedInterview as any).minExperience)
-                    ? `${(selectedInterview as any).minExperience} - ${(selectedInterview as any).maxExperience} Years`
-                    : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
-                  minExperience: (selectedInterview as any).minExperience,
-                  maxExperience: (selectedInterview as any).maxExperience,
-                  salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
-                  recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
-                  recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',
-                  whatsappSessionId: userProfile?.whatsappSessionId || '',
-                  whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
-                }
-            );
-            if (waResult.success) waCount = waResult.totalSent;
-        }
+        startBackgroundSend({
+          candidates: candidatesPayload,
+          jobTitle: selectedInterview.title,
+          interviewLink: targetLink,
+          accessCode: selectedInterview.accessCode || '',
+          isReminder,
+          sendEmailChannel,
+          sendWhatsAppChannel,
+          options: {
+            gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
+            location: (selectedInterview as any).location,
+            education: (selectedInterview as any).education || (selectedInterview as any).qualification,
+            qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
+            experience: ((selectedInterview as any).maxExperience > (selectedInterview as any).minExperience)
+              ? `${(selectedInterview as any).minExperience} - ${(selectedInterview as any).maxExperience} Years`
+              : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
+            minExperience: (selectedInterview as any).minExperience,
+            maxExperience: (selectedInterview as any).maxExperience,
+            salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+            salaryRange: (selectedInterview as any).salaryRange || (selectedInterview as any).salary,
+            employmentType: (selectedInterview as any).employmentType,
+            customFields: (selectedInterview as any).customFields,
+            recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
+            recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',
+            whatsappSessionId: userProfile?.whatsappSessionId || '',
+            whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
+          },
+          waMinDelay: typeof waMinDelay === 'number' ? waMinDelay : (parseInt(waMinDelay) || 15),
+          waMaxDelay: typeof waMaxDelay === 'number' ? waMaxDelay : (parseInt(waMaxDelay) || 25),
+          waDelayUnit
+        });
 
-        messageBox.showSuccess(`Invitations sent: ${emailCount > 0 ? `${emailCount} Email(s)` : ''}${emailCount > 0 && waCount > 0 ? ' & ' : ''}${waCount > 0 ? `${waCount} WhatsApp invite(s)` : ''}!`);
+        messageBox.showSuccess(`🚀 Background ${isReminder ? 'reminders' : 'sending'} started for ${candidatesPayload.length} candidate(s)! You can freely navigate to any page.`);
         
         const primaryUid = userProfile?.parentRecruiterId || userProfile?.teamId || user?.uid || '';
         if (primaryUid) {
@@ -1068,7 +1076,7 @@ const RecruiterInterviews: React.FC = () => {
               className={`geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border px-3 font-medium transition-colors ${interviewLimitReached ? 'cursor-not-allowed border-red-500/30 bg-red-500/10 text-red-400' : 'border-white bg-white text-black hover:bg-[#eaeaea]'}`}
             >
               <i className="fas fa-plus text-[11px]"></i>
-              <span>{interviewLimitReached ? 'Interview limit reached' : 'Create Interview'}</span>
+              <span>{interviewLimitReached ? 'Job limit reached' : 'Create Job'}</span>
             </Link>
           </div>
         </div>
@@ -1309,22 +1317,22 @@ const RecruiterInterviews: React.FC = () => {
 
     {isInviteModalOpen && selectedInterview && createPortal(
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-200" onClick={() => setIsInviteModalOpen(false)}>
-            <div className="bg-[#090909] border border-white/[0.13] rounded-[12px] shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col text-white animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white dark:bg-[#090909] border border-gray-200 dark:border-white/[0.13] rounded-[12px] shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col text-slate-900 dark:text-white animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
                 {/* Modal Header */}
-                <div className="flex items-center justify-between px-5 py-4 bg-[#0d0d0d] border-b border-white/[0.11]">
+                <div className="flex items-center justify-between px-5 py-4 bg-gray-50 dark:bg-[#0d0d0d] border-b border-gray-200 dark:border-white/[0.11]">
                     <div className="flex items-center gap-2.5">
-                        <div className="p-2 rounded-[6px] bg-white/[0.05] border border-white/[0.11] text-white">
+                        <div className="p-2 rounded-[6px] bg-gray-200/60 dark:bg-white/[0.05] border border-gray-300 dark:border-white/[0.11] text-slate-800 dark:text-white">
                             <i className="fas fa-user-plus text-sm"></i>
                         </div>
                         <div>
-                            <h3 className="font-bold text-base text-white">Invite Candidates</h3>
-                            <p className="geist-small text-[#8f8f8f]">{selectedInterview.title}</p>
+                            <h3 className="font-bold text-base text-slate-900 dark:text-white">Invite Candidates</h3>
+                            <p className="geist-small text-gray-500 dark:text-[#8f8f8f]">{selectedInterview.title}</p>
                         </div>
                     </div>
                     <button
                         type="button"
                         onClick={() => setIsInviteModalOpen(false)}
-                        className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white"
+                        className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.03] text-gray-500 dark:text-[#8f8f8f] transition-colors hover:bg-gray-200 dark:hover:bg-white/[0.06] hover:text-slate-900 dark:hover:text-white"
                     >
                         <span className="text-xl leading-none">&times;</span>
                     </button>
@@ -1332,27 +1340,27 @@ const RecruiterInterviews: React.FC = () => {
 
                 {/* Modal Body Content */}
                 <div className="p-5 space-y-4 overflow-y-auto">
-                    <div className="p-4 bg-white/[0.025] border border-white/[0.11] rounded-[8px] space-y-3">
+                    <div className="p-4 bg-gray-50/80 dark:bg-white/[0.025] border border-gray-200 dark:border-white/[0.11] rounded-[8px] space-y-3">
                         <div>
-                            <h4 className="geist-label uppercase text-[#6b7280] mb-1">Access Code</h4>
-                            <div className="flex items-center justify-between bg-[#111111] p-2.5 rounded-[6px] border border-white/[0.11]">
-                                <span className="font-mono text-sm font-bold tracking-widest text-white">{selectedInterview.accessCode}</span>
-                                <button onClick={() => {navigator.clipboard.writeText(selectedInterview.accessCode || ''); messageBox.showSuccess('Access code copied!');}} className="text-[#8f8f8f] hover:text-white transition-colors" title="Copy Access Code">
+                            <h4 className="geist-label uppercase text-gray-500 dark:text-[#6b7280] mb-1">Access Code</h4>
+                            <div className="flex items-center justify-between bg-gray-100 dark:bg-[#111111] p-2.5 rounded-[6px] border border-gray-200 dark:border-white/[0.11]">
+                                <span className="font-mono text-sm font-bold tracking-widest text-slate-900 dark:text-white">{selectedInterview.accessCode}</span>
+                                <button onClick={() => {navigator.clipboard.writeText(selectedInterview.accessCode || ''); messageBox.showSuccess('Access code copied!');}} className="text-gray-500 dark:text-[#8f8f8f] hover:text-slate-900 dark:hover:text-white transition-colors" title="Copy Access Code">
                                     <i className="fas fa-copy"></i>
                                 </button>
                             </div>
                         </div>
                         <div>
-                            <h4 className="geist-label uppercase text-[#6b7280] mb-1">Interview Link</h4>
-                            <div className="flex items-center justify-between bg-[#111111] p-2.5 rounded-[6px] border border-white/[0.11]">
-                                <span className="text-xs font-mono truncate mr-2 text-[#d4d4d4]">
+                            <h4 className="geist-label uppercase text-gray-500 dark:text-[#6b7280] mb-1">Interview Link</h4>
+                            <div className="flex items-center justify-between bg-gray-100 dark:bg-[#111111] p-2.5 rounded-[6px] border border-gray-200 dark:border-white/[0.11]">
+                                <span className="text-xs font-mono truncate mr-2 text-slate-800 dark:text-[#d4d4d4]">
                                     {selectedInterview.interviewLink || `${window.location.origin}/#/interview/${selectedInterview.id}`}
                                 </span>
                                 <button onClick={() => {
                                     const link = selectedInterview.interviewLink || `${window.location.origin}/#/interview/${selectedInterview.id}`;
                                     navigator.clipboard.writeText(link);
                                     messageBox.showSuccess('Interview link copied!');
-                                }} className="text-[#8f8f8f] hover:text-white transition-colors" title="Copy Interview Link">
+                                }} className="text-gray-500 dark:text-[#8f8f8f] hover:text-slate-900 dark:hover:text-white transition-colors" title="Copy Interview Link">
                                     <i className="fas fa-link"></i>
                                 </button>
                             </div>
@@ -1363,21 +1371,21 @@ const RecruiterInterviews: React.FC = () => {
                                     const text = `You've been invited to an interview for ${selectedInterview.title}.\n\nInterview Link: ${link}\nAccess Code: ${selectedInterview.accessCode}`;
                                     navigator.clipboard.writeText(text);
                                     messageBox.showSuccess('Full invite details copied!');
-                             }} className="geist-caption text-xs font-semibold text-white hover:underline transition-colors">
+                             }} className="geist-caption text-xs font-semibold text-slate-900 dark:text-white hover:underline transition-colors">
                                  <i className="fas fa-clipboard-list mr-1"></i> Copy Full Invite Details
                              </button>
                         </div>
                     </div>
 
                     {/* Mode Selector */}
-                    <div className="flex items-center gap-1 p-1 bg-white/[0.04] border border-white/[0.08] rounded-[6px] flex-wrap">
+                    <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] rounded-[6px] flex-wrap">
                         <button
                             type="button"
                             onClick={() => setInviteMode('single')}
                             className={`geist-caption flex-1 py-1.5 px-2 rounded-[4px] font-semibold text-xs transition-all flex items-center justify-center gap-1.5 min-w-[110px] ${
                                 inviteMode === 'single'
-                                    ? 'bg-white text-black shadow-sm'
-                                    : 'text-[#8f8f8f] hover:text-white hover:bg-white/[0.04]'
+                                    ? 'bg-white text-slate-900 shadow-sm dark:bg-white dark:text-black'
+                                    : 'text-gray-600 dark:text-[#8f8f8f] hover:text-slate-900 dark:hover:text-white hover:bg-gray-200/60 dark:hover:bg-white/[0.04]'
                             }`}
                         >
                             <i className="fas fa-file-alt text-xs"></i>
@@ -1388,8 +1396,8 @@ const RecruiterInterviews: React.FC = () => {
                             onClick={() => setInviteMode('bulk')}
                             className={`geist-caption flex-1 py-1.5 px-2 rounded-[4px] font-semibold text-xs transition-all flex items-center justify-center gap-1.5 min-w-[95px] ${
                                 inviteMode === 'bulk'
-                                    ? 'bg-white text-black shadow-sm'
-                                    : 'text-[#8f8f8f] hover:text-white hover:bg-white/[0.04]'
+                                    ? 'bg-white text-slate-900 shadow-sm dark:bg-white dark:text-black'
+                                    : 'text-gray-600 dark:text-[#8f8f8f] hover:text-slate-900 dark:hover:text-white hover:bg-gray-200/60 dark:hover:bg-white/[0.04]'
                             }`}
                         >
                             <i className="fas fa-layer-group text-xs"></i>
@@ -1400,8 +1408,8 @@ const RecruiterInterviews: React.FC = () => {
                             onClick={() => setInviteMode('invited')}
                             className={`geist-caption flex-1 py-1.5 px-2 rounded-[4px] font-semibold text-xs transition-all flex items-center justify-center gap-1.5 min-w-[130px] ${
                                 inviteMode === 'invited'
-                                    ? 'bg-white text-black shadow-sm'
-                                    : 'text-[#8f8f8f] hover:text-white hover:bg-white/[0.04]'
+                                    ? 'bg-white text-slate-900 shadow-sm dark:bg-white dark:text-black'
+                                    : 'text-gray-600 dark:text-[#8f8f8f] hover:text-slate-900 dark:hover:text-white hover:bg-gray-200/60 dark:hover:bg-white/[0.04]'
                             }`}
                         >
                             <i className="fas fa-users text-xs"></i>
@@ -1412,11 +1420,11 @@ const RecruiterInterviews: React.FC = () => {
                             onClick={() => setInviteMode('ai_suggest')}
                             className={`geist-caption flex-1 py-1.5 px-2 rounded-[4px] font-semibold text-xs transition-all flex items-center justify-center gap-1.5 min-w-[140px] ${
                                 inviteMode === 'ai_suggest'
-                                    ? 'bg-emerald-400 text-black shadow-sm font-bold'
-                                    : 'text-emerald-400 hover:text-emerald-300 hover:bg-white/[0.04]'
+                                    ? 'bg-emerald-500 text-white dark:bg-emerald-400 dark:text-black shadow-sm font-bold'
+                                    : 'text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-gray-200/60 dark:hover:bg-white/[0.04]'
                             }`}
                         >
-                            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                            <Sparkles className="w-3.5 h-3.5" />
                             <span>Suggest AI Candidates</span>
                         </button>
                     </div>
@@ -1426,20 +1434,20 @@ const RecruiterInterviews: React.FC = () => {
                     {inviteMode === 'single' && (
                         <>
                             {/* AI Single Candidate Resume Upload + Optional Extra Text Section */}
-                            <div className="p-3 bg-white/[0.02] border border-white/[0.11] rounded-[6px] space-y-3">
+                            <div className="p-3 bg-gray-50/60 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.11] rounded-[6px] space-y-3">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-1.5">
-                                        <Sparkles className="w-4 h-4 text-emerald-400" />
-                                        <span className="geist-caption font-semibold text-white">Upload Single Resume + AI Analysis</span>
+                                        <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                        <span className="geist-caption font-semibold text-slate-900 dark:text-white">Upload Single Resume + AI Analysis</span>
                                     </div>
                                 </div>
 
-                                <p className="geist-small text-[#8f8f8f]">
+                                <p className="geist-small text-gray-600 dark:text-[#8f8f8f]">
                                     Upload candidate resume (PDF, DOCX, TXT) and add optional recruiter notes. AI analyzes details, extracts contact info, saves to <strong>Resume Dump</strong>, and adds candidate to invite roster.
                                 </p>
 
                                 <div>
-                                    <label className="geist-label uppercase text-[#6b7280] block mb-1">
+                                    <label className="geist-label uppercase text-gray-500 dark:text-[#6b7280] block mb-1">
                                         Select Candidate Resume File
                                     </label>
                                     <input
@@ -1449,33 +1457,59 @@ const RecruiterInterviews: React.FC = () => {
                                             const file = e.target.files?.[0];
                                             if (file) setSelectedResumeFile(file);
                                         }}
-                                        className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-2 text-white outline-none focus:border-white/[0.28] file:mr-3 file:py-1 file:px-2.5 file:rounded-[4px] file:border-0 file:text-xs file:font-semibold file:bg-white file:text-black hover:file:bg-[#eaeaea] cursor-pointer"
+                                        className="geist-caption w-full rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] p-2 text-slate-900 dark:text-white outline-none focus:border-gray-400 dark:focus:border-white/[0.28] file:mr-3 file:py-1 file:px-2.5 file:rounded-[4px] file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-white dark:file:bg-white dark:file:text-black hover:file:bg-slate-800 dark:hover:file:bg-[#eaeaea] cursor-pointer"
                                     />
                                     {selectedResumeFile && (
-                                        <span className="geist-small text-emerald-400 block mt-1">
+                                        <span className="geist-small text-emerald-600 dark:text-emerald-400 block mt-1 font-medium">
                                             Selected: {selectedResumeFile.name} ({(selectedResumeFile.size / 1024).toFixed(1)} KB)
                                         </span>
                                     )}
                                 </div>
 
-                                <div>
-                                    <label className="geist-label uppercase text-[#6b7280] block mb-1">
-                                        Experience (Years) (Optional)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        step="0.5"
-                                        min="0"
-                                        max="60"
-                                        placeholder="e.g. 3 or 5.5 (Leave blank for AI auto-extraction from resume)"
-                                        value={manualExp}
-                                        onChange={(e) => setManualExp(e.target.value)}
-                                        className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-2.5 text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
-                                    />
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div>
+                                        <label className="geist-label uppercase text-gray-500 dark:text-[#6b7280] block mb-1">
+                                            Location / City <span className="text-slate-900 dark:text-white font-semibold">*</span>
+                                        </label>
+                                        <LocationCityInput
+                                            value={manualLocation}
+                                            onChange={setManualLocation}
+                                            placeholder="e.g. Nashik, Mumbai, Pune..."
+                                            className="geist-caption w-full rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] p-2.5 text-slate-900 dark:text-white outline-none focus:border-gray-400 dark:focus:border-white/[0.28] placeholder:text-gray-400 dark:placeholder:text-[#6b7280]"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="geist-label uppercase text-gray-500 dark:text-[#6b7280] block mb-1">
+                                            Experience (Years) <span className="text-slate-900 dark:text-white font-semibold">*</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            min="0"
+                                            max="60"
+                                            placeholder="e.g. 1.5 or 3.5 Yrs"
+                                            value={manualExp}
+                                            onChange={(e) => setManualExp(e.target.value)}
+                                            className="geist-caption w-full rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] p-2.5 text-slate-900 dark:text-white outline-none focus:border-gray-400 dark:focus:border-white/[0.28] placeholder:text-gray-400 dark:placeholder:text-[#6b7280]"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="geist-label uppercase text-gray-500 dark:text-[#6b7280] block mb-1">
+                                            Highest Education <span className="text-slate-900 dark:text-white font-semibold">*</span>
+                                        </label>
+                                        <EducationInput
+                                            value={manualEducation}
+                                            onChange={setManualEducation}
+                                            placeholder="Type or select education..."
+                                            className="geist-caption w-full rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] p-2.5 text-slate-900 dark:text-white outline-none focus:border-gray-400 dark:focus:border-white/[0.28] placeholder:text-gray-400 dark:placeholder:text-[#6b7280]"
+                                        />
+                                    </div>
                                 </div>
 
                                 <div>
-                                    <label className="geist-label uppercase text-[#6b7280] block mb-1">
+                                    <label className="geist-label uppercase text-gray-500 dark:text-[#6b7280] block mb-1">
                                         Optional Extra Text / Recruiter Notes (Analyzed with Resume)
                                     </label>
                                     <textarea
@@ -1483,7 +1517,7 @@ const RecruiterInterviews: React.FC = () => {
                                         placeholder="Enter optional extra text (e.g. candidate phone/email, referral notes, cover letter, or additional info to analyze with resume)..."
                                         value={resumeExtraText}
                                         onChange={(e) => setResumeExtraText(e.target.value)}
-                                        className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-2.5 text-[#d4d4d4] outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
+                                        className="geist-caption w-full rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] p-2.5 text-slate-900 dark:text-[#d4d4d4] outline-none focus:border-gray-400 dark:focus:border-white/[0.28] placeholder:text-gray-400 dark:placeholder:text-[#6b7280]"
                                     />
                                 </div>
 
@@ -1492,60 +1526,69 @@ const RecruiterInterviews: React.FC = () => {
                                     type="button"
                                     onClick={handleAnalyzeAndSaveResumeCandidate}
                                     disabled={!selectedResumeFile || analyzingResumeAI}
-                                    className="geist-caption inline-flex h-8 w-full items-center justify-center gap-2 rounded-[6px] border border-emerald-500/40 bg-emerald-500/10 px-3 font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    className="geist-caption inline-flex h-8 w-full items-center justify-center gap-2 rounded-[6px] border border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 px-3 font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                     <Sparkles className="w-3.5 h-3.5" />
                                     <span>{analyzingResumeAI ? 'Analyzing with AI & Saving to Resume Dump...' : 'Analyze Resume with AI & Save to Resume Dump'}</span>
                                 </button>
                             </div>
 
-                            <div className="relative border-t border-white/[0.08] my-1">
-                                <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 bg-[#000] px-2 text-[10px] uppercase text-[#6b7280] font-mono">
+                            <div className="relative border-t border-gray-200 dark:border-white/[0.08] my-1">
+                                <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 bg-white dark:bg-[#090909] px-2 text-[10px] uppercase text-gray-500 dark:text-[#6b7280] font-mono">
                                     OR ADD MANUALLY
                                 </span>
                             </div>
 
-                            <div>
-                                <label className="block geist-label uppercase text-[#6b7280] mb-1.5">Add Candidate Manually (Email & WhatsApp Phone)</label>
-                                <div className="flex gap-2">
+                            <div className="space-y-2">
+                                <label className="block geist-label uppercase text-gray-500 dark:text-[#6b7280]">Add Candidate Manually (Email & WhatsApp Phone)</label>
+                                <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+                                    <input 
+                                        type="text" 
+                                        value={manualName} 
+                                        onChange={(e) => setManualName(e.target.value)} 
+                                        placeholder="Candidate Name (e.g. Rahul Sharma)" 
+                                        className="flex-1 p-2 rounded-[6px] bg-white dark:bg-[#111111] border border-gray-300 dark:border-white/[0.11] text-xs text-slate-900 dark:text-white outline-none focus:border-gray-400 dark:focus:border-white/30 placeholder:text-gray-400 dark:placeholder:text-[#6b7280]" 
+                                    />
                                     <input 
                                         type="email" 
                                         value={newEmail} 
                                         onChange={(e) => setNewEmail(e.target.value)} 
                                         placeholder="Candidate email address" 
-                                        className="flex-1 p-2 rounded-[6px] bg-[#111111] border border-white/[0.11] text-xs text-white outline-none focus:border-white/30 placeholder:text-[#6b7280]" 
+                                        className="flex-1 p-2 rounded-[6px] bg-white dark:bg-[#111111] border border-gray-300 dark:border-white/[0.11] text-xs text-slate-900 dark:text-white outline-none focus:border-gray-400 dark:focus:border-white/30 placeholder:text-gray-400 dark:placeholder:text-[#6b7280]" 
                                     />
                                     <input 
                                         type="tel" 
                                         value={manualPhone} 
                                         onChange={(e) => setManualPhone(e.target.value)} 
                                         placeholder="WhatsApp Phone (+91...)" 
-                                        className="w-2/5 p-2 rounded-[6px] bg-[#111111] border border-white/[0.11] text-xs text-white outline-none focus:border-white/30 placeholder:text-[#6b7280]" 
+                                        className="w-full sm:w-1/4 p-2 rounded-[6px] bg-white dark:bg-[#111111] border border-gray-300 dark:border-white/[0.11] text-xs text-slate-900 dark:text-white outline-none focus:border-gray-400 dark:focus:border-white/30 placeholder:text-gray-400 dark:placeholder:text-[#6b7280]" 
                                     />
                                     <button 
                                         onClick={() => {
+                                            const trimmedName = manualName.trim();
                                             const trimmedEmail = newEmail.trim().toLowerCase();
                                             const trimmedPhone = manualPhone.trim();
+
                                             if (!trimmedEmail && !trimmedPhone) {
                                                 messageBox.showError("Please enter an email address or WhatsApp phone number.");
                                                 return;
                                             }
                                             const targetEmail = trimmedEmail || `${trimmedPhone.replace(/[^0-9]/g, '')}@whatsapp.local`;
+                                            const candidateDisplayName = trimmedName || (trimmedEmail ? trimmedEmail.split('@')[0] : 'Candidate');
                                             if (!newEmails.includes(targetEmail)) {
                                                 setNewEmails(prev => [...prev, targetEmail]);
                                             }
-                                            if (trimmedPhone) {
-                                                setParsedCandidates(prev => [
-                                                    ...prev.filter(c => c.email.toLowerCase() !== targetEmail.toLowerCase()),
-                                                    { email: targetEmail, phone: trimmedPhone, name: trimmedEmail ? trimmedEmail.split('@')[0] : 'Candidate', matchScore: 'N/A' }
-                                                ]);
-                                            }
+                                            setParsedCandidates(prev => [
+                                                ...prev.filter(c => c.email.toLowerCase() !== targetEmail.toLowerCase()),
+                                                { email: targetEmail, phone: trimmedPhone || 'N/A', name: candidateDisplayName, matchScore: 'N/A' }
+                                            ]);
+                                            setManualName('');
                                             setNewEmail('');
                                             setManualPhone('');
                                         }} 
-                                        className="geist-caption bg-white text-black font-semibold px-4 py-2 rounded-[6px] text-xs hover:bg-neutral-200 transition-colors shrink-0"
+                                        className="geist-caption bg-slate-900 text-white dark:bg-white dark:text-black font-semibold px-4 py-2 rounded-[6px] text-xs hover:bg-slate-800 dark:hover:bg-neutral-200 transition-colors shrink-0"
                                     >
-                                        Add
+                                        + Add Candidate
                                     </button>
                                 </div>
                             </div>
@@ -1556,17 +1599,17 @@ const RecruiterInterviews: React.FC = () => {
                     {inviteMode === 'bulk' && (
                         <div className="space-y-3">
                             <div>
-                                <label className="block geist-label uppercase text-[#6b7280] mb-1.5">Bulk Upload Candidate File or Resumes</label>
-                                <label className="flex items-center justify-center gap-2 px-4 py-3 bg-white/[0.02] border-2 border-dashed border-white/[0.16] rounded-[8px] cursor-pointer hover:bg-white/[0.04] transition-colors">
+                                <label className="block geist-label uppercase text-gray-500 dark:text-[#6b7280] mb-1.5">Bulk Upload Candidate File or Resumes</label>
+                                <label className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-50 dark:bg-white/[0.02] border-2 border-dashed border-gray-300 dark:border-white/[0.16] rounded-[8px] cursor-pointer hover:bg-gray-100 dark:hover:bg-white/[0.04] transition-colors">
                                     {parsingResumes ? (
                                       <>
-                                        <ButtonBusySkeleton className="w-5 bg-white/30" />
-                                        <ButtonBusySkeleton className="w-40 bg-white/30" />
+                                        <ButtonBusySkeleton className="w-5 bg-slate-300 dark:bg-white/30" />
+                                        <ButtonBusySkeleton className="w-40 bg-slate-300 dark:bg-white/30" />
                                       </>
                                     ) : (
                                       <>
-                                        <i className="fas fa-file-excel text-emerald-400 text-lg"></i>
-                                        <span className="geist-caption font-medium text-xs text-[#d4d4d4]">Upload Excel, CSV, PDF, DOCX, or TXT (Auto-extracts Name, Phone & Email)</span>
+                                        <i className="fas fa-file-excel text-emerald-600 dark:text-emerald-400 text-lg"></i>
+                                        <span className="geist-caption font-medium text-xs text-slate-800 dark:text-[#d4d4d4]">Upload Excel, CSV, PDF, DOCX, or TXT (Auto-extracts Name, Phone & Email)</span>
                                       </>
                                     )}
                                     <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,text/csv" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
@@ -1575,7 +1618,7 @@ const RecruiterInterviews: React.FC = () => {
 
                             <div className="space-y-1.5">
                                 <div className="flex items-center justify-between">
-                                    <label className="geist-label uppercase text-[#6b7280] block font-semibold text-xs">
+                                    <label className="geist-label uppercase text-gray-500 dark:text-[#6b7280] block font-semibold text-xs">
                                       Paste Multiple Emails
                                     </label>
                                     {bulkPastedEmails.trim() && (
@@ -1600,7 +1643,7 @@ const RecruiterInterviews: React.FC = () => {
                                           setBulkPastedEmails('');
                                           messageBox.showSuccess(`Added ${added} candidate email(s) to invite list!`);
                                         }}
-                                        className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold transition-colors flex items-center gap-1"
+                                        className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-semibold transition-colors flex items-center gap-1"
                                       >
                                         <i className="fas fa-plus text-[10px]"></i>
                                         <span>Add Pasted Emails</span>
@@ -1612,7 +1655,7 @@ const RecruiterInterviews: React.FC = () => {
                                   placeholder="Enter or paste multiple candidate emails separated by comma or newline (e.g. alex@example.com, sara@company.org)..."
                                   value={bulkPastedEmails}
                                   onChange={(e) => setBulkPastedEmails(e.target.value)}
-                                  className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-[#111111] p-3 text-xs text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
+                                  className="geist-caption w-full rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111111] p-3 text-xs text-slate-900 dark:text-white outline-none focus:border-gray-400 dark:focus:border-white/[0.28] placeholder:text-gray-400 dark:placeholder:text-[#6b7280]"
                                 />
                             </div>
                         </div>
@@ -1620,9 +1663,9 @@ const RecruiterInterviews: React.FC = () => {
 
                     {inviteMode === 'invited' && (
                         <div className="space-y-3">
-                            <h4 className="geist-label uppercase text-[#6b7280]">Invited Candidates Roster ({(selectedInterview.candidateEmails || []).length}):</h4>
+                            <h4 className="geist-label uppercase text-gray-500 dark:text-[#6b7280]">Invited Candidates Roster ({(selectedInterview.candidateEmails || []).length}):</h4>
                             {(!selectedInterview.candidateEmails || selectedInterview.candidateEmails.length === 0) ? (
-                                <p className="geist-small text-[#6b7280] italic p-4 text-center border border-white/[0.08] rounded-[6px]">No candidates invited yet for this role.</p>
+                                <p className="geist-small text-gray-500 dark:text-[#6b7280] italic p-4 text-center border border-gray-200 dark:border-white/[0.08] rounded-[6px]">No candidates invited yet for this role.</p>
                             ) : (
                                 <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-1">
                                     {selectedInterview.candidateEmails.map((email) => {
@@ -1632,7 +1675,7 @@ const RecruiterInterviews: React.FC = () => {
                                         const candPhone = candData?.phone && candData.phone !== 'N/A' ? candData.phone : '';
 
                                         return (
-                                            <div key={email} className="flex items-center justify-between text-xs bg-white/[0.025] border border-white/[0.11] rounded-[6px] px-3.5 py-2.5 shadow-sm">
+                                            <div key={email} className="flex items-center justify-between text-xs bg-gray-50 dark:bg-white/[0.025] border border-gray-200 dark:border-white/[0.11] rounded-[6px] px-3.5 py-2.5 shadow-sm">
                                                 {isEditing ? (
                                                     <div className="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mr-2">
                                                         <input 
@@ -1640,7 +1683,7 @@ const RecruiterInterviews: React.FC = () => {
                                                             value={editedEmailValue} 
                                                             onChange={(e) => setEditedEmailValue(e.target.value)} 
                                                             placeholder="Candidate Email"
-                                                            className="flex-1 p-2 text-xs rounded-[6px] border border-white/[0.11] bg-[#111111] text-white outline-none focus:border-white/30"
+                                                            className="flex-1 p-2 text-xs rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111111] text-slate-900 dark:text-white outline-none focus:border-gray-400 dark:focus:border-white/30"
                                                             autoFocus
                                                         />
                                                         <input 
@@ -1648,20 +1691,20 @@ const RecruiterInterviews: React.FC = () => {
                                                             value={editedPhoneValue} 
                                                             onChange={(e) => setEditedPhoneValue(e.target.value)} 
                                                             placeholder="Phone number (e.g. +91...)"
-                                                            className="w-full sm:w-2/5 p-2 text-xs rounded-[6px] border border-white/[0.11] bg-[#111111] text-white outline-none focus:border-white/30"
+                                                            className="w-full sm:w-2/5 p-2 text-xs rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111111] text-slate-900 dark:text-white outline-none focus:border-gray-400 dark:focus:border-white/30"
                                                         />
                                                         <div className="flex items-center gap-1.5 shrink-0">
                                                             <button 
                                                                 onClick={() => handleEditAndResend(email, editedEmailValue, editedPhoneValue)}
                                                                 disabled={resendingEmail !== null}
-                                                                className="bg-white text-black hover:bg-neutral-200 px-3 py-1.5 rounded-[6px] text-xs font-semibold disabled:opacity-50 flex items-center gap-1 shrink-0 transition-colors"
+                                                                className="bg-slate-900 text-white dark:bg-white dark:text-black hover:bg-slate-800 dark:hover:bg-neutral-200 px-3 py-1.5 rounded-[6px] text-xs font-semibold disabled:opacity-50 flex items-center gap-1 shrink-0 transition-colors"
                                                             >
-                                                                {isResending ? <ButtonBusySkeleton className="w-12 bg-black/30" /> : <><i className="fas fa-save"></i> Save</>}
+                                                                {isResending ? <ButtonBusySkeleton className="w-12 bg-white/30 dark:bg-black/30" /> : <><i className="fas fa-save"></i> Save</>}
                                                             </button>
                                                             <button 
                                                                 onClick={() => { setEditingCandidateEmail(null); setEditedEmailValue(''); setEditedPhoneValue(''); }}
                                                                 disabled={resendingEmail !== null}
-                                                                className="border border-white/[0.11] bg-white/[0.03] text-[#d4d4d4] hover:bg-white/[0.06] px-3 py-1.5 rounded-[6px] text-xs shrink-0 transition-colors"
+                                                                className="border border-gray-300 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.03] text-slate-700 dark:text-[#d4d4d4] hover:bg-gray-200 dark:hover:bg-white/[0.06] px-3 py-1.5 rounded-[6px] text-xs shrink-0 transition-colors"
                                                             >
                                                                 Cancel
                                                             </button>
@@ -1670,13 +1713,13 @@ const RecruiterInterviews: React.FC = () => {
                                                 ) : (
                                                     <>
                                                         <div className="flex flex-col min-w-0">
-                                                            <span className="font-semibold text-white truncate max-w-[240px]" title={email}>{email}</span>
+                                                            <span className="font-semibold text-slate-900 dark:text-white truncate max-w-[240px]" title={email}>{email}</span>
                                                             {candPhone ? (
-                                                                <span className="text-xs text-[#8bbde8] font-mono flex items-center gap-1.5 mt-0.5">
+                                                                <span className="text-xs text-blue-600 dark:text-[#8bbde8] font-mono flex items-center gap-1.5 mt-0.5">
                                                                     <i className="fas fa-phone-alt"></i> {candPhone}
                                                                 </span>
                                                             ) : (
-                                                                <span className="text-[11px] text-[#6b7280] italic">No phone attached (Click pencil to edit)</span>
+                                                                <span className="text-[11px] text-gray-500 dark:text-[#6b7280] italic">No phone attached (Click pencil to edit)</span>
                                                             )}
                                                         </div>
                                                         <div className="flex items-center gap-1.5 shrink-0">
@@ -1687,7 +1730,7 @@ const RecruiterInterviews: React.FC = () => {
                                                                     setEditedPhoneValue(candPhone);
                                                                 }}
                                                                 disabled={resendingEmail !== null}
-                                                                className="w-7 h-7 rounded border border-white/[0.11] bg-white/[0.03] text-[#d4d4d4] hover:bg-white/[0.08] hover:text-white transition-colors flex items-center justify-center" 
+                                                                className="w-7 h-7 rounded border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] text-slate-700 dark:text-[#d4d4d4] hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-slate-900 dark:hover:text-white transition-colors flex items-center justify-center" 
                                                                 title="Edit Candidate Contact Details"
                                                             >
                                                                 <i className="fas fa-pencil-alt text-xs"></i>
@@ -1695,15 +1738,15 @@ const RecruiterInterviews: React.FC = () => {
                                                             <button 
                                                                 onClick={() => handleResend(email)}
                                                                 disabled={resendingEmail !== null}
-                                                                className="w-7 h-7 rounded border border-white/[0.11] bg-white/[0.04] text-[#d4d4d4] hover:bg-white/[0.08] hover:text-white transition-colors flex items-center justify-center" 
+                                                                className="w-7 h-7 rounded border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.04] text-slate-700 dark:text-[#d4d4d4] hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-slate-900 dark:hover:text-white transition-colors flex items-center justify-center" 
                                                                 title="Mail Reminder"
                                                             >
-                                                                <i className="fas fa-envelope text-blue-400 text-xs"></i>
+                                                                <i className="fas fa-envelope text-blue-500 dark:text-blue-400 text-xs"></i>
                                                             </button>
                                                             <button 
                                                                 onClick={() => handleSendWhatsAppReminder(email, candPhone)}
                                                                 disabled={resendingEmail !== null}
-                                                                className="w-7 h-7 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors flex items-center justify-center" 
+                                                                className="w-7 h-7 rounded border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors flex items-center justify-center" 
                                                                 title="WhatsApp Reminder"
                                                             >
                                                                 <i className="fab fa-whatsapp text-xs"></i>
@@ -1725,11 +1768,11 @@ const RecruiterInterviews: React.FC = () => {
                         <div className="space-y-3">
                             <div className="flex items-center justify-between p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-[6px]">
                                 <div>
-                                    <div className="flex items-center gap-1.5 text-emerald-400 font-semibold text-xs">
+                                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold text-xs">
                                         <Sparkles className="w-4 h-4" />
                                         <span>AI Candidate Recommendations ({aiSuggestedCandidates.length})</span>
                                     </div>
-                                    <p className="geist-small text-[#8f8f8f] mt-0.5 text-[11px]">
+                                    <p className="geist-small text-gray-600 dark:text-[#8f8f8f] mt-0.5 text-[11px]">
                                         Best matched candidates from your candidate pool based on skills & interview requirements.
                                     </p>
                                 </div>
@@ -1755,7 +1798,7 @@ const RecruiterInterviews: React.FC = () => {
                                             });
                                             messageBox.showSuccess(`Added top ${addedCount > 0 ? addedCount : Math.min(5, aiSuggestedCandidates.length)} AI candidate matches to invite list!`);
                                         }}
-                                        className="geist-caption inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] bg-emerald-500 text-black font-bold text-xs hover:bg-emerald-400 transition-colors shrink-0"
+                                        className="geist-caption inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] bg-emerald-500 text-white dark:text-black font-bold text-xs hover:bg-emerald-600 dark:hover:bg-emerald-400 transition-colors shrink-0"
                                     >
                                         <Sparkles className="w-3 h-3" />
                                         <span>+ Add Top 5</span>
@@ -1764,14 +1807,14 @@ const RecruiterInterviews: React.FC = () => {
                             </div>
 
                             {loadingDumpCandidates ? (
-                                <div className="py-8 text-center text-[#8f8f8f]">
-                                    <Sparkles className="w-5 h-5 animate-spin mx-auto text-emerald-400 mb-2" />
+                                <div className="py-8 text-center text-gray-500 dark:text-[#8f8f8f]">
+                                    <Sparkles className="w-5 h-5 animate-spin mx-auto text-emerald-500 dark:text-emerald-400 mb-2" />
                                     Analyzing candidate profiles against interview requirements...
                                 </div>
                             ) : aiSuggestedCandidates.length === 0 ? (
-                                <div className="p-6 text-center border border-white/[0.08] rounded-[6px] bg-white/[0.02]">
-                                    <p className="geist-caption text-white font-medium">No new candidate recommendations found</p>
-                                    <p className="geist-small text-[#6b7280] mt-1 max-w-sm mx-auto">
+                                <div className="p-6 text-center border border-gray-200 dark:border-white/[0.08] rounded-[6px] bg-gray-50 dark:bg-white/[0.02]">
+                                    <p className="geist-caption text-slate-900 dark:text-white font-medium">No new candidate recommendations found</p>
+                                    <p className="geist-small text-gray-500 dark:text-[#6b7280] mt-1 max-w-sm mx-auto">
                                         All stored candidate profiles are already invited, or upload more resumes to generate matches.
                                     </p>
                                 </div>
@@ -1782,40 +1825,40 @@ const RecruiterInterviews: React.FC = () => {
                                         return (
                                             <div
                                                 key={cand.id}
-                                                className="flex items-start justify-between gap-3 p-3 bg-white/[0.03] border border-white/[0.09] rounded-[6px] hover:border-white/[0.2] transition-colors"
+                                                className="flex items-start justify-between gap-3 p-3 bg-gray-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.09] rounded-[6px] hover:border-gray-300 dark:hover:border-white/[0.2] transition-colors"
                                             >
                                                 <div className="space-y-1 min-w-0 flex-1">
                                                     <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className="font-semibold text-white text-xs truncate">{cand.name}</span>
+                                                        <span className="font-semibold text-slate-900 dark:text-white text-xs truncate">{cand.name}</span>
                                                         <span className={`geist-small inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 font-bold text-[10px] ${
                                                             cand.matchScore >= 75
-                                                                ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
+                                                                ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                                                                 : cand.matchScore >= 50
-                                                                ? 'border border-blue-500/40 bg-blue-500/10 text-blue-400'
-                                                                : 'border border-white/[0.15] bg-white/[0.05] text-[#d4d4d4]'
+                                                                ? 'border border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                                                : 'border border-gray-300 dark:border-white/[0.15] bg-gray-100 dark:bg-white/[0.05] text-slate-700 dark:text-[#d4d4d4]'
                                                         }`}>
                                                             {cand.matchScore >= 75 ? '🔥' : '⚡'} {cand.matchScore}% Match
                                                         </span>
                                                         {cand.experience && cand.experience !== 'N/A' && (
-                                                            <span className="text-[10px] text-[#83d0a3] bg-emerald-950/40 border border-emerald-500/20 px-1.5 py-0.2 rounded font-mono">
+                                                            <span className="text-[10px] text-emerald-700 dark:text-[#83d0a3] bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/20 px-1.5 py-0.2 rounded font-mono">
                                                                 {cand.experience}
                                                             </span>
                                                         )}
                                                     </div>
 
-                                                    <div className="text-[11px] text-[#8f8f8f] truncate font-mono">
+                                                    <div className="text-[11px] text-gray-500 dark:text-[#8f8f8f] truncate font-mono">
                                                         {cand.email} {cand.phone && cand.phone !== 'N/A' ? `· ${cand.phone}` : ''}
                                                     </div>
 
                                                     {cand.skills && cand.skills.length > 0 && (
                                                         <div className="flex flex-wrap gap-1 mt-1">
                                                             {cand.skills.slice(0, 4).map((s: string) => (
-                                                                <span key={s} className="text-[10px] text-[#d4d4d4] bg-white/[0.04] border border-white/[0.08] px-1.5 py-0.2 rounded">
+                                                                <span key={s} className="text-[10px] text-slate-700 dark:text-[#d4d4d4] bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] px-1.5 py-0.2 rounded">
                                                                     {s}
                                                                 </span>
                                                             ))}
                                                             {cand.skills.length > 4 && (
-                                                                <span className="text-[10px] text-[#6b7280] px-1 py-0.2">
+                                                                <span className="text-[10px] text-gray-500 dark:text-[#6b7280] px-1 py-0.2">
                                                                     +{cand.skills.length - 4} more
                                                                 </span>
                                                             )}
@@ -1841,8 +1884,8 @@ const RecruiterInterviews: React.FC = () => {
                                                     disabled={isAdded}
                                                     className={`geist-caption inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] text-xs font-semibold shrink-0 transition-colors ${
                                                         isAdded
-                                                            ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 opacity-80 cursor-default'
-                                                            : 'border border-white/20 bg-white text-black hover:bg-neutral-200'
+                                                            ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 opacity-80 cursor-default'
+                                                            : 'border border-gray-300 dark:border-white/20 bg-slate-900 text-white dark:bg-white dark:text-black hover:bg-slate-800 dark:hover:bg-neutral-200'
                                                     }`}
                                                 >
                                                     {isAdded ? '✓ Added' : '+ Add Candidate'}
@@ -1857,8 +1900,8 @@ const RecruiterInterviews: React.FC = () => {
 
 
                     {sendingProgressMsg && (
-                        <div className="p-3 bg-white/[0.04] border border-white/[0.15] rounded-[6px] text-xs font-medium text-white flex items-center gap-2 animate-pulse">
-                            <i className="fas fa-spinner fa-spin text-white"></i>
+                        <div className="p-3 bg-blue-50 dark:bg-white/[0.04] border border-blue-200 dark:border-white/[0.15] rounded-[6px] text-xs font-medium text-blue-900 dark:text-white flex items-center gap-2 animate-pulse">
+                            <i className="fas fa-spinner fa-spin text-blue-600 dark:text-white"></i>
                             <span>{sendingProgressMsg}</span>
                         </div>
                     )}
@@ -1866,37 +1909,86 @@ const RecruiterInterviews: React.FC = () => {
                     {inviteMode !== 'invited' && (
                         <div>
                             {/* Delivery Channels Selector */}
-                            <div className="p-3 bg-white/[0.03] border border-white/[0.11] rounded-[6px] space-y-2 mb-3">
-                                <span className="geist-label uppercase text-[#6b7280] block font-semibold text-[11px]">
+                            <div className="p-3 bg-gray-50/80 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.11] rounded-[6px] space-y-2 mb-3">
+                                <span className="geist-label uppercase text-gray-500 dark:text-[#6b7280] block font-semibold text-[11px]">
                                   Invitation Delivery Channels:
                                 </span>
                                 <div className="flex items-center gap-4 flex-wrap text-xs">
-                                  <label className="flex items-center gap-2 cursor-pointer select-none text-white font-medium">
+                                  <label className="flex items-center gap-2 cursor-pointer select-none text-slate-900 dark:text-white font-medium">
                                     <input
                                       type="checkbox"
                                       checked={sendEmailChannel}
                                       onChange={(e) => setSendEmailChannel(e.target.checked)}
                                       className="w-4 h-4 rounded text-blue-600 focus:ring-0 cursor-pointer"
                                     />
-                                    <i className="fas fa-envelope text-blue-400"></i>
+                                    <i className="fas fa-envelope text-blue-500 dark:text-blue-400"></i>
                                     <span>Send Email Invitations</span>
                                   </label>
 
-                                  <label className="flex items-center gap-2 cursor-pointer select-none text-white font-medium">
+                                  <label className="flex items-center gap-2 cursor-pointer select-none text-slate-900 dark:text-white font-medium">
                                     <input
                                       type="checkbox"
                                       checked={sendWhatsAppChannel}
                                       onChange={(e) => setSendWhatsAppChannel(e.target.checked)}
                                       className="w-4 h-4 rounded text-emerald-500 focus:ring-0 cursor-pointer"
                                     />
-                                    <i className="fab fa-whatsapp text-emerald-400"></i>
-                                    <span>Send WhatsApp Invitations (10s Anti-Spam Delay)</span>
+                                    <i className="fab fa-whatsapp text-emerald-600 dark:text-emerald-400"></i>
+                                    <span>Send WhatsApp Invitations</span>
                                   </label>
                                 </div>
+
+                                {sendWhatsAppChannel && (
+                                   <div className="mt-2.5 pt-2.5 border-t border-gray-200 dark:border-border/40 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                                     <div>
+                                       <label className="text-[11px] text-gray-500 dark:text-muted-foreground block mb-1 font-medium">Min Delay</label>
+                                       <input
+                                         type="number"
+                                         min="1"
+                                         max="360"
+                                         value={waMinDelay}
+                                         onChange={(e) => {
+                                           const val = e.target.value;
+                                           setWaMinDelay(val === '' ? '' : Math.max(1, parseInt(val) || 1));
+                                         }}
+                                         placeholder="15"
+                                         className="w-full h-8 rounded-md border border-gray-300 dark:border-input bg-white dark:bg-background px-2.5 text-xs text-slate-900 dark:text-foreground outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 cursor-text"
+                                       />
+                                     </div>
+                                     <div>
+                                       <label className="text-[11px] text-gray-500 dark:text-muted-foreground block mb-1 font-medium">Max Delay</label>
+                                       <input
+                                         type="number"
+                                         min="1"
+                                         max="360"
+                                         value={waMaxDelay}
+                                         onChange={(e) => {
+                                           const val = e.target.value;
+                                           setWaMaxDelay(val === '' ? '' : Math.max(1, parseInt(val) || 1));
+                                         }}
+                                         placeholder="25"
+                                         className="w-full h-8 rounded-md border border-gray-300 dark:border-input bg-white dark:bg-background px-2.5 text-xs text-slate-900 dark:text-foreground outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 cursor-text"
+                                       />
+                                     </div>
+                                     <div>
+                                       <label className="text-[11px] text-gray-500 dark:text-muted-foreground block mb-1 font-medium">Delay Unit</label>
+                                       <select
+                                         value={waDelayUnit}
+                                         onChange={(e) => setWaDelayUnit(e.target.value as 'sec' | 'min')}
+                                         className="w-full h-8 rounded-md border border-gray-300 dark:border-input bg-white dark:bg-background px-2 text-xs text-slate-900 dark:text-foreground outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 cursor-pointer"
+                                       >
+                                         <option value="sec" className="bg-white dark:bg-background text-slate-900 dark:text-foreground">Seconds (sec)</option>
+                                         <option value="min" className="bg-white dark:bg-background text-slate-900 dark:text-foreground">Minutes (min)</option>
+                                       </select>
+                                     </div>
+                                     <p className="sm:col-span-3 text-[10px] text-emerald-600 dark:text-emerald-400 italic">
+                                       * Each WhatsApp message will pause for a random delay between {waMinDelay || 15} - {waMaxDelay || 25} {waDelayUnit} to protect your WhatsApp number from spam blocking.
+                                     </p>
+                                   </div>
+                                 )}
                             </div>
 
                             <div className="flex items-center justify-between mb-1.5">
-                              <h4 className="geist-label uppercase text-[#6b7280]">New Candidates to Invite ({newEmails.length}):</h4>
+                              <h4 className="geist-label uppercase text-gray-500 dark:text-[#6b7280]">New Candidates to Invite ({newEmails.length}):</h4>
                               {newEmails.length > 0 && (
                                 <button
                                   type="button"
@@ -1905,7 +1997,7 @@ const RecruiterInterviews: React.FC = () => {
                                     setParsedCandidates([]);
                                     messageBox.showInfo('Cleared all candidate entries.');
                                   }}
-                                  className="text-xs text-red-400 hover:text-red-300 font-semibold transition-colors flex items-center gap-1"
+                                  className="text-xs text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                                 >
                                   <i className="fas fa-trash-alt text-[10px]"></i>
                                   <span>Remove All ({newEmails.length})</span>
@@ -1913,7 +2005,7 @@ const RecruiterInterviews: React.FC = () => {
                               )}
                             </div>
                             {newEmails.length === 0 ? (
-                                 <p className="geist-small text-[#6b7280] italic">No candidates added yet. Upload resumes or add manually above.</p>
+                                 <p className="geist-small text-gray-500 dark:text-[#6b7280] italic">No candidates added yet. Upload resumes or add manually above.</p>
                             ) : (
                                 <div className="flex flex-col gap-2 max-h-[180px] overflow-y-auto pr-1">
                                     {newEmails.map(email => {
@@ -1922,18 +2014,18 @@ const RecruiterInterviews: React.FC = () => {
                                         let ScoreBadge = null;
                                         if (parsedData?.matchScore && parsedData.matchScore !== 'N/A') {
                                             const numScore = parseFloat(parsedData.matchScore);
-                                            let badgeColor = 'bg-white/[0.04] text-[#8f8f8f] border-white/[0.08]';
+                                            let badgeColor = 'bg-gray-100 dark:bg-white/[0.04] text-gray-600 dark:text-[#8f8f8f] border-gray-200 dark:border-white/[0.08]';
                                             let icon = 'fas fa-minus-circle';
                                             
                                             if (!isNaN(numScore)) {
                                                 if (numScore >= 75) {
-                                                    badgeColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 font-semibold';
+                                                    badgeColor = 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold';
                                                     icon = 'fas fa-check-circle';
                                                 } else if (numScore >= 50) {
-                                                    badgeColor = 'bg-white/[0.06] text-[#d4d4d4] border-white/[0.15]';
+                                                    badgeColor = 'bg-gray-100 dark:bg-white/[0.06] text-slate-800 dark:text-[#d4d4d4] border-gray-300 dark:border-white/[0.15]';
                                                     icon = 'fas fa-exclamation-circle';
                                                 } else {
-                                                    badgeColor = 'bg-red-500/10 text-red-400 border-red-500/30';
+                                                    badgeColor = 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30';
                                                     icon = 'fas fa-times-circle';
                                                 }
                                             }
@@ -1946,15 +2038,15 @@ const RecruiterInterviews: React.FC = () => {
                                         }
 
                                         return (
-                                            <div key={email} className="flex items-start justify-between text-xs bg-white/[0.025] border border-white/[0.11] rounded-[6px] px-3.5 py-2.5 shadow-sm transition-colors hover:border-white/20">
+                                            <div key={email} className="flex items-start justify-between text-xs bg-gray-50 dark:bg-white/[0.025] border border-gray-200 dark:border-white/[0.11] rounded-[6px] px-3.5 py-2.5 shadow-sm transition-colors hover:border-gray-300 dark:hover:border-white/20">
                                                 <div className="flex flex-col min-w-0">
-                                                    <span className="font-semibold text-white truncate max-w-[260px]">{email}</span>
+                                                    <span className="font-semibold text-slate-900 dark:text-white truncate max-w-[260px]">{email}</span>
                                                     {parsedData?.phone && parsedData.phone !== 'N/A' && (
-                                                        <span className="text-xs text-[#8bbde8] font-mono flex items-center gap-1.5 mt-0.5"><i className="fas fa-phone-alt"></i>{parsedData.phone}</span>
+                                                        <span className="text-xs text-blue-600 dark:text-[#8bbde8] font-mono flex items-center gap-1.5 mt-0.5"><i className="fas fa-phone-alt"></i>{parsedData.phone}</span>
                                                     )}
                                                     {ScoreBadge}
                                                 </div>
-                                                <button onClick={() => handleRemoveNewEmail(email)} className="text-[#8f8f8f] hover:text-[#ff8f8f] transition-colors p-1.5 rounded hover:bg-white/[0.06]" title="Remove Candidate">
+                                                <button onClick={() => handleRemoveNewEmail(email)} className="text-gray-400 hover:text-red-500 dark:text-[#8f8f8f] dark:hover:text-[#ff8f8f] transition-colors p-1.5 rounded hover:bg-gray-200 dark:hover:bg-white/[0.06]" title="Remove Candidate">
                                                     <i className="fas fa-trash-alt"></i>
                                                 </button>
                                             </div>
@@ -1968,21 +2060,37 @@ const RecruiterInterviews: React.FC = () => {
                 </div>
 
                 {/* Modal Footer */}
-                <div className="flex justify-end gap-2 p-4 bg-[#0d0d0d] border-t border-white/[0.11]">
+                <div className="flex justify-end gap-2 p-4 bg-gray-50 dark:bg-[#0d0d0d] border-t border-gray-200 dark:border-white/[0.11]">
                     <button 
                         onClick={() => setIsInviteModalOpen(false)} 
-                        className="geist-caption h-9 px-4 rounded-[6px] border border-white/[0.11] bg-white/[0.03] hover:bg-white/[0.06] font-semibold text-xs text-[#d4d4d4] transition-colors"
+                        className="geist-caption h-9 px-4 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] hover:bg-gray-100 dark:hover:bg-white/[0.06] font-semibold text-xs text-slate-700 dark:text-[#d4d4d4] transition-colors cursor-pointer"
                     >
                         Cancel
                     </button>
+
                     <button 
-                        onClick={handleSendInvites} 
+                        onClick={() => handleSendInvites(true)} 
                         disabled={sendingEmails || newEmails.length === 0}
-                        className="geist-caption h-9 px-4 rounded-[6px] bg-white text-black hover:bg-neutral-200 font-semibold text-xs flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className="geist-caption h-9 px-3 rounded-[6px] bg-amber-500/20 text-amber-700 dark:text-amber-300 hover:bg-amber-500/30 border border-amber-500/40 font-semibold text-xs flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     >
                         {sendingEmails ? (
-                            <ButtonBusySkeleton className="w-20 bg-black/30" />
-                        ) : 'Send Invites'}
+                            <ButtonBusySkeleton className="w-20 bg-amber-500/30" />
+                        ) : (
+                            <>
+                              <i className="fas fa-clock text-xs"></i>
+                              <span>Send Bulk Reminders</span>
+                            </>
+                        )}
+                    </button>
+
+                    <button 
+                        onClick={() => handleSendInvites(false)} 
+                        disabled={sendingEmails || newEmails.length === 0}
+                        className="geist-caption h-9 px-4 rounded-[6px] bg-slate-900 text-white dark:bg-white dark:text-black hover:bg-slate-800 dark:hover:bg-neutral-200 font-semibold text-xs flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                    >
+                        {sendingEmails ? (
+                            <ButtonBusySkeleton className="w-20 bg-white/30 dark:bg-black/30" />
+                        ) : 'Send Invitations'}
                     </button>
                 </div>
             </div>

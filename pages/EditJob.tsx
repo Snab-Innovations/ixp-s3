@@ -471,7 +471,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-gray-200 dark:border-white/[0.11] flex justify-between items-center bg-gray-50 dark:bg-[#050505]">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#6b7280]">Interview Setup</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#6b7280]">Job Setup</span>
             <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mt-0.5">
               <i className="fa-solid fa-pen-to-square text-indigo-600 dark:text-white text-base"></i>
               Edit Job Details
@@ -494,25 +494,25 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
             <div className="p-5 sm:p-6 space-y-5 overflow-y-auto custom-card-scrollbar bg-white dark:bg-[#000]">
 
               {/* AI JD Import & Auto-Fill Box */}
-              <div className="p-4 rounded-[6px] border border-blue-500/30 bg-blue-50/50 dark:bg-blue-500/5 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-500/20 pb-2.5">
-                  <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold text-xs">
-                    <i className="fas fa-wand-magic-sparkles"></i>
+              <div className="p-4 rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-50/80 dark:bg-white/[0.025] space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 dark:border-white/10 pb-2.5">
+                  <div className="flex items-center gap-2 text-black dark:text-white font-bold text-xs">
+                    <i className="fas fa-wand-magic-sparkles text-black dark:text-white"></i>
                     <span>AI JD Import & Auto-Fill</span>
                   </div>
 
-                  <div className="flex rounded-[4px] border border-gray-200 dark:border-white/10 bg-white dark:bg-black/40 p-0.5 text-xs shadow-sm dark:shadow-none">
+                  <div className="flex rounded-[4px] border border-gray-200 dark:border-white/10 bg-gray-100/80 dark:bg-black/40 p-0.5 text-xs shadow-inner dark:shadow-none">
                     <button
                       type="button"
                       onClick={() => setJdImportMode('upload')}
-                      className={`px-3 py-1 rounded-[4px] text-xs transition-colors flex items-center gap-1.5 font-bold ${jdImportMode === 'upload' ? 'bg-blue-600 dark:bg-white text-white dark:text-black font-semibold shadow' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-gray-900 dark:hover:text-white'}`}
+                      className={`px-3 py-1 rounded-[4px] text-xs transition-all flex items-center gap-1.5 font-bold cursor-pointer ${jdImportMode === 'upload' ? 'bg-black text-white dark:bg-white dark:text-black shadow-sm' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-gray-900 dark:hover:text-white'}`}
                     >
                       <i className="fas fa-file-pdf"></i> Upload File
                     </button>
                     <button
                       type="button"
                       onClick={() => setJdImportMode('paste')}
-                      className={`px-3 py-1 rounded-[4px] text-xs transition-colors flex items-center gap-1.5 font-bold ${jdImportMode === 'paste' ? 'bg-blue-600 dark:bg-white text-white dark:text-black font-semibold shadow' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-gray-900 dark:hover:text-white'}`}
+                      className={`px-3 py-1 rounded-[4px] text-xs transition-all flex items-center gap-1.5 font-bold cursor-pointer ${jdImportMode === 'paste' ? 'bg-black text-white dark:bg-white dark:text-black shadow-sm' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-gray-900 dark:hover:text-white'}`}
                     >
                       <i className="fas fa-paste"></i> Paste JD Text
                     </button>
@@ -521,11 +521,11 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
 
                 {jdImportMode === 'upload' ? (
                   <div className="flex items-center gap-3">
-                    <label htmlFor="edit-jd-upload" className="flex-1 cursor-pointer p-3 border border-dashed border-blue-400/40 rounded-[6px] text-center text-xs text-gray-700 dark:text-gray-300 hover:bg-blue-500/10 transition-colors font-medium">
+                    <label htmlFor="edit-jd-upload" className="flex-1 cursor-pointer p-3 border border-dashed border-gray-300 dark:border-white/20 rounded-[6px] text-center text-xs text-gray-800 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors font-medium">
                       {parsingJd ? (
-                        <span><i className="fas fa-spinner fa-spin mr-1"></i> Parsing JD file...</span>
+                        <span><i className="fas fa-spinner fa-spin mr-1 text-black dark:text-white"></i> Parsing JD file...</span>
                       ) : (
-                        <span><i className="fas fa-file-upload mr-1 text-blue-600 dark:text-blue-400"></i> Upload JD PDF or TXT File to Auto-Fill All Fields</span>
+                        <span><i className="fas fa-file-upload mr-1 text-black dark:text-white"></i> Upload JD PDF or TXT File to Auto-Fill All Fields</span>
                       )}
                     </label>
                     <input id="edit-jd-upload" type="file" accept=".pdf,.txt" className="hidden" onChange={handleJDUpload} disabled={parsingJd} />
@@ -543,7 +543,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                       type="button"
                       onClick={handleParsePastedJDText}
                       disabled={parsingJd || !pastedJdText.trim()}
-                      className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-[6px] transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer shadow"
+                      className="w-full py-2 bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 text-white dark:text-black font-semibold text-xs rounded-[6px] transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-sm"
                     >
                       {parsingJd ? <><i className="fas fa-spinner fa-spin"></i> Parsing...</> : <><i className="fas fa-wand-magic-sparkles"></i> Auto-Fill Details & Custom Fields</>}
                     </button>
@@ -554,7 +554,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
               {/* Basic Information */}
               <div className={panelClass}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-white/[0.11] pb-2">
-                  <i className="fa-solid fa-briefcase text-indigo-600 dark:text-white"></i> Basic Job Information
+                  <i className="fa-solid fa-briefcase text-black dark:text-white"></i> Basic Job Information
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -610,7 +610,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
               {/* Experience, Location & Compensation */}
               <div className={panelClass}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-white/[0.11] pb-2">
-                  <i className="fa-solid fa-location-dot text-emerald-600 dark:text-emerald-400"></i> Experience, Location & Salary
+                  <i className="fa-solid fa-location-dot text-black dark:text-white"></i> Experience, Location & Salary
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
@@ -685,11 +685,11 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
               {/* Qualifications */}
               <div className={panelClass}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-white/[0.11] pb-2">
-                  <i className="fa-solid fa-graduation-cap text-indigo-600 dark:text-indigo-400"></i> Qualifications & Education
+                  <i className="fa-solid fa-graduation-cap text-black dark:text-white"></i> Qualifications & Education
                 </h3>
                 <div className="flex flex-wrap gap-2 min-h-[40px] p-2.5 bg-white dark:bg-[#050505] border border-gray-300 dark:border-white/[0.14] rounded-[6px]">
                   {formData.qualifications ? formData.qualifications.split(',').map(e => e.trim()).filter(e => e).map(edu => (
-                    <span key={edu} className="px-3 py-1 bg-indigo-50 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/30 rounded-[4px] text-xs font-bold flex items-center gap-2 animate-in fade-in zoom-in duration-200">
+                    <span key={edu} className="px-3 py-1 bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white border border-gray-300 dark:border-white/20 rounded-[4px] text-xs font-bold flex items-center gap-2 animate-in fade-in zoom-in duration-200">
                       {edu}
                       <button type="button" onClick={() => toggleEducation(edu)} className="hover:text-red-500 transition-colors font-bold text-sm">&times;</button>
                     </span>
@@ -738,7 +738,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                           setEduInput('');
                         }
                       }}
-                      className="px-4 py-2 bg-gray-100 dark:bg-[#262626] hover:bg-gray-200 dark:hover:bg-[#333333] text-gray-900 dark:text-white border border-gray-300 dark:border-white/20 rounded-[6px] font-bold text-xs transition-colors shrink-0"
+                      className="px-4 py-2 bg-white dark:bg-[#262626] hover:bg-gray-100 dark:hover:bg-[#333333] text-gray-900 dark:text-white border border-gray-300 dark:border-white/20 rounded-[6px] font-bold text-xs transition-colors shrink-0 cursor-pointer shadow-sm"
                     >
                       Add
                     </button>
@@ -750,7 +750,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
               <div className={panelClass}>
                 <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.11] pb-2">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2">
-                    <i className="fa-solid fa-code text-purple-600 dark:text-purple-400"></i> Required Skills ({selectedSkillsList.length})
+                    <i className="fa-solid fa-code text-black dark:text-white"></i> Required Skills ({selectedSkillsList.length})
                   </h3>
                   {selectedSkillsList.length > 0 && (
                     <button 
@@ -816,7 +816,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                         setSkillSearch('');
                       }
                     }}
-                    className="px-4 py-2 bg-gray-100 dark:bg-[#262626] hover:bg-gray-200 dark:hover:bg-[#333333] text-gray-900 dark:text-white border border-gray-300 dark:border-white/20 rounded-[6px] font-bold text-xs transition-colors shrink-0"
+                    className="px-4 py-2 bg-white dark:bg-[#262626] hover:bg-gray-100 dark:hover:bg-[#333333] text-gray-900 dark:text-white border border-gray-300 dark:border-white/20 rounded-[6px] font-bold text-xs transition-colors shrink-0 cursor-pointer shadow-sm"
                   >
                     Add Skill
                   </button>
@@ -850,7 +850,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
               {/* Interview Rules & Settings */}
               <div className={panelClass}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-white/[0.11] pb-2">
-                  <i className="fa-solid fa-sliders text-amber-600 dark:text-amber-400"></i> Interview Rules & Settings
+                  <i className="fa-solid fa-sliders text-black dark:text-white"></i> Interview Rules & Settings
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
@@ -997,7 +997,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
               <button 
                 type="submit" 
                 disabled={saving}
-                className="w-2/3 border border-gray-900 dark:border-white bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-[#ededed] text-white dark:text-black font-semibold py-2.5 px-4 rounded-[6px] transition-colors disabled:opacity-50 text-xs flex items-center justify-center gap-2 shadow"
+                className="w-2/3 border border-black dark:border-white bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 text-white dark:text-black font-semibold py-2.5 px-4 rounded-[6px] transition-colors disabled:opacity-50 text-xs flex items-center justify-center gap-2 shadow-md cursor-pointer"
               >
                 {saving ? (
                   <><i className="fas fa-spinner fa-spin"></i> Saving Changes...</>

@@ -11,6 +11,7 @@ import { sendWhatsAppMessage, sendBulkWhatsAppInvites, sendInterviewWhatsAppInvi
 import { evaluateResumeForMultipleJobs } from '../services/api';
 import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 import { logTeamActivity } from '../services/auditService';
+import { LocationCityInput } from '../components/LocationCityInput';
 
 const InlineBusySkeleton = ({ className = 'bg-current/25' }: { className?: string }) => (
     <span className={`inline-block h-3 w-16 animate-pulse rounded-[4px] ${className}`} aria-hidden="true" />
@@ -41,11 +42,15 @@ const InvitedCandidates: React.FC = () => {
     const [selectedInterviewId, setSelectedInterviewId] = useState<string>('');
     const [parsingResumes, setParsingResumes] = useState(false);
     const [sendingEmails, setSendingEmails] = useState(false);
-    const [newCandidates, setNewCandidates] = useState<{email: string, phone: string, scores?: Record<string, string>}[]>([]);
+    const [newCandidates, setNewCandidates] = useState<{email: string, phone: string, name?: string, experience?: string, location?: string, scores?: Record<string, string>}[]>([]);
+    const [manualName, setManualName] = useState('');
     const [manualEmail, setManualEmail] = useState('');
     const [manualPhone, setManualPhone] = useState('');
+    const [manualExp, setManualExp] = useState('');
+    const [manualLocation, setManualLocation] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [jobSearchTerm, setJobSearchTerm] = useState('');
+    const [candidateTab, setCandidateTab] = useState<'pending' | 'completed' | 'all'>('pending');
     
     const messageBox = useMessageBox();
     const [whatsappModal, setWhatsappModal] = useState<{
@@ -426,16 +431,22 @@ const InvitedCandidates: React.FC = () => {
         }
         const lowerEmail = manualEmail.trim().toLowerCase();
         const phoneVal = manualPhone.trim();
+        const nameVal = manualName.trim() || (lowerEmail ? lowerEmail.split('@')[0] : 'Candidate');
+        const expVal = manualExp.trim() ? `${manualExp.trim()} Yrs` : 'N/A';
+        const locVal = manualLocation.trim() || 'N/A';
 
         const exists = newCandidates.some(c => 
             (lowerEmail && c.email === lowerEmail) || 
             (phoneVal && c.phone === phoneVal)
         );
         if (!exists) {
-            setNewCandidates(prev => [...prev, { email: lowerEmail, phone: phoneVal || 'N/A' }]);
+            setNewCandidates(prev => [...prev, { email: lowerEmail, phone: phoneVal || 'N/A', name: nameVal, experience: expVal, location: locVal }]);
         }
+        setManualName('');
         setManualEmail('');
         setManualPhone('');
+        setManualExp('');
+        setManualLocation('');
     };
 
     const handleRemoveCandidate = (identifier: string) => {
@@ -453,9 +464,26 @@ const InvitedCandidates: React.FC = () => {
         try {
             const selectedInterview = interviews.find(i => i.id === selectedInterviewId);
             if (!selectedInterview) throw new Error("Interview not found");
+            
+            // Exclude candidates who have already completed this interview
+            const attemptsSnap = await getDocs(collection(db, 'interviews', selectedInterview.id, 'attempts'));
+            const completedEmailsSet = new Set(
+              attemptsSnap.docs.map(d => (d.data()?.candidateInfo?.email || '').toLowerCase())
+            );
 
-            const validEmails = newCandidates.map(c => c.email).filter(Boolean);
-            const validPhoneCandidates = newCandidates.filter(c => c.phone && c.phone !== 'N/A');
+            const pendingCandidatesToSend = newCandidates.filter(c => !completedEmailsSet.has(c.email.toLowerCase()));
+
+            if (pendingCandidatesToSend.length === 0) {
+              messageBox.showError("All added candidate(s) have already completed this interview. No invitations dispatched.");
+              return;
+            }
+
+            if (pendingCandidatesToSend.length < newCandidates.length) {
+              messageBox.showInfo(`${newCandidates.length - pendingCandidatesToSend.length} candidate(s) skipped because they already completed this interview.`);
+            }
+
+            const validEmails = pendingCandidatesToSend.map(c => c.email).filter(e => e && !e.endsWith('@whatsapp.local'));
+            const validPhoneCandidates = pendingCandidatesToSend.filter(c => c.phone && c.phone !== 'N/A');
 
             // Update Database
             await updateDoc(doc(db, 'interviews', selectedInterviewId), { 
@@ -589,6 +617,16 @@ const InvitedCandidates: React.FC = () => {
     const selectedInterview = interviews.find(i => i.id === selectedInterviewId);
     const submittedCount = filteredCandidates.filter(c => c.hasSubmitted).length;
     const pendingCount = Math.max(filteredCandidates.length - submittedCount, 0);
+
+    const displayedCandidates = useMemo(() => {
+        if (candidateTab === 'pending') {
+            return filteredCandidates.filter(c => !c.hasSubmitted);
+        }
+        if (candidateTab === 'completed') {
+            return filteredCandidates.filter(c => c.hasSubmitted);
+        }
+        return filteredCandidates;
+    }, [filteredCandidates, candidateTab]);
 
     const exportToCSV = () => {
         const headers = ["Candidate Name", "Email", "Phone", "Invited Role", "Status", "Overall Score", "Resume Score", "Q&A Score", "Resume Link", "Report Link"];
@@ -750,14 +788,15 @@ const InvitedCandidates: React.FC = () => {
 
                         <div className="min-w-0 rounded-[6px] border border-[#2e2e2e] bg-[#000] p-4">
                             <div className="mb-3 flex items-center justify-between gap-3">
-                                <p className="geist-label uppercase text-[#6b7280]">Manual Add</p>
+                                <p className="geist-label uppercase text-[#6b7280]">Add Candidate Manually</p>
                                 <span className="geist-small rounded-[6px] border border-[#2e2e2e] bg-[#1a1a1a] px-2 py-0.5 text-[#a0a0a0]">Optional</span>
                             </div>
                             <div className="grid gap-2">
-                                <input type="email" value={manualEmail} onChange={e=>setManualEmail(e.target.value)} placeholder="Candidate email" className="geist-caption h-10 w-full rounded-[6px] border border-[#2e2e2e] bg-[#000] px-3 text-[#ededed] outline-none transition-colors placeholder:text-[#878787] focus:border-[#878787]" />
+                                <input type="text" value={manualName} onChange={e=>setManualName(e.target.value)} placeholder="Candidate Name (e.g. Rahul Sharma)" className="geist-caption h-10 w-full rounded-[6px] border border-[#2e2e2e] bg-[#000] px-3 text-[#ededed] outline-none transition-colors placeholder:text-[#878787] focus:border-[#878787]" />
+                                <input type="email" value={manualEmail} onChange={e=>setManualEmail(e.target.value)} placeholder="Candidate Email (e.g. candidate@example.com)" className="geist-caption h-10 w-full rounded-[6px] border border-[#2e2e2e] bg-[#000] px-3 text-[#ededed] outline-none transition-colors placeholder:text-[#878787] focus:border-[#878787]" />
                                 <div className="flex min-w-0 gap-2">
-                                    <input type="text" value={manualPhone} onChange={e=>setManualPhone(e.target.value)} placeholder="Phone optional" className="geist-caption h-10 min-w-0 flex-1 rounded-[6px] border border-[#2e2e2e] bg-[#000] px-3 text-[#ededed] outline-none transition-colors placeholder:text-[#878787] focus:border-[#878787]" />
-                                    <button onClick={handleManualAdd} className="geist-caption inline-flex h-10 shrink-0 items-center justify-center rounded-[6px] border border-[#2e2e2e] bg-[#000] px-3 font-medium text-[#ededed] transition-colors hover:bg-[#1a1a1a]">Add</button>
+                                    <input type="text" value={manualPhone} onChange={e=>setManualPhone(e.target.value)} placeholder="WhatsApp Phone (+91...)" className="geist-caption h-10 min-w-0 flex-1 rounded-[6px] border border-[#2e2e2e] bg-[#000] px-3 text-[#ededed] outline-none transition-colors placeholder:text-[#878787] focus:border-[#878787]" />
+                                    <button onClick={handleManualAdd} className="geist-caption inline-flex h-10 shrink-0 items-center justify-center rounded-[6px] border border-[#2e2e2e] bg-[#000] px-4 font-medium text-[#ededed] transition-colors hover:bg-[#1a1a1a]">Add Candidate</button>
                                 </div>
                             </div>
                         </div>
@@ -834,8 +873,46 @@ const InvitedCandidates: React.FC = () => {
                     <div className="flex flex-col gap-3 border-b border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7 xl:flex-row xl:items-center xl:justify-between">
                         <div>
                             <h2 className="geist-section-title text-white">Active Candidates Tracking</h2>
-                            <p className="geist-small mt-0.5 text-[#8f8f8f]">{filteredCandidates.length} tracked, {submittedCount} submitted, {pendingCount} pending.</p>
+                            <p className="geist-small mt-0.5 text-[#8f8f8f]">{filteredCandidates.length} total tracked, {submittedCount} completed, {pendingCount} pending.</p>
                         </div>
+                        
+                        {/* Tab Switcher: Pending vs Completed vs All */}
+                        <div className="flex items-center gap-1.5 p-1 rounded-lg border border-white/10 bg-white/[0.03]">
+                            <button
+                                type="button"
+                                onClick={() => setCandidateTab('pending')}
+                                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                                    candidateTab === 'pending'
+                                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow'
+                                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                }`}
+                            >
+                                ⏳ Pending ({pendingCount})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setCandidateTab('completed')}
+                                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                                    candidateTab === 'completed'
+                                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow'
+                                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                }`}
+                            >
+                                ✅ Completed ({submittedCount})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setCandidateTab('all')}
+                                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                                    candidateTab === 'all'
+                                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow'
+                                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                }`}
+                            >
+                                All Candidates ({filteredCandidates.length})
+                            </button>
+                        </div>
+
                         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                             <div className="relative w-full sm:w-72">
                                 <i className="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-[#6b7280]"></i>
@@ -869,18 +946,19 @@ const InvitedCandidates: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/[0.08]">
-                                {filteredCandidates.length === 0 ? (
+                                {displayedCandidates.length === 0 ? (
                                     <tr>
                                         <td colSpan={5} className="px-4 py-14 text-center sm:px-6 lg:px-7">
                                             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#6b7280]">
                                                 <i className="fas fa-users-slash"></i>
                                             </div>
-                                            <p className="geist-caption mt-4 text-[#d4d4d4]">No tracked candidates found.</p>
-                                            <p className="geist-small mt-1 text-[#6b7280]">Upload resumes or add candidates manually to begin tracking.</p>
+                                            <p className="geist-caption mt-4 text-[#d4d4d4]">
+                                                {candidateTab === 'pending' ? 'No pending candidates.' : candidateTab === 'completed' ? 'No completed candidates yet.' : 'No tracked candidates found.'}
+                                            </p>
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredCandidates.map((candidate, idx) => {
+                                    displayedCandidates.map((candidate, idx) => {
                                         const isEditingThis = editingCandidate && 
                                             editingCandidate.email.toLowerCase() === candidate.email.toLowerCase() && 
                                             editingCandidate.interviewId === candidate.interviewId;

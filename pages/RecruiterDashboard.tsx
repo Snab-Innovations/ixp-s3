@@ -556,7 +556,7 @@ const RecruiterDashboard: React.FC = () => {
 
   const quickActions = [
     {
-      label: 'Create Interview',
+      label: 'Create Job',
       description: 'Questions and invites.',
       href: '/recruiter/interview/create',
       icon: Video,

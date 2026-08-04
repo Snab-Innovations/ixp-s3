@@ -67,6 +67,7 @@ export interface ParsedJdResult {
   bondOrAgreement?: string;
   weeklyOff?: string;
   facilities?: string;
+  jobNo?: string;
   companyProfile?: string;
   customFields?: Array<{ key: string; value: string }>;
 }
@@ -75,6 +76,7 @@ export async function parseJobDescriptionText(rawText: string): Promise<ParsedJd
   const systemPrompt = `You are an expert HR AI assistant. Parse the provided job description (JD) text and return a JSON object with structured details.
 
 Standard Fields to extract (if present):
+- "jobNo": Job Number / Job Code / Requisition ID (e.g. "Job No: 1042" or "REQ-901")
 - "title": Job title / Role / Designation (e.g. "Production Engineer" or "Jr. Production Engineer")
 - "description": Detailed job description and responsibilities
 - "department": Industry / Department / Category (e.g. "Manufacturing" or "Engineering")

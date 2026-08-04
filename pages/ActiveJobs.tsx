@@ -8,7 +8,7 @@ import { useMessageBox } from '../components/MessageBox';
 import { 
   Briefcase, MapPin, DollarSign, Calendar, Clock, Sparkles, 
   Search, Filter, ChevronRight, ArrowRight, ShieldCheck, 
-  GraduationCap, CheckCircle2, User, Eye, X, Send, Copy, Check, MessageSquare, Phone, Mail
+  GraduationCap, CheckCircle2, User, Eye, X, Send, Copy, Check, MessageSquare, Phone, Mail, Upload
 } from 'lucide-react';
 
 export interface ActiveJobItem {
@@ -234,17 +234,30 @@ const ActiveJobsPage: React.FC = () => {
           <Logo className="w-[140px] sm:w-[165px] h-auto" isDark={isDark} />
         </Link>
 
-        <button
-          onClick={() => handleOpenContactModal()}
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border shadow-sm ${
-            isDark 
-              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' 
-              : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-          }`}
-        >
-          <MessageSquare size={14} />
-          <span>Contact Us</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/upload-resume"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+              isDark 
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' 
+                : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+            }`}
+          >
+            <Upload size={14} />
+            <span>Upload Resume / CV</span>
+          </Link>
+          <button
+            onClick={() => handleOpenContactModal()}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border shadow-sm ${
+              isDark 
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' 
+                : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+            }`}
+          >
+            <MessageSquare size={14} />
+            <span>Contact Us</span>
+          </button>
+        </div>
       </nav>
 
       {/* Hero Header */}

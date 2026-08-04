@@ -211,7 +211,7 @@ export async function sendInterviewWhatsAppInvite(params: {
 
 /**
  * Bulk sends interview invites via WhatsApp to a list of candidates with phone numbers.
- * Sends candidates one-by-one with a mandatory 10-second delay between messages to protect WhatsApp from ban/spam blocking.
+ * Sends candidates one-by-one with a random delay between minDelay and maxDelay (default 15-25 seconds) between messages to protect WhatsApp from ban/spam blocking.
  */
 export async function sendBulkWhatsAppInvites(
   candidates: Array<{ phone: string; name?: string; email?: string }>,
@@ -219,13 +219,20 @@ export async function sendBulkWhatsAppInvites(
   interviewLink: string,
   accessCode: string,
   isReminder = false,
-  onProgress?: (sentCount: number, totalCount: number, currentCandidate: string, isWaiting: boolean) => void,
-  options?: WhatsAppInviteOptions
+  onProgress?: (sentCount: number, totalCount: number, currentCandidate: string, isWaiting: boolean, waitTimeSec?: number) => void,
+  options?: WhatsAppInviteOptions,
+  minDelay = 15,
+  maxDelay = 25,
+  delayUnit: 'sec' | 'min' = 'sec'
 ): Promise<{ success: boolean; totalSent: number; totalFailed: number; errors: string[] }> {
   let totalSent = 0;
   let totalFailed = 0;
   const errors: string[] = [];
   const validCandidates = candidates.filter(c => !!c.phone && c.phone.trim() !== '');
+
+  const multiplier = delayUnit === 'min' ? 60 * 1000 : 1000;
+  const minMs = Math.max(1000, (minDelay || 15) * multiplier);
+  const maxMs = Math.max(minMs, (maxDelay || 25) * multiplier);
 
   for (let i = 0; i < validCandidates.length; i++) {
     const candidate = validCandidates[i];
@@ -252,12 +259,14 @@ export async function sendBulkWhatsAppInvites(
       if (res.error) errors.push(`${candidate.phone}: ${res.error}`);
     }
 
-    // Mandatory 10-second delay before sending to next candidate to protect WhatsApp account
+    // Random delay between minDelay and maxDelay before sending to next candidate
     if (i < validCandidates.length - 1) {
+      const randomDelayMs = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
+      const delaySec = Math.round(randomDelayMs / 1000);
       if (onProgress) {
-        onProgress(i + 1, validCandidates.length, candidateDisplayName, true);
+        onProgress(i + 1, validCandidates.length, candidateDisplayName, true, delaySec);
       }
-      await new Promise(resolve => setTimeout(resolve, 10000));
+      await new Promise(resolve => setTimeout(resolve, randomDelayMs));
     }
   }
 

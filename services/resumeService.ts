@@ -9,7 +9,7 @@ import { geminiGenerateJson } from './geminiService';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
-export type ResumeSource = 'resume_dump' | 'interview_creation' | 'candidate_interview';
+export type ResumeSource = 'resume_dump' | 'interview_creation' | 'candidate_interview' | 'public_job_seeker_upload';
 
 export interface ResumeExperienceEntry {
   title: string;
@@ -234,6 +234,72 @@ const uniqueStrings = (items: unknown[], limit = 30) => {
 
 const canonicalizeSkill = (skill: string) => SKILL_ALIASES.get(normalizeComparable(skill)) || skill.trim();
 
+const SENSELESS_SKILL_PATTERNS = [
+  /hard\s*work/i,
+  /team\s*player/i,
+  /communication\s*skill/i,
+  /good\s*(listener|speaker|behavior|talker)/i,
+  /\bhonest\b/i,
+  /\bpunctual\b/i,
+  /\bsincere\b/i,
+  /self\s*motivat/i,
+  /quick\s*learner/i,
+  /curriculum\s*vitae/i,
+  /\bresume\b/i,
+  /\bdeclaration\b/i,
+  /\bhobbies\b/i,
+  /\breferences\b/i,
+  /personal\s*detail/i,
+  /biodata/i,
+  /fresh\s*graduat/i,
+  /looking\s*for/i,
+  /\bdedicated\b/i,
+  /\benthusiastic\b/i,
+  /page\s*\d+/i,
+  /responsible\s*for/i,
+  /ability\s*to/i,
+  /seeking/i,
+  /willingness/i,
+  /detail\s*oriented/i,
+  /fast\s*learner/i,
+  /positive\s*attitude/i,
+  /multi\s*tasking/i,
+  /interpersonal\s*skill/i,
+  /problem\s*solving\s*skills?/i,
+  /time\s*management/i,
+  /work\s*ethic/i,
+  /creative\s*thinking/i
+];
+
+export function sanitizeDomainSkills(skills: string[]): string[] {
+  if (!Array.isArray(skills)) return [];
+  const cleanList: string[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of skills) {
+    if (typeof raw !== 'string') continue;
+    let s = raw.trim().replace(/^[-*•·▪●]+\s*/, '');
+    if (!s || s.length < 2 || s.length > 40) continue;
+
+    // Check against senseless patterns
+    if (SENSELESS_SKILL_PATTERNS.some(pattern => pattern.test(s))) {
+      continue;
+    }
+
+    // Must not contain sentence punctuation
+    if (/[.!?]/.test(s)) continue;
+
+    const canonical = canonicalizeSkill(s);
+    const normalizedKey = canonical.toLowerCase().replace(/[^a-z0-9+#]/g, '');
+    if (!seen.has(normalizedKey)) {
+      seen.add(normalizedKey);
+      cleanList.push(canonical);
+    }
+  }
+
+  return cleanList;
+}
+
 export const extractSkillSignals = (text: string) => {
   const found: string[] = [];
   for (const [label, patterns] of SKILL_DEFINITIONS) {
@@ -337,7 +403,7 @@ const deterministicParse = (text: string, fallbackFileName: string): ParsedResum
     currentTitle: extractCurrentTitle(cleanText, name),
     summary,
     totalExperienceYears: extractExperienceYears(cleanText),
-    skills: extractSkillSignals(cleanText),
+    skills: sanitizeDomainSkills(extractSkillSignals(cleanText)),
     experience: [],
     education: extractEducation(cleanText),
     certifications: extractSimpleListSection(cleanText, /^(certifications?|courses?)\s*:?$/i),
@@ -401,6 +467,43 @@ const parseAIEducation = (value: unknown): ResumeEducationEntry[] => {
   }).filter((item) => item.degree || item.institution);
 };
 
+export const normalizeStandardCityName = (rawLocation: string): string => {
+  if (!rawLocation || typeof rawLocation !== 'string') return '';
+  const clean = rawLocation.trim();
+  if (!clean) return '';
+  
+  const lower = clean.toLowerCase();
+  
+  // Standard city alias mappings
+  if (lower.includes('nasik') || lower.includes('nashik')) return 'Nashik';
+  if (lower.includes('mumbai') || lower.includes('bombay')) return 'Mumbai';
+  if (lower.includes('pune') || lower.includes('poona')) return 'Pune';
+  if (lower.includes('nagpur')) return 'Nagpur';
+  if (lower.includes('thane')) return 'Thane';
+  if (lower.includes('aurangabad') || lower.includes('sambhajinagar')) return 'Chhatrapati Sambhajinagar';
+  if (lower.includes('solapur') || lower.includes('sholapur')) return 'Solapur';
+  if (lower.includes('kolhapur')) return 'Kolhapur';
+  if (lower.includes('amravati')) return 'Amravati';
+  if (lower.includes('jalgaon')) return 'Jalgaon';
+  if (lower.includes('nanded')) return 'Nanded';
+  if (lower.includes('sangli')) return 'Sangli';
+  if (lower.includes('latur')) return 'Latur';
+  if (lower.includes('dhule')) return 'Dhule';
+  if (lower.includes('ahmednagar')) return 'Ahmednagar';
+  if (lower.includes('satara')) return 'Satara';
+  if (lower.includes('delhi')) return 'Delhi';
+  if (lower.includes('bengaluru') || lower.includes('bangalore')) return 'Bengaluru';
+  if (lower.includes('hyderabad')) return 'Hyderabad';
+  if (lower.includes('chennai') || lower.includes('madras')) return 'Chennai';
+  if (lower.includes('kolkata') || lower.includes('calcutta')) return 'Kolkata';
+
+  // Capitalize standard proper words if not matched above
+  return clean
+    .split(/\s+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
+
 export const analyzeResumeText = async (
   text: string,
   fallbackFileName: string,
@@ -411,35 +514,38 @@ export const analyzeResumeText = async (
 
   try {
     let ai: AIResumeProfile;
+    const sysPrompt = 'You extract factual resume data for recruiters. Never infer missing facts or protected traits. CRITICAL: Extract ONLY standard, recognized technical/engineering/domain skills (e.g. AutoCAD, Site Supervision, Python, Quantity Surveying, Billing & Estimation, RCC Design, Tally, REVIT, Financial Modeling, Project Management). Strictly EXCLUDE any non-technical buzzwords or senseless phrases (e.g., "hard working", "team player", "good communication", "honest", "curriculum vitae", "quick learner"). Return only valid JSON.';
+    const userPrompt = `Extract this resume into the exact JSON shape below. Fill ALL fields automatically from the resume text. Ensure skills contain ONLY standard domain/technical skills and NO senseless generic words. totalExperienceYears must be a number.\n\n{"name":"","email":"","phone":"","location":"","currentTitle":"","summary":"","totalExperienceYears":0,"skills":[],"experience":[{"title":"","company":"","startDate":"","endDate":"","highlights":[],"skills":[]}],"education":[{"degree":"","institution":"","year":""}],"certifications":[],"languages":[],"keywords":[],"linkedinUrl":"","portfolioUrl":""}\n\nRESUME TEXT:\n${text.slice(0, 18_000)}`;
+
     try {
       ai = await geminiGenerateJson<AIResumeProfile>(
-        'You extract factual resume data for recruiters. Never infer missing facts, protected traits, personality, or candidate quality. Return only valid JSON.',
-        `Extract this resume into the exact JSON shape below. Keep skills canonical and concise. Experience must contain only roles explicitly present in the resume. totalExperienceYears must be a number.\n\n{"name":"","email":"","phone":"","location":"","currentTitle":"","summary":"","totalExperienceYears":0,"skills":[],"experience":[{"title":"","company":"","startDate":"","endDate":"","highlights":[],"skills":[]}],"education":[{"degree":"","institution":"","year":""}],"certifications":[],"languages":[],"keywords":[],"linkedinUrl":"","portfolioUrl":""}\n\nRESUME & RECRUITER NOTES:\n${text.slice(0, 18_000)}`,
+        sysPrompt,
+        userPrompt,
         0.1
       );
     } catch (geminiError) {
-      console.warn('Gemini zai.glm-4.7-flash resume extraction failed, falling back to Grok:', geminiError);
+      console.warn('Gemini resume extraction failed, falling back to Grok:', geminiError);
       ai = await grokGenerateJson<AIResumeProfile>(
-        'You extract factual resume data for recruiters. Never infer missing facts, protected traits, personality, or candidate quality. Return only valid JSON.',
-        `Extract this resume into the exact JSON shape below. Keep skills canonical and concise. Experience must contain only roles explicitly present in the resume. totalExperienceYears must be a number.\n\n{"name":"","email":"","phone":"","location":"","currentTitle":"","summary":"","totalExperienceYears":0,"skills":[],"experience":[{"title":"","company":"","startDate":"","endDate":"","highlights":[],"skills":[]}],"education":[{"degree":"","institution":"","year":""}],"certifications":[],"languages":[],"keywords":[],"linkedinUrl":"","portfolioUrl":""}\n\nRESUME & RECRUITER NOTES:\n${text.slice(0, 18_000)}`,
+        sysPrompt,
+        userPrompt,
         0.1,
         1800
       );
     }
 
-
     const aiSkills = Array.isArray(ai.skills) ? ai.skills.map((skill) => canonicalizeSkill(safeString(skill, 60))) : [];
     const aiExperience = parseAIExperience(ai.experience);
     const experienceSkills = aiExperience.flatMap((entry) => entry.skills);
+    const rawSkills = [...aiSkills, ...experienceSkills, ...fallback.skills];
     const profile: ParsedResumeProfile = {
       name: safeString(ai.name, 100) || fallback.name,
       email: safeString(ai.email, 150).toLowerCase() || fallback.email,
       phone: formatExtractedPhone(safeString(ai.phone, 50)) || fallback.phone,
-      location: safeString(ai.location, 150) || fallback.location,
+      location: normalizeStandardCityName(safeString(ai.location, 150) || fallback.location),
       currentTitle: safeString(ai.currentTitle, 150) || fallback.currentTitle,
       summary: safeString(ai.summary, 1200) || fallback.summary,
       totalExperienceYears: safeNumber(ai.totalExperienceYears) || fallback.totalExperienceYears,
-      skills: uniqueStrings([...aiSkills, ...experienceSkills, ...fallback.skills].map(canonicalizeSkill), 40),
+      skills: sanitizeDomainSkills(rawSkills).slice(0, 40),
       experience: aiExperience,
       education: parseAIEducation(ai.education).length ? parseAIEducation(ai.education) : fallback.education,
       certifications: uniqueStrings(Array.isArray(ai.certifications) ? ai.certifications : fallback.certifications, 12),
@@ -478,6 +584,26 @@ export const readResumeText = async (fileOrBlob: Blob, fileName = '') => {
 
   if (mimeType.startsWith('text/') || lowerName.endsWith('.txt')) return normalizeWhitespace(await fileOrBlob.text());
   throw new Error('Unsupported resume type. Upload PDF, DOCX, or TXT.');
+};
+
+export const parseResumeFileLocally = async (
+  file: File,
+  overrides: Partial<Pick<ParsedResumeProfile, 'name' | 'email' | 'phone'>> = {},
+  additionalText = ''
+): Promise<{ profile: ParsedResumeProfile; resumeText: string }> => {
+  const resumeText = await readResumeText(file, file.name);
+  if (!resumeText) throw new Error('No readable text was found in this resume.');
+
+  const textToAnalyze = additionalText.trim()
+    ? `${resumeText}\n\n[Additional Candidate Details & Recruiter Notes]:\n${additionalText.trim()}`
+    : resumeText;
+
+  const profile = await analyzeResumeText(textToAnalyze, file.name, overrides);
+  if (additionalText.trim()) {
+    profile.additionalText = additionalText.trim();
+  }
+
+  return { profile, resumeText: resumeText.slice(0, MAX_RESUME_TEXT_CHARS) };
 };
 
 export const ingestResumeFile = async (

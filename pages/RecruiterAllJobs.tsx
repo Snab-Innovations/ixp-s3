@@ -11,6 +11,9 @@ import { parseCandidateDocument } from '../services/candidateFileParser';
 import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 import { sendInterviewWhatsAppInvite, formatPhoneForWhatsApp, buildWhatsAppInviteText, openWhatsAppWebInvite, sendBulkWhatsAppInvites } from '../services/waSenderService';
 import EditJobModal from './EditJob';
+import { useBackgroundSend } from '../context/BackgroundSendContext';
+import { LocationCityInput } from '../components/LocationCityInput';
+import { EducationInput } from '../components/EducationInput';
 import {
   Briefcase,
   Search,
@@ -38,6 +41,7 @@ import {
   Sparkles,
   Phone,
   MessageSquare,
+  Clock,
   Send,
   Bell
 } from 'lucide-react';
@@ -191,8 +195,9 @@ function getAISuggestedCandidatesForJob(job: any, candidates: any[], alreadyInvi
 
 const RecruiterAllJobs: React.FC = () => {
   const { user, userProfile } = useAuth();
-  const messageBox = useMessageBox();
   const navigate = useNavigate();
+  const messageBox = useMessageBox();
+  const { startBackgroundSend } = useBackgroundSend();
 
   const [jobs, setJobs] = useState<AllJobItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -213,9 +218,12 @@ const RecruiterAllJobs: React.FC = () => {
   const [candidateEmailsInput, setCandidateEmailsInput] = useState('');
   const [inviteEmailsList, setInviteEmailsList] = useState<string[]>([]);
   const [parsedCandidates, setParsedCandidates] = useState<{ email: string; phone: string; name?: string; experience?: string }[]>([]);
+  const [currentSingleName, setCurrentSingleName] = useState('');
   const [currentSingleEmail, setCurrentSingleEmail] = useState('');
   const [currentSinglePhone, setCurrentSinglePhone] = useState('');
   const [currentSingleExp, setCurrentSingleExp] = useState('');
+  const [currentSingleLocation, setCurrentSingleLocation] = useState('');
+  const [currentSingleEducation, setCurrentSingleEducation] = useState('B.Tech / B.E. (Bachelor of Engineering / Technology)');
 
   // AI Candidate Suggestions State
   const [dumpCandidates, setDumpCandidates] = useState<any[]>([]);
@@ -238,8 +246,11 @@ const RecruiterAllJobs: React.FC = () => {
   const [analyzingResumeAI, setAnalyzingResumeAI] = useState(false);
 
   // Delivery Channels State
-  const [sendEmailChannel, setSendEmailChannel] = useState(true);
-  const [sendWhatsAppChannel, setSendWhatsAppChannel] = useState(true);
+  const [sendEmailChannel, setSendEmailChannel] = useState<boolean>(true);
+  const [sendWhatsAppChannel, setSendWhatsAppChannel] = useState<boolean>(true);
+  const [waMinDelay, setWaMinDelay] = useState<number | string>(15);
+  const [waMaxDelay, setWaMaxDelay] = useState<number | string>(25);
+  const [waDelayUnit, setWaDelayUnit] = useState<'sec' | 'min'>('sec');
   const [sendingProgressMsg, setSendingProgressMsg] = useState('');
 
   // Reminder States
@@ -631,9 +642,11 @@ const RecruiterAllJobs: React.FC = () => {
   };
 
   const handleAddCandidate = () => {
+    const trimmedName = currentSingleName.trim();
     const trimmedEmail = currentSingleEmail.trim().toLowerCase();
     const trimmedPhone = currentSinglePhone.trim();
     const expText = currentSingleExp.trim() ? `${currentSingleExp.trim()} yrs` : 'N/A';
+    const locText = currentSingleLocation.trim() || 'N/A';
 
     if (!trimmedEmail && !trimmedPhone) {
       messageBox.showError("Please enter an email address or WhatsApp phone number.");
@@ -646,6 +659,7 @@ const RecruiterAllJobs: React.FC = () => {
     }
 
     const targetEmail = trimmedEmail || `${trimmedPhone.replace(/[^0-9]/g, '')}@whatsapp.local`;
+    const candidateDisplayName = trimmedName || (trimmedEmail ? trimmedEmail.split('@')[0] : 'Candidate');
 
     if (!inviteEmailsList.includes(targetEmail)) {
       setInviteEmailsList(prev => [...prev, targetEmail]);
@@ -653,12 +667,14 @@ const RecruiterAllJobs: React.FC = () => {
 
     setParsedCandidates(prev => [
       ...prev.filter(c => c.email.toLowerCase() !== targetEmail.toLowerCase()),
-      { email: targetEmail, phone: trimmedPhone || 'N/A', name: trimmedEmail ? trimmedEmail.split('@')[0] : 'Candidate', experience: expText }
+      { email: targetEmail, phone: trimmedPhone || 'N/A', name: candidateDisplayName, experience: expText, location: locText }
     ]);
 
+    setCurrentSingleName('');
     setCurrentSingleEmail('');
     setCurrentSinglePhone('');
     setCurrentSingleExp('');
+    setCurrentSingleLocation('');
   };
 
   const handleRemoveEmail = (email: string) => {
@@ -713,9 +729,30 @@ const RecruiterAllJobs: React.FC = () => {
     }
     if (!invitingJob) return;
 
+    if (!currentSingleLocation.trim()) {
+      messageBox.showError("Candidate Location / City is mandatory for proper filtering. Please enter or select a city.");
+      return;
+    }
+
+    if (!currentSingleExp.trim()) {
+      messageBox.showError("Candidate Experience in Years is mandatory for proper filtering. Please enter experience.");
+      return;
+    }
+
+    if (!currentSingleEducation.trim()) {
+      messageBox.showError("Highest Education Qualification is mandatory for proper filtering. Please select candidate education.");
+      return;
+    }
+
+    const parsedExpNum = parseFloat(currentSingleExp.trim());
+    if (isNaN(parsedExpNum)) {
+      messageBox.showError("Please enter a valid numeric experience in years (e.g. 1.5 or 3).");
+      return;
+    }
+
     setAnalyzingResumeAI(true);
     try {
-      // 1. Parse resume file + analyze with AI (and upload to Cloudinary/storage)
+      // 1. Parse resume file + analyze with AI
       const { profile, resumeText, resumeUrl } = await ingestResumeFile(
         selectedResumeFile,
         {},
@@ -723,12 +760,16 @@ const RecruiterAllJobs: React.FC = () => {
         resumeExtraText
       );
 
-      // If recruiter explicitly provided experience years, use it!
-      if (currentSingleExp.trim()) {
-        const parsedExpNum = parseFloat(currentSingleExp.trim());
-        if (!isNaN(parsedExpNum)) {
-          profile.totalExperienceYears = parsedExpNum;
-        }
+      // Mandatory overrides for location and experience
+      profile.location = currentSingleLocation.trim();
+      profile.totalExperienceYears = parsedExpNum;
+      if (currentSingleEducation.trim()) {
+        const selectedDegree = currentSingleEducation.trim();
+        const existingEdu = profile.education || [];
+        profile.education = [
+          { degree: selectedDegree, institution: 'Verified Qualification', year: '' },
+          ...existingEdu.filter(e => e.degree.toLowerCase() !== selectedDegree.toLowerCase())
+        ];
       }
 
       // 2. Save full candidate record into Resume Dump
@@ -780,10 +821,11 @@ const RecruiterAllJobs: React.FC = () => {
         );
       }
 
-      // Reset file picker, extra text & experience inputs
+      // Reset file picker, extra text, experience & location inputs
       setSelectedResumeFile(null);
       setResumeExtraText('');
       setCurrentSingleExp('');
+      setCurrentSingleLocation('');
     } catch (err: any) {
       console.error("Error analyzing candidate resume:", err);
       messageBox.showError(`AI extraction failed: ${err.message || 'Failed to analyze candidate resume.'}`);
@@ -792,7 +834,7 @@ const RecruiterAllJobs: React.FC = () => {
     }
   };
 
-  const handleSendInvites = async () => {
+  const handleSendInvites = async (isReminder = false) => {
     if (!invitingJob) return;
 
     if (!sendEmailChannel && !sendWhatsAppChannel) {
@@ -813,7 +855,7 @@ const RecruiterAllJobs: React.FC = () => {
     }
 
     setSendingInvites(true);
-    setSendingProgressMsg('Preparing candidate invitations...');
+    setSendingProgressMsg(`Preparing candidate ${isReminder ? 'reminders' : 'invitations'}...`);
 
     try {
       const existingCandidateEmails = invitingJob.candidateEmails || [];
@@ -841,75 +883,44 @@ const RecruiterAllJobs: React.FC = () => {
       ]);
 
       const targetLink = invitingJob.interviewLink || `${window.location.origin}/#/interview/${invitingJob.id}`;
-      const validEmails = finalEmails.filter(e => !e.endsWith('@whatsapp.local'));
 
-      let emailCount = 0;
-      if (sendEmailChannel && validEmails.length > 0) {
-        setSendingProgressMsg(`Sending ${validEmails.length} email invitation(s)...`);
-        const res = await sendInterviewInvitations(
-          validEmails,
-          invitingJob.title,
-          targetLink,
-          invitingJob.accessCode || '',
-          false,
-          {
-            location: invitingJob.location,
-            qualification: invitingJob.qualifications || invitingJob.education,
-            experience: ((invitingJob as any).maxExperience > (invitingJob as any).minExperience)
-              ? `${(invitingJob as any).minExperience} - ${(invitingJob as any).maxExperience} Years`
-              : invitingJob.experience,
-            minExperience: (invitingJob as any).minExperience,
-            maxExperience: (invitingJob as any).maxExperience,
-            gender: (invitingJob as any).gender || (invitingJob as any).genderRequirement,
-            salary: invitingJob.salary || invitingJob.salaryRange,
-            salaryRange: invitingJob.salaryRange || invitingJob.salary,
-            employmentType: (invitingJob as any).employmentType,
-            customFields: (invitingJob as any).customFields,
-            recruiterName: userProfile?.name || (user as any)?.displayName || 'Hiring Team',
-          }
-        );
-        if (res.success) emailCount = res.totalEmails;
-      }
+      const candidatesPayload = candidateDataToAdd.map(c => ({
+        email: c.email,
+        phone: c.phone,
+        name: c.name
+      }));
 
-      let waCount = 0;
-      const candidatesWithPhones = parsedCandidates.filter(c => c.phone && c.phone !== 'N/A');
-      if (sendWhatsAppChannel && candidatesWithPhones.length > 0) {
-        setSendingProgressMsg(`Sending WhatsApp invites one-by-one with 10s anti-spam delay...`);
-        const waResult = await sendBulkWhatsAppInvites(
-          candidatesWithPhones,
-          invitingJob.title,
-          targetLink,
-          invitingJob.accessCode || '',
-          false,
-          (sentCount, totalCount, currentCandidate, isWaiting) => {
-            if (isWaiting) {
-              setSendingProgressMsg(`⏳ Sent WhatsApp to ${currentCandidate} (${sentCount}/${totalCount}). Waiting 10s delay to protect WhatsApp number...`);
-            } else {
-              setSendingProgressMsg(`📱 Sending WhatsApp invite ${sentCount}/${totalCount} to ${currentCandidate}...`);
-            }
-          },
-          {
-            location: invitingJob.location,
-            qualification: invitingJob.qualifications || invitingJob.education,
-            experience: ((invitingJob as any).maxExperience > (invitingJob as any).minExperience)
-              ? `${(invitingJob as any).minExperience} - ${(invitingJob as any).maxExperience} Years`
-              : invitingJob.experience,
-            minExperience: (invitingJob as any).minExperience,
-            maxExperience: (invitingJob as any).maxExperience,
-            gender: (invitingJob as any).gender || (invitingJob as any).genderRequirement,
-            salary: invitingJob.salary || invitingJob.salaryRange,
-            salaryRange: invitingJob.salaryRange || invitingJob.salary,
-            employmentType: (invitingJob as any).employmentType,
-            customFields: (invitingJob as any).customFields,
-            recruiterName: userProfile?.name || (user as any)?.displayName || 'Hiring Team',
-            whatsappSessionId: userProfile?.whatsappSessionId || '',
-            whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
-          }
-        );
-        if (waResult.success) waCount = waResult.totalSent;
-      }
+      startBackgroundSend({
+        candidates: candidatesPayload,
+        jobTitle: invitingJob.title,
+        interviewLink: targetLink,
+        accessCode: invitingJob.accessCode || '',
+        isReminder,
+        sendEmailChannel,
+        sendWhatsAppChannel,
+        options: {
+          location: invitingJob.location,
+          qualification: invitingJob.qualifications || invitingJob.education,
+          experience: ((invitingJob as any).maxExperience > (invitingJob as any).minExperience)
+            ? `${(invitingJob as any).minExperience} - ${(invitingJob as any).maxExperience} Years`
+            : invitingJob.experience,
+          minExperience: (invitingJob as any).minExperience,
+          maxExperience: (invitingJob as any).maxExperience,
+          gender: (invitingJob as any).gender || (invitingJob as any).genderRequirement,
+          salary: invitingJob.salary || invitingJob.salaryRange,
+          salaryRange: invitingJob.salaryRange || invitingJob.salary,
+          employmentType: (invitingJob as any).employmentType,
+          customFields: (invitingJob as any).customFields,
+          recruiterName: userProfile?.name || (user as any)?.displayName || 'Hiring Team',
+          whatsappSessionId: userProfile?.whatsappSessionId || '',
+          whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
+        },
+        waMinDelay: typeof waMinDelay === 'number' ? waMinDelay : (parseInt(waMinDelay) || 15),
+        waMaxDelay: typeof waMaxDelay === 'number' ? waMaxDelay : (parseInt(waMaxDelay) || 25),
+        waDelayUnit
+      });
 
-      messageBox.showSuccess(`Invited ${finalEmails.length} candidate(s) successfully! ${emailCount > 0 ? `${emailCount} Email(s) sent. ` : ''}${waCount > 0 ? `${waCount} WhatsApp invite(s) sent.` : ''}`);
+      messageBox.showSuccess(`🚀 Background ${isReminder ? 'reminders' : 'sending'} started for ${candidatesPayload.length} candidate(s)! You can freely navigate to any page.`);
 
       setInvitingJob(null);
       setInviteEmailsList([]);
@@ -1542,20 +1553,46 @@ const RecruiterAllJobs: React.FC = () => {
                       )}
                     </div>
 
-                    <div>
-                      <label className="geist-label uppercase text-[#6b7280] block mb-1">
-                        Experience (Years) (Optional)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        min="0"
-                        max="60"
-                        placeholder="e.g. 3 or 5.5 (Leave blank for AI auto-extraction from resume)"
-                        value={currentSingleExp}
-                        onChange={(e) => setCurrentSingleExp(e.target.value)}
-                        className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-2.5 text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
-                      />
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="geist-label uppercase text-[#6b7280] block mb-1">
+                          Location / City <span className="text-white font-semibold">*</span>
+                        </label>
+                        <LocationCityInput
+                          value={currentSingleLocation}
+                          onChange={setCurrentSingleLocation}
+                          placeholder="e.g. Nashik, Mumbai, Pune..."
+                          className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-2.5 text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="geist-label uppercase text-[#6b7280] block mb-1">
+                          Experience (Years) <span className="text-white font-semibold">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="60"
+                          placeholder="e.g. 1.5 or 3.5 Yrs"
+                          value={currentSingleExp}
+                          onChange={(e) => setCurrentSingleExp(e.target.value)}
+                          className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-2.5 text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="geist-label uppercase text-[#6b7280] block mb-1">
+                          Highest Education <span className="text-white font-semibold">*</span>
+                        </label>
+                        <EducationInput
+                          value={currentSingleEducation}
+                          onChange={setCurrentSingleEducation}
+                          placeholder="Type or select education..."
+                          className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-2.5 text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
+                        />
+                      </div>
                     </div>
 
                     {/* Optional Extra Text Area */}
@@ -1592,22 +1629,23 @@ const RecruiterAllJobs: React.FC = () => {
                   </div>
 
                   {/* Single Candidate Manual Input */}
-                  <div>
-                    <label className="geist-label uppercase text-[#6b7280] block mb-1">
+                  <div className="space-y-2">
+                    <label className="geist-label uppercase text-[#6b7280] block">
                       Add Candidate Manually (Email & WhatsApp Contact)
                     </label>
                     <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        placeholder="Candidate Name (e.g. Rahul Sharma)"
+                        value={currentSingleName}
+                        onChange={(e) => setCurrentSingleName(e.target.value)}
+                        className="geist-caption flex-1 h-9 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
+                      />
                       <input
                         type="email"
                         placeholder="Candidate email (e.g. candidate@example.com)"
                         value={currentSingleEmail}
                         onChange={(e) => setCurrentSingleEmail(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleAddCandidate();
-                          }
-                        }}
                         className="geist-caption flex-1 h-9 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
                       />
                       <input
@@ -1615,20 +1653,14 @@ const RecruiterAllJobs: React.FC = () => {
                         placeholder="WhatsApp Phone (+91...)"
                         value={currentSinglePhone}
                         onChange={(e) => setCurrentSinglePhone(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleAddCandidate();
-                          }
-                        }}
-                        className="geist-caption w-full sm:w-2/5 h-9 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
+                        className="geist-caption w-full sm:w-1/4 h-9 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
                       />
                       <button
                         type="button"
                         onClick={handleAddCandidate}
                         className="geist-caption h-9 px-4 bg-white text-black hover:bg-[#eaeaea] rounded-[6px] font-semibold transition-colors shrink-0"
                       >
-                        Add Candidate
+                        + Add Candidate
                       </button>
                     </div>
                   </div>
@@ -1993,9 +2025,58 @@ const RecruiterAllJobs: React.FC = () => {
                       className="w-4 h-4 rounded text-emerald-500 focus:ring-0 cursor-pointer"
                     />
                     <MessageSquare className="w-4 h-4 text-emerald-400" />
-                    <span>Send WhatsApp Invitations (10s Anti-Spam Delay)</span>
+                    <span>Send WhatsApp Invitations</span>
                   </label>
                 </div>
+
+                {sendWhatsAppChannel && (
+                  <div className="mt-2.5 pt-2.5 border-t border-border/40 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                    <div>
+                      <label className="text-[11px] text-muted-foreground block mb-1 font-medium">Min Delay</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="360"
+                        value={waMinDelay}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setWaMinDelay(val === '' ? '' : Math.max(1, parseInt(val) || 1));
+                        }}
+                        placeholder="15"
+                        className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 cursor-text"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-muted-foreground block mb-1 font-medium">Max Delay</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="360"
+                        value={waMaxDelay}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setWaMaxDelay(val === '' ? '' : Math.max(1, parseInt(val) || 1));
+                        }}
+                        placeholder="25"
+                        className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 cursor-text"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-muted-foreground block mb-1 font-medium">Delay Unit</label>
+                      <select
+                        value={waDelayUnit}
+                        onChange={(e) => setWaDelayUnit(e.target.value as 'sec' | 'min')}
+                        className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 cursor-pointer"
+                      >
+                        <option value="sec" className="bg-background text-foreground">Seconds (sec)</option>
+                        <option value="min" className="bg-background text-foreground">Minutes (min)</option>
+                      </select>
+                    </div>
+                    <p className="sm:col-span-3 text-[10px] text-emerald-500 dark:text-emerald-400 italic">
+                      * Each WhatsApp message will pause for a random delay between {waMinDelay || 15} - {waMaxDelay || 25} {waDelayUnit} to protect your WhatsApp number from spam blocking.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {sendingProgressMsg && (
@@ -2020,7 +2101,7 @@ const RecruiterAllJobs: React.FC = () => {
                         setCandidateEmailsInput('');
                         messageBox.showInfo('Cleared all candidate entries.');
                       }}
-                      className="text-xs text-red-400 hover:text-red-300 font-semibold transition-colors flex items-center gap-1"
+                      className="text-xs text-red-400 hover:text-red-300 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Remove All ({inviteEmailsList.length})</span>
@@ -2040,7 +2121,7 @@ const RecruiterAllJobs: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => handleRemoveEmail(email)}
-                              className="text-[#8f8f8f] hover:text-[#ff8f8f] ml-1"
+                              className="text-[#8f8f8f] hover:text-[#ff8f8f] ml-1 cursor-pointer"
                             >
                               &times;
                             </button>
@@ -2072,16 +2153,26 @@ const RecruiterAllJobs: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setInvitingJob(null)}
-                className="geist-caption h-8 px-3 border border-white/[0.11] text-[#d4d4d4] hover:text-white rounded-[6px] font-medium hover:bg-white/[0.04]"
+                className="geist-caption h-8 px-3 border border-white/[0.11] text-[#d4d4d4] hover:text-white rounded-[6px] font-medium hover:bg-white/[0.04] cursor-pointer"
               >
                 Cancel
               </button>
 
               <button
                 type="button"
-                onClick={handleSendInvites}
+                onClick={() => handleSendInvites(true)}
                 disabled={sendingInvites}
-                className="geist-caption inline-flex h-8 items-center gap-2 px-4 bg-white text-black hover:bg-[#eaeaea] rounded-[6px] font-semibold transition-colors disabled:opacity-50"
+                className="geist-caption inline-flex h-8 items-center gap-1.5 px-3 bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/40 rounded-[6px] font-semibold text-xs transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>{sendingInvites ? 'Sending...' : 'Send Bulk Reminders'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSendInvites(false)}
+                disabled={sendingInvites}
+                className="geist-caption inline-flex h-8 items-center gap-2 px-4 bg-white text-black hover:bg-[#eaeaea] rounded-[6px] font-semibold text-xs transition-colors disabled:opacity-50 cursor-pointer"
               >
                 <Mail className="w-3.5 h-3.5" />
                 <span>{sendingInvites ? 'Sending...' : 'Send Invitations'}</span>

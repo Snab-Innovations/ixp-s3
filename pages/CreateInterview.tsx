@@ -5,7 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { SKILL_OPTIONS } from './Profile';
 import * as pdfjsLib from 'pdfjs-dist';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Sparkles, Building2 } from 'lucide-react';
+import { LocationCityInput } from '../components/LocationCityInput';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rateLimitService';
 import { getCandidateIdentityKeys, isCandidateIdentityInSet, dedupeCandidatesByIdentity } from '../services/candidateIdentity';
@@ -59,6 +60,56 @@ const textContainsSkill = (text: string, skill: string) => {
   const normalizedText = ` ${normalizeSearchText(text)} `;
   const normalizedSkill = ` ${normalizeSearchText(skill)} `;
   return normalizedSkill.trim().length > 1 && normalizedText.includes(normalizedSkill);
+};
+
+const fetchTextFromUrl = async (targetUrl: string): Promise<string> => {
+  let cleanUrl = targetUrl.trim();
+  if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+    cleanUrl = 'https://' + cleanUrl;
+  }
+
+  let htmlText = '';
+
+  try {
+    const res = await fetch(cleanUrl);
+    if (res.ok) {
+      htmlText = await res.text();
+    }
+  } catch (err) {
+    console.warn("Direct fetch failed (likely CORS), attempting proxy fetch...", err);
+  }
+
+  if (!htmlText) {
+    const proxies = [
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(cleanUrl)}`,
+      `https://corsproxy.io/?${encodeURIComponent(cleanUrl)}`
+    ];
+
+    for (const proxyUrl of proxies) {
+      try {
+        const res = await fetch(proxyUrl);
+        if (res.ok) {
+          htmlText = await res.text();
+          if (htmlText.length > 50) break;
+        }
+      } catch (proxyErr) {
+        console.warn(`Proxy ${proxyUrl} failed:`, proxyErr);
+      }
+    }
+  }
+
+  if (!htmlText) {
+    throw new Error("Unable to fetch webpage content directly due to browser CORS or security rules.");
+  }
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlText, 'text/html');
+
+  const elementsToRemove = doc.querySelectorAll('script, style, noscript, iframe, svg, header, footer, nav');
+  elementsToRemove.forEach((el) => el.remove());
+
+  const rawText = doc.body?.textContent || doc.textContent || '';
+  return rawText.replace(/\s+/g, ' ').trim();
 };
 
 export const CreateInterviewSkeleton = () => (
@@ -150,8 +201,9 @@ const CreateInterview: React.FC = () => {
   const DEFAULT_FIRST_QUESTION = "Please tell us about your work experience. For each company, tell us your job title, what work you did every day, and your main responsibilities.";
 
   const [parsingJd, setParsingJd] = useState(false);
-  const [jdImportMode, setJdImportMode] = useState<'upload' | 'paste'>('upload');
+  const [jdImportMode, setJdImportMode] = useState<'upload' | 'paste' | 'url'>('upload');
   const [pastedJdText, setPastedJdText] = useState('');
+  const [jdUrlInput, setJdUrlInput] = useState('');
   const [parsingResumes, setParsingResumes] = useState(false);
   const [sendingEmails, setSendingEmails] = useState(false);
   const [manualQuestions, setManualQuestions] = useState<string[]>([DEFAULT_FIRST_QUESTION]);
@@ -160,25 +212,54 @@ const CreateInterview: React.FC = () => {
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [tempCustomField, setTempCustomField] = useState({ key: '', value: '' });
 
+  const getDefaultDeadlineDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 5);
+    return d.toISOString().split('T')[0];
+  };
+
   const [eduInput, setEduInput] = useState('');
   const [formData, setFormData] = useState({
+    jobNo: '',
     title: '',
     description: '',
     department: '',
-    employmentType: '',
+    employmentType: 'Full-time',
     minExperience: 0,
     maxExperience: 0,
     experience: 0,
     skills: '',
     education: '',
     location: '',
+    city: '',
+    companyDetails: '',
+    jobLink: '',
     salaryRange: '',
     genderRequirement: 'Any',
-    deadline: '',
+    deadline: getDefaultDeadlineDate(),
     numQuestions: 5,
     difficulty: 'Easy',
     strictness: 'Low',
   });
+
+  const aiRecommendedSkills = useMemo(() => {
+    const jobText = `${formData.title} ${formData.department} ${formData.description} ${formData.skills}`.toLowerCase();
+    const detected = extractSkillSignals(jobText);
+
+    const currentList = formData.skills
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const combined = Array.from(new Set([...currentList, ...detected]));
+
+    if (skillSearch.trim()) {
+      const q = skillSearch.trim().toLowerCase();
+      return combined.filter((s) => s.toLowerCase().includes(q));
+    }
+
+    return combined;
+  }, [formData.title, formData.department, formData.description, formData.skills, skillSearch]);
 
   useEffect(() => {
     if (!user) {
@@ -428,24 +509,63 @@ const CreateInterview: React.FC = () => {
   };
 
   const handleApplyParsedJdData = (parsed: ParsedJdResult) => {
+    let extractedCompanyInfo = parsed.companyProfile || '';
+    let extractedJobNo = parsed.jobNo || '';
+    const remainingCustomFields: { key: string; value: string }[] = [];
+
+    if (parsed.customFields && Array.isArray(parsed.customFields)) {
+      parsed.customFields.forEach(cf => {
+        const keyLower = cf.key.trim().toLowerCase();
+        if (
+          keyLower.includes('job no') ||
+          keyLower.includes('job number') ||
+          keyLower.includes('job code') ||
+          keyLower.includes('req id') ||
+          keyLower.includes('requisition')
+        ) {
+          if (!extractedJobNo) extractedJobNo = cf.value.trim();
+        } else if (
+          keyLower.includes('company profile') ||
+          keyLower.includes('company overview') ||
+          keyLower.includes('company detail') ||
+          keyLower.includes('about company') ||
+          keyLower.includes('company product') ||
+          keyLower.includes('company turnover')
+        ) {
+          if (!extractedCompanyInfo.includes(cf.value.trim())) {
+            extractedCompanyInfo += (extractedCompanyInfo ? '\n\n' : '') + `${cf.key.trim()}: ${cf.value.trim()}`;
+          }
+        } else {
+          remainingCustomFields.push(cf);
+        }
+      });
+    }
+
     setFormData(prev => ({
       ...prev,
+      jobNo: extractedJobNo || prev.jobNo || '',
       title: parsed.title || parsed.vacancyName || parsed.designation || prev.title,
       description: parsed.description || prev.description,
       department: parsed.department || parsed.industry || parsed.roleCategory || prev.department,
-      employmentType: parsed.employmentType || prev.employmentType,
+      employmentType: parsed.employmentType ? (
+        parsed.employmentType.toLowerCase().includes('part') ? 'Part-time' :
+        parsed.employmentType.toLowerCase().includes('contract') ? 'Contract' :
+        parsed.employmentType.toLowerCase().includes('intern') ? 'Internship' : 'Full-time'
+      ) : (prev.employmentType || 'Full-time'),
       minExperience: parsed.minExperience !== undefined ? Number(parsed.minExperience) : prev.minExperience,
       maxExperience: parsed.maxExperience !== undefined ? Number(parsed.maxExperience) : prev.maxExperience,
       experience: parsed.minExperience !== undefined ? Number(parsed.minExperience) : prev.experience,
       skills: parsed.skills || (parsed.technicalSkills && parsed.softSkills ? `${parsed.technicalSkills}, ${parsed.softSkills}` : prev.skills),
       education: parsed.qualification || parsed.education || prev.education,
       salaryRange: parsed.salaryRange || (parsed.minSalary && parsed.maxSalary ? `${parsed.minSalary} - ${parsed.maxSalary}` : (prev as any).salaryRange || ''),
-      location: parsed.location || (parsed.city ? `${parsed.city}, ${parsed.state || ''}` : (prev as any).location || ''),
-      genderRequirement: parsed.gender || (prev as any).genderRequirement || '',
+      location: parsed.location || (parsed.city ? `${parsed.city}${parsed.state ? `, ${parsed.state}` : ''}` : prev.location || ''),
+      city: parsed.city || (parsed.location ? parsed.location.split(',')[0].trim() : prev.city || ''),
+      companyDetails: extractedCompanyInfo || prev.companyDetails || '',
+      genderRequirement: parsed.gender || (prev as any).genderRequirement || 'Any',
     }));
 
-    if (parsed.customFields && Array.from(parsed.customFields).length > 0) {
-      const newFields = parsed.customFields.map((cf, idx) => ({
+    if (remainingCustomFields.length > 0) {
+      const newFields = remainingCustomFields.map((cf, idx) => ({
         id: Date.now() + idx,
         key: cf.key.trim(),
         value: cf.value.trim()
@@ -456,6 +576,34 @@ const CreateInterview: React.FC = () => {
         const filteredNew = newFields.filter(f => !existingKeys.has(f.key.toLowerCase()));
         return [...prev, ...filteredNew];
       });
+    }
+  };
+
+  const handleFetchAndParseJdFromUrl = async () => {
+    let targetUrl = jdUrlInput.trim();
+    if (!targetUrl) {
+      alert('Please enter or paste a Job Description web link (URL) first.');
+      return;
+    }
+
+    setParsingJd(true);
+    try {
+      const fetchedText = await fetchTextFromUrl(targetUrl);
+      if (!fetchedText || fetchedText.length < 30) {
+        throw new Error("Could not extract readable text content from the URL webpage.");
+      }
+
+      const fullUrl = targetUrl.startsWith('http') ? targetUrl : 'https://' + targetUrl;
+      setFormData(prev => ({ ...prev, jobLink: prev.jobLink || fullUrl }));
+
+      const parsedData = await parseJobDescriptionText(fetchedText);
+      handleApplyParsedJdData(parsedData);
+      alert('✅ Job description webpage fetched & parsed! All standard details & dynamic fields auto-filled.');
+    } catch (error: any) {
+      console.error('Error fetching/parsing JD from URL:', error);
+      alert(`❌ Could not fetch JD from URL: ${error.message || 'CORS or website restriction'}. You can paste the JD text directly in the "Paste Text" tab.`);
+    } finally {
+      setParsingJd(false);
     }
   };
 
@@ -771,7 +919,7 @@ const CreateInterview: React.FC = () => {
       navigate('/recruiter/interviews');
     } catch (err) {
       console.error(err);
-      alert("❌ Failed to create interview");
+      alert("❌ Failed to create job");
     } finally {
       setLoading(false);
     }
@@ -781,8 +929,8 @@ const CreateInterview: React.FC = () => {
   const textareaClass = "geist-caption min-h-[132px] w-full resize-y rounded-[6px] border border-gray-300 dark:border-white/[0.14] bg-white dark:bg-[#050505] px-3 py-2.5 text-gray-900 dark:text-white outline-none transition-colors placeholder:text-gray-400 dark:placeholder:text-[#6b7280] focus:border-indigo-500 dark:focus:border-white/[0.28]";
   const selectClass = `${inputClass} appearance-none`;
   const labelClass = "geist-label mb-1.5 block text-gray-700 dark:text-[#a1a1aa]";
-  const secondaryButtonClass = "geist-caption inline-flex h-9 shrink-0 items-center justify-center rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.03] px-3 font-medium text-gray-800 dark:text-[#d4d4d4] transition-colors hover:bg-gray-200 dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
-  const primaryButtonClass = "geist-caption inline-flex h-10 items-center justify-center rounded-[6px] border border-gray-900 dark:border-white bg-gray-900 dark:bg-white px-4 font-medium text-white dark:text-black transition-colors hover:bg-gray-800 dark:hover:bg-[#eaeaea] disabled:cursor-not-allowed disabled:opacity-50";
+  const secondaryButtonClass = "geist-caption inline-flex h-9 shrink-0 items-center justify-center rounded-[6px] border border-gray-300 dark:border-white/[0.14] bg-white dark:bg-white/[0.03] px-3.5 font-semibold text-gray-800 dark:text-[#d4d4d4] transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-40 shadow-sm dark:shadow-none cursor-pointer";
+  const primaryButtonClass = "geist-caption inline-flex h-10 items-center justify-center rounded-[6px] bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 px-5 font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 shadow-md dark:shadow-none cursor-pointer";
   const panelHeaderClass = "geist-label uppercase text-gray-500 dark:text-[#6b7280]";
   const panelTitleClass = "geist-section-title mt-1 text-gray-900 dark:text-white";
   const helperTextClass = "geist-small mt-1 max-w-2xl text-gray-600 dark:text-[#8f8f8f]";
@@ -792,8 +940,8 @@ const CreateInterview: React.FC = () => {
 
       <header className="border-b border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#000]">
         <div className="px-4 py-5 sm:px-6 lg:px-7">
-          <p className="geist-label uppercase text-gray-500 dark:text-[#6b7280]">Interview setup</p>
-          <h1 className="geist-page-title mt-2 text-gray-900 dark:text-white">Create interview</h1>
+          <p className="geist-label uppercase text-gray-500 dark:text-[#6b7280]">Job setup</p>
+          <h1 className="geist-page-title mt-2 text-gray-900 dark:text-white">Create Job</h1>
           <p className="geist-small mt-1 max-w-2xl text-gray-600 dark:text-[#8f8f8f]">
             Build a structured interview brief, tune the question rules, and prepare candidate invitations from one focused workspace.
           </p>
@@ -817,20 +965,27 @@ const CreateInterview: React.FC = () => {
             </div>
 
             {/* Mode Switcher Tabs */}
-            <div className="flex rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] p-1 shadow-sm dark:shadow-none">
+            <div className="flex rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-100/80 dark:bg-white/[0.03] p-1 shadow-inner dark:shadow-none">
               <button
                 type="button"
                 onClick={() => setJdImportMode('upload')}
-                className={`flex-1 py-1.5 text-xs font-medium rounded-[4px] transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${jdImportMode === 'upload' ? 'bg-gray-900 dark:bg-white text-white dark:text-black font-semibold shadow' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-gray-900 dark:hover:text-white'}`}
+                className={`flex-1 py-1.5 text-[11px] font-semibold rounded-[4px] transition-all flex items-center justify-center gap-1 cursor-pointer ${jdImportMode === 'upload' ? 'bg-black text-white dark:bg-white dark:text-black shadow-sm' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-gray-900 dark:hover:text-white'}`}
               >
                 <i className="fas fa-file-pdf"></i> Upload File
               </button>
               <button
                 type="button"
                 onClick={() => setJdImportMode('paste')}
-                className={`flex-1 py-1.5 text-xs font-medium rounded-[4px] transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${jdImportMode === 'paste' ? 'bg-gray-900 dark:bg-white text-white dark:text-black font-semibold shadow' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-gray-900 dark:hover:text-white'}`}
+                className={`flex-1 py-1.5 text-[11px] font-semibold rounded-[4px] transition-all flex items-center justify-center gap-1 cursor-pointer ${jdImportMode === 'paste' ? 'bg-black text-white dark:bg-white dark:text-black shadow-sm' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-gray-900 dark:hover:text-white'}`}
               >
-                <i className="fas fa-paste"></i> Paste JD Text
+                <i className="fas fa-paste"></i> Paste Text
+              </button>
+              <button
+                type="button"
+                onClick={() => setJdImportMode('url')}
+                className={`flex-1 py-1.5 text-[11px] font-semibold rounded-[4px] transition-all flex items-center justify-center gap-1 cursor-pointer ${jdImportMode === 'url' ? 'bg-black text-white dark:bg-white dark:text-black shadow-sm' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-gray-900 dark:hover:text-white'}`}
+              >
+                <i className="fas fa-link"></i> Web Link
               </button>
             </div>
 
@@ -849,7 +1004,7 @@ const CreateInterview: React.FC = () => {
                   ) : (
                     <>
                       <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                        <i className="fas fa-file-upload text-blue-600 dark:text-blue-400"></i> Upload job description file
+                        <i className="fas fa-file-upload text-black dark:text-white"></i> Upload job description file
                       </span>
                       <span className="geist-small mt-1 text-gray-500 dark:text-[#8f8f8f]">PDF or TXT document with job requirements.</span>
                     </>
@@ -857,7 +1012,7 @@ const CreateInterview: React.FC = () => {
                 </label>
                 <input id="jd-upload" type="file" accept=".pdf,.txt" className="hidden" onChange={handleJDUpload} disabled={parsingJd} />
               </>
-            ) : (
+            ) : jdImportMode === 'paste' ? (
               <div className="space-y-3">
                 <textarea
                   rows={8}
@@ -870,7 +1025,7 @@ const CreateInterview: React.FC = () => {
                   type="button"
                   onClick={handleParsePastedJDText}
                   disabled={parsingJd || !pastedJdText.trim()}
-                  className="w-full h-9 rounded-[6px] bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow"
+                  className="w-full h-9 rounded-[6px] bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 text-white dark:text-black font-semibold text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
                 >
                   {parsingJd ? (
                     <>
@@ -879,6 +1034,32 @@ const CreateInterview: React.FC = () => {
                   ) : (
                     <>
                       <i className="fas fa-wand-magic-sparkles"></i> Auto-Fill JD Details & Custom Fields
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <input
+                  type="url"
+                  value={jdUrlInput}
+                  onChange={(e) => setJdUrlInput(e.target.value)}
+                  placeholder="Paste Job URL (e.g. https://company.com/job/101)..."
+                  className="w-full rounded-[6px] border border-gray-300 dark:border-white/[0.18] bg-white dark:bg-white/[0.03] p-3 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-indigo-500 dark:focus:border-white font-sans"
+                />
+                <button
+                  type="button"
+                  onClick={handleFetchAndParseJdFromUrl}
+                  disabled={parsingJd || !jdUrlInput.trim()}
+                  className="w-full h-9 rounded-[6px] bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 text-white dark:text-black font-semibold text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
+                >
+                  {parsingJd ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin"></i> Fetching Webpage & Parsing...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-globe"></i> Fetch & Auto-Fill JD from URL
                     </>
                   )}
                 </button>
@@ -913,6 +1094,18 @@ const CreateInterview: React.FC = () => {
 
             <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
               <div>
+                <label className={labelClass}>Job Number / Code (Optional)</label>
+                <input
+                  name="jobNo"
+                  type="text"
+                  className={inputClass}
+                  value={formData.jobNo}
+                  onChange={handleFormChange}
+                  placeholder="e.g. Job No: 1042 or REQ-901 (Auto-filled by AI if in JD)"
+                />
+              </div>
+
+              <div>
                 <label className={labelClass}>Job title / role</label>
                 <input name="title" type="text" required className={inputClass} value={formData.title} onChange={handleFormChange} placeholder="Senior Frontend Engineer" />
               </div>
@@ -927,10 +1120,26 @@ const CreateInterview: React.FC = () => {
                 <textarea name="description" required rows={5} className={textareaClass} value={formData.description} onChange={handleFormChange} placeholder="Describe the role, responsibilities, and what you are looking for." />
               </div>
 
+              <div className="xl:col-span-2">
+                <label className={labelClass}>Company Details & Overview (Optional)</label>
+                <textarea name="companyDetails" rows={3} className={textareaClass} value={formData.companyDetails} onChange={handleFormChange} placeholder="Enter company profile, background, product overview, or recruiter company details..." />
+              </div>
+
+              <div className="xl:col-span-2">
+                <label className={labelClass}>Job Link / External URL (Added by Job Creator)</label>
+                <input
+                  name="jobLink"
+                  type="url"
+                  className={inputClass}
+                  value={formData.jobLink}
+                  onChange={handleFormChange}
+                  placeholder="e.g. https://dsource.in/careers/job-101 (Added manually by job creator, not AI)"
+                />
+              </div>
+
               <div>
                 <label className={labelClass}>Employment type</label>
                 <select name="employmentType" required className={selectClass} value={formData.employmentType} onChange={handleFormChange}>
-                  <option value="">Select type</option>
                   <option value="Full-time">Full-time</option>
                   <option value="Part-time">Part-time</option>
                   <option value="Contract">Contract</option>
@@ -948,8 +1157,25 @@ const CreateInterview: React.FC = () => {
               </div>
 
               <div>
-                <label className={labelClass}>Job location <span className="text-red-500 dark:text-red-400">*</span></label>
-                <input name="location" type="text" required className={inputClass} value={formData.location} onChange={handleFormChange} placeholder="e.g. Ambad, Nashik / Remote / Mumbai" />
+                <label className={labelClass}>Job City / Location <span className="text-red-500 dark:text-red-400">*</span></label>
+                <LocationCityInput
+                  value={formData.city || formData.location}
+                  onChange={(val) => setFormData({ ...formData, city: val, location: val })}
+                  placeholder="Search city (e.g. Ambad, Nashik / Pune / Mumbai)..."
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className={labelClass}>Application Deadline (Autoset: 5 Days Default)</label>
+                <input
+                  name="deadline"
+                  type="date"
+                  required
+                  className={inputClass}
+                  value={formData.deadline}
+                  onChange={handleFormChange}
+                />
               </div>
 
               <div>
@@ -1076,24 +1302,39 @@ const CreateInterview: React.FC = () => {
               </button>
             </div>
 
-            <div className="mt-3 max-h-44 overflow-y-auto rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-50 dark:bg-[#050505] p-2 custom-scrollbar">
-              <div className="flex flex-wrap gap-2">
-                {SKILL_OPTIONS.filter(s => s.toLowerCase().includes(skillSearch.toLowerCase())).map(skill => {
+            <div className="mt-3 rounded-[6px] border border-purple-200 dark:border-white/[0.11] bg-purple-50/50 dark:bg-[#08080c] p-3">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 animate-pulse" />
+                <span className="geist-caption text-xs font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+                  AI Recommended Contextual Skills ({aiRecommendedSkills.length})
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 mb-2">
+                Contextually recommended skills based on your job title & description. Click to toggle.
+              </p>
+              <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto custom-scrollbar">
+                {aiRecommendedSkills.map((skill) => {
                   const isSelected = formData.skills.split(',').map(s => s.trim()).includes(skill);
                   return (
                     <button
                       key={skill}
                       type="button"
                       onClick={() => toggleSkill(skill)}
-                      className={`geist-small inline-flex h-7 items-center rounded-[6px] border px-2.5 transition-colors ${isSelected
-                        ? 'border-purple-300 dark:border-white/[0.28] bg-purple-600 dark:bg-white text-white dark:text-black font-semibold'
-                        : 'border-gray-200 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] text-gray-700 dark:text-[#8f8f8f] hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-white'
-                        }`}
+                      className={`geist-small inline-flex h-7 items-center rounded-[6px] border px-2.5 transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'border-purple-400 bg-purple-600 dark:bg-white text-white dark:text-black font-bold shadow-sm'
+                          : 'border-gray-300 dark:border-white/10 bg-white dark:bg-white/[0.04] text-gray-800 dark:text-gray-200 hover:bg-purple-100 dark:hover:bg-white/10'
+                      }`}
                     >
-                      {skill}{isSelected && ' ✓'}
+                      {skill} {isSelected ? '✓' : '+'}
                     </button>
                   );
                 })}
+                {aiRecommendedSkills.length === 0 && (
+                  <span className="text-xs text-gray-400 dark:text-gray-500 italic">
+                    Paste or upload a Job Description to auto-recommend skills, or add custom skills above.
+                  </span>
+                )}
               </div>
             </div>
           </section>
@@ -1409,7 +1650,7 @@ const CreateInterview: React.FC = () => {
                     <SkeletonBlock className="h-3.5 w-40 bg-gray-300 dark:bg-black/[0.18]" />
                     <SkeletonBlock className="h-2.5 w-28 bg-gray-200 dark:bg-black/[0.12]" />
                   </span>
-                ) : interviewLimitReached ? 'Interview limit reached' : 'Create interview and send invitations'}
+                ) : interviewLimitReached ? 'Job limit reached' : 'Create job and send invitations'}
               </button>
             </div>
           </div>

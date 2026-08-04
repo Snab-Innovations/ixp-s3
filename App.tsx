@@ -2,6 +2,7 @@ import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { BackgroundSendProvider } from './context/BackgroundSendContext';
 import { MessageBoxProvider } from './components/MessageBox';
 import Layout from './components/Layout';
 import AuthPage from './pages/Auth';
@@ -50,6 +51,7 @@ import StatusPage from './pages/Status';
 import ClientView from './pages/ClientView';
 import ActiveJobsPage from './pages/ActiveJobs';
 import RecruiterAllJobs from './pages/RecruiterAllJobs';
+import PublicJobSeekerUpload from './pages/PublicJobSeekerUpload';
 
 const DefaultRouteLoader = () => (
   <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
@@ -109,7 +111,8 @@ const App: React.FC = () => {
     <MessageBoxProvider>
       <ThemeProvider>
         <AuthProvider>
-          <HashRouter>
+          <BackgroundSendProvider>
+            <HashRouter>
             <Routes>
             {/* Public Routes (No Layout) */}
             <Route path="/" element={<HomeRoute />} />
@@ -154,6 +157,21 @@ const App: React.FC = () => {
             <Route path="active-jobs" element={
               <ThemeProvider>
                 <ActiveJobsPage />
+              </ThemeProvider>
+            } />
+            <Route path="upload-resume" element={
+              <ThemeProvider>
+                <PublicJobSeekerUpload />
+              </ThemeProvider>
+            } />
+            <Route path="job-seeker-upload" element={
+              <ThemeProvider>
+                <PublicJobSeekerUpload />
+              </ThemeProvider>
+            } />
+            <Route path="careers/upload-resume" element={
+              <ThemeProvider>
+                <PublicJobSeekerUpload />
               </ThemeProvider>
             } />
 
@@ -262,6 +280,7 @@ const App: React.FC = () => {
             } />
             </Routes>
           </HashRouter>
+        </BackgroundSendProvider>
         </AuthProvider>
       </ThemeProvider>
     </MessageBoxProvider>

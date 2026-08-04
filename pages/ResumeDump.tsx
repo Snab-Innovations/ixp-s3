@@ -3,11 +3,14 @@ import { createPortal } from 'react-dom';
 import { collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import * as pdfjsLib from 'pdfjs-dist';
 import * as mammoth from 'mammoth';
-import { Award, Clock, Edit3, Filter, GraduationCap, MapPin, Plus, Archive, Briefcase, Check, CheckCircle2, CheckSquare, Copy, ExternalLink, FileText, Mail, MessageSquare, RotateCcw, Search, Send, SlidersHorizontal, Sparkles, Square, Trash2, UploadCloud, UserCheck, UserX, XCircle } from 'lucide-react';
+import { Award, Clock, Edit3, Filter, GraduationCap, MapPin, Plus, Archive, Briefcase, Check, CheckCircle2, CheckSquare, ChevronDown, Copy, ExternalLink, FileText, Mail, MessageSquare, RotateCcw, Search, Send, SlidersHorizontal, Sparkles, Square, Trash2, UploadCloud, UserCheck, UserX, XCircle } from 'lucide-react';
 
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
+import { LocationCityInput } from '../components/LocationCityInput';
+import { EducationInput } from '../components/EducationInput';
+import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
 import { SKILL_OPTIONS } from './Profile';
 import { analyzeResumeText, ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 import { logTeamActivity } from '../services/auditService';
@@ -466,17 +469,25 @@ const ResumeDump: React.FC = () => {
   const [selectedUploadFiles, setSelectedUploadFiles] = useState<File[]>([]);
   const [uploadModalExtraInfo, setUploadModalExtraInfo] = useState('');
   const [uploadModalExpYears, setUploadModalExpYears] = useState('');
+  const [uploadModalLocation, setUploadModalLocation] = useState('');
+  const [uploadModalHighestEducation, setUploadModalHighestEducation] = useState('B.Tech / B.E. (Bachelor of Engineering / Technology)');
   const [searchTerm, setSearchTerm] = useState('');
 
   const [deletingCandidateId, setDeletingCandidateId] = useState<string | null>(null);
   const [isDraggingResume, setIsDraggingResume] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'available' | 'hired'>('all');
   const [skillFilter, setSkillFilter] = useState<string>('all');
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [isSkillRecBoxOpen, setIsSkillRecBoxOpen] = useState<boolean>(false);
+  const [skillRecSearch, setSkillRecSearch] = useState<string>('');
   const [titleFilter, setTitleFilter] = useState<string>('all');
   const [expFilter, setExpFilter] = useState<string>('all');
   const [locationFilter, setLocationFilter] = useState<string>('all');
   const [matchScoreFilter, setMatchScoreFilter] = useState<string>('all');
   const [educationFilter, setEducationFilter] = useState<string>('all');
+  const [selectedEducation, setSelectedEducation] = useState<string[]>([]);
+  const [isEducationRecBoxOpen, setIsEducationRecBoxOpen] = useState<boolean>(false);
+  const [educationRecSearch, setEducationRecSearch] = useState<string>('');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [showMoreFilters, setShowMoreFilters] = useState<boolean>(false);
@@ -489,6 +500,7 @@ const ResumeDump: React.FC = () => {
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
+  const [inviteModalEducation, setInviteModalEducation] = useState<string>('B.Tech / B.E. (Bachelor of Engineering / Technology)');
 
   // Add candidate with optional text modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -641,9 +653,7 @@ const ResumeDump: React.FC = () => {
     }
 
     setLoading(true);
-    const candidatesQuery = teamId
-      ? query(collection(db, 'resumeDumpCandidates'), where('teamId', '==', teamId))
-      : query(collection(db, 'resumeDumpCandidates'), where('recruiterUID', '==', user.uid));
+    const candidatesQuery = query(collection(db, 'resumeDumpCandidates'));
 
     const unsubscribe = onSnapshot(
       candidatesQuery,
@@ -665,6 +675,15 @@ const ResumeDump: React.FC = () => {
               resumeUrl: typeof data.resumeUrl === 'string' ? data.resumeUrl : '',
               resumeFileName: typeof data.resumeFileName === 'string' ? data.resumeFileName : 'resume',
             } as ResumeDumpCandidate;
+          })
+          .filter((c: any) => {
+            // Include candidates from public upload portal (http://localhost:3000/#/upload-resume)
+            if (c.source === 'public_job_seeker_upload' || c.recruiterUID === 'DSOURCE_PUBLIC_JOB_SEEKER_POOL' || c.recruiterUID === 'PUBLIC_JOB_SEEKER_POOL' || c.teamId === 'DSOURCE_TALENT_ROSTER' || c.teamId === 'GLOBAL_CANDIDATE_POOL') {
+              return true;
+            }
+            if (teamId && c.teamId === teamId) return true;
+            if (user?.uid && c.recruiterUID === user.uid) return true;
+            return false;
           })
           .sort((left, right) => toMillis(right.updatedAt || right.createdAt) - toMillis(left.updatedAt || left.createdAt));
         setCandidates(dedupeCandidatesByIdentity(records, (candidate) => toMillis(candidate.updatedAt || candidate.createdAt)));
@@ -698,11 +717,16 @@ const ResumeDump: React.FC = () => {
   }, [candidates]);
 
   const uniqueLocationsList = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(MAHARASHTRA_CITIES);
     candidates.forEach(c => {
       if (c.location && c.location.trim()) {
         const parts = c.location.split(/[,/]/).map(p => p.trim()).filter(Boolean);
-        parts.forEach(p => set.add(p));
+        parts.forEach(p => {
+          const matchedCity = MAHARASHTRA_CITIES.find(m => m.toLowerCase() === p.toLowerCase() || p.toLowerCase().includes(m.toLowerCase()));
+          if (matchedCity) {
+            set.add(matchedCity);
+          }
+        });
       }
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
@@ -723,26 +747,29 @@ const ResumeDump: React.FC = () => {
     if (selectedJobId !== 'all') count++;
     if (statusFilter !== 'all') count++;
     if (skillFilter !== 'all') count++;
+    if (selectedSkills.length > 0) count++;
     if (titleFilter !== 'all') count++;
     if (expFilter !== 'all') count++;
     if (locationFilter !== 'all') count++;
     if (matchScoreFilter !== 'all') count++;
     if (educationFilter !== 'all') count++;
+    if (selectedEducation.length > 0) count++;
     if (sourceFilter !== 'all') count++;
     if (dateFilter !== 'all') count++;
     return count;
-  }, [selectedJobId, statusFilter, skillFilter, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, sourceFilter, dateFilter, searchTerm]);
+  }, [selectedJobId, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, selectedEducation, sourceFilter, dateFilter, searchTerm]);
 
   const handleClearAllFilters = () => {
-
     setSelectedJobId('all');
     setStatusFilter('all');
     setSkillFilter('all');
+    setSelectedSkills([]);
     setTitleFilter('all');
     setExpFilter('all');
     setLocationFilter('all');
     setMatchScoreFilter('all');
     setEducationFilter('all');
+    setSelectedEducation([]);
     setSourceFilter('all');
     setDateFilter('all');
     setSearchTerm('');
@@ -841,7 +868,14 @@ const ResumeDump: React.FC = () => {
       if (statusFilter === 'hired' && !(candidate.isHired || candidate.doNotSuggest)) return false;
       if (statusFilter === 'available' && (candidate.isHired || candidate.doNotSuggest)) return false;
 
-      // 3. Skill filter
+      // 3. Skill filter (Single + Multi-select checkmark Rec Box)
+      if (selectedSkills.length > 0) {
+        const candidateSkillsLower = (candidate.skills || []).map(s => s.toLowerCase());
+        const hasSelectedSkill = selectedSkills.some(reqSkill =>
+          candidateSkillsLower.some(cs => cs.includes(reqSkill.toLowerCase()))
+        );
+        if (!hasSelectedSkill) return false;
+      }
       if (skillFilter !== 'all') {
         const hasSkill = (candidate.skills || []).some(s => s.toLowerCase() === skillFilter.toLowerCase());
         if (!hasSkill) return false;
@@ -879,7 +913,14 @@ const ResumeDump: React.FC = () => {
         if (matchScoreFilter === '30+' && score < 30) return false;
       }
 
-      // 8. Education / Degree Filter
+      // 8. Education / Degree Filter (Single + Multi-select checkmark Rec Box)
+      if (selectedEducation.length > 0) {
+        const candEduText = (candidate.education || []).map(e => `${e.degree || ''} ${e.institution || ''}`).join(' ').toLowerCase() + ' ' + (candidate.summary || '').toLowerCase();
+        const hasSelectedEdu = selectedEducation.some(reqEdu =>
+          candEduText.includes(reqEdu.toLowerCase())
+        );
+        if (!hasSelectedEdu) return false;
+      }
       if (educationFilter !== 'all') {
         const candEdu = (candidate.education || []).map(e => `${e.degree || ''} ${e.institution || ''}`).join(' ').toLowerCase() + ' ' + (candidate.summary || '').toLowerCase();
         if (!candEdu.includes(educationFilter.toLowerCase())) return false;
@@ -924,6 +965,7 @@ const ResumeDump: React.FC = () => {
       searchTerm.trim() ||
       statusFilter !== 'all' ||
       skillFilter !== 'all' ||
+      selectedSkills.length > 0 ||
       titleFilter !== 'all' ||
       expFilter !== 'all' ||
       locationFilter !== 'all' ||
@@ -932,7 +974,7 @@ const ResumeDump: React.FC = () => {
       sourceFilter !== 'all' ||
       dateFilter !== 'all'
     );
-  }, [selectedJobId, searchTerm, statusFilter, skillFilter, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, sourceFilter, dateFilter]);
+  }, [selectedJobId, searchTerm, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, sourceFilter, dateFilter]);
 
 
   const totalPages = isSearchOrFilterActive
@@ -952,6 +994,43 @@ const ResumeDump: React.FC = () => {
   const processResumeFiles = async (files: File[], customExtraText?: string) => {
     if (!user || files.length === 0) return;
 
+    if (!uploadModalLocation.trim()) {
+      messageBox.show({
+        title: 'Location Required',
+        message: 'Candidate Location / City is mandatory for proper filtering. Please select or enter a city.',
+        variant: 'error',
+      });
+      return;
+    }
+
+    if (!uploadModalExpYears.trim()) {
+      messageBox.show({
+        title: 'Experience Required',
+        message: 'Candidate Experience in Years is mandatory for proper filtering. Please enter experience.',
+        variant: 'error',
+      });
+      return;
+    }
+
+    if (!uploadModalHighestEducation.trim()) {
+      messageBox.show({
+        title: 'Education Required',
+        message: 'Highest Education Qualification is mandatory for proper filtering. Please select candidate education.',
+        variant: 'error',
+      });
+      return;
+    }
+
+    const parsedExpNum = parseFloat(uploadModalExpYears.trim());
+    if (isNaN(parsedExpNum)) {
+      messageBox.show({
+        title: 'Invalid Experience',
+        message: 'Please enter a valid numeric experience in years (e.g. 1.5 or 3).',
+        variant: 'error',
+      });
+      return;
+    }
+
     setUploading(true);
     setIsDraggingResume(false);
     setUploadResults([]);
@@ -963,11 +1042,15 @@ const ResumeDump: React.FC = () => {
       try {
         const ingested = await ingestResumeFile(file, {}, '', extraInfoText);
 
-        if (uploadModalExpYears.trim()) {
-          const parsedExpNum = parseFloat(uploadModalExpYears.trim());
-          if (!isNaN(parsedExpNum)) {
-            ingested.profile.totalExperienceYears = parsedExpNum;
-          }
+        ingested.profile.location = uploadModalLocation.trim();
+        ingested.profile.totalExperienceYears = parsedExpNum;
+        if (uploadModalHighestEducation.trim()) {
+          const selectedDegree = uploadModalHighestEducation.trim();
+          const existingEdu = ingested.profile.education || [];
+          ingested.profile.education = [
+            { degree: selectedDegree, institution: 'Verified Qualification', year: '' },
+            ...existingEdu.filter(e => e.degree.toLowerCase() !== selectedDegree.toLowerCase())
+          ];
         }
 
         const creatorInfo = {
@@ -1017,11 +1100,16 @@ const ResumeDump: React.FC = () => {
     }));
 
     setUploadResults(results);
+    setTimeout(() => {
+      setUploadResults([]);
+    }, 8000);
     setUploading(false);
     setUploadStatus('');
     setSelectedUploadFiles([]);
     setUploadModalExtraInfo('');
     setUploadModalExpYears('');
+    setUploadModalLocation('');
+    setUploadModalHighestEducation('B.Tech / B.E. (Bachelor of Engineering / Technology)');
     setIsUploadModalOpen(false);
 
   };
@@ -1344,17 +1432,111 @@ const ResumeDump: React.FC = () => {
               </button>
             </div>
 
-            {/* Skill Filter Dropdown */}
-            <select
-              value={skillFilter}
-              onChange={(e) => setSkillFilter(e.target.value)}
-              className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[170px]"
-            >
-              <option value="all">All Skills ({uniqueSkillsList.length})</option>
-              {uniqueSkillsList.map(skill => (
-                <option key={skill} value={skill}>{skill}</option>
-              ))}
-            </select>
+            {/* Skill Rec Box Filter (Multi-Select Checkmarks) */}
+            <div className="flex items-center gap-1 shrink-0 relative">
+              <Filter size={13} className="text-[#8f8f8f] shrink-0" />
+              <button
+                type="button"
+                onClick={() => setIsSkillRecBoxOpen(prev => !prev)}
+                className="geist-caption h-8 inline-flex items-center justify-between gap-1.5 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs text-slate-800 dark:text-white outline-none focus:border-black dark:focus:border-white/30 cursor-pointer min-w-[140px] max-w-[180px] font-normal shadow-2xs"
+                title="Click to select multiple skills with checkmarks"
+              >
+                <span className="truncate">
+                  {selectedSkills.length > 0
+                    ? `Skills (${selectedSkills.length})`
+                    : `All Skills (${uniqueSkillsList.length})`}
+                </span>
+                <ChevronDown size={12} className="text-[#8f8f8f] shrink-0 ml-1" />
+              </button>
+
+              {/* Floating Recommended Skills Box (Rec Box) */}
+              {isSkillRecBoxOpen && (
+                <div
+                  className="absolute left-0 top-full mt-1.5 z-[9999] w-72 rounded-lg border border-gray-200 dark:border-white/15 bg-white dark:bg-[#0c0c0d] p-3 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in duration-100"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-gray-200 dark:border-white/10">
+                    <div className="relative flex-1">
+                      <Search size={12} className="absolute left-2.5 top-2.5 text-gray-400" />
+                      <input
+                        type="text"
+                        value={skillRecSearch}
+                        onChange={(e) => setSkillRecSearch(e.target.value)}
+                        placeholder="Search skills..."
+                        className="w-full h-7 pl-7 pr-2 rounded bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-xs text-slate-900 dark:text-white outline-none focus:border-black dark:focus:border-white/30"
+                      />
+                    </div>
+                    {selectedSkills.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSkills([])}
+                        className="text-[10px] text-red-500 hover:underline font-semibold shrink-0"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="geist-label text-[10px] uppercase text-gray-500 dark:text-gray-400 mb-1.5 font-bold tracking-wider">
+                    Recommended Domain Skills:
+                  </p>
+
+                  <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+                    {Array.from(new Set([
+                      "AutoCAD", "Civil Engineering", "Site Management", "Estimating", "Structural Design",
+                      "Billing & Estimation", "RCC Design", "Revit", "Quantity Surveying", "Project Management",
+                      "React", "Node.js", "Python", "TypeScript", "JavaScript", "SQL", "PostgreSQL",
+                      "Financial Analysis", "Accounting", "Tally", "GST Compliance", "Auditing",
+                      "Sales & Marketing", "Business Development", "Digital Marketing", "SEO", "Lead Generation",
+                      "Quality Assurance", "AWS", "Docker", "Machine Learning", "Data Analysis", "Excel",
+                      ...uniqueSkillsList
+                    ]))
+                      .filter(s => s.toLowerCase().includes(skillRecSearch.toLowerCase()))
+                      .map(skill => {
+                        const isChecked = selectedSkills.includes(skill);
+                        return (
+                          <label
+                            key={skill}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedSkills(prev =>
+                                isChecked ? prev.filter(s => s !== skill) : [...prev, skill]
+                              );
+                            }}
+                            className={`flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer text-xs transition-colors ${
+                              isChecked
+                                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold'
+                                : 'hover:bg-gray-100 dark:hover:bg-white/5 text-slate-700 dark:text-gray-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                isChecked
+                                  ? 'bg-emerald-500 border-emerald-500 text-white'
+                                  : 'border-gray-300 dark:border-white/20 bg-white dark:bg-transparent'
+                              }`}>
+                                {isChecked && <Check size={11} strokeWidth={3} />}
+                              </div>
+                              <span>{skill}</span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                  </div>
+
+                  <div className="mt-2 pt-2 border-t border-gray-200 dark:border-white/10 flex items-center justify-between text-[11px]">
+                    <span className="text-gray-500 dark:text-gray-400 font-medium">{selectedSkills.length} selected</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsSkillRecBoxOpen(false)}
+                      className="px-3 py-1 rounded bg-black dark:bg-white text-white dark:text-black font-bold text-xs hover:opacity-90 cursor-pointer"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Job Title / Industry Filter Dropdown */}
             <select
@@ -1404,16 +1586,12 @@ const ResumeDump: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowMoreFilters(prev => !prev)}
-              className={`geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-2.5 text-xs font-semibold transition-colors shrink-0 ${
-                showMoreFilters || activeFiltersCount > 0
-                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
-                  : 'border-white/[0.11] bg-[#111] text-[#8f8f8f] hover:text-white'
-              }`}
+              className="geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-gray-300 dark:border-white/[0.14] bg-white text-gray-900 dark:bg-white dark:text-black hover:bg-gray-100 dark:hover:bg-gray-200 px-2.5 text-xs font-normal transition-all shrink-0 cursor-pointer shadow-sm"
             >
-              <SlidersHorizontal size={13} />
+              <SlidersHorizontal size={13} className="text-gray-700 dark:text-black" />
               <span>{showMoreFilters ? 'Less Filters' : 'More Filters'}</span>
               {activeFiltersCount > 0 && (
-                <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-bold text-black">
+                <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-gray-200 text-gray-900 dark:bg-black dark:text-white text-[10px] font-medium">
                   {activeFiltersCount}
                 </span>
               )}
@@ -1471,24 +1649,103 @@ const ResumeDump: React.FC = () => {
               </select>
             </div>
 
-            {/* Education / Qualification Filter */}
-            <div className="flex items-center gap-1 shrink-0">
-              <GraduationCap size={13} className="text-[#8f8f8f] shrink-0" />
-              <select
-                value={educationFilter}
-                onChange={(e) => setEducationFilter(e.target.value)}
-                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[180px]"
+            {/* Education / Qualification Multi-Select Checkmark Filter Box */}
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsEducationRecBoxOpen(prev => !prev)}
+                className="geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs font-normal text-slate-800 dark:text-white transition-all cursor-pointer shadow-sm hover:border-gray-400 dark:hover:border-white/30"
               >
-                <option value="all">Education: All ({uniqueEducationList.length})</option>
-                <option value="B.Tech">B.Tech / B.E.</option>
-                <option value="M.Tech">M.Tech / M.E.</option>
-                <option value="MBA">MBA / PGDM</option>
-                <option value="BCA">BCA / MCA</option>
-                <option value="B.Sc">B.Sc / M.Sc</option>
-                {uniqueEducationList.map(edu => (
-                  <option key={edu} value={edu}>{edu}</option>
-                ))}
-              </select>
+                <GraduationCap size={13} className="text-gray-500 dark:text-[#8f8f8f] shrink-0" />
+                <span className="font-normal text-slate-800 dark:text-white">
+                  {selectedEducation.length > 0
+                    ? `Education (${selectedEducation.length})`
+                    : 'All Education'}
+                </span>
+                <ChevronDown size={12} className="text-gray-400 dark:text-gray-500 shrink-0" />
+              </button>
+
+              {isEducationRecBoxOpen && (
+                <div className="absolute left-0 top-full mt-1.5 z-[9999] w-72 sm:w-80 rounded-lg border border-gray-200 dark:border-white/15 bg-white dark:bg-[#0c0c0d] p-3 shadow-2xl backdrop-blur-md animate-in fade-in duration-100">
+                  <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-gray-100 dark:border-white/10">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 size-3" />
+                      <input
+                        type="text"
+                        value={educationRecSearch}
+                        onChange={(e) => setEducationRecSearch(e.target.value)}
+                        placeholder="Search degrees / trades..."
+                        className="w-full h-7 pl-7 pr-2 rounded bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/10 text-xs text-slate-900 dark:text-white outline-none"
+                        autoFocus
+                      />
+                    </div>
+                    {selectedEducation.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedEducation([])}
+                        className="text-[10px] text-red-500 hover:underline font-semibold shrink-0"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="geist-label text-[10px] uppercase text-gray-500 dark:text-gray-400 mb-1.5 font-bold tracking-wider">
+                    Select Education Qualifications:
+                  </p>
+
+                  <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+                    {Array.from(new Set([
+                      "B.Tech / B.E.", "M.Tech / M.E.", "Diploma in Civil Engineering", "Diploma in Mechanical Engineering",
+                      "Diploma in Electrical Engineering", "Diploma in Computer Engineering / IT", "MBA / PGDM", "BBA / BBM",
+                      "BCA", "MCA", "B.Sc", "M.Sc", "B.Com", "M.Com", "B.A.", "M.A.", "Ph.D.", "12th Pass / HSC", "10th Pass / SSC",
+                      ...uniqueEducationList
+                    ]))
+                      .filter(edu => edu.toLowerCase().includes(educationRecSearch.toLowerCase()))
+                      .map(edu => {
+                        const isChecked = selectedEducation.includes(edu);
+                        return (
+                          <label
+                            key={edu}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedEducation(prev =>
+                                isChecked ? prev.filter(eItem => eItem !== edu) : [...prev, edu]
+                              );
+                            }}
+                            className={`flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer text-xs transition-colors ${
+                              isChecked
+                                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold'
+                                : 'hover:bg-gray-100 dark:hover:bg-white/5 text-slate-700 dark:text-gray-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                isChecked
+                                  ? 'bg-emerald-500 border-emerald-500 text-white'
+                                  : 'border-gray-300 dark:border-white/20 bg-white dark:bg-transparent'
+                              }`}>
+                                {isChecked && <Check size={11} strokeWidth={3} />}
+                              </div>
+                              <span className="whitespace-normal text-xs">{edu}</span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                  </div>
+
+                  <div className="mt-2 pt-2 border-t border-gray-200 dark:border-white/10 flex items-center justify-between text-[11px]">
+                    <span className="text-gray-500 dark:text-gray-400 font-medium">{selectedEducation.length} selected</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsEducationRecBoxOpen(false)}
+                      className="px-3 py-1 rounded bg-black dark:bg-white text-white dark:text-black font-bold text-xs hover:opacity-90 cursor-pointer"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Candidate Source Filter */}
@@ -1546,18 +1803,33 @@ const ResumeDump: React.FC = () => {
       )}
 
       {(uploadResults.length > 0) && (
-        <section className="border-b border-white/[0.11] px-4 py-3 sm:px-6 lg:px-7">
+        <section className="border-b border-gray-200 dark:border-white/[0.11] bg-emerald-500/10 dark:bg-emerald-950/20 px-4 py-3 sm:px-6 lg:px-7 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-2">
+            <span className="geist-caption text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+              <CheckCircle2 size={14} />
+              Recent Resume Upload Results:
+            </span>
+            <button
+              type="button"
+              onClick={() => setUploadResults([])}
+              className="text-xs text-gray-600 hover:text-slate-900 dark:text-gray-400 dark:hover:text-white flex items-center gap-1 px-2.5 py-0.5 rounded border border-gray-300 dark:border-white/10 bg-white dark:bg-white/5 transition-colors font-medium"
+              title="Dismiss notification"
+            >
+              <span>Dismiss</span>
+              <span className="font-bold text-sm leading-none">&times;</span>
+            </button>
+          </div>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {uploadResults.slice(-6).map((result) => (
-              <div key={`${result.fileName}-${result.message}`} className="flex min-w-0 items-start gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 py-2">
+              <div key={`${result.fileName}-${result.message}`} className="flex min-w-0 items-start gap-2 rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] p-2.5 shadow-sm">
                 {result.status === 'saved' ? (
-                  <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-[#83d0a3]" strokeWidth={1.8} />
+                  <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600 dark:text-[#83d0a3]" strokeWidth={1.8} />
                 ) : (
-                  <XCircle className="mt-0.5 size-3.5 shrink-0 text-[#ff8f8f]" strokeWidth={1.8} />
+                  <XCircle className="mt-0.5 size-3.5 shrink-0 text-red-500 dark:text-[#ff8f8f]" strokeWidth={1.8} />
                 )}
-                <div className="min-w-0">
-                  <p className="geist-caption truncate text-white">{result.fileName}</p>
-                  <p className="geist-small mt-0.5 truncate text-[#8f8f8f]">{result.message}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="geist-caption truncate font-medium text-slate-800 dark:text-white">{result.fileName}</p>
+                  <p className="geist-small mt-0.5 truncate text-gray-500 dark:text-[#8f8f8f]">{result.message}</p>
                 </div>
               </div>
             ))}
@@ -1596,7 +1868,7 @@ const ResumeDump: React.FC = () => {
             <table className="min-w-full divide-y divide-white/[0.11] text-left">
               <thead className="bg-[#080808]">
                 <tr>
-                  <th className="w-10 px-3 py-2 text-center">
+                  <th className="w-8 px-2 py-2 text-center border-b border-gray-200 dark:border-white/[0.08] bg-gray-50/70 dark:bg-white/[0.02]">
                     <input
                       type="checkbox"
                       checked={paginatedCandidates.length > 0 && paginatedCandidates.every(c => selectedCandidateIds.includes(c.id))}
@@ -1609,38 +1881,39 @@ const ResumeDump: React.FC = () => {
                           setSelectedCandidateIds(selectedCandidateIds.filter(id => !pageIds.has(id)));
                         }
                       }}
-                      className="rounded border-white/20 bg-[#111] text-white focus:ring-0 cursor-pointer h-4 w-4 accent-white"
+                      className="rounded border-gray-300 dark:border-white/20 bg-white dark:bg-[#111] text-black dark:text-white focus:ring-0 cursor-pointer h-3.5 w-3.5 accent-black dark:accent-white"
                       title="Select all candidates on this page"
                     />
                   </th>
-                  <th className="geist-label whitespace-nowrap px-4 py-2 uppercase text-[#6b7280] sm:px-6 lg:px-7">Candidate</th>
+                  <th className="geist-label whitespace-nowrap px-3 py-2 text-left uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f] border-b border-gray-200 dark:border-white/[0.08] bg-gray-50/70 dark:bg-white/[0.02]">Candidate</th>
                   {selectedJobId !== 'all' && (
-                    <th className="geist-label whitespace-nowrap px-4 py-2 uppercase text-[#6b7280]">Match Score</th>
+                    <th className="geist-label whitespace-nowrap px-3 py-2 text-left uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f] border-b border-gray-200 dark:border-white/[0.08] bg-gray-50/70 dark:bg-white/[0.02]">Match Score</th>
                   )}
-                  <th className="geist-label whitespace-nowrap px-4 py-2 uppercase text-[#6b7280]">Phone</th>
-                  <th className="geist-label whitespace-nowrap px-4 py-2 uppercase text-[#6b7280]">Experience</th>
-                  <th className="geist-label whitespace-nowrap px-4 py-2 uppercase text-[#6b7280]">Skills</th>
+                  <th className="geist-label whitespace-nowrap px-3 py-2 text-left uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f] border-b border-gray-200 dark:border-white/[0.08] bg-gray-50/70 dark:bg-white/[0.02]">Phone & Email</th>
+                  <th className="geist-label whitespace-nowrap px-3 py-2 text-left uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f] border-b border-gray-200 dark:border-white/[0.08] bg-gray-50/70 dark:bg-white/[0.02]">Experience</th>
+                  <th className="geist-label whitespace-nowrap px-3 py-2 text-left uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f] border-b border-gray-200 dark:border-white/[0.08] bg-gray-50/70 dark:bg-white/[0.02]">Education</th>
+                  <th className="geist-label whitespace-nowrap px-3 py-2 text-left uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f] border-b border-gray-200 dark:border-white/[0.08] bg-gray-50/70 dark:bg-white/[0.02]">Skills</th>
 
-                  <th className="geist-label whitespace-nowrap px-4 py-2 uppercase text-[#6b7280]">Suggestion Status</th>
-                  <th className="geist-label whitespace-nowrap px-4 py-2 uppercase text-[#6b7280]">Uploaded</th>
-                  <th className="geist-label whitespace-nowrap px-4 py-2 text-right uppercase text-[#6b7280] min-w-[280px]">Actions</th>
+                  <th className="geist-label whitespace-nowrap px-3 py-2 text-left uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f] border-b border-gray-200 dark:border-white/[0.08] bg-gray-50/70 dark:bg-white/[0.02]">Status</th>
+                  <th className="geist-label whitespace-nowrap px-3 py-2 text-left uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f] border-b border-gray-200 dark:border-white/[0.08] bg-gray-50/70 dark:bg-white/[0.02]">Uploaded</th>
+                  <th className="geist-label whitespace-nowrap px-3 py-2 text-right uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f] border-b border-gray-200 dark:border-white/[0.08] bg-gray-50/70 dark:bg-white/[0.02] w-[175px] min-w-[175px]">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.08]">
+              <tbody className="divide-y divide-gray-200 dark:divide-white/[0.08]">
                 {paginatedCandidates.map((candidate) => (
                   <tr
                     key={candidate.id}
                     onClick={() => setSkillsPanelCandidate(candidate)}
                     className={`cursor-pointer transition-colors ${
                       selectedCandidateIds.includes(candidate.id)
-                        ? 'bg-white/[0.07] hover:bg-white/[0.09]'
+                        ? 'bg-blue-50/60 dark:bg-white/[0.07] hover:bg-blue-50/80 dark:hover:bg-white/[0.09]'
                         : candidate.isHired || candidate.doNotSuggest
-                        ? 'bg-emerald-950/10 hover:bg-emerald-950/20'
-                        : 'hover:bg-white/[0.04]'
+                        ? 'bg-emerald-500/5 dark:bg-emerald-950/10 hover:bg-emerald-500/10 dark:hover:bg-emerald-950/20'
+                        : 'hover:bg-gray-50 dark:hover:bg-white/[0.04]'
                     }`}
                     title="Click row to view full candidate details"
                   >
-                    <td className="w-10 px-3 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                    <td className="w-8 px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selectedCandidateIds.includes(candidate.id)}
@@ -1651,149 +1924,153 @@ const ResumeDump: React.FC = () => {
                             setSelectedCandidateIds(selectedCandidateIds.filter(id => id !== candidate.id));
                           }
                         }}
-                        className="rounded border-white/20 bg-[#111] text-white focus:ring-0 cursor-pointer h-4 w-4 accent-white"
+                        className="rounded border-gray-300 dark:border-white/20 bg-white dark:bg-[#111] text-black dark:text-white focus:ring-0 cursor-pointer h-3.5 w-3.5 accent-black dark:accent-white"
                       />
                     </td>
-                    <td className="px-4 py-1.5 sm:px-6 lg:px-7">
-                      <div className="flex items-center gap-2">
-                        <div className="geist-caption max-w-[320px] truncate font-semibold text-white" title={candidate.name}>
+                    <td className="px-3 py-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <div className="geist-caption max-w-[280px] truncate text-xs font-bold text-slate-900 dark:text-white" title={candidate.name}>
                           {candidate.name || 'Unknown Candidate'}
                         </div>
                       </div>
-                      <div className="geist-small mt-0.5 max-w-[320px] truncate text-[#8bbde8]" title={candidate.email}>
-                        {candidate.email || 'Email not found'}
+                      <div className="geist-small mt-0.5 max-w-[280px] truncate text-[11px] text-gray-600 dark:text-[#9ca3af]" title={candidate.currentTitle}>
+                        {candidate.currentTitle || 'Candidate Profile'}
                       </div>
-                      {(candidate.currentTitle || candidate.location) && (
-                        <div className="geist-small mt-0.5 max-w-[320px] truncate text-[#6b7280]" title={[candidate.currentTitle, candidate.location].filter(Boolean).join(' · ')}>
-                          {[candidate.currentTitle, candidate.location].filter(Boolean).join(' · ')}
-                        </div>
+                      {candidate.location && (
+                        <div className="geist-small mt-0.5 text-[10px] text-gray-500 dark:text-[#6b7280]">📍 {candidate.location}</div>
                       )}
                     </td>
 
                     {selectedJobId !== 'all' && (
-                      <td className="px-4 py-1.5 whitespace-nowrap">
-                        {typeof candidate.matchScore === 'number' && (
-                          <span className={`geist-small inline-flex items-center gap-1 rounded-[6px] px-2.5 py-0.5 font-medium text-xs ${
-                            candidate.matchScore >= 75
-                              ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-semibold'
-                              : candidate.matchScore >= 45
-                              ? 'border border-white/[0.15] bg-white/[0.04] text-[#d4d4d4]'
-                              : 'border border-white/[0.08] bg-white/[0.02] text-[#6b7280]'
-                          }`}>
-                            {candidate.matchScore >= 75 ? '🔥' : '⚡'} {candidate.matchScore}% Match
-                          </span>
-                        )}
+                      <td className="px-3 py-1.5 whitespace-nowrap">
+                        <span className={`geist-caption inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-bold ${
+                          (candidate.matchScore || 0) >= 70
+                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                            : (candidate.matchScore || 0) >= 40
+                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
+                            : 'bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-[#a1a1aa] border border-gray-200 dark:border-white/[0.1]'
+                        }`}>
+                          {candidate.matchScore ?? 0}%
+                        </span>
                       </td>
                     )}
 
-                    <td className="px-4 py-1.5 whitespace-nowrap">
-                      <span className="geist-caption whitespace-nowrap text-[#d4d4d4]">{candidate.phone || 'N/A'}</span>
+                    <td className="px-3 py-1.5 whitespace-nowrap">
+                      <div className="geist-caption text-[11px] font-mono font-medium text-slate-800 dark:text-[#d4d4d4]">{candidate.phone || 'N/A'}</div>
+                      <div className="geist-small text-[10px] text-gray-500 dark:text-[#8f8f8f] truncate max-w-[140px]">{candidate.email || 'No email'}</div>
                     </td>
-                    <td className="px-4 py-1.5 whitespace-nowrap">
-                      <span className="geist-caption whitespace-nowrap text-[#83d0a3] font-semibold">
+                    <td className="px-3 py-1.5 whitespace-nowrap">
+                      <div className="geist-caption text-[11px] font-semibold text-slate-800 dark:text-[#d4d4d4]">
                         {candidate.totalExperienceYears !== undefined && candidate.totalExperienceYears !== null && !isNaN(Number(candidate.totalExperienceYears))
                           ? `${candidate.totalExperienceYears} Yrs`
-                          : 'N/A'}
-                      </span>
+                          : 'Not Specified'}
+                      </div>
                     </td>
 
-                    <td className="px-4 py-1.5">
-                      {candidate.skills.length > 0 ? (
-                        <div className="flex max-w-[320px] flex-wrap items-center gap-1">
-                          {candidate.skills.slice(0, 2).map((skill) => (
-                            <span key={skill} className="geist-small rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-0.5 text-[#d4d4d4] whitespace-nowrap">
-                              {skill}
-                            </span>
-                          ))}
-                          {candidate.skills.length > 2 && (
-                            <span className="geist-small rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-1.5 py-0.5 text-[#8f8f8f] whitespace-nowrap">
-                              +{candidate.skills.length - 2}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="geist-caption text-[#6b7280]">No skills</span>
-                      )}
+                    <td className="px-3 py-1.5 whitespace-nowrap">
+                      <div className="geist-caption text-[11px] font-semibold text-slate-800 dark:text-[#d4d4d4] truncate max-w-[150px]" title={candidate.education && candidate.education.length > 0 ? candidate.education[0].degree : 'Not Specified'}>
+                        {candidate.education && candidate.education.length > 0 && candidate.education[0].degree
+                          ? candidate.education[0].degree.replace(/\s*\([^)]*\)/g, '')
+                          : 'Not Specified'}
+                      </div>
                     </td>
-                    <td className="px-4 py-1.5 whitespace-nowrap">
+
+                    <td className="px-3 py-1.5">
+                      <div className="flex flex-wrap gap-1 max-w-[240px]">
+                        {candidate.skills.slice(0, 3).map((skill, idx) => (
+                          <span key={idx} className="geist-small rounded border border-gray-200 dark:border-white/[0.1] bg-gray-100 dark:bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-slate-700 dark:text-[#d4d4d4]">
+                            {skill}
+                          </span>
+                        ))}
+                        {candidate.skills.length > 3 && (
+                          <span key="more" className="geist-small rounded border border-gray-200 dark:border-white/[0.1] bg-gray-50 dark:bg-white/[0.02] px-1.5 py-0.5 text-[10px] text-gray-500 dark:text-[#8f8f8f]">
+                            +{candidate.skills.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">
                       {candidate.isHired || candidate.doNotSuggest ? (
-                        <span className="geist-small inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-semibold text-emerald-400 whitespace-nowrap">
-                          🎉 Hired
+                        <span className="geist-small inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                          Hired 🎉
                         </span>
                       ) : (
-                        <span className="geist-small inline-flex items-center gap-1.5 rounded-full border border-white/[0.11] bg-white/[0.03] px-2 py-0.5 text-[#a1a1aa] whitespace-nowrap">
+                        <span className="geist-small inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.03] px-2 py-0.5 text-[10px] text-gray-600 dark:text-[#a1a1aa] whitespace-nowrap">
                           Available
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-1.5 whitespace-nowrap">
-                      <div className="geist-label whitespace-nowrap text-[#9ca3af]">{formatDate(candidate.updatedAt || candidate.createdAt)}</div>
-                      <div className="geist-small mt-0.5 max-w-[160px] truncate text-[#6b7280]" title={candidate.resumeFileName}>
+                    <td className="px-3 py-1.5 whitespace-nowrap">
+                      <div className="geist-label whitespace-nowrap text-[10px] text-gray-600 dark:text-[#9ca3af]">{formatDate(candidate.updatedAt || candidate.createdAt)}</div>
+                      <div className="geist-small mt-0.5 max-w-[140px] truncate text-[10px] text-gray-400 dark:text-[#6b7280]" title={candidate.resumeFileName}>
                         {candidate.resumeFileName}
                       </div>
                     </td>
-                    <td className="px-4 py-1.5 text-right whitespace-nowrap min-w-[280px]" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-end items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedCandidateIds([candidate.id]);
-                            setIsInviteModalOpen(true);
-                          }}
-                          className="geist-caption inline-flex h-7 items-center justify-center gap-1.5 rounded-[6px] border border-white/[0.16] bg-white/[0.04] px-2.5 font-medium text-[#d4d4d4] shrink-0 transition-colors hover:bg-white/[0.08] hover:text-white"
-                          title="Send interview invitation for this candidate"
-                        >
-                          <Send size={11} strokeWidth={2} className="shrink-0 text-[#8f8f8f]" />
-                          <span className="whitespace-nowrap">Invite</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); toggleHiredStatus(candidate); }}
-                          className={`geist-caption inline-flex h-7 items-center justify-center gap-1.5 rounded-[6px] border px-2.5 font-semibold text-xs whitespace-nowrap shrink-0 transition-all ${
-                            candidate.isHired || candidate.doNotSuggest
-                              ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 shadow-sm shadow-emerald-500/10'
-                              : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/25 hover:border-emerald-500/70'
-                          }`}
-                          title={candidate.isHired || candidate.doNotSuggest ? 'Click to unmark as Hired' : 'Mark candidate as Hired (excludes from future job suggestions)'}
-                        >
-                          <UserCheck size={13} className="text-emerald-400 shrink-0" strokeWidth={2} />
-                          <span className="whitespace-nowrap">{candidate.isHired || candidate.doNotSuggest ? 'Hired 🎉' : 'Mark Hired'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPreviewResumeCandidate(candidate);
-                          }}
-                          className="geist-caption inline-flex h-7 items-center justify-center gap-1.5 rounded-[6px] border border-blue-500/30 bg-blue-500/10 px-2.5 font-medium text-blue-300 whitespace-nowrap shrink-0 transition-colors hover:bg-blue-500/20 hover:text-white"
-                          title="View original resume in popup modal"
-                        >
-                          <ExternalLink size={12} strokeWidth={1.8} className="shrink-0" />
-                          <span className="whitespace-nowrap">Resume</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenEditCandidateModal(candidate);
-                          }}
-                          className="geist-caption inline-flex h-7 items-center justify-center gap-1 rounded-[6px] border border-white/[0.16] bg-white/[0.04] px-2 font-medium text-[#d4d4d4] shrink-0 transition-colors hover:bg-white/[0.08] hover:text-white"
-                          title="Edit candidate information"
-                        >
-                          <Edit3 size={12} strokeWidth={1.8} className="shrink-0 text-emerald-400" />
-                          <span className="whitespace-nowrap">Edit</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); confirmDeleteCandidate(candidate); }}
-                          disabled={deletingCandidateId === candidate.id}
-                          className="geist-caption inline-flex h-7 items-center justify-center gap-1 rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-2 font-medium text-[#ff8f8f] shrink-0 transition-colors hover:bg-[#260b0b] disabled:cursor-not-allowed disabled:opacity-40"
-                          title="Delete candidate"
-                        >
-                          <Trash2 size={12} strokeWidth={1.8} className="shrink-0" />
-                        </button>
+                    <td className="px-2 py-1.5 text-right w-[175px] min-w-[175px]" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-col gap-1 w-[165px] ml-auto">
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedCandidateIds([candidate.id]);
+                              setIsInviteModalOpen(true);
+                            }}
+                            className="geist-caption flex-1 inline-flex h-6 items-center justify-center gap-1 rounded-[5px] border border-gray-200 dark:border-white/[0.12] bg-white dark:bg-white/[0.04] px-1.5 text-[10px] font-medium text-slate-800 dark:text-[#d4d4d4] transition-all hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-black dark:hover:text-white shadow-2xs cursor-pointer"
+                            title="Send interview invitation"
+                          >
+                            <Send size={10} strokeWidth={1.8} className="shrink-0 text-slate-500 dark:text-[#8f8f8f]" />
+                            <span>Invite</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); toggleHiredStatus(candidate); }}
+                            className={`geist-caption flex-1 inline-flex h-6 items-center justify-center gap-1 rounded-[5px] border px-1.5 text-[10px] font-medium transition-all shadow-2xs cursor-pointer ${
+                              candidate.isHired || candidate.doNotSuggest
+                                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25'
+                                : 'border-gray-200 dark:border-white/[0.12] bg-white dark:bg-white/[0.04] text-slate-800 dark:text-[#d4d4d4] hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-black dark:hover:text-white'
+                            }`}
+                            title={candidate.isHired || candidate.doNotSuggest ? 'Unmark Hired' : 'Mark candidate as Hired'}
+                          >
+                            <UserCheck size={10} className="text-emerald-600 dark:text-emerald-400 shrink-0" strokeWidth={1.8} />
+                            <span className="truncate">{candidate.isHired || candidate.doNotSuggest ? 'Hired 🎉' : 'Mark Hired'}</span>
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewResumeCandidate(candidate);
+                            }}
+                            className="geist-caption flex-1 inline-flex h-6 items-center justify-center gap-1 rounded-[5px] border border-gray-200 dark:border-white/[0.12] bg-white dark:bg-white/[0.04] px-1.5 text-[10px] font-medium text-slate-800 dark:text-[#d4d4d4] transition-all hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-black dark:hover:text-white shadow-2xs cursor-pointer"
+                            title="View original resume"
+                          >
+                            <ExternalLink size={10} strokeWidth={1.8} className="shrink-0 text-blue-600 dark:text-blue-400" />
+                            <span>Resume</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEditCandidateModal(candidate);
+                            }}
+                            className="geist-caption flex-1 inline-flex h-6 items-center justify-center gap-1 rounded-[5px] border border-gray-200 dark:border-white/[0.12] bg-white dark:bg-white/[0.04] px-1.5 text-[10px] font-medium text-slate-800 dark:text-[#d4d4d4] transition-all hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-black dark:hover:text-white shadow-2xs cursor-pointer"
+                            title="Edit candidate"
+                          >
+                            <Edit3 size={10} strokeWidth={1.8} className="shrink-0 text-indigo-600 dark:text-indigo-400" />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); confirmDeleteCandidate(candidate); }}
+                            disabled={deletingCandidateId === candidate.id}
+                            className="geist-caption inline-flex h-6 w-6 items-center justify-center rounded-[5px] border border-gray-200 dark:border-white/[0.12] bg-white dark:bg-white/[0.04] text-slate-500 dark:text-[#8f8f8f] shrink-0 transition-all hover:border-red-300 dark:hover:border-red-500/40 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-600 dark:hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                            title="Delete candidate"
+                          >
+                            <Trash2 size={10} strokeWidth={1.8} />
+                          </button>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -1854,148 +2131,150 @@ const ResumeDump: React.FC = () => {
         createPortal(
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" onClick={() => setSkillsPanelCandidate(null)}>
             <div
-              className="w-full max-w-2xl overflow-hidden rounded-[12px] border border-white/[0.13] bg-[#090909] text-white shadow-2xl"
+              className="w-full max-w-2xl overflow-hidden rounded-[12px] border border-gray-200 dark:border-white/[0.13] bg-white dark:bg-[#090909] text-slate-900 dark:text-white shadow-2xl animate-in fade-in zoom-in duration-150"
               onClick={(event) => event.stopPropagation()}
             >
-              <div className="flex items-start justify-between gap-4 border-b border-white/[0.11] px-5 py-4 bg-[#0d0d0d]">
-                <div className="min-w-0">
+              {/* Modal Top Header with Responsive Non-Overflowing Action Buttons */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-200 dark:border-white/[0.11] px-5 py-4 bg-gray-50 dark:bg-[#0d0d0d]">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="geist-label uppercase tracking-wider text-[#6b7280]">Candidate Profile</p>
+                    <p className="geist-label uppercase tracking-wider text-gray-500 dark:text-[#6b7280]">Candidate Profile</p>
                     {skillsPanelCandidate.isHired || skillsPanelCandidate.doNotSuggest ? (
-                      <span className="geist-small rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400">
+                      <span className="geist-small rounded-full border border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                         🎉 Hired
                       </span>
                     ) : (
-                      <span className="geist-small rounded-full border border-white/[0.11] bg-white/[0.04] px-2 py-0.5 text-xs text-[#a1a1aa]">
+                      <span className="geist-small rounded-full border border-gray-200 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.04] px-2 py-0.5 text-xs text-gray-700 dark:text-[#a1a1aa]">
                         Available
                       </span>
                     )}
                   </div>
-                  <h3 className="text-xl font-bold mt-1 text-white truncate">
+                  <h3 className="text-lg font-bold mt-0.5 text-slate-900 dark:text-white truncate">
                     {skillsPanelCandidate.name || 'Unknown Candidate'}
                   </h3>
-                  <p className="text-xs text-[#8bbde8] mt-0.5">
+                  <p className="text-xs text-blue-600 dark:text-[#8bbde8] mt-0.5 truncate">
                     {skillsPanelCandidate.email || 'Email not available'} {skillsPanelCandidate.phone ? `· ${skillsPanelCandidate.phone}` : ''}
                   </p>
                 </div>
                 
-                <div className="flex items-center gap-2">
+                {/* Top Action Buttons - Wrapped and Constrained so they NEVER overflow */}
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0 max-w-full">
                   <button
                     type="button"
                     onClick={async () => {
                       await toggleHiredStatus(skillsPanelCandidate);
                       setSkillsPanelCandidate(prev => prev ? ({ ...prev, isHired: !prev.isHired, doNotSuggest: !prev.isHired }) : null);
                     }}
-                    className={`geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-3 font-semibold text-xs transition-all ${
+                    className={`geist-caption inline-flex h-7 items-center gap-1 rounded-[6px] border px-2.5 font-semibold text-xs transition-all cursor-pointer ${
                       skillsPanelCandidate.isHired || skillsPanelCandidate.doNotSuggest
-                        ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
-                        : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/25 hover:border-emerald-500/70'
+                        ? 'border-emerald-500/50 bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/30'
+                        : 'border-emerald-600/40 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/25'
                     }`}
                     title={skillsPanelCandidate.isHired || skillsPanelCandidate.doNotSuggest ? 'Click to unmark as Hired' : 'Mark candidate as Hired'}
                   >
-                    <UserCheck size={13} className="text-emerald-400" strokeWidth={2} />
+                    <UserCheck size={12} className="text-emerald-600 dark:text-emerald-400 shrink-0" strokeWidth={2} />
                     <span>{skillsPanelCandidate.isHired || skillsPanelCandidate.doNotSuggest ? 'Hired 🎉' : 'Mark Hired'}</span>
                   </button>
+
                   {skillsPanelCandidate.resumeUrl && (
                     <button
                       type="button"
                       onClick={() => setPreviewResumeCandidate(skillsPanelCandidate)}
-                      className="geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-blue-500/40 bg-blue-600/20 px-3 font-semibold text-blue-300 transition-colors hover:bg-blue-600/30 hover:text-white"
+                      className="geist-caption inline-flex h-7 items-center gap-1 rounded-[6px] border border-blue-500/40 bg-blue-50 dark:bg-blue-600/20 px-2.5 font-semibold text-xs text-blue-700 dark:text-blue-300 transition-colors hover:bg-blue-100 dark:hover:bg-blue-600/30 cursor-pointer"
                       title="View resume in popup modal"
                     >
-                      <ExternalLink size={13} strokeWidth={1.8} />
-                      View Resume
+                      <ExternalLink size={12} strokeWidth={1.8} className="shrink-0" />
+                      <span>Resume</span>
                     </button>
                   )}
+
                   <button
                     type="button"
                     onClick={() => handleOpenEditCandidateModal(skillsPanelCandidate)}
-                    className="geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-white/[0.15] bg-white/[0.04] px-3 font-semibold text-xs text-[#d4d4d4] transition-colors hover:bg-white/[0.08] hover:text-white"
+                    className="geist-caption inline-flex h-7 items-center gap-1 rounded-[6px] border border-gray-300 dark:border-white/[0.15] bg-gray-100 dark:bg-white/[0.04] px-2.5 font-semibold text-xs text-slate-800 dark:text-[#d4d4d4] transition-colors hover:bg-gray-200 dark:hover:bg-white/[0.08] hover:text-black dark:hover:text-white cursor-pointer"
                     title="Edit candidate details"
                   >
-                    <Edit3 size={13} className="text-emerald-400" strokeWidth={1.8} />
-                    <span>Edit Info</span>
+                    <Edit3 size={12} className="text-indigo-600 dark:text-indigo-400 shrink-0" strokeWidth={1.8} />
+                    <span>Edit</span>
                   </button>
+
                   <button
                     type="button"
                     onClick={() => setSkillsPanelCandidate(null)}
-
-                    className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white"
+                    className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.03] text-gray-500 dark:text-[#8f8f8f] transition-colors hover:bg-gray-200 dark:hover:bg-white/[0.06] hover:text-black dark:hover:text-white text-lg leading-none cursor-pointer"
                     title="Close details popup"
                   >
-                    <span className="text-xl leading-none">&times;</span>
+                    &times;
                   </button>
                 </div>
               </div>
 
-              <div className="max-h-[70vh] space-y-5 overflow-y-auto p-5">
+              {/* Modal Body */}
+              <div className="max-h-[70vh] space-y-4 overflow-y-auto p-5 geist-small">
                 <div className="grid gap-3 sm:grid-cols-4">
-                  <div className="rounded-[8px] border border-white/[0.11] bg-white/[0.025] p-3 min-w-0 overflow-hidden">
-                    <p className="geist-label uppercase text-[#6b7280]">Name & Contact</p>
-                    <p className="geist-caption mt-1 font-semibold text-white truncate">{skillsPanelCandidate.name || 'N/A'}</p>
-                    <p className="geist-small text-[#8bbde8] mt-0.5 truncate" title={skillsPanelCandidate.email}>{skillsPanelCandidate.email || 'N/A'}</p>
-                    <p className="geist-small text-[#d4d4d4] mt-0.5 truncate">{skillsPanelCandidate.phone || 'N/A'}</p>
+                  <div className="rounded-[8px] border border-gray-200 dark:border-white/[0.11] bg-gray-50/70 dark:bg-white/[0.025] p-3 min-w-0 overflow-hidden">
+                    <p className="geist-label uppercase text-gray-500 dark:text-[#6b7280]">Name & Contact</p>
+                    <p className="geist-caption mt-1 font-semibold text-slate-900 dark:text-white truncate">{skillsPanelCandidate.name || 'N/A'}</p>
+                    <p className="geist-small text-blue-600 dark:text-[#8bbde8] mt-0.5 truncate" title={skillsPanelCandidate.email}>{skillsPanelCandidate.email || 'N/A'}</p>
+                    <p className="geist-small text-slate-700 dark:text-[#d4d4d4] mt-0.5 truncate">{skillsPanelCandidate.phone || 'N/A'}</p>
                   </div>
-                  <div className="rounded-[8px] border border-white/[0.11] bg-white/[0.025] p-3 min-w-0 overflow-hidden">
-                    <p className="geist-label uppercase text-[#6b7280]">Experience</p>
-                    <p className="geist-caption mt-1 font-semibold text-[#83d0a3] truncate">
+                  <div className="rounded-[8px] border border-gray-200 dark:border-white/[0.11] bg-gray-50/70 dark:bg-white/[0.025] p-3 min-w-0 overflow-hidden">
+                    <p className="geist-label uppercase text-gray-500 dark:text-[#6b7280]">Experience</p>
+                    <p className="geist-caption mt-1 font-semibold text-emerald-700 dark:text-[#83d0a3] truncate">
                       {skillsPanelCandidate.totalExperienceYears !== undefined && skillsPanelCandidate.totalExperienceYears !== null && !isNaN(Number(skillsPanelCandidate.totalExperienceYears))
                         ? `${skillsPanelCandidate.totalExperienceYears} Years`
                         : 'N/A'}
                     </p>
                   </div>
-                  <div className="rounded-[8px] border border-white/[0.11] bg-white/[0.025] p-3 min-w-0 overflow-hidden">
-                    <p className="geist-label uppercase text-[#6b7280]">Current Role</p>
-                    <p className="geist-caption mt-1 font-semibold text-[#d4d4d4] truncate" title={skillsPanelCandidate.currentTitle}>{skillsPanelCandidate.currentTitle || 'Not specified'}</p>
+                  <div className="rounded-[8px] border border-gray-200 dark:border-white/[0.11] bg-gray-50/70 dark:bg-white/[0.025] p-3 min-w-0 overflow-hidden">
+                    <p className="geist-label uppercase text-gray-500 dark:text-[#6b7280]">Current Role</p>
+                    <p className="geist-caption mt-1 font-semibold text-slate-800 dark:text-[#d4d4d4] truncate" title={skillsPanelCandidate.currentTitle}>{skillsPanelCandidate.currentTitle || 'Not specified'}</p>
                   </div>
-                  <div className="rounded-[8px] border border-white/[0.11] bg-white/[0.025] p-3 min-w-0 overflow-hidden">
-                    <p className="geist-label uppercase text-[#6b7280]">Location & Source</p>
-                    <p className="geist-caption mt-1 text-[#d4d4d4] truncate" title={skillsPanelCandidate.location}>{skillsPanelCandidate.location || 'Not specified'}</p>
-                    <p className="geist-small text-[#6b7280] mt-0.5 truncate" title={skillsPanelCandidate.resumeFileName}>{skillsPanelCandidate.resumeFileName}</p>
+                  <div className="rounded-[8px] border border-gray-200 dark:border-white/[0.11] bg-gray-50/70 dark:bg-white/[0.025] p-3 min-w-0 overflow-hidden">
+                    <p className="geist-label uppercase text-gray-500 dark:text-[#6b7280]">Location & Source</p>
+                    <p className="geist-caption mt-1 text-slate-800 dark:text-[#d4d4d4] truncate" title={skillsPanelCandidate.location}>{skillsPanelCandidate.location || 'Not specified'}</p>
+                    <p className="geist-small text-gray-500 dark:text-[#6b7280] mt-0.5 truncate" title={skillsPanelCandidate.resumeFileName}>{skillsPanelCandidate.resumeFileName}</p>
                   </div>
                 </div>
 
-
                 {skillsPanelCandidate.summary && (
                   <div className="min-w-0">
-                    <p className="geist-label uppercase text-[#6b7280]">Professional Summary</p>
-                    <p className="geist-caption mt-2 leading-relaxed text-[#d4d4d4] bg-white/[0.02] p-3 rounded-[6px] border border-white/[0.06] break-words whitespace-pre-wrap">{skillsPanelCandidate.summary}</p>
+                    <p className="geist-label uppercase text-gray-500 dark:text-[#6b7280]">Professional Summary</p>
+                    <p className="geist-caption mt-2 leading-relaxed text-slate-800 dark:text-[#d4d4d4] bg-gray-50 dark:bg-white/[0.02] p-3 rounded-[6px] border border-gray-200 dark:border-white/[0.06] break-words whitespace-pre-wrap">{skillsPanelCandidate.summary}</p>
                   </div>
                 )}
 
                 <div className="min-w-0">
-                  <p className="geist-label uppercase text-[#6b7280]">Skills & Tech Stack ({(skillsPanelCandidate.skills || []).length})</p>
+                  <p className="geist-label uppercase text-gray-500 dark:text-[#6b7280]">Skills & Tech Stack ({(skillsPanelCandidate.skills || []).length})</p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {(skillsPanelCandidate.skills || []).length > 0 ? skillsPanelCandidate.skills.map((skill) => (
-                      <span key={skill} className="geist-caption rounded-[6px] border border-white/[0.11] bg-white/[0.04] px-2.5 py-1 font-medium text-[#d4d4d4] break-all">
+                      <span key={skill} className="geist-caption rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.04] px-2.5 py-1 font-medium text-slate-800 dark:text-[#d4d4d4] break-all">
                         {skill}
                       </span>
-                    )) : <span className="geist-caption text-[#6b7280]">No explicit skills extracted.</span>}
+                    )) : <span className="geist-caption text-gray-500 dark:text-[#6b7280]">No explicit skills extracted.</span>}
                   </div>
                 </div>
 
-
-
                 {(skillsPanelCandidate.education || []).length > 0 && (
                   <div className="min-w-0">
-                    <p className="geist-label uppercase text-[#6b7280]">Education</p>
+                    <p className="geist-label uppercase text-gray-500 dark:text-[#6b7280]">Education</p>
                     <div className="mt-2 space-y-1.5">
                       {skillsPanelCandidate.education!.map((entry, index) => (
-                        <p key={`${entry.degree}-${index}`} className="geist-caption text-[#d4d4d4] break-words">{[entry.degree, entry.institution, entry.year].filter(Boolean).join(' · ')}</p>
+                        <p key={`${entry.degree}-${index}`} className="geist-caption text-slate-800 dark:text-[#d4d4d4] break-words">{[entry.degree, entry.institution, entry.year].filter(Boolean).join(' · ')}</p>
                       ))}
                     </div>
                   </div>
                 )}
 
                 {skillsPanelCandidate.resumeUrl && (
-                  <div className="pt-2 border-t border-white/[0.08] flex flex-wrap items-center justify-between gap-2 min-w-0">
-                    <p className="geist-small text-[#6b7280] truncate max-w-[280px]">
-                      File: <span className="text-[#a1a1aa] truncate">{skillsPanelCandidate.resumeFileName}</span>
+                  <div className="pt-2 border-t border-gray-200 dark:border-white/[0.08] flex flex-wrap items-center justify-between gap-2 min-w-0">
+                    <p className="geist-small text-gray-500 dark:text-[#6b7280] truncate max-w-[280px]">
+                      File: <span className="text-slate-800 dark:text-[#a1a1aa] truncate">{skillsPanelCandidate.resumeFileName}</span>
                     </p>
                     <button
                       type="button"
                       onClick={() => setPreviewResumeCandidate(skillsPanelCandidate)}
-                      className="geist-caption inline-flex items-center gap-1.5 text-blue-400 hover:text-blue-300 font-bold hover:underline"
+                      className="geist-caption inline-flex items-center gap-1.5 text-blue-600 dark:text-blue-400 hover:underline font-semibold"
                     >
                       <ExternalLink size={13} />
                       View Full Resume Document in Popup
@@ -2020,14 +2299,14 @@ const ResumeDump: React.FC = () => {
               onClick={(event) => event.stopPropagation()}
             >
               {/* Top Bar Header */}
-              <div className="flex items-center justify-between px-5 py-3.5 bg-[#181818] border-b border-white/10 text-white shrink-0">
+              <div className="flex items-center justify-between px-5 py-3.5 bg-gray-100 dark:bg-[#181818] border-b border-gray-200 dark:border-white/10 text-slate-900 dark:text-white shrink-0">
                 <div className="flex items-center gap-3 min-w-0">
-                  <FileText className="text-blue-400 size-5 shrink-0" />
+                  <FileText className="text-blue-600 dark:text-blue-400 size-5 shrink-0" />
                   <div className="min-w-0">
-                    <h3 className="font-bold text-sm sm:text-base text-white truncate">
+                    <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">
                       {previewResumeCandidate.name ? `${previewResumeCandidate.name}'s Resume` : previewResumeCandidate.resumeFileName}
                     </h3>
-                    <p className="text-xs text-gray-400 truncate">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                       {previewResumeCandidate.resumeFileName}
                     </p>
                   </div>
@@ -2038,7 +2317,7 @@ const ResumeDump: React.FC = () => {
                     href={previewResumeCandidate.resumeUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold text-white flex items-center gap-1.5 transition-colors"
+                    className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-xs font-semibold text-slate-900 dark:text-white flex items-center gap-1.5 transition-colors"
                     title="Download / Open in New Tab"
                   >
                     <ExternalLink size={13} />
@@ -2047,7 +2326,7 @@ const ResumeDump: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setPreviewResumeCandidate(null)}
-                    className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+                    className="w-8 h-8 rounded-lg bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 flex items-center justify-center text-slate-700 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors"
                     title="Close Preview"
                   >
                     <span className="text-xl leading-none">&times;</span>
@@ -2081,23 +2360,20 @@ const ResumeDump: React.FC = () => {
       {/* Send Interview Invitations Modal Popup */}
       {isInviteModalOpen &&
         createPortal(
-          <div
-            className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-in fade-in duration-200"
-            onClick={() => setIsInviteModalOpen(false)}
-          >
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md" onClick={() => setIsInviteModalOpen(false)}>
             <div
-              className="flex flex-col w-full max-w-xl bg-[#090909] border border-white/[0.13] rounded-[12px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 text-white"
-              onClick={(event) => event.stopPropagation()}
+              className="w-full max-w-lg overflow-hidden rounded-[14px] border border-gray-200 dark:border-white/[0.15] bg-white dark:bg-[#090909] text-slate-900 dark:text-white shadow-2xl animate-in fade-in zoom-in duration-150"
+              onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Header */}
-              <div className="flex items-center justify-between px-5 py-4 bg-[#0d0d0d] border-b border-white/[0.11]">
+              <div className="flex items-center justify-between px-5 py-4 bg-gray-50 dark:bg-[#0d0d0d] border-b border-gray-200 dark:border-white/[0.11]">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-[6px] bg-white/[0.05] border border-white/[0.11] text-white">
+                  <div className="p-2 rounded-[6px] bg-gray-100 dark:bg-white/[0.05] border border-gray-200 dark:border-white/[0.11] text-slate-900 dark:text-white">
                     <Send size={16} strokeWidth={2} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm text-white">Send Interview Invitations</h3>
-                    <p className="geist-small text-[#8f8f8f]">
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-white">Send Interview Invitations</h3>
+                    <p className="geist-small text-gray-500 dark:text-[#8f8f8f]">
                       Inviting {selectedCandidateIds.length || filteredCandidates.length} Candidate(s)
                     </p>
                   </div>
@@ -2105,7 +2381,7 @@ const ResumeDump: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsInviteModalOpen(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white"
+                  className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.03] text-gray-500 dark:text-[#8f8f8f] transition-colors hover:bg-gray-200 dark:hover:bg-white/[0.06] hover:text-black dark:hover:text-white"
                 >
                   <span className="text-xl leading-none">&times;</span>
                 </button>
@@ -2113,19 +2389,31 @@ const ResumeDump: React.FC = () => {
 
               {/* Modal Content Body */}
               <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+                {/* Highest Education Qualification Input */}
+                <div>
+                  <label className="block geist-label uppercase text-gray-600 dark:text-[#6b7280] mb-1.5 font-medium">
+                    Highest Education Qualification
+                  </label>
+                  <EducationInput
+                    value={inviteModalEducation}
+                    onChange={setInviteModalEducation}
+                    placeholder="Type or select education (e.g. B.Tech Civil, Diploma, B.Com)..."
+                  />
+                </div>
+
                 {/* 1. Job Role Selection */}
                 <div>
-                  <label className="block geist-label uppercase text-[#6b7280] mb-1.5">
+                  <label className="block geist-label uppercase text-gray-600 dark:text-[#6b7280] mb-1.5 font-medium">
                     Select Target Job Role / Interview
                   </label>
                   <select
                     value={selectedJobId}
                     onChange={(e) => setSelectedJobId(e.target.value)}
-                    className="geist-caption w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111111] px-3 text-xs font-semibold text-white outline-none focus:border-white/30 cursor-pointer"
+                    className="geist-caption w-full h-9 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111111] px-3 text-xs font-semibold text-slate-900 dark:text-white outline-none focus:border-slate-900 dark:focus:border-white/30 cursor-pointer"
                   >
-                    <option value="all" disabled className="bg-[#111] text-white">-- Choose a Job Role to Invite Candidates --</option>
+                    <option value="all" disabled className="bg-white dark:bg-[#111] text-slate-900 dark:text-white">-- Choose a Job Role to Invite Candidates --</option>
                     {jobs.map(j => (
-                      <option key={j.id} value={j.id} className="bg-[#111] text-white">
+                      <option key={j.id} value={j.id} className="bg-white dark:bg-[#111] text-slate-900 dark:text-white">
                         {j.title || j.jobRole || 'Untitled Job'} {j.accessCode ? `(Code: ${j.accessCode})` : ''}
                       </option>
                     ))}
@@ -2134,17 +2422,17 @@ const ResumeDump: React.FC = () => {
 
                 {/* 2. Candidate Selection Summary */}
                 <div>
-                  <label className="block geist-label uppercase text-[#6b7280] mb-1.5">
+                  <label className="block geist-label uppercase text-gray-600 dark:text-[#6b7280] mb-1.5 font-medium">
                     Selected Candidates ({selectedCandidateIds.length > 0 ? selectedCandidateIds.length : filteredCandidates.length})
                   </label>
-                  <div className="max-h-32 overflow-y-auto rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-2.5 space-y-1.5">
+                  <div className="max-h-32 overflow-y-auto rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-50/50 dark:bg-white/[0.025] p-2.5 space-y-1.5">
                     {(selectedCandidateIds.length > 0
                       ? candidates.filter(c => selectedCandidateIds.includes(c.id))
                       : filteredCandidates
                     ).map(cand => (
-                      <div key={cand.id} className="flex items-center justify-between geist-caption px-2 py-1 rounded bg-white/[0.03]">
-                        <span className="font-semibold text-white truncate max-w-[220px]">{cand.name || 'Candidate'}</span>
-                        <span className="text-[#8bbde8] truncate max-w-[200px]">{cand.email || cand.phone || 'No Contact'}</span>
+                      <div key={cand.id} className="flex items-center justify-between geist-caption px-2 py-1 rounded bg-white dark:bg-white/[0.03] border border-gray-200/60 dark:border-transparent">
+                        <span className="font-semibold text-slate-900 dark:text-white truncate max-w-[220px]">{cand.name || 'Candidate'}</span>
+                        <span className="text-blue-600 dark:text-[#8bbde8] truncate max-w-[200px]">{cand.email || cand.phone || 'No Contact'}</span>
                       </div>
                     ))}
                   </div>
@@ -2152,20 +2440,20 @@ const ResumeDump: React.FC = () => {
 
                 {/* 3. Generated Invite Details */}
                 {activeSelectedJob ? (
-                  <div className="p-3.5 rounded-[8px] border border-white/[0.11] bg-white/[0.025] space-y-2.5">
+                  <div className="p-3.5 rounded-[8px] border border-gray-200 dark:border-white/[0.11] bg-gray-50/50 dark:bg-white/[0.025] space-y-2.5">
                     <div className="flex items-center justify-between geist-caption">
-                      <span className="text-[#8f8f8f]">Job Title:</span>
-                      <span className="font-bold text-white">{activeSelectedJob.title || activeSelectedJob.jobRole}</span>
+                      <span className="text-gray-500 dark:text-[#8f8f8f]">Job Title:</span>
+                      <span className="font-bold text-slate-900 dark:text-white">{activeSelectedJob.title || activeSelectedJob.jobRole}</span>
                     </div>
                     {activeSelectedJob.accessCode && (
                       <div className="flex items-center justify-between geist-caption">
-                        <span className="text-[#8f8f8f]">Access Code:</span>
-                        <span className="font-mono bg-white/[0.06] border border-white/[0.11] px-2 py-0.5 rounded text-white font-bold">{activeSelectedJob.accessCode}</span>
+                        <span className="text-gray-500 dark:text-[#8f8f8f]">Access Code:</span>
+                        <span className="font-mono bg-gray-100 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.11] px-2 py-0.5 rounded text-slate-900 dark:text-white font-bold">{activeSelectedJob.accessCode}</span>
                       </div>
                     )}
                     <div className="geist-caption">
-                      <span className="text-[#8f8f8f] block mb-1">Interview Link:</span>
-                      <div className="flex items-center gap-2 bg-[#050505] border border-white/[0.11] p-2 rounded-[6px] text-[#d4d4d4] font-mono text-[11px] break-all">
+                      <span className="text-gray-500 dark:text-[#8f8f8f] block mb-1">Interview Link:</span>
+                      <div className="flex items-center gap-2 bg-gray-100 dark:bg-[#050505] border border-gray-200 dark:border-white/[0.11] p-2 rounded-[6px] text-slate-900 dark:text-[#d4d4d4] font-mono text-[11px] break-all">
                         <span className="flex-1 truncate">
                           {`${window.location.origin}/#/interview/${activeSelectedJob.id}${activeSelectedJob.accessCode ? `?code=${activeSelectedJob.accessCode}` : ''}`}
                         </span>
@@ -2176,7 +2464,7 @@ const ResumeDump: React.FC = () => {
                             setCopiedInviteLink(true);
                             setTimeout(() => setCopiedInviteLink(false), 2500);
                           }}
-                          className="px-2.5 py-1 rounded bg-white text-black hover:bg-neutral-200 font-sans text-xs font-semibold shrink-0 transition-colors"
+                          className="px-2.5 py-1 rounded bg-slate-900 dark:bg-white text-white dark:text-black hover:bg-slate-800 dark:hover:bg-neutral-200 font-sans text-xs font-semibold shrink-0 transition-colors"
                         >
                           {copiedInviteLink ? 'Copied! ✅' : 'Copy Link'}
                         </button>
@@ -2184,18 +2472,18 @@ const ResumeDump: React.FC = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-3 rounded-[6px] border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs text-center font-medium">
+                  <div className="p-3 rounded-[6px] border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs text-center font-medium">
                     ⚠️ Please select a Job Role above to generate the specific interview link & access code.
                   </div>
                 )}
               </div>
 
               {/* Modal Footer Actions */}
-              <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 bg-[#0d0d0d] border-t border-white/[0.11]">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 bg-gray-50 dark:bg-[#0d0d0d] border-t border-gray-200 dark:border-white/[0.11]">
                 <button
                   type="button"
                   onClick={() => setIsInviteModalOpen(false)}
-                  className="geist-caption h-9 px-4 rounded-[6px] border border-white/[0.11] bg-white/[0.03] hover:bg-white/[0.06] font-semibold text-xs text-[#d4d4d4] transition-colors"
+                  className="geist-caption h-9 px-4 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] hover:bg-gray-100 dark:hover:bg-white/[0.06] font-semibold text-xs text-slate-700 dark:text-[#d4d4d4] transition-colors"
                 >
                   Cancel
                 </button>
@@ -2211,7 +2499,7 @@ const ResumeDump: React.FC = () => {
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 font-semibold text-xs px-3 hover:bg-emerald-500/20 transition-colors"
+                      className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border border-emerald-600/40 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-semibold text-xs px-3 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
                     >
                       <MessageSquare size={13} />
                       WhatsApp Invite
@@ -2220,13 +2508,36 @@ const ResumeDump: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
+                      if (inviteModalEducation.trim()) {
+                        const targetCandidates = selectedCandidateIds.length > 0
+                          ? candidates.filter(c => selectedCandidateIds.includes(c.id))
+                          : filteredCandidates;
+
+                        await Promise.all(targetCandidates.map(async (cand) => {
+                          const selectedDegree = inviteModalEducation.trim();
+                          const existingEdu = cand.education || [];
+                          const updatedEdu = [
+                            { degree: selectedDegree, institution: 'Verified Qualification', year: '' },
+                            ...existingEdu.filter(e => e.degree.toLowerCase() !== selectedDegree.toLowerCase())
+                          ];
+                          try {
+                            await updateDoc(doc(db, 'resumeDumpCandidates', cand.id), {
+                              education: updatedEdu,
+                              updatedAt: serverTimestamp(),
+                            });
+                          } catch (err) {
+                            console.error('Failed to update candidate education on invite:', err);
+                          }
+                        }));
+                      }
+
                       messageBox.showSuccess(`✅ Interview invitations generated & copied successfully for ${selectedCandidateIds.length || filteredCandidates.length} candidate(s)!`);
                       setIsInviteModalOpen(false);
                       setSelectedCandidateIds([]);
                     }}
                     disabled={!activeSelectedJob}
-                    className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] bg-white text-black hover:bg-neutral-200 font-semibold text-xs px-4 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] bg-slate-900 dark:bg-white text-white dark:text-black hover:bg-slate-800 dark:hover:bg-neutral-200 font-semibold text-xs px-4 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
                     <Mail size={13} />
                     Send Invites
@@ -2241,25 +2552,25 @@ const ResumeDump: React.FC = () => {
       {/* Upload Resumes Modal with Extra Info */}
       {isUploadModalOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 p-4 backdrop-blur-md" onClick={() => !uploading && setIsUploadModalOpen(false)}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md" onClick={() => !uploading && setIsUploadModalOpen(false)}>
             <div
-              className="w-full max-w-xl overflow-hidden rounded-[14px] border border-white/[0.15] bg-[#0c0c0d] text-white shadow-2xl animate-in fade-in zoom-in duration-150"
+              className="w-full max-w-xl overflow-hidden rounded-[14px] border border-gray-200 dark:border-white/[0.15] bg-white dark:bg-[#0c0c0d] text-slate-900 dark:text-white shadow-2xl animate-in fade-in zoom-in duration-150"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between border-b border-white/[0.11] bg-[#111113] px-5 py-4">
+              <div className="flex items-center justify-between border-b border-gray-200 dark:border-white/[0.11] bg-gray-50 dark:bg-[#111113] px-5 py-4">
                 <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <UploadCloud size={18} className="text-white" />
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <UploadCloud size={18} className="text-slate-900 dark:text-white" />
                     Upload Candidate Resumes
                   </h3>
-                  <p className="geist-small mt-0.5 text-[#8f8f8f]">
+                  <p className="geist-small mt-0.5 text-gray-500 dark:text-[#8f8f8f]">
                     Select or drop resume files and optionally attach extra details to parse together.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => !uploading && setIsUploadModalOpen(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] transition-colors hover:bg-white/[0.08] hover:text-white text-xl leading-none"
+                  className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.03] text-gray-500 dark:text-[#8f8f8f] transition-colors hover:bg-gray-200 dark:hover:bg-white/[0.08] hover:text-black dark:hover:text-white text-xl leading-none"
                 >
                   &times;
                 </button>
@@ -2268,17 +2579,17 @@ const ResumeDump: React.FC = () => {
               <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
                 {/* File Selection Dropzone */}
                 <div>
-                  <label className="geist-label block uppercase text-[#9ca3af] mb-1.5 font-medium">
-                    Select Resume File(s) <span className="text-white font-semibold">*</span>
+                  <label className="geist-label block uppercase text-gray-600 dark:text-[#9ca3af] mb-1.5 font-medium">
+                    Select Resume File(s) <span className="text-slate-900 dark:text-white font-semibold">*</span>
                   </label>
-                  <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[8px] border border-dashed border-white/[0.18] bg-white/[0.025] p-5 text-center transition-colors hover:bg-white/[0.05] hover:border-white/40">
-                    <UploadCloud size={24} className="text-[#a1a1aa]" />
-                    <span className="geist-caption text-xs font-semibold text-white">
+                  <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[8px] border border-dashed border-gray-300 dark:border-white/[0.18] bg-gray-50/80 dark:bg-white/[0.025] p-5 text-center transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.05]">
+                    <UploadCloud size={24} className="text-gray-400 dark:text-[#a1a1aa]" />
+                    <span className="geist-caption text-xs font-semibold text-slate-800 dark:text-white">
                       {selectedUploadFiles.length > 0
                         ? `Selected ${selectedUploadFiles.length} file${selectedUploadFiles.length > 1 ? 's' : ''}`
                         : 'Click to select PDF, DOCX, or TXT resumes'}
                     </span>
-                    <span className="geist-small text-[#6b7280]">
+                    <span className="geist-small text-gray-500 dark:text-[#6b7280]">
                       Select single or multiple candidate resume files
                     </span>
                     <input
@@ -2299,19 +2610,19 @@ const ResumeDump: React.FC = () => {
                   {/* List of Selected Files */}
                   {selectedUploadFiles.length > 0 && (
                     <div className="mt-3 space-y-1.5">
-                      <p className="geist-label uppercase text-[#6b7280] text-[10px]">Selected Files ({selectedUploadFiles.length}):</p>
+                      <p className="geist-label uppercase text-gray-500 dark:text-[#6b7280] text-[10px]">Selected Files ({selectedUploadFiles.length}):</p>
                       <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
                         {selectedUploadFiles.map((file, idx) => (
-                          <div key={`${file.name}-${idx}`} className="flex items-center justify-between rounded-[6px] border border-white/[0.1] bg-white/[0.03] px-3 py-1.5 text-xs">
+                          <div key={`${file.name}-${idx}`} className="flex items-center justify-between rounded-[6px] border border-gray-200 dark:border-white/[0.1] bg-gray-100/70 dark:bg-white/[0.03] px-3 py-1.5 text-xs">
                             <div className="flex items-center gap-2 truncate min-w-0">
-                              <FileText size={13} className="text-blue-400 shrink-0" />
-                              <span className="truncate text-white font-medium">{file.name}</span>
-                              <span className="text-[#6b7280]">({(file.size / 1024).toFixed(0)} KB)</span>
+                              <FileText size={13} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                              <span className="truncate text-slate-800 dark:text-white font-medium">{file.name}</span>
+                              <span className="text-gray-500 dark:text-[#6b7280]">({(file.size / 1024).toFixed(0)} KB)</span>
                             </div>
                             <button
                               type="button"
                               onClick={() => setSelectedUploadFiles(prev => prev.filter((_, i) => i !== idx))}
-                              className="text-[#8f8f8f] hover:text-red-400 font-bold ml-2 text-base"
+                              className="text-gray-400 dark:text-[#8f8f8f] hover:text-red-500 dark:hover:text-red-400 font-bold ml-2 text-base"
                               disabled={uploading}
                             >
                               &times;
@@ -2323,48 +2634,73 @@ const ResumeDump: React.FC = () => {
                   )}
                 </div>
 
-                {/* Optional Experience Years Input */}
-                <div>
-                  <label className="geist-label block uppercase text-[#9ca3af] mb-1.5 font-medium">
-                    Experience Years <span className="text-blue-400 font-normal lowercase">(Optional e.g. 3 or 5.5 — leave blank to auto-detect with AI)</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    max="60"
-                    value={uploadModalExpYears}
-                    onChange={(e) => setUploadModalExpYears(e.target.value)}
-                    placeholder="e.g. 3 or 5.5 (Optional)"
-                    className="w-full rounded-[8px] border border-white/[0.14] bg-[#050505] p-3 text-xs text-white outline-none focus:border-blue-400 placeholder:text-[#6b7280]"
-                  />
+                {/* Location, Experience & Education Mandatory Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="geist-label block uppercase text-gray-600 dark:text-[#9ca3af] mb-1.5 font-medium">
+                      Location / City <span className="text-slate-900 dark:text-[#ededed] font-semibold">*</span>
+                    </label>
+                    <LocationCityInput
+                      value={uploadModalLocation}
+                      onChange={setUploadModalLocation}
+                      placeholder="e.g. Nashik, Mumbai, Pune..."
+                      className="w-full rounded-[8px] border border-gray-300 dark:border-white/[0.14] bg-white dark:bg-[#050505] p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-black dark:focus:border-blue-400 placeholder:text-gray-400 dark:placeholder:text-[#6b7280]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="geist-label block uppercase text-gray-600 dark:text-[#9ca3af] mb-1.5 font-medium">
+                      Experience Years <span className="text-slate-900 dark:text-[#ededed] font-semibold">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="60"
+                      value={uploadModalExpYears}
+                      onChange={(e) => setUploadModalExpYears(e.target.value)}
+                      placeholder="e.g. 1.5 or 3.5 Yrs"
+                      className="w-full rounded-[8px] border border-gray-300 dark:border-white/[0.14] bg-white dark:bg-[#050505] p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-black dark:focus:border-blue-400 placeholder:text-gray-400 dark:placeholder:text-[#6b7280]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="geist-label block uppercase text-gray-600 dark:text-[#9ca3af] mb-1.5 font-medium">
+                      Highest Education <span className="text-slate-900 dark:text-[#ededed] font-semibold">*</span>
+                    </label>
+                    <EducationInput
+                      value={uploadModalHighestEducation}
+                      onChange={setUploadModalHighestEducation}
+                      placeholder="Type or select education (e.g. B.Tech Civil, Diploma, B.Com)..."
+                    />
+                  </div>
                 </div>
 
                 {/* Extra Info Input Field */}
                 <div>
-                  <label className="geist-label block uppercase text-[#9ca3af] mb-1.5 font-medium">
-                    Extra Info / Candidate Notes <span className="text-blue-400 font-normal lowercase">(Optional — will be parsed WITH PDF data)</span>
+                  <label className="geist-label block uppercase text-gray-600 dark:text-[#9ca3af] mb-1.5 font-medium">
+                    Extra Info / Candidate Notes <span className="text-blue-600 dark:text-blue-400 font-normal lowercase">(Optional — will be parsed WITH PDF data)</span>
                   </label>
                   <textarea
                     rows={4}
                     value={uploadModalExtraInfo}
                     onChange={(e) => setUploadModalExtraInfo(e.target.value)}
                     placeholder="Enter candidate bio, extra skills, recruiter notes, past performance, or details to combine with PDF parsing..."
-                    className="w-full rounded-[8px] border border-white/[0.14] bg-[#050505] p-3 text-xs text-white outline-none focus:border-blue-400 placeholder:text-[#6b7280] leading-relaxed"
+                    className="w-full rounded-[8px] border border-gray-300 dark:border-white/[0.14] bg-white dark:bg-[#050505] p-3 text-xs text-slate-900 dark:text-white outline-none focus:border-black dark:focus:border-blue-400 placeholder:text-gray-400 dark:placeholder:text-[#6b7280] leading-relaxed"
                   />
-                  <p className="geist-small mt-1 text-[#6b7280]">
+                  <p className="geist-small mt-1 text-gray-500 dark:text-[#6b7280]">
                     💡 Any text entered here will be combined with the extracted PDF/DOCX text before AI extraction.
                   </p>
                 </div>
 
 
                 {/* Submit Actions */}
-                <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/[0.1]">
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200 dark:border-white/[0.1]">
                   <button
                     type="button"
                     onClick={() => setIsUploadModalOpen(false)}
                     disabled={uploading}
-                    className="geist-caption rounded-[6px] border border-white/[0.11] bg-white/[0.04] px-4 py-2 text-xs font-semibold text-[#d4d4d4] hover:bg-white/[0.08]"
+                    className="geist-caption rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.04] px-4 py-2 text-xs font-semibold text-slate-700 dark:text-[#d4d4d4] hover:bg-gray-200 dark:hover:bg-white/[0.08]"
                   >
                     Cancel
                   </button>
@@ -2372,11 +2708,11 @@ const ResumeDump: React.FC = () => {
                     type="button"
                     onClick={() => processResumeFiles(selectedUploadFiles, uploadModalExtraInfo)}
                     disabled={uploading || selectedUploadFiles.length === 0}
-                    className="geist-caption inline-flex items-center gap-2 rounded-[6px] bg-white px-4 py-2 text-xs font-bold text-black hover:bg-neutral-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="geist-caption inline-flex items-center gap-2 rounded-[6px] bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 px-4 py-2 text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
                     {uploading ? (
                       <>
-                        <Sparkles size={14} className="animate-spin text-black" />
+                        <Sparkles size={14} className="animate-spin text-white dark:text-black" />
                         {uploadStatus || 'Processing Resumes...'}
                       </>
                     ) : (
@@ -2397,170 +2733,204 @@ const ResumeDump: React.FC = () => {
       {editingCandidate &&
         createPortal(
           <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200" onClick={() => setEditingCandidate(null)}>
-            <div className="relative w-full max-w-2xl bg-[#090909] border border-white/[0.15] rounded-[12px] shadow-2xl flex flex-col text-white max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+            <div className="relative w-full max-w-2xl bg-white dark:bg-[#090909] border border-gray-200 dark:border-white/[0.15] rounded-[12px] shadow-2xl flex flex-col text-slate-900 dark:text-white max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
               {/* Modal Header */}
-              <div className="flex items-center justify-between px-5 py-4 bg-[#0d0d0d] border-b border-white/[0.11] shrink-0">
+              <div className="flex items-center justify-between px-5 py-4 bg-gray-50 dark:bg-[#0d0d0d] border-b border-gray-200 dark:border-white/[0.11] shrink-0">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-[6px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                  <div className="p-2 rounded-[6px] bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400">
                     <Edit3 size={16} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-base text-white">Edit Candidate Information</h3>
-                    <p className="geist-small text-[#8f8f8f]">Update candidate profile, experience, skills, and contact details</p>
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white">Edit Candidate Information</h3>
+                    <p className="geist-small text-gray-500 dark:text-[#8f8f8f]">Update candidate profile, experience, skills, and contact details</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setEditingCandidate(null)}
-                  className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white"
+                  className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.03] text-gray-500 dark:text-[#8f8f8f] transition-colors hover:bg-gray-200 dark:hover:bg-white/[0.06] hover:text-black dark:hover:text-white text-xl leading-none"
                 >
-                  <span className="text-xl leading-none">&times;</span>
+                  &times;
                 </button>
               </div>
 
               {/* Modal Body / Form */}
               <div className="p-5 space-y-4 overflow-y-auto max-h-[70vh] geist-small">
                 {/* 1. Personal & Contact Info */}
-                <div className="space-y-3 p-3.5 bg-white/[0.02] border border-white/[0.08] rounded-[8px]">
-                  <p className="geist-label uppercase text-emerald-400 font-semibold text-[11px]">Personal & Contact Details</p>
+                <div className="space-y-3 p-3.5 bg-gray-50/60 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.08] rounded-[8px]">
+                  <p className="geist-label uppercase text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">Personal & Contact Details</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[#a1a1aa] mb-1 font-medium">Candidate Name</label>
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Candidate Name</label>
                       <input
                         type="text"
                         value={editingCandidateForm.name}
                         onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, name: e.target.value }))}
                         placeholder="e.g. Rahul Sharma"
-                        className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                        className="w-full h-9 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-3 text-slate-900 dark:text-white outline-none focus:border-slate-900 dark:focus:border-white/30 text-xs"
                       />
                     </div>
                     <div>
-                      <label className="block text-[#a1a1aa] mb-1 font-medium">Email Address</label>
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Email Address</label>
                       <input
                         type="email"
                         value={editingCandidateForm.email}
                         onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, email: e.target.value }))}
                         placeholder="e.g. candidate@example.com"
-                        className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                        className="w-full h-9 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-3 text-slate-900 dark:text-white outline-none focus:border-slate-900 dark:focus:border-white/30 text-xs"
                       />
                     </div>
                     <div>
-                      <label className="block text-[#a1a1aa] mb-1 font-medium">Phone / WhatsApp Number</label>
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Phone / WhatsApp Number</label>
                       <input
                         type="text"
                         value={editingCandidateForm.phone}
                         onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, phone: e.target.value }))}
                         placeholder="e.g. +91 9876543210"
-                        className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                        className="w-full h-9 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-3 text-slate-900 dark:text-white outline-none focus:border-slate-900 dark:focus:border-white/30 text-xs"
                       />
                     </div>
                     <div>
-                      <label className="block text-[#a1a1aa] mb-1 font-medium">City / Location</label>
-                      <input
-                        type="text"
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">City / Location</label>
+                      <LocationCityInput
                         value={editingCandidateForm.location}
-                        onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, location: e.target.value }))}
-                        placeholder="e.g. Mumbai, Maharashtra"
-                        className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                        onChange={(val) => setEditingCandidateForm(prev => ({ ...prev, location: val }))}
+                        placeholder="e.g. Nashik, Mumbai, Pune..."
+                        className="w-full h-9 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-3 text-slate-900 dark:text-white outline-none focus:border-slate-900 dark:focus:border-white/30 text-xs"
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* 2. Professional Details */}
-                <div className="space-y-3 p-3.5 bg-white/[0.02] border border-white/[0.08] rounded-[8px]">
-                  <p className="geist-label uppercase text-emerald-400 font-semibold text-[11px]">Professional Profile & Skills</p>
+                <div className="space-y-3 p-3.5 bg-gray-50/60 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.08] rounded-[8px]">
+                  <p className="geist-label uppercase text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">Professional Profile & Skills</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[#a1a1aa] mb-1 font-medium">Current Designation / Role</label>
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Current Designation / Role</label>
                       <input
                         type="text"
                         value={editingCandidateForm.currentTitle}
                         onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, currentTitle: e.target.value }))}
                         placeholder="e.g. Full Stack Developer"
-                        className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                        className="w-full h-9 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-3 text-slate-900 dark:text-white outline-none focus:border-slate-900 dark:focus:border-white/30 text-xs"
                       />
                     </div>
                     <div>
-                      <label className="block text-[#a1a1aa] mb-1 font-medium">Total Experience (Years)</label>
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Total Experience (Years)</label>
                       <input
                         type="number"
-                        step="0.5"
+                        step="0.1"
                         min="0"
                         max="50"
                         value={editingCandidateForm.totalExperienceYears}
                         onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, totalExperienceYears: e.target.value }))}
-                        placeholder="e.g. 3.5"
-                        className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                        placeholder="e.g. 1.5, 2.5"
+                        className="w-full h-9 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-3 text-slate-900 dark:text-white outline-none focus:border-slate-900 dark:focus:border-white/30 text-xs"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[#a1a1aa] mb-1 font-medium">Skills (Comma Separated)</label>
+                    <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Skills (Comma Separated or Check Rec Box below)</label>
                     <input
                       type="text"
                       value={editingCandidateForm.skills}
                       onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, skills: e.target.value }))}
-                      placeholder="e.g. React, Node.js, Python, PostgreSQL, AWS"
-                      className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                      placeholder="e.g. React, Node.js, Python, AutoCAD, Civil Engineering"
+                      className="w-full h-9 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-3 text-slate-900 dark:text-white outline-none focus:border-slate-900 dark:focus:border-white/30 text-xs"
                     />
-                    {editingCandidateForm.skills.trim() && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {editingCandidateForm.skills.split(',').map(s => s.trim()).filter(Boolean).map(skill => (
-                          <span key={skill} className="px-2 py-0.5 rounded bg-white/[0.06] border border-white/10 text-[10px] text-white">
-                            {skill}
-                          </span>
-                        ))}
+
+                    {/* Recommended Domain Skills Box with Checkmarks */}
+                    <div className="mt-2.5 p-2.5 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-100/50 dark:bg-white/[0.02]">
+                      <p className="geist-label text-[10px] uppercase text-emerald-600 dark:text-emerald-400 font-bold mb-1.5 flex items-center gap-1">
+                        <CheckSquare size={12} />
+                        Recommended Skills Rec Box (Click checkmark to add/remove):
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+                        {[
+                          "AutoCAD", "Civil Engineering", "Site Management", "Estimating", "Structural Design",
+                          "Billing & Estimation", "RCC Design", "Revit", "Quantity Surveying", "Project Management",
+                          "React", "Node.js", "Python", "TypeScript", "JavaScript", "SQL", "PostgreSQL",
+                          "Financial Analysis", "Accounting", "Tally", "GST Compliance", "Auditing",
+                          "Sales & Marketing", "Business Development", "Digital Marketing", "SEO", "Lead Generation",
+                          "Quality Assurance", "AWS", "Docker", "Machine Learning", "Data Analysis", "Excel"
+                        ].map(skill => {
+                          const currentSkills = editingCandidateForm.skills.split(',').map(s => s.trim()).filter(Boolean);
+                          const isChecked = currentSkills.some(s => s.toLowerCase() === skill.toLowerCase());
+                          return (
+                            <button
+                              key={skill}
+                              type="button"
+                              onClick={() => {
+                                let newSkills: string[];
+                                if (isChecked) {
+                                  newSkills = currentSkills.filter(s => s.toLowerCase() !== skill.toLowerCase());
+                                } else {
+                                  newSkills = [...currentSkills, skill];
+                                }
+                                setEditingCandidateForm(prev => ({ ...prev, skills: newSkills.join(', ') }));
+                              }}
+                              className={`geist-caption inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold border transition-all cursor-pointer ${
+                                isChecked
+                                  ? 'bg-emerald-50 dark:bg-emerald-500/20 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
+                                  : 'bg-white dark:bg-white/[0.04] border-gray-300 dark:border-white/10 text-slate-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/[0.08] hover:text-black dark:hover:text-white'
+                              }`}
+                            >
+                              <div className={`w-3 h-3 rounded-xs border flex items-center justify-center ${isChecked ? 'bg-emerald-500 border-emerald-500 text-white dark:text-black' : 'border-gray-400 dark:border-gray-500'}`}>
+                                {isChecked && <Check size={9} strokeWidth={3} />}
+                              </div>
+                              <span>{skill}</span>
+                            </button>
+                          );
+                        })}
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   <div>
-                    <label className="block text-[#a1a1aa] mb-1 font-medium font-medium">Degree / Education Qualification</label>
-                    <input
-                      type="text"
+                    <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Degree / Education Qualification</label>
+                    <EducationInput
                       value={editingCandidateForm.education}
-                      onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, education: e.target.value }))}
-                      placeholder="e.g. B.Tech Computer Science - IIT Bombay"
-                      className="w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
+                      onChange={(val) => setEditingCandidateForm(prev => ({ ...prev, education: val }))}
+                      placeholder="Type or select qualification (e.g. B.Tech CSE, Diploma Civil, B.Com)..."
                     />
                   </div>
                 </div>
 
                 {/* 3. Summary & Recruiter Notes */}
-                <div className="space-y-3 p-3.5 bg-white/[0.02] border border-white/[0.08] rounded-[8px]">
-                  <p className="geist-label uppercase text-emerald-400 font-semibold text-[11px]">Summary & Recruiter Notes</p>
+                <div className="space-y-3 p-3.5 bg-gray-50/60 dark:bg-white/[0.02] border border-gray-200 dark:border-white/[0.08] rounded-[8px]">
+                  <p className="geist-label uppercase text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">Summary & Recruiter Notes</p>
                   <div>
-                    <label className="block text-[#a1a1aa] mb-1 font-medium font-medium">Professional Summary</label>
+                    <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Professional Summary</label>
                     <textarea
                       rows={3}
                       value={editingCandidateForm.summary}
                       onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, summary: e.target.value }))}
                       placeholder="Enter candidate profile summary or background..."
-                      className="w-full rounded-[6px] border border-white/[0.11] bg-[#111] p-2.5 text-white outline-none focus:border-white/30 text-xs resize-y"
+                      className="w-full rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] p-2.5 text-slate-900 dark:text-white outline-none focus:border-slate-900 dark:focus:border-white/30 text-xs resize-y"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[#a1a1aa] mb-1 font-medium font-medium">Recruiter Notes / Additional Details</label>
+                    <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Recruiter Notes / Additional Details</label>
                     <textarea
                       rows={2}
                       value={editingCandidateForm.additionalText}
                       onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, additionalText: e.target.value }))}
                       placeholder="Add recruiter notes, expected salary, notice period, interview feedback..."
-                      className="w-full rounded-[6px] border border-white/[0.11] bg-[#111] p-2.5 text-white outline-none focus:border-white/30 text-xs resize-y"
+                      className="w-full rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] p-2.5 text-slate-900 dark:text-white outline-none focus:border-slate-900 dark:focus:border-white/30 text-xs resize-y"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Modal Footer */}
-              <div className="flex items-center justify-end gap-2 px-5 py-3.5 bg-[#0d0d0d] border-t border-white/[0.11] shrink-0">
+              <div className="flex items-center justify-end gap-2 px-5 py-3.5 bg-gray-50 dark:bg-[#0d0d0d] border-t border-gray-200 dark:border-white/[0.11] shrink-0">
                 <button
                   type="button"
                   onClick={() => setEditingCandidate(null)}
-                  className="geist-caption h-9 px-4 rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#d4d4d4] font-medium text-xs hover:bg-white/[0.06] hover:text-white transition-colors"
+                  className="geist-caption h-9 px-4 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] text-slate-700 dark:text-[#d4d4d4] font-medium text-xs hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-black dark:hover:text-white transition-colors"
                 >
                   Cancel
                 </button>
@@ -2568,7 +2938,7 @@ const ResumeDump: React.FC = () => {
                   type="button"
                   onClick={handleSaveCandidateEdit}
                   disabled={isSavingCandidateEdit}
-                  className="geist-caption inline-flex items-center gap-1.5 h-9 px-4 rounded-[6px] bg-emerald-500 text-black font-bold text-xs hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-emerald-500/20"
+                  className="geist-caption inline-flex items-center gap-1.5 h-9 px-4 rounded-[6px] bg-emerald-600 dark:bg-emerald-500 text-white dark:text-black font-bold text-xs hover:bg-emerald-700 dark:hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-emerald-500/20"
                 >
                   {isSavingCandidateEdit ? (
                     <>
