@@ -11,6 +11,46 @@ export interface SendWhatsAppResponse {
   error?: string;
 }
 
+export interface WhatsAppStatusResponse {
+  status: string;
+  qrCodeDataUrl?: string | null;
+  userInfo?: { name?: string; phone?: string; id?: string } | null;
+  lastUpdated?: string;
+  error?: string | null;
+  sessionId?: string;
+  hasPasscode?: boolean;
+}
+
+/**
+  * Fetches WhatsApp API session status and QR code data URL.
+  */
+export async function fetchWhatsAppStatus(
+  sessionId: string,
+  passcode: string
+): Promise<WhatsAppStatusResponse> {
+  if (!sessionId || !passcode) {
+    return { status: 'DISCONNECTED', error: 'Missing session ID or passcode' };
+  }
+
+  const url = 'https://whatsapp-sending-api.onrender.com/api/status';
+
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'x-session-id': sessionId.trim(),
+        'x-session-passcode': passcode.trim(),
+      },
+    });
+
+    const data = await res.json();
+    return data;
+  } catch (err: any) {
+    console.error('[WhatsApp API] Error fetching status:', err);
+    return { status: 'ERROR', error: err.message || 'Failed to connect to WhatsApp API service' };
+  }
+}
+
 export interface WhatsAppInviteOptions {
   gender?: string;
   location?: string;
