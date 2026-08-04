@@ -54,7 +54,7 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       {showRecruiterSidebar ? <RecruiterRateLimitBanner /> : null}
 
-      <nav className={`sticky top-0 z-40 border-b backdrop-blur-xl transition-colors duration-300 ${isRecruiterPath ? 'recruiter-topbar' : ''} ${showRecruiterSidebar ? 'border-white/[0.11] bg-[#000]/95 text-white' : 'border-border bg-background/90'}`}>
+      <nav className={`sticky top-0 z-40 border-b backdrop-blur-xl transition-colors duration-300 ${isRecruiterPath ? 'recruiter-topbar' : ''} ${showRecruiterSidebar ? 'border-slate-200 dark:border-white/[0.11] bg-white/95 dark:bg-[#000]/95 text-slate-900 dark:text-white' : 'border-border bg-background/90'}`}>
         <div className="w-full mx-auto px-3 sm:px-4 lg:px-5">
           <div className="relative flex h-14 items-center justify-between">
 
@@ -69,7 +69,7 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
             {showRecruiterSidebar && location.pathname === '/recruiter/jobs' && (
               <div className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 sm:block">
-                <h1 className="geist-caption font-medium text-white">
+                <h1 className="geist-caption font-medium text-slate-900 dark:text-white">
                   Recruiter Dashboard
                 </h1>
               </div>
@@ -262,7 +262,7 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             {children}
           </main>
 
-          <footer className={`z-10 mt-auto border-t backdrop-blur-sm ${isRecruiterPath ? 'recruiter-footer' : ''} ${showRecruiterSidebar ? 'border-white/[0.11] bg-[#000] text-white' : 'border-border bg-background/90'}`}>
+          <footer className={`z-10 mt-auto border-t backdrop-blur-sm ${isRecruiterPath ? 'recruiter-footer' : ''} ${showRecruiterSidebar ? 'border-slate-200 dark:border-white/[0.11] bg-white dark:bg-[#000] text-slate-900 dark:text-white' : 'border-border bg-background/90'}`}>
             <div className={`${showRecruiterSidebar ? 'w-full' : 'max-w-7xl mx-auto'} px-3 sm:px-4 lg:px-5`}>
           <div className="flex min-h-14 flex-col items-center justify-between gap-3 py-3 md:flex-row">
             <div className="flex items-center gap-2 opacity-70 transition-opacity hover:opacity-100">
@@ -270,23 +270,23 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             </div>
 
             <div className="flex flex-wrap items-center justify-center gap-1.5">
-              <Link to="/contact" className={`geist-small group inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-2.5 font-medium transition-colors ${showRecruiterSidebar ? 'border-white/[0.11] bg-transparent text-[#8f8f8f] hover:bg-white/[0.05] hover:text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-white'}`}>
+              <Link to="/contact" className={`geist-small group inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-2.5 font-medium transition-colors ${showRecruiterSidebar ? 'border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-transparent text-slate-700 dark:text-[#8f8f8f] hover:bg-slate-200 dark:hover:bg-white/[0.05] hover:text-slate-900 dark:hover:text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-white'}`}>
                 <Mail size={13} />
                 <span>Contact Us</span>
               </Link>
-              <Link to="/report-bug" className={`geist-small group inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-2.5 font-medium transition-colors ${showRecruiterSidebar ? 'border-white/[0.11] bg-transparent text-[#8f8f8f] hover:bg-white/[0.05] hover:text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-white'}`}>
+              <Link to="/report-bug" className={`geist-small group inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-2.5 font-medium transition-colors ${showRecruiterSidebar ? 'border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-transparent text-slate-700 dark:text-[#8f8f8f] hover:bg-slate-200 dark:hover:bg-white/[0.05] hover:text-slate-900 dark:hover:text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-white'}`}>
                 <Bug size={13} />
                 <span>Report Bug</span>
               </Link>
-              <Link to="/reviews" className={`geist-small group inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-2.5 font-medium transition-colors ${showRecruiterSidebar ? 'border-white/[0.11] bg-transparent text-[#8f8f8f] hover:bg-white/[0.05] hover:text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-white'}`}>
+              <Link to="/reviews" className={`geist-small group inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-2.5 font-medium transition-colors ${showRecruiterSidebar ? 'border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-transparent text-slate-700 dark:text-[#8f8f8f] hover:bg-slate-200 dark:hover:bg-white/[0.05] hover:text-slate-900 dark:hover:text-white' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-white'}`}>
                 <MessageSquare size={13} />
                 <span>Reviews</span>
               </Link>
             </div>
 
-            <div className={`geist-small text-center font-medium md:text-right ${showRecruiterSidebar ? 'text-[#6b7280]' : 'text-gray-400 dark:text-gray-600'}`}>
+            <div className={`geist-small text-center font-medium md:text-right ${showRecruiterSidebar ? 'text-slate-500 dark:text-[#6b7280]' : 'text-gray-400 dark:text-gray-600'}`}>
               <div>&copy; 2026 InterviewXpert Inc.</div>
-              <div className="text-[10px] opacity-75">Developed by <a href="https://snab.co.in" target="_blank" rel="noopener noreferrer" className={showRecruiterSidebar ? 'text-[#a1a1a1] hover:text-white' : 'text-primary hover:underline'}>SNAB Innovations</a></div>
+              <div className="text-[10px] opacity-75">Developed by <a href="https://snab.co.in" target="_blank" rel="noopener noreferrer" className={showRecruiterSidebar ? 'text-slate-700 dark:text-[#a1a1a1] hover:text-slate-900 dark:hover:text-white' : 'text-primary hover:underline'}>SNAB Innovations</a></div>
             </div>
           </div>
             </div>

@@ -479,9 +479,9 @@ const Profile: React.FC = () => {
   if (loading) return <div className="p-6 text-center">Loading profile...</div>;
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-6">
+    <div className="max-w-5xl mx-auto p-4 md:p-6 text-slate-900 dark:text-white">
       <div className="mb-6">
-        <button onClick={() => navigate(-1)} className="text-primary hover:underline flex items-center gap-2">
+        <button onClick={() => navigate(-1)} className="text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-white transition-colors flex items-center gap-2 font-medium">
           <i className="fas fa-arrow-left"></i> Back
         </button>
       </div>
@@ -489,24 +489,24 @@ const Profile: React.FC = () => {
       {!isEditing ? (
         // VIEW-ONLY PROFILE
         <div>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-            <h2 className="text-3xl font-bold text-gray-800 dark:text-white">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+            <h2 className="text-3xl font-bold text-slate-900 dark:text-white">
               {isOwnProfile ? 'My Profile' : 'Profile'}
             </h2>
             <div className="flex flex-wrap gap-2 w-full sm:w-auto">
               {isOwnProfile && (
-                <button onClick={() => setIsEditing(true)} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-primary-dark">
+                <button onClick={() => setIsEditing(true)} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-black rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-slate-800 dark:hover:bg-slate-100 transition-colors shadow-sm cursor-pointer">
                   <i className="fas fa-edit"></i> Edit Profile
                 </button>
               )}
-              <button onClick={downloadProfileAsPDF} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-green-700"><i className="fas fa-file-pdf"></i> PDF</button>
-              <button onClick={downloadProfileAsJPG} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium flex items-center gap-2 hover:bg-orange-700"><i className="fas fa-image"></i> JPG</button>
+              <button onClick={downloadProfileAsPDF} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-emerald-600 dark:bg-emerald-500 text-white rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-emerald-700 dark:hover:bg-emerald-600 transition-colors shadow-sm cursor-pointer"><i className="fas fa-file-pdf"></i> PDF</button>
+              <button onClick={downloadProfileAsJPG} className="flex-1 sm:flex-none justify-center px-4 py-2 bg-amber-600 dark:bg-amber-500 text-white rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-amber-700 dark:hover:bg-amber-600 transition-colors shadow-sm cursor-pointer"><i className="fas fa-image"></i> JPG</button>
             </div>
           </div>
 
-          <div id="profile-view-content" className="bg-white dark:bg-[#0a0a0a] p-4 md:p-8 rounded-2xl shadow-lg border border-gray-100 dark:border-white/5">
+          <div id="profile-view-content" className="bg-white dark:bg-[#0a0a0a] p-4 md:p-8 rounded-2xl shadow-lg border border-slate-200 dark:border-white/5">
             {/* Header */}
-            <div className="flex flex-col md:flex-row items-center md:items-start gap-6 md:gap-8 mb-8 pb-8 border-b border-gray-200 dark:border-white/10 text-center md:text-left">
+            <div className="flex flex-col md:flex-row items-center md:items-start gap-6 md:gap-8 mb-8 pb-8 border-b border-slate-200 dark:border-white/10 text-center md:text-left">
               <div className="relative group">
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full opacity-75 blur group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
                 <img
@@ -517,31 +517,31 @@ const Profile: React.FC = () => {
               </div>
               
               <div className="flex-1 w-full">
-                <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 dark:text-white tracking-tight mb-2">{formData.displayName}</h1>
+                <h1 className="text-3xl md:text-5xl font-extrabold text-slate-900 dark:text-white tracking-tight mb-2">{formData.displayName}</h1>
                 
-                <div className="flex items-center justify-center md:justify-start gap-2 text-gray-500 dark:text-gray-400 mb-6">
-                  <i className="fas fa-map-marker-alt text-primary"></i> 
+                <div className="flex items-center justify-center md:justify-start gap-2 text-slate-500 dark:text-gray-400 mb-6">
+                  <i className="fas fa-map-marker-alt text-blue-600 dark:text-blue-400"></i> 
                   <span className="font-medium">{formData.location || 'Location not specified'}</span>
                 </div>
 
                 <div className="flex flex-wrap justify-center md:justify-start gap-3 md:gap-4">
-                  <div className="px-4 py-2 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5 flex items-center gap-3 shadow-sm">
+                  <div className="px-4 py-2 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5 flex items-center gap-3 shadow-sm">
                     <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
                         <i className="fas fa-tools"></i>
                     </div>
                     <div className="text-left">
-                        <p className="font-bold text-gray-900 dark:text-white leading-none">{formData.skills.split(',').filter(s => s).length}</p>
-                        <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mt-0.5">Skills</p>
+                        <p className="font-bold text-slate-900 dark:text-white leading-none">{formData.skills.split(',').filter(s => s).length}</p>
+                        <p className="text-[10px] font-bold text-slate-500 dark:text-gray-400 uppercase tracking-wider mt-0.5">Skills</p>
                     </div>
                   </div>
                   
-                  <div className="px-4 py-2 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5 flex items-center gap-3 shadow-sm">
+                  <div className="px-4 py-2 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/5 flex items-center gap-3 shadow-sm">
                     <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
                         <i className="fas fa-briefcase"></i>
                     </div>
                     <div className="text-left">
-                        <p className="font-bold text-gray-900 dark:text-white leading-none">{formData.experienceYears}</p>
-                        <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mt-0.5">Years Exp.</p>
+                        <p className="font-bold text-slate-900 dark:text-white leading-none">{formData.experienceYears}</p>
+                        <p className="text-[10px] font-bold text-slate-500 dark:text-gray-400 uppercase tracking-wider mt-0.5">Years Exp.</p>
                     </div>
                   </div>
                 </div>
@@ -554,30 +554,30 @@ const Profile: React.FC = () => {
               <div className="lg:col-span-2 space-y-8">
                 {formData.bio && (
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-white border-b border-gray-200 dark:border-white/10 pb-2 mb-3">About Me</h3>
-                    <p className="text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{formData.bio}</p>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-white/10 pb-2 mb-3">About Me</h3>
+                    <p className="text-slate-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{formData.bio}</p>
                   </div>
                 )}
 
                 {/* Experience */}
                 {(formData.experienceList.length > 0 || formData.experience) && (
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-white border-b border-gray-200 dark:border-white/10 pb-2 mb-3">Experience</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-white/10 pb-2 mb-3">Experience</h3>
                     {formData.experienceList.length > 0 ? (
                       <div className="space-y-4">
                         {formData.experienceList.map(exp => (
                           <div key={exp.id}>
                             <div className="flex justify-between items-baseline">
-                              <h4 className="font-bold text-gray-800 dark:text-white">{exp.role}</h4>
-                              <span className="text-sm text-gray-500 dark:text-gray-400">{exp.duration}</span>
+                              <h4 className="font-bold text-slate-900 dark:text-white">{exp.role}</h4>
+                              <span className="text-sm text-slate-500 dark:text-gray-400">{exp.duration}</span>
                             </div>
-                            <div className="text-primary font-medium text-sm mb-1">{exp.company}</div>
-                            <p className="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap">{exp.description}</p>
+                            <div className="text-blue-600 dark:text-blue-400 font-medium text-sm mb-1">{exp.company}</div>
+                            <p className="text-slate-600 dark:text-gray-300 text-sm whitespace-pre-wrap">{exp.description}</p>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-gray-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{formData.experience}</p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{formData.experience}</p>
                     )}
                   </div>
                 )}
@@ -585,15 +585,15 @@ const Profile: React.FC = () => {
                 {/* Projects */}
                 {formData.projects.length > 0 && (
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-white border-b border-gray-200 dark:border-white/10 pb-2 mb-3">Projects</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-white/10 pb-2 mb-3">Projects</h3>
                     <div className="space-y-4">
                       {formData.projects.map(proj => (
                         <div key={proj.id}>
                           <div className="flex justify-between items-baseline">
-                            <h4 className="font-bold text-gray-800 dark:text-white">{proj.title}</h4>
-                            {proj.link && <a href={proj.link} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline">View Project</a>}
+                            <h4 className="font-bold text-slate-900 dark:text-white">{proj.title}</h4>
+                            {proj.link && <a href={proj.link} target="_blank" rel="noreferrer" className="text-sm text-blue-600 dark:text-blue-400 hover:underline">View Project</a>}
                           </div>
-                          <p className="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap">{proj.description}</p>
+                          <p className="text-slate-600 dark:text-gray-300 text-sm whitespace-pre-wrap">{proj.description}</p>
                         </div>
                       ))}
                     </div>
@@ -603,29 +603,29 @@ const Profile: React.FC = () => {
                 {/* Custom Sections */}
                 {formData.customSections.map(section => (
                   <div key={section.id}>
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-white border-b border-gray-200 dark:border-white/10 pb-2 mb-3">{section.title}</h3>
-                    <p className="text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{section.content}</p>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-white/10 pb-2 mb-3">{section.title}</h3>
+                    <p className="text-slate-600 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{section.content}</p>
                   </div>
                 ))}
 
                 {/* Education */}
                 {(formData.educationList.length > 0 || formData.education) && (
                   <div>
-                    <h3 className="text-lg font-bold text-gray-800 dark:text-white border-b border-gray-200 dark:border-white/10 pb-2 mb-3">Education</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-white/10 pb-2 mb-3">Education</h3>
                     {formData.educationList.length > 0 ? (
                       <div className="space-y-4">
                         {formData.educationList.map(edu => (
                           <div key={edu.id}>
                             <div className="flex justify-between items-baseline">
-                              <h4 className="font-bold text-gray-800 dark:text-white">{edu.school}</h4>
-                              <span className="text-sm text-gray-500 dark:text-gray-400">{edu.year}</span>
+                              <h4 className="font-bold text-slate-900 dark:text-white">{edu.school}</h4>
+                              <span className="text-sm text-slate-500 dark:text-gray-400">{edu.year}</span>
                             </div>
-                            <div className="text-gray-600 dark:text-gray-300 text-sm">{edu.degree}</div>
+                            <div className="text-slate-600 dark:text-gray-300 text-sm">{edu.degree}</div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-gray-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{formData.education}</p>
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{formData.education}</p>
                     )}
                   </div>
                 )}
@@ -633,26 +633,26 @@ const Profile: React.FC = () => {
 
               {/* Right Sidebar */}
               <div className="space-y-8">
-                <div className="bg-gray-50 dark:bg-white/5 p-4 rounded-xl border border-gray-100 dark:border-white/5">
-                  <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">Contact & Links</h3>
+                <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-xl border border-slate-200 dark:border-white/5">
+                  <h3 className="text-sm font-bold text-slate-500 dark:text-gray-400 uppercase mb-3">Contact & Links</h3>
                   <div className="space-y-3 text-sm">
-                    {formData.email && <div className="flex items-center gap-3 truncate text-gray-700 dark:text-gray-300"><i className="fas fa-envelope text-gray-400 dark:text-gray-500 w-4 text-center"></i><a href={`mailto:${formData.email}`} className="text-primary hover:underline">{formData.email}</a></div>}
-                    {formData.phoneNumber && <div className="flex items-center gap-3 text-gray-700 dark:text-gray-300"><i className="fas fa-phone text-gray-400 dark:text-gray-500 w-4 text-center"></i><span>{formData.phoneNumber}</span></div>}
-                    {formData.portfolio && <div className="flex items-center gap-3 truncate text-gray-700 dark:text-gray-300"><i className="fas fa-globe text-gray-400 dark:text-gray-500 w-4 text-center"></i><a href={formData.portfolio} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Portfolio</a></div>}
-                    {formData.linkedin && <div className="flex items-center gap-3 truncate text-gray-700 dark:text-gray-300"><i className="fab fa-linkedin text-gray-400 dark:text-gray-500 w-4 text-center"></i><a href={formData.linkedin} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">LinkedIn</a></div>}
-                    {formData.github && <div className="flex items-center gap-3 truncate text-gray-700 dark:text-gray-300"><i className="fab fa-github text-gray-400 dark:text-gray-500 w-4 text-center"></i><a href={formData.github} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">GitHub</a></div>}
+                    {formData.email && <div className="flex items-center gap-3 truncate text-slate-700 dark:text-gray-300"><i className="fas fa-envelope text-slate-400 dark:text-gray-500 w-4 text-center"></i><a href={`mailto:${formData.email}`} className="text-blue-600 dark:text-blue-400 hover:underline">{formData.email}</a></div>}
+                    {formData.phoneNumber && <div className="flex items-center gap-3 text-slate-700 dark:text-gray-300"><i className="fas fa-phone text-slate-400 dark:text-gray-500 w-4 text-center"></i><span>{formData.phoneNumber}</span></div>}
+                    {formData.portfolio && <div className="flex items-center gap-3 truncate text-slate-700 dark:text-gray-300"><i className="fas fa-globe text-slate-400 dark:text-gray-500 w-4 text-center"></i><a href={formData.portfolio} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">Portfolio</a></div>}
+                    {formData.linkedin && <div className="flex items-center gap-3 truncate text-slate-700 dark:text-gray-300"><i className="fab fa-linkedin text-slate-400 dark:text-gray-500 w-4 text-center"></i><a href={formData.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">LinkedIn</a></div>}
+                    {formData.github && <div className="flex items-center gap-3 truncate text-slate-700 dark:text-gray-300"><i className="fab fa-github text-slate-400 dark:text-gray-500 w-4 text-center"></i><a href={formData.github} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">GitHub</a></div>}
                   </div>
                 </div>
 
                 {/* Certifications */}
                 {formData.certifications.length > 0 && (
-                  <div className="bg-gray-50 dark:bg-white/5 p-4 rounded-xl border border-gray-100 dark:border-white/5">
-                    <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">Certifications</h3>
+                  <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-xl border border-slate-200 dark:border-white/5">
+                    <h3 className="text-sm font-bold text-slate-500 dark:text-gray-400 uppercase mb-3">Certifications</h3>
                     <div className="space-y-3 text-sm">
                       {formData.certifications.map(cert => (
                         <div key={cert.id}>
-                          <div className="font-bold text-gray-800 dark:text-white">{cert.name}</div>
-                          <div className="text-gray-600 dark:text-gray-400 text-xs">{cert.issuer} • {cert.year}</div>
+                          <div className="font-bold text-slate-900 dark:text-white">{cert.name}</div>
+                          <div className="text-slate-600 dark:text-gray-400 text-xs">{cert.issuer} • {cert.year}</div>
                         </div>
                       ))}
                     </div>
@@ -661,14 +661,14 @@ const Profile: React.FC = () => {
 
                 {/* Volunteering */}
                 {formData.volunteering.length > 0 && (
-                  <div className="bg-gray-50 dark:bg-white/5 p-4 rounded-xl border border-gray-100 dark:border-white/5">
-                    <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">Volunteering</h3>
+                  <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-xl border border-slate-200 dark:border-white/5">
+                    <h3 className="text-sm font-bold text-slate-500 dark:text-gray-400 uppercase mb-3">Volunteering</h3>
                     <div className="space-y-3 text-sm">
                       {formData.volunteering.map(vol => (
                         <div key={vol.id}>
-                          <div className="font-bold text-gray-800 dark:text-white">{vol.role}</div>
-                          <div className="text-xs text-gray-600 dark:text-gray-300">{vol.organization}</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">{vol.duration}</div>
+                          <div className="font-bold text-slate-900 dark:text-white">{vol.role}</div>
+                          <div className="text-xs text-slate-600 dark:text-gray-300">{vol.organization}</div>
+                          <div className="text-xs text-slate-500 dark:text-gray-400">{vol.duration}</div>
                         </div>
                       ))}
                     </div>
@@ -677,28 +677,28 @@ const Profile: React.FC = () => {
 
                 {formData.skills && (
                   <div>
-                    <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase mb-3">Skills</h3>
+                    <h3 className="text-sm font-bold text-slate-500 dark:text-gray-400 uppercase mb-3">Skills</h3>
                     <div className="flex flex-wrap gap-2">
                       {formData.skills.split(',').map(s => s.trim()).filter(s => s).map(skill => (
-                        <span key={skill} className="px-3 py-1 bg-blue-50 dark:bg-blue-500/10 text-blue-800 dark:text-blue-300 rounded-full text-xs font-medium border border-blue-100 dark:border-blue-500/20">{skill}</span>
+                        <span key={skill} className="px-3 py-1 bg-blue-50 dark:bg-blue-500/10 text-blue-800 dark:text-blue-300 rounded-full text-xs font-medium border border-blue-200 dark:border-blue-500/20">{skill}</span>
                       ))}
                     </div>
                   </div>
                 )}
                 {formData.hobbies && (
                   <div>
-                    <h3 className="text-sm font-bold text-gray-500 dark:text-slate-400 uppercase mb-3">Hobbies</h3>
-                    <p className="text-sm text-gray-600 dark:text-slate-300">
+                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase mb-3">Hobbies</h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
                       {formData.hobbies}
                     </p>
                   </div>
                 )}
                 {formData.preferredCategories && (
                   <div>
-                    <h3 className="text-sm font-bold text-gray-500 dark:text-slate-400 uppercase mb-3">Preferred Categories</h3>
+                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase mb-3">Preferred Categories</h3>
                     <div className="flex flex-wrap gap-2">
                       {formData.preferredCategories.split(',').map(c => c.trim()).filter(c => c).map(cat => (
-                        <span key={cat} className="px-3 py-1 bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-gray-300 rounded-full text-xs font-medium border border-gray-200 dark:border-white/10">{cat}</span>
+                        <span key={cat} className="px-3 py-1 bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-gray-300 rounded-full text-xs font-medium border border-slate-200 dark:border-white/10">{cat}</span>
                       ))}
                     </div>
                   </div>
@@ -711,8 +711,8 @@ const Profile: React.FC = () => {
         // EDITABLE PROFILE for the logged-in user
         <>
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-3xl font-bold text-gray-800 dark:text-white">Edit My Profile</h2>
-            <button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-slate-700">
+            <h2 className="text-3xl font-bold text-slate-900 dark:text-white">Edit My Profile</h2>
+            <button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer">
               Cancel
             </button>
           </div>
@@ -720,28 +720,28 @@ const Profile: React.FC = () => {
           {/* Journey Progress Bar */}
           <div className="mb-8 md:mb-10">
             <div className="flex items-center justify-between relative min-w-[280px]">
-              <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-full h-1 bg-gray-200 dark:bg-slate-800 -z-10 rounded-full"></div>
-              <div className="absolute left-0 top-1/2 transform -translate-y-1/2 h-1 bg-primary -z-10 rounded-full transition-all duration-500" style={{ width: `${(activeStep / (steps.length - 1)) * 100}%` }}></div>
+              <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-full h-1 bg-slate-200 dark:bg-slate-800 -z-10 rounded-full"></div>
+              <div className="absolute left-0 top-1/2 transform -translate-y-1/2 h-1 bg-blue-600 dark:bg-blue-400 -z-10 rounded-full transition-all duration-500" style={{ width: `${(activeStep / (steps.length - 1)) * 100}%` }}></div>
 
               {steps.map((step, index) => (
                 <button
                   key={step.id}
                   onClick={() => setActiveStep(index)}
-                  className={`flex flex-col items-center gap-2 group focus:outline-none`}
+                  className={`flex flex-col items-center gap-2 group focus:outline-none cursor-pointer`}
                 >
                   <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center border-4 transition-all duration-300 z-10 ${index <= activeStep
-                    ? 'border-primary bg-white dark:bg-slate-900 text-primary shadow-lg scale-110'
-                    : 'border-gray-300 dark:border-slate-700 bg-gray-100 dark:bg-slate-800 text-gray-400'
+                    ? 'border-blue-600 dark:border-blue-400 bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-lg scale-110'
+                    : 'border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-400'
                     }`}>
                     <i className={`fas ${step.icon} text-xs md:text-sm`}></i>
                   </div>
-                  <span className={`hidden md:block text-xs font-bold transition-colors duration-300 ${index <= activeStep ? 'text-primary' : 'text-gray-400'}`}>{step.title}</span>
+                  <span className={`hidden md:block text-xs font-bold transition-colors duration-300 ${index <= activeStep ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>{step.title}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 p-4 md:p-6 rounded-lg shadow-sm border border-gray-200 dark:border-slate-800 space-y-4">
+          <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 p-4 md:p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 space-y-4">
 
             <div className="min-h-[400px]">
               {activeStep === 0 && (
