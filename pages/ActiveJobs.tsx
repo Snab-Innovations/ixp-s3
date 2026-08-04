@@ -235,48 +235,76 @@ const ActiveJobsPage: React.FC = () => {
           <Logo className="w-[140px] sm:w-[165px] h-auto" isDark={isDark} />
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           <Link
             to="/upload-resume"
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+            className={`inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-sm font-extrabold whitespace-nowrap transition-all shadow-md hover:scale-[1.02] active:scale-[0.98] cursor-pointer ${
               isDark 
-                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' 
-                : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-black shadow-emerald-500/20 hover:shadow-emerald-500/35' 
+                : 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-600/25 hover:shadow-emerald-600/40'
             }`}
           >
-            <Upload size={14} />
-            <span>Upload Resume / CV</span>
+            <Upload size={14} className="animate-pulse shrink-0" />
+            <span className="hidden xs:inline">Upload Resume / CV</span>
+            <span className="xs:hidden">Upload CV</span>
           </Link>
           <button
+            type="button"
             onClick={() => handleOpenContactModal()}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border shadow-sm ${
+            className={`inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-sm font-extrabold whitespace-nowrap transition-all border shadow-sm hover:scale-[1.02] active:scale-[0.98] cursor-pointer ${
               isDark 
-                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' 
-                : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                ? 'border-white/20 bg-white/10 text-white hover:bg-white/15' 
+                : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
             }`}
           >
-            <MessageSquare size={14} />
-            <span>Contact Us</span>
+            <MessageSquare size={14} className="text-emerald-500 shrink-0" />
+            <span>Contact</span>
           </button>
         </div>
       </nav>
 
       {/* Hero Header */}
-      <section className={`relative pt-32 pb-16 px-4 md:px-8 border-b transition-colors ${isDark ? 'border-white/[0.08] bg-[#030303]' : 'border-slate-200 bg-white'}`}>
+      <section className={`relative pt-28 sm:pt-32 pb-12 sm:pb-16 px-4 md:px-8 border-b transition-colors ${isDark ? 'border-white/[0.08] bg-[#030303]' : 'border-slate-200 bg-white'}`}>
         <div className={`absolute inset-0 pointer-events-none ${isDark ? 'bg-gradient-to-b from-blue-600/10 via-indigo-600/5 to-transparent' : 'bg-gradient-to-b from-blue-500/5 via-indigo-500/5 to-transparent'}`} />
         <div className="max-w-6xl mx-auto relative z-10 text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${isDark ? 'border-blue-500/30 bg-blue-500/10 text-blue-400' : 'border-blue-200 bg-blue-50 text-blue-600'}">
+          <div className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-wider border ${isDark ? 'border-blue-500/30 bg-blue-500/10 text-blue-400' : 'border-blue-200 bg-blue-50 text-blue-600'}`}>
             <Sparkles size={14} className="animate-pulse" />
             <span>Active Job Openings ({jobs.length})</span>
           </div>
 
-          <h1 className={`text-3xl sm:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent ${isDark ? 'bg-gradient-to-r from-white via-slate-200 to-slate-400' : 'bg-gradient-to-r from-slate-900 via-slate-800 to-slate-600'}`}>
+          <h1 className={`text-2xl sm:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent leading-tight ${isDark ? 'bg-gradient-to-r from-white via-slate-200 to-slate-400' : 'bg-gradient-to-r from-slate-900 via-slate-800 to-slate-600'}`}>
             Explore Posted Jobs & AI Interviews
           </h1>
 
-          <p className={`max-w-2xl mx-auto text-sm sm:text-base ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+          <p className={`max-w-2xl mx-auto text-xs sm:text-base leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
             Browse active positions from verified hiring recruiters. Copy access codes or launch AI interviews immediately.
           </p>
+
+          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2.5 sm:gap-3.5 w-full max-w-md sm:max-w-none mx-auto">
+            <Link
+              to="/upload-resume"
+              className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-3.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-all shadow-lg hover:scale-[1.02] active:scale-[0.98] cursor-pointer ${
+                isDark 
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-black shadow-emerald-500/25 hover:shadow-emerald-500/40' 
+                  : 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-600/30 hover:shadow-emerald-600/50'
+              }`}
+            >
+              <Upload size={16} className="animate-pulse shrink-0" />
+              <span>Upload Resume / CV for Direct Job Match</span>
+            </Link>
+            <button
+              type="button"
+              onClick={() => handleOpenContactModal()}
+              className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 sm:py-3.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-all border shadow-sm hover:scale-[1.02] active:scale-[0.98] cursor-pointer ${
+                isDark 
+                  ? 'border-white/20 bg-white/10 text-white hover:bg-white/15' 
+                  : 'border-slate-300 bg-white text-slate-800 hover:bg-slate-50'
+              }`}
+            >
+              <MessageSquare size={16} className="text-emerald-500 shrink-0" />
+              <span>Contact Support Team</span>
+            </button>
+          </div>
 
           {/* Search & Filter Bar */}
           <div className={`max-w-3xl mx-auto mt-8 flex flex-col sm:flex-row items-center gap-3 p-2.5 rounded-2xl border shadow-2xl transition-colors ${isDark ? 'bg-[#0d0d0d] border-white/[0.12]' : 'bg-white border-slate-200 shadow-slate-200/50'}`}>
