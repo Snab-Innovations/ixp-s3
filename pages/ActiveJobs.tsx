@@ -13,6 +13,7 @@ import {
 
 export interface ActiveJobItem {
   id: string;
+  jobNo?: string;
   title: string;
   contactPerson?: string;
   description?: string;
@@ -390,13 +391,22 @@ const ActiveJobsPage: React.FC = () => {
                   <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-all pointer-events-none" />
 
                   <div>
-                    {/* Top Row: Role Category & Active Indicator */}
+                    {/* Top Row: Job No, Role Category & Active Indicator */}
                     <div className="flex items-center justify-between gap-2 mb-3">
-                      <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider ${
-                        isDark ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400' : 'bg-blue-50 border border-blue-200 text-blue-600'
-                      }`}>
-                        {job.roleCategory || job.department || 'Active Role'}
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {job.jobNo && (
+                          <span className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-extrabold uppercase tracking-wider ${
+                            isDark ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border border-emerald-300 text-emerald-700'
+                          }`}>
+                            Job No: {job.jobNo}
+                          </span>
+                        )}
+                        <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider ${
+                          isDark ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400' : 'bg-blue-50 border border-blue-200 text-blue-600'
+                        }`}>
+                          {job.roleCategory || job.department || 'Active Role'}
+                        </span>
+                      </div>
 
                       <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-500 shrink-0 font-semibold">
                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -549,11 +559,20 @@ const ActiveJobsPage: React.FC = () => {
             {/* Modal Header */}
             <div className={`flex items-start justify-between gap-4 border-b pb-5 ${isDark ? 'border-white/[0.1]' : 'border-slate-200'}`}>
               <div>
-                <span className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider ${
-                  isDark ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400' : 'bg-blue-50 border border-blue-200 text-blue-600'
-                }`}>
-                  {selectedJobModal.roleCategory || selectedJobModal.department}
-                </span>
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  {selectedJobModal.jobNo && (
+                    <span className={`px-2.5 py-1 rounded text-[11px] font-mono font-extrabold uppercase tracking-wider ${
+                      isDark ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border border-emerald-300 text-emerald-700'
+                    }`}>
+                      Job No: {selectedJobModal.jobNo}
+                    </span>
+                  )}
+                  <span className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-wider ${
+                    isDark ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400' : 'bg-blue-50 border border-blue-200 text-blue-600'
+                  }`}>
+                    {selectedJobModal.roleCategory || selectedJobModal.department}
+                  </span>
+                </div>
                 <h2 className={`text-2xl font-extrabold mt-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>{selectedJobModal.title}</h2>
                 <div className={`flex flex-wrap items-center gap-3 text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                   <span>{selectedJobModal.location}</span>

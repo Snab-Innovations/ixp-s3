@@ -625,7 +625,26 @@ const RecruiterAllJobs: React.FC = () => {
     });
   }, [jobs, searchQuery, selectedCategory, selectedEmploymentType, statusFilter]);
 
+  const canUserDeleteJob = (): boolean => {
+    if (!user || !userProfile) return false;
+    if (
+      userProfile.role === 'subrecruiter' ||
+      userProfile.role === 'team_member' ||
+      Boolean(userProfile.parentRecruiterId) ||
+      Boolean(userProfile.primaryRecruiterUID)
+    ) {
+      return false;
+    }
+    const role = (userProfile.role || '').toLowerCase();
+    return role === 'primary' || role === 'owner' || role === 'admin' || role === 'recruiter';
+  };
+
   const handleDeleteJob = (jobId: string, title: string) => {
+    if (!canUserDeleteJob()) {
+      messageBox.showError("Only the main primary recruiter can delete jobs.");
+      return;
+    }
+
     messageBox.showConfirm(`Are you sure you want to delete "${title}"?`, async () => {
       try {
         await Promise.all([
@@ -633,7 +652,9 @@ const RecruiterAllJobs: React.FC = () => {
           deleteDoc(doc(db, 'interviews', jobId)).catch(() => {})
         ]);
         messageBox.showSuccess(`Job "${title}" deleted successfully.`);
-        if (viewingJobDetails?.id === jobId) setViewingJobDetails(null);
+        if (viewingJobDetails?.id === jobId) {
+          setViewingJobDetails(null);
+        }
       } catch (err) {
         console.error("Failed to delete job", err);
         messageBox.showError("Failed to delete job. Please try again.");
@@ -1177,10 +1198,11 @@ const RecruiterAllJobs: React.FC = () => {
                     </h2>
 
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 geist-small text-[#8f8f8f]">
-                      <span className="flex items-center gap-1">
-                        <Building className="w-3 h-3 text-[#6b7280]" />
-                        {job.companyName || userProfile?.company || 'Company'}
-                      </span>
+                      {job.jobNo && (
+                        <span className="font-mono text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-[11px]">
+                          Job No: {job.jobNo}
+                        </span>
+                      )}
                       <span className="flex items-center gap-1">
                         <MapPin className="w-3 h-3 text-[#6b7280]" />
                         {job.location || 'Remote'}
@@ -1303,7 +1325,8 @@ const RecruiterAllJobs: React.FC = () => {
                 </div>
                 <h2 className="geist-section-title text-white text-lg font-bold">{viewingJobDetails.title}</h2>
                 <p className="geist-small text-[#8f8f8f] mt-0.5">
-                  {viewingJobDetails.companyName || userProfile?.company || 'Company'} • {viewingJobDetails.location || 'Remote'}
+                  {viewingJobDetails.jobNo ? <span className="font-mono text-emerald-400 font-bold mr-2">Job No: {viewingJobDetails.jobNo} •</span> : null}
+                  {viewingJobDetails.location || 'Remote'}
                 </p>
               </div>
 
@@ -1383,14 +1406,16 @@ const RecruiterAllJobs: React.FC = () => {
             </div>
 
             <div className="border-t border-white/[0.11] bg-[#000] px-5 py-3 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => handleDeleteJob(viewingJobDetails.id, viewingJobDetails.title)}
-                className="geist-caption text-rose-400 hover:text-rose-300 flex items-center gap-1"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete Job</span>
-              </button>
+              {canUserDeleteJob() ? (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteJob(viewingJobDetails.id, viewingJobDetails.title)}
+                  className="geist-caption text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Job</span>
+                </button>
+              ) : <div />}
 
               <div className="flex items-center gap-2">
                 <button

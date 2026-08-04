@@ -180,8 +180,26 @@ const InterviewOverview: React.FC = () => {
     ] as Array<[string, any]>;
   }, [interview, responsesCount]);
 
+  const canDelete = useMemo(() => {
+    if (!user || !userProfile || !interview) return false;
+    if (
+      userProfile.role === 'subrecruiter' ||
+      userProfile.role === 'team_member' ||
+      Boolean(userProfile.parentRecruiterId) ||
+      Boolean(userProfile.primaryRecruiterUID)
+    ) {
+      return false;
+    }
+    const role = (userProfile.role || '').toLowerCase();
+    return role === 'primary' || role === 'owner' || role === 'admin' || role === 'recruiter';
+  }, [user, userProfile, interview]);
+
   const handleDelete = () => {
     if (!interview) return;
+    if (!canDelete) {
+      messageBox.showError('Only the main primary recruiter can delete jobs.');
+      return;
+    }
     messageBox.showConfirm('Are you sure you want to delete this interview?', async () => {
       try {
         await deleteDoc(doc(db, 'interviews', interview.id));
@@ -278,14 +296,16 @@ const InterviewOverview: React.FC = () => {
                 <i className="fas fa-pencil-alt text-[11px]"></i>
                 <span>Edit</span>
               </ActionButton>
-              <ActionButton
-                type="button"
-                onClick={handleDelete}
-                className="border-[#512828] bg-[#180808] text-[#ff8f8f] hover:bg-[#250d0d] hover:text-[#ffc3c3]"
-              >
-                <i className="fas fa-trash text-[11px]"></i>
-                <span>Delete</span>
-              </ActionButton>
+              {canDelete && (
+                <ActionButton
+                  type="button"
+                  onClick={handleDelete}
+                  className="border-[#512828] bg-[#180808] text-[#ff8f8f] hover:bg-[#250d0d] hover:text-[#ffc3c3]"
+                >
+                  <i className="fas fa-trash text-[11px]"></i>
+                  <span>Delete</span>
+                </ActionButton>
+              )}
             </div>
           </div>
         </div>
