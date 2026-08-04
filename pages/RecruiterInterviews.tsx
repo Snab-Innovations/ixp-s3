@@ -9,7 +9,7 @@ import { Interview } from '../types';
 import { useMessageBox } from '../components/MessageBox';
 import { createPortal } from 'react-dom';
 import { sendInterviewInvitations } from '../services/brevoService';
-import { sendWhatsAppMessage, sendInterviewWhatsAppInvite, buildWhatsAppInviteText, openWhatsAppWebInvite, formatPhoneForWhatsApp } from '../services/waSenderService';
+import { sendWhatsAppMessage, sendInterviewWhatsAppInvite, buildWhatsAppInviteText, openWhatsAppWebInvite, formatPhoneForWhatsApp, sendBulkWhatsAppInvites } from '../services/waSenderService';
 
 import EditJobModal from './EditJob';
 
@@ -264,6 +264,11 @@ const RecruiterInterviews: React.FC = () => {
   const [selectedResumeFile, setSelectedResumeFile] = useState<File | null>(null);
   const [resumeExtraText, setResumeExtraText] = useState('');
   const [analyzingResumeAI, setAnalyzingResumeAI] = useState(false);
+
+  // Delivery Channels State
+  const [sendEmailChannel, setSendEmailChannel] = useState(true);
+  const [sendWhatsAppChannel, setSendWhatsAppChannel] = useState(true);
+  const [bulkPastedEmails, setBulkPastedEmails] = useState('');
 
   useEffect(() => {
     if (!selectedInterview || !user) return;
@@ -843,6 +848,11 @@ const RecruiterInterviews: React.FC = () => {
 
   const handleSendInvites = async () => {
     if (!selectedInterview || (newEmails.length === 0 && parsedCandidates.length === 0)) return;
+
+    if (!sendEmailChannel && !sendWhatsAppChannel) {
+        messageBox.showError("Please select at least one delivery channel (Email or WhatsApp).");
+        return;
+    }
     
     setSendingEmails(true);
     setSendingProgressMsg('Preparing candidate invitations...');
@@ -871,9 +881,8 @@ const RecruiterInterviews: React.FC = () => {
           updateDoc(doc(db, 'jobs', selectedInterview.id), inviteUpdatePayload).catch(() => {})
         ]);
 
-        
         let emailCount = 0;
-        if (validEmails.length > 0) {
+        if (sendEmailChannel && validEmails.length > 0) {
             setSendingProgressMsg(`Sending ${validEmails.length} invitation email(s)...`);
             const result = await sendInterviewInvitations(
                 validEmails,
@@ -904,7 +913,7 @@ const RecruiterInterviews: React.FC = () => {
 
         let waCount = 0;
         const candidatesWithPhones = parsedCandidates.filter(c => c.phone && c.phone !== 'N/A');
-        if (candidatesWithPhones.length > 0) {
+        if (sendWhatsAppChannel && candidatesWithPhones.length > 0) {
             setSendingProgressMsg(`Sending WhatsApp invites one-by-one with 10s anti-spam delay...`);
             const waResult = await sendBulkWhatsAppInvites(
                 candidatesWithPhones,
@@ -1545,22 +1554,67 @@ const RecruiterInterviews: React.FC = () => {
 
 
                     {inviteMode === 'bulk' && (
-                        <div>
-                            <label className="block geist-label uppercase text-[#6b7280] mb-1.5">Bulk Upload Candidate File or Resumes</label>
-                            <label className="flex items-center justify-center gap-2 px-4 py-3 bg-white/[0.02] border-2 border-dashed border-white/[0.16] rounded-[8px] cursor-pointer hover:bg-white/[0.04] transition-colors">
-                                {parsingResumes ? (
-                                  <>
-                                    <ButtonBusySkeleton className="w-5 bg-white/30" />
-                                    <ButtonBusySkeleton className="w-40 bg-white/30" />
-                                  </>
-                                ) : (
-                                  <>
-                                    <i className="fas fa-file-excel text-emerald-400 text-lg"></i>
-                                    <span className="geist-caption font-medium text-xs text-[#d4d4d4]">Upload Excel, CSV, PDF, DOCX, or TXT (Auto-extracts Name, Phone & Email)</span>
-                                  </>
-                                )}
-                                <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,text/csv" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
-                            </label>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block geist-label uppercase text-[#6b7280] mb-1.5">Bulk Upload Candidate File or Resumes</label>
+                                <label className="flex items-center justify-center gap-2 px-4 py-3 bg-white/[0.02] border-2 border-dashed border-white/[0.16] rounded-[8px] cursor-pointer hover:bg-white/[0.04] transition-colors">
+                                    {parsingResumes ? (
+                                      <>
+                                        <ButtonBusySkeleton className="w-5 bg-white/30" />
+                                        <ButtonBusySkeleton className="w-40 bg-white/30" />
+                                      </>
+                                    ) : (
+                                      <>
+                                        <i className="fas fa-file-excel text-emerald-400 text-lg"></i>
+                                        <span className="geist-caption font-medium text-xs text-[#d4d4d4]">Upload Excel, CSV, PDF, DOCX, or TXT (Auto-extracts Name, Phone & Email)</span>
+                                      </>
+                                    )}
+                                    <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,text/csv" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
+                                </label>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <label className="geist-label uppercase text-[#6b7280] block font-semibold text-xs">
+                                      Paste Multiple Emails
+                                    </label>
+                                    {bulkPastedEmails.trim() && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const extracted = bulkPastedEmails
+                                            .split(/[\n,;\s]+/)
+                                            .map(e => e.trim().toLowerCase())
+                                            .filter(e => e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+                                          if (extracted.length === 0) {
+                                            messageBox.showError('No valid email addresses found in pasted text.');
+                                            return;
+                                          }
+                                          let added = 0;
+                                          extracted.forEach(email => {
+                                            if (!newEmails.includes(email)) {
+                                              setNewEmails(prev => [...prev, email]);
+                                              added++;
+                                            }
+                                          });
+                                          setBulkPastedEmails('');
+                                          messageBox.showSuccess(`Added ${added} candidate email(s) to invite list!`);
+                                        }}
+                                        className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold transition-colors flex items-center gap-1"
+                                      >
+                                        <i className="fas fa-plus text-[10px]"></i>
+                                        <span>Add Pasted Emails</span>
+                                      </button>
+                                    )}
+                                </div>
+                                <textarea
+                                  rows={3}
+                                  placeholder="Enter or paste multiple candidate emails separated by comma or newline (e.g. alex@example.com, sara@company.org)..."
+                                  value={bulkPastedEmails}
+                                  onChange={(e) => setBulkPastedEmails(e.target.value)}
+                                  className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-[#111111] p-3 text-xs text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
+                                />
+                            </div>
                         </div>
                     )}
 
@@ -1811,7 +1865,53 @@ const RecruiterInterviews: React.FC = () => {
 
                     {inviteMode !== 'invited' && (
                         <div>
-                            <h4 className="geist-label uppercase text-[#6b7280] mb-1.5">New Candidates to Invite:</h4>
+                            {/* Delivery Channels Selector */}
+                            <div className="p-3 bg-white/[0.03] border border-white/[0.11] rounded-[6px] space-y-2 mb-3">
+                                <span className="geist-label uppercase text-[#6b7280] block font-semibold text-[11px]">
+                                  Invitation Delivery Channels:
+                                </span>
+                                <div className="flex items-center gap-4 flex-wrap text-xs">
+                                  <label className="flex items-center gap-2 cursor-pointer select-none text-white font-medium">
+                                    <input
+                                      type="checkbox"
+                                      checked={sendEmailChannel}
+                                      onChange={(e) => setSendEmailChannel(e.target.checked)}
+                                      className="w-4 h-4 rounded text-blue-600 focus:ring-0 cursor-pointer"
+                                    />
+                                    <i className="fas fa-envelope text-blue-400"></i>
+                                    <span>Send Email Invitations</span>
+                                  </label>
+
+                                  <label className="flex items-center gap-2 cursor-pointer select-none text-white font-medium">
+                                    <input
+                                      type="checkbox"
+                                      checked={sendWhatsAppChannel}
+                                      onChange={(e) => setSendWhatsAppChannel(e.target.checked)}
+                                      className="w-4 h-4 rounded text-emerald-500 focus:ring-0 cursor-pointer"
+                                    />
+                                    <i className="fab fa-whatsapp text-emerald-400"></i>
+                                    <span>Send WhatsApp Invitations (10s Anti-Spam Delay)</span>
+                                  </label>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between mb-1.5">
+                              <h4 className="geist-label uppercase text-[#6b7280]">New Candidates to Invite ({newEmails.length}):</h4>
+                              {newEmails.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setNewEmails([]);
+                                    setParsedCandidates([]);
+                                    messageBox.showInfo('Cleared all candidate entries.');
+                                  }}
+                                  className="text-xs text-red-400 hover:text-red-300 font-semibold transition-colors flex items-center gap-1"
+                                >
+                                  <i className="fas fa-trash-alt text-[10px]"></i>
+                                  <span>Remove All ({newEmails.length})</span>
+                                </button>
+                              )}
+                            </div>
                             {newEmails.length === 0 ? (
                                  <p className="geist-small text-[#6b7280] italic">No candidates added yet. Upload resumes or add manually above.</p>
                             ) : (

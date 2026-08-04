@@ -9,7 +9,7 @@ import { useMessageBox } from '../components/MessageBox';
 import { sendInterviewInvitations } from '../services/brevoService';
 import { parseCandidateDocument } from '../services/candidateFileParser';
 import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
-import { sendInterviewWhatsAppInvite, formatPhoneForWhatsApp, buildWhatsAppInviteText, openWhatsAppWebInvite } from '../services/waSenderService';
+import { sendInterviewWhatsAppInvite, formatPhoneForWhatsApp, buildWhatsAppInviteText, openWhatsAppWebInvite, sendBulkWhatsAppInvites } from '../services/waSenderService';
 import EditJobModal from './EditJob';
 import {
   Briefcase,
@@ -236,6 +236,11 @@ const RecruiterAllJobs: React.FC = () => {
   const [selectedResumeFile, setSelectedResumeFile] = useState<File | null>(null);
   const [resumeExtraText, setResumeExtraText] = useState('');
   const [analyzingResumeAI, setAnalyzingResumeAI] = useState(false);
+
+  // Delivery Channels State
+  const [sendEmailChannel, setSendEmailChannel] = useState(true);
+  const [sendWhatsAppChannel, setSendWhatsAppChannel] = useState(true);
+  const [sendingProgressMsg, setSendingProgressMsg] = useState('');
 
   // Reminder States
   const [remindingCandidateEmail, setRemindingCandidateEmail] = useState<string | null>(null);
@@ -790,6 +795,11 @@ const RecruiterAllJobs: React.FC = () => {
   const handleSendInvites = async () => {
     if (!invitingJob) return;
 
+    if (!sendEmailChannel && !sendWhatsAppChannel) {
+      messageBox.showError("Please select at least one delivery channel (Email or WhatsApp).");
+      return;
+    }
+
     const extraInputEmails = candidateEmailsInput
       .split(/[\n,;]/)
       .map(e => e.trim().toLowerCase())
@@ -803,6 +813,8 @@ const RecruiterAllJobs: React.FC = () => {
     }
 
     setSendingInvites(true);
+    setSendingProgressMsg('Preparing candidate invitations...');
+
     try {
       const existingCandidateEmails = invitingJob.candidateEmails || [];
       const updatedCandidateEmails = Array.from(new Set([...existingCandidateEmails, ...finalEmails]));
@@ -817,7 +829,6 @@ const RecruiterAllJobs: React.FC = () => {
         };
       });
 
-
       const updatePayload = {
         candidateEmails: updatedCandidateEmails,
         candidateData: arrayUnion(...candidateDataToAdd),
@@ -831,9 +842,11 @@ const RecruiterAllJobs: React.FC = () => {
 
       const targetLink = invitingJob.interviewLink || `${window.location.origin}/#/interview/${invitingJob.id}`;
       const validEmails = finalEmails.filter(e => !e.endsWith('@whatsapp.local'));
-      let res = { success: true, totalEmails: 0, error: '' };
-      if (validEmails.length > 0) {
-        res = await sendInterviewInvitations(
+
+      let emailCount = 0;
+      if (sendEmailChannel && validEmails.length > 0) {
+        setSendingProgressMsg(`Sending ${validEmails.length} email invitation(s)...`);
+        const res = await sendInterviewInvitations(
           validEmails,
           invitingJob.title,
           targetLink,
@@ -855,13 +868,48 @@ const RecruiterAllJobs: React.FC = () => {
             recruiterName: userProfile?.name || (user as any)?.displayName || 'Hiring Team',
           }
         );
+        if (res.success) emailCount = res.totalEmails;
       }
 
-      if (res.success) {
-        messageBox.showSuccess(`Invited ${finalEmails.length} candidate(s) successfully!`);
-      } else {
-        messageBox.showSuccess(`Candidates added to invite list (${finalEmails.length} candidates). Email status: ${res.error || 'Sent'}`);
+      let waCount = 0;
+      const candidatesWithPhones = parsedCandidates.filter(c => c.phone && c.phone !== 'N/A');
+      if (sendWhatsAppChannel && candidatesWithPhones.length > 0) {
+        setSendingProgressMsg(`Sending WhatsApp invites one-by-one with 10s anti-spam delay...`);
+        const waResult = await sendBulkWhatsAppInvites(
+          candidatesWithPhones,
+          invitingJob.title,
+          targetLink,
+          invitingJob.accessCode || '',
+          false,
+          (sentCount, totalCount, currentCandidate, isWaiting) => {
+            if (isWaiting) {
+              setSendingProgressMsg(`⏳ Sent WhatsApp to ${currentCandidate} (${sentCount}/${totalCount}). Waiting 10s delay to protect WhatsApp number...`);
+            } else {
+              setSendingProgressMsg(`📱 Sending WhatsApp invite ${sentCount}/${totalCount} to ${currentCandidate}...`);
+            }
+          },
+          {
+            location: invitingJob.location,
+            qualification: invitingJob.qualifications || invitingJob.education,
+            experience: ((invitingJob as any).maxExperience > (invitingJob as any).minExperience)
+              ? `${(invitingJob as any).minExperience} - ${(invitingJob as any).maxExperience} Years`
+              : invitingJob.experience,
+            minExperience: (invitingJob as any).minExperience,
+            maxExperience: (invitingJob as any).maxExperience,
+            gender: (invitingJob as any).gender || (invitingJob as any).genderRequirement,
+            salary: invitingJob.salary || invitingJob.salaryRange,
+            salaryRange: invitingJob.salaryRange || invitingJob.salary,
+            employmentType: (invitingJob as any).employmentType,
+            customFields: (invitingJob as any).customFields,
+            recruiterName: userProfile?.name || (user as any)?.displayName || 'Hiring Team',
+            whatsappSessionId: userProfile?.whatsappSessionId || '',
+            whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
+          }
+        );
+        if (waResult.success) waCount = waResult.totalSent;
       }
+
+      messageBox.showSuccess(`Invited ${finalEmails.length} candidate(s) successfully! ${emailCount > 0 ? `${emailCount} Email(s) sent. ` : ''}${waCount > 0 ? `${waCount} WhatsApp invite(s) sent.` : ''}`);
 
       setInvitingJob(null);
       setInviteEmailsList([]);
@@ -873,6 +921,7 @@ const RecruiterAllJobs: React.FC = () => {
       messageBox.showError("Failed to send invitations. Please try again.");
     } finally {
       setSendingInvites(false);
+      setSendingProgressMsg('');
     }
   };
 
@@ -1611,13 +1660,43 @@ const RecruiterAllJobs: React.FC = () => {
                   </div>
 
                   {/* Bulk Paste Multiple Emails */}
-                  <div>
-                    <label className="geist-label uppercase text-[#6b7280] block mb-1">
-                      Paste Multiple Emails
-                    </label>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="geist-label uppercase text-[#6b7280] block font-semibold text-xs">
+                        Paste Multiple Emails
+                      </label>
+                      {candidateEmailsInput.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const extracted = candidateEmailsInput
+                              .split(/[\n,;\s]+/)
+                              .map(e => e.trim().toLowerCase())
+                              .filter(e => e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+                            if (extracted.length === 0) {
+                              messageBox.showError('No valid email addresses found in pasted text.');
+                              return;
+                            }
+                            let added = 0;
+                            extracted.forEach(email => {
+                              if (!inviteEmailsList.includes(email)) {
+                                setInviteEmailsList(prev => [...prev, email]);
+                                added++;
+                              }
+                            });
+                            setCandidateEmailsInput('');
+                            messageBox.showSuccess(`Added ${added} candidate email(s) to invite list!`);
+                          }}
+                          className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold transition-colors flex items-center gap-1"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Pasted Emails</span>
+                        </button>
+                      )}
+                    </div>
                     <textarea
                       rows={3}
-                      placeholder="Enter multiple candidate emails separated by comma or newline (e.g. alex@example.com, sara@company.org)..."
+                      placeholder="Enter or paste multiple candidate emails separated by comma or newline (e.g. alex@example.com, sara@company.org)..."
                       value={candidateEmailsInput}
                       onChange={(e) => setCandidateEmailsInput(e.target.value)}
                       className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-3 text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
@@ -1889,12 +1968,64 @@ const RecruiterAllJobs: React.FC = () => {
               )}
 
 
+              {/* Delivery Channels Toggle */}
+              <div className="p-3 bg-white/[0.03] border border-white/[0.11] rounded-[6px] space-y-2">
+                <span className="geist-label uppercase text-[#6b7280] block font-semibold text-[11px]">
+                  Invitation Delivery Channels:
+                </span>
+                <div className="flex items-center gap-4 flex-wrap text-xs">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-white font-medium">
+                    <input
+                      type="checkbox"
+                      checked={sendEmailChannel}
+                      onChange={(e) => setSendEmailChannel(e.target.checked)}
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-0 cursor-pointer"
+                    />
+                    <Mail className="w-4 h-4 text-blue-400" />
+                    <span>Send Email Invitations</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-white font-medium">
+                    <input
+                      type="checkbox"
+                      checked={sendWhatsAppChannel}
+                      onChange={(e) => setSendWhatsAppChannel(e.target.checked)}
+                      className="w-4 h-4 rounded text-emerald-500 focus:ring-0 cursor-pointer"
+                    />
+                    <MessageSquare className="w-4 h-4 text-emerald-400" />
+                    <span>Send WhatsApp Invitations (10s Anti-Spam Delay)</span>
+                  </label>
+                </div>
+              </div>
+
+              {sendingProgressMsg && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-[6px] text-xs font-medium text-emerald-400 flex items-center gap-2 animate-pulse">
+                  <Sparkles className="w-4 h-4 animate-spin text-emerald-400" />
+                  <span>{sendingProgressMsg}</span>
+                </div>
+              )}
+
               {/* Selected Candidates Roster */}
               {inviteEmailsList.length > 0 && (
                 <div className="pt-2 border-t border-white/[0.08]">
-                  <span className="geist-label uppercase text-[#6b7280] block mb-1">
-                    Selected Candidates ({inviteEmailsList.length}):
-                  </span>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="geist-label uppercase text-[#6b7280] block font-semibold text-xs">
+                      Selected Candidates ({inviteEmailsList.length}):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInviteEmailsList([]);
+                        setParsedCandidates([]);
+                        setCandidateEmailsInput('');
+                        messageBox.showInfo('Cleared all candidate entries.');
+                      }}
+                      className="text-xs text-red-400 hover:text-red-300 font-semibold transition-colors flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Remove All ({inviteEmailsList.length})</span>
+                    </button>
+                  </div>
                   <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 bg-white/[0.02] border border-white/[0.08] rounded-[6px]">
                     {inviteEmailsList.map(email => {
                       const parsed = parsedCandidates.find(c => c.email.toLowerCase() === email.toLowerCase());

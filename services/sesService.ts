@@ -26,6 +26,8 @@ export interface JobDetailsOptions {
   recruiterPhone?: string;
   employmentType?: string;
   customFields?: Array<{ key: string; value: string }>;
+  whatsappSessionId?: string;
+  whatsappSessionPasscode?: string;
 }
 
 export interface SendEmailResult {
