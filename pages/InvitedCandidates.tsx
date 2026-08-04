@@ -247,9 +247,9 @@ const InvitedCandidates: React.FC = () => {
                     : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
                   minExperience: (selectedInterview as any).minExperience,
                   maxExperience: (selectedInterview as any).maxExperience,
-                  salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
-                  recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
-                  recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+                  recruiterName: userProfile?.name || userProfile?.fullname || userProfile?.displayName || user?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
+                  recruiterPhone: userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || user?.phoneNumber || '9762588623 / 8484888632',
+                  recruiterEmail: userProfile?.email || user?.email || ''
                 }
             );
             if (result.success && result.totalEmails > 0) emailSent = true;
@@ -509,9 +509,9 @@ const InvitedCandidates: React.FC = () => {
                         : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
                       minExperience: (selectedInterview as any).minExperience,
                       maxExperience: (selectedInterview as any).maxExperience,
-                      salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
-                      recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiter',
-                      recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+                      recruiterName: userProfile?.name || userProfile?.fullname || userProfile?.displayName || user?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiter',
+                      recruiterPhone: userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || user?.phoneNumber || '9762588623 / 8484888632',
+                      recruiterEmail: userProfile?.email || user?.email || ''
                     }
                 );
                 if (result.success) {

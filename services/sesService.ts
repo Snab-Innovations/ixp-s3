@@ -24,6 +24,7 @@ export interface JobDetailsOptions {
   salaryRange?: string;
   recruiterName?: string;
   recruiterPhone?: string;
+  recruiterEmail?: string;
   employmentType?: string;
   customFields?: Array<{ key: string; value: string }>;
   whatsappSessionId?: string;
@@ -160,6 +161,7 @@ export function getDesignerEmailTemplate(
 
   const recruiterName = options?.recruiterName || 'HR Recruiting Team';
   const recruiterPhone = options?.recruiterPhone || 'Dsource HR Support (9762588623 / 8484888632)';
+  const recruiterEmail = options?.recruiterEmail || FROM_EMAIL;
 
   return `
 <!DOCTYPE html>
@@ -264,13 +266,13 @@ export function getDesignerEmailTemplate(
                 Direct Link: <a href="${interviewLink}" style="color:#2563eb;text-decoration:underline;">${interviewLink}</a>
               </p>
 
-              <!-- Recruiter Contact Person Card -->
+              <!-- Recruiter & Sender Contact Card -->
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:24px;">
                 <tr>
                   <td style="padding:18px 20px;">
-                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b;margin-bottom:6px;">Contact Person / Recruiter Details</div>
-                    <div style="font-size:15px;font-weight:700;color:#0f172a;">👤 ${recruiterName}</div>
-                    <div style="font-size:14px;color:#334155;margin-top:2px;">📞 Mobile / Contact: <strong style="color:#1d4ed8;">${recruiterPhone}</strong></div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b;margin-bottom:8px;">Sender & Recruiter Contact Details</div>
+                    <div style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:4px;">👤 Sender Name: <span style="color:#0f172a;font-weight:700;">${recruiterName}</span></div>
+                    <div style="font-size:14px;color:#334155;">📞 Contact / Phone: <strong style="color:#1d4ed8;">${recruiterPhone}</strong></div>
                   </td>
                 </tr>
               </table>

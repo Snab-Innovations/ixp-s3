@@ -725,8 +725,8 @@ const RecruiterInterviews: React.FC = () => {
               salaryRange: (selectedInterview as any).salaryRange || (selectedInterview as any).salary,
               employmentType: (selectedInterview as any).employmentType,
               customFields: (selectedInterview as any).customFields,
-              recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruitment Team',
-              recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
+              recruiterName: userProfile?.name || userProfile?.fullname || userProfile?.displayName || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruitment Team',
+              recruiterPhone: userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || (user as any)?.phoneNumber || (selectedInterview as any).contactPersonPhone || '9762588623 / 8484888632'
             }
         );
 
@@ -946,8 +946,9 @@ const RecruiterInterviews: React.FC = () => {
             salaryRange: (selectedInterview as any).salaryRange || (selectedInterview as any).salary,
             employmentType: (selectedInterview as any).employmentType,
             customFields: (selectedInterview as any).customFields,
-            recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
-            recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',
+            recruiterName: userProfile?.name || userProfile?.fullname || userProfile?.displayName || user?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
+            recruiterPhone: userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || user?.phoneNumber || (selectedInterview as any).contactPersonPhone || '9762588623 / 8484888632',
+            recruiterEmail: userProfile?.email || user?.email || '',
             whatsappSessionId: userProfile?.whatsappSessionId || '',
             whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
           },

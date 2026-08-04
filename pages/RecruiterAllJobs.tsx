@@ -349,7 +349,8 @@ const RecruiterAllJobs: React.FC = () => {
           salaryRange: invitingJob.salaryRange || invitingJob.salary,
           employmentType: (invitingJob as any).employmentType,
           customFields: (invitingJob as any).customFields,
-          recruiterName: userProfile?.name || (user as any)?.displayName || 'Hiring Team',
+          recruiterName: userProfile?.name || userProfile?.fullname || userProfile?.displayName || (user as any)?.displayName || 'Hiring Team',
+          recruiterPhone: userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || (user as any)?.phoneNumber || '9762588623 / 8484888632'
         }
       );
 
@@ -932,7 +933,9 @@ const RecruiterAllJobs: React.FC = () => {
           salaryRange: invitingJob.salaryRange || invitingJob.salary,
           employmentType: (invitingJob as any).employmentType,
           customFields: (invitingJob as any).customFields,
-          recruiterName: userProfile?.name || (user as any)?.displayName || 'Hiring Team',
+          recruiterName: userProfile?.name || userProfile?.fullname || userProfile?.displayName || user?.displayName || 'Hiring Team',
+          recruiterPhone: userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || user?.phoneNumber || '9762588623 / 8484888632',
+          recruiterEmail: userProfile?.email || user?.email || '',
           whatsappSessionId: userProfile?.whatsappSessionId || '',
           whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
         },
