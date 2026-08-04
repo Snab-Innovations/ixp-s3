@@ -17,12 +17,15 @@ export interface JobDetailsOptions {
   location?: string;
   education?: string;
   qualification?: string;
-  experience?: string;
+  experience?: string | number;
   minExperience?: number | string;
   maxExperience?: number | string;
   salary?: string;
+  salaryRange?: string;
   recruiterName?: string;
   recruiterPhone?: string;
+  employmentType?: string;
+  customFields?: Array<{ key: string; value: string }>;
 }
 
 export interface SendEmailResult {
@@ -52,37 +55,60 @@ const getSESClient = (): SESv2Client => {
  * Handles ranges like 5-8 yrs, minExperience & maxExperience, single numbers, etc.
  */
 export function formatExperienceDisplay(options?: {
-  experience?: string;
+  experience?: string | number;
   minExperience?: number | string;
   maxExperience?: number | string;
 }): string {
   if (!options) return 'As per Job Description';
 
-  const minExp = options.minExperience !== undefined && options.minExperience !== null && String(options.minExperience).trim() !== '' ? String(options.minExperience).trim() : null;
-  const maxExp = options.maxExperience !== undefined && options.maxExperience !== null && String(options.maxExperience).trim() !== '' ? String(options.maxExperience).trim() : null;
+  const rawMin = options.minExperience !== undefined && options.minExperience !== null ? String(options.minExperience).trim() : '';
+  const rawMax = options.maxExperience !== undefined && options.maxExperience !== null ? String(options.maxExperience).trim() : '';
 
-  if (minExp !== null && maxExp !== null) {
-    if (minExp === maxExp) return `${minExp} ${Number(minExp) === 1 ? 'Year' : 'Years'}`;
-    return `${minExp} - ${maxExp} Years`;
-  } else if (minExp !== null) {
-    return `${minExp}+ Years`;
+  const minVal = rawMin !== '' && !isNaN(Number(rawMin)) ? Number(rawMin) : null;
+  const maxVal = rawMax !== '' && !isNaN(Number(rawMax)) ? Number(rawMax) : null;
+
+  // 1. Check numerical minExperience and maxExperience range first
+  if (minVal !== null && maxVal !== null && maxVal > minVal && minVal >= 0) {
+    return `${minVal} - ${maxVal} Years`;
   }
 
+  // 2. Check if experience string itself contains a range like "3-5", "3 - 5 yrs", "3 to 5 years"
   const expStr = options.experience !== undefined && options.experience !== null ? String(options.experience).trim() : '';
-  if (!expStr) return 'As per Job Description';
-
-  const rangeMatch = expStr.match(/^(\d+)\s*(?:-|to)\s*(\d+)\s*(?:yrs?|years?)?$/i);
-  if (rangeMatch) {
-    return `${rangeMatch[1]} - ${rangeMatch[2]} Years`;
+  if (expStr) {
+    const rangeMatch = expStr.match(/^(\d+)\s*(?:-|to)\s*(\d+)\s*(?:yrs?|years?)?$/i);
+    if (rangeMatch) {
+      const rMin = Number(rangeMatch[1]);
+      const rMax = Number(rangeMatch[2]);
+      if (rMax > rMin) {
+        return `${rMin} - ${rMax} Years`;
+      }
+      return `${rMin} ${rMin === 1 ? 'Year' : 'Years'}`;
+    }
   }
 
-  const singleMatch = expStr.match(/^(\d+)\s*(?:yrs?|years?)?$/i);
-  if (singleMatch) {
-    const num = singleMatch[1];
-    return `${num} ${Number(num) === 1 ? 'Year' : 'Years'}`;
+  // 3. Check equal min & max
+  if (minVal !== null && maxVal !== null && minVal === maxVal && minVal > 0) {
+    return `${minVal} ${minVal === 1 ? 'Year' : 'Years'}`;
   }
 
-  return expStr;
+  // 4. Single value in experience string or minVal
+  if (expStr) {
+    const singleMatch = expStr.match(/^(\d+)\s*(?:yrs?|years?)?$/i);
+    if (singleMatch) {
+      const num = Number(singleMatch[1]);
+      if (minVal !== null && maxVal !== null && maxVal > minVal) {
+        return `${minVal} - ${maxVal} Years`;
+      }
+      return `${num} ${num === 1 ? 'Year' : 'Years'}`;
+    }
+    return expStr;
+  }
+
+  if (minVal !== null && minVal > 0) {
+    return `${minVal}+ Years`;
+  }
+
+  return 'As per Job Description';
 }
 
 /**
@@ -123,7 +149,12 @@ export function getDesignerEmailTemplate(
   const jobLocationDisplay = options?.location || 'As specified in Job Description';
   const jobQualificationDisplay = options?.qualification || options?.education || 'As per Job Description';
   const jobExpDisplay = formatExperienceDisplay(options);
-  const jobSalaryDisplay = options?.salary || 'Competitive / As per Job Description';
+  const jobSalaryDisplay = options?.salary || options?.salaryRange || 'Competitive / As per Job Description';
+  const employmentTypeDisplay = options?.employmentType ? `<tr><td style="padding:6px 0;font-size:14px;color:#475569;font-weight:600;">💼 Employment:</td><td style="padding:6px 0;font-size:14px;color:#0f172a;font-weight:600;">${options.employmentType}</td></tr>` : '';
+
+  const customRows = options?.customFields && options.customFields.length > 0
+    ? options.customFields.map(cf => `<tr><td style="padding:6px 0;font-size:14px;color:#475569;font-weight:600;">🔹 ${cf.key}:</td><td style="padding:6px 0;font-size:14px;color:#0f172a;font-weight:600;">${cf.value}</td></tr>`).join('')
+    : '';
 
   const recruiterName = options?.recruiterName || 'HR Recruiting Team';
   const recruiterPhone = options?.recruiterPhone || 'Dsource HR Support (9762588623 / 8484888632)';
@@ -179,6 +210,7 @@ export function getDesignerEmailTemplate(
                         <td style="padding:6px 0;font-size:14px;color:#475569;width:38%;font-weight:600;">📌 Post:</td>
                         <td style="padding:6px 0;font-size:14px;color:#0f172a;font-weight:700;">${jobPostDisplay}</td>
                       </tr>
+                      ${employmentTypeDisplay}
                       <tr>
                         <td style="padding:6px 0;font-size:14px;color:#475569;font-weight:600;">📍 Location:</td>
                         <td style="padding:6px 0;font-size:14px;color:#0f172a;font-weight:600;">${jobLocationDisplay}</td>
@@ -195,6 +227,7 @@ export function getDesignerEmailTemplate(
                         <td style="padding:6px 0;font-size:14px;color:#475569;font-weight:600;">💰 Salary:</td>
                         <td style="padding:6px 0;font-size:14px;color:#166534;font-weight:700;">${jobSalaryDisplay}</td>
                       </tr>
+                      ${customRows}
                     </table>
                   </td>
                 </tr>

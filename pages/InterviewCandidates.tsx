@@ -370,10 +370,15 @@ const InterviewCandidates: React.FC = () => {
             location: (interview as any).location,
             education: (interview as any).education || (interview as any).qualification,
             qualification: (interview as any).qualification || (interview as any).education,
-            experience: (interview as any).experience || (interview as any).experienceRequired,
+            experience: ((interview as any).maxExperience > (interview as any).minExperience)
+              ? `${(interview as any).minExperience} - ${(interview as any).maxExperience} Years`
+              : ((interview as any).experience || (interview as any).experienceRequired),
             minExperience: (interview as any).minExperience,
             maxExperience: (interview as any).maxExperience,
             salary: (interview as any).salary || (interview as any).salaryRange,
+            salaryRange: (interview as any).salaryRange || (interview as any).salary,
+            employmentType: (interview as any).employmentType,
+            customFields: (interview as any).customFields,
             recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiting Team',
             recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
           }
@@ -404,10 +409,15 @@ const InterviewCandidates: React.FC = () => {
             location: (interview as any).location,
             education: (interview as any).education || (interview as any).qualification,
             qualification: (interview as any).qualification || (interview as any).education,
-            experience: (interview as any).experience || (interview as any).experienceRequired,
+            experience: ((interview as any).maxExperience > (interview as any).minExperience)
+              ? `${(interview as any).minExperience} - ${(interview as any).maxExperience} Years`
+              : ((interview as any).experience || (interview as any).experienceRequired),
             minExperience: (interview as any).minExperience,
             maxExperience: (interview as any).maxExperience,
             salary: (interview as any).salary || (interview as any).salaryRange,
+            salaryRange: (interview as any).salaryRange || (interview as any).salary,
+            employmentType: (interview as any).employmentType,
+            customFields: (interview as any).customFields,
             recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiting Team',
             recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
           }

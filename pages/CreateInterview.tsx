@@ -623,8 +623,13 @@ const CreateInterview: React.FC = () => {
         designation: userProfile?.designation || 'Recruiter'
       };
 
+      const expFormatted = (formData.maxExperience > formData.minExperience) 
+        ? `${formData.minExperience} - ${formData.maxExperience} Years` 
+        : (formData.minExperience > 0 ? `${formData.minExperience} Years` : '0 - 2 Years');
+
       await setDoc(doc(db, 'interviews', newRand), {
         ...formData,
+        experience: expFormatted,
         manualQuestions,
         customFields,
         candidateEmails,
@@ -678,10 +683,15 @@ const CreateInterview: React.FC = () => {
               location: (formData as any).location,
               education: (formData as any).education || (formData as any).qualification,
               qualification: (formData as any).qualification || (formData as any).education,
-              experience: (formData as any).experience || (formData as any).experienceRequired,
+              experience: ((formData as any).maxExperience > (formData as any).minExperience)
+                ? `${(formData as any).minExperience} - ${(formData as any).maxExperience} Years`
+                : ((formData as any).experience || (formData as any).experienceRequired),
               minExperience: (formData as any).minExperience,
               maxExperience: (formData as any).maxExperience,
               salary: (formData as any).salary || (formData as any).salaryRange,
+              salaryRange: (formData as any).salaryRange || (formData as any).salary,
+              employmentType: (formData as any).employmentType,
+              customFields,
               recruiterName: userProfile?.name || creatorInfo.name || (user as any)?.displayName || 'Recruiter',
               recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
             }
@@ -718,10 +728,15 @@ const CreateInterview: React.FC = () => {
               location: (formData as any).location,
               education: (formData as any).education || (formData as any).qualification,
               qualification: (formData as any).qualification || (formData as any).education,
-              experience: (formData as any).experience || (formData as any).experienceRequired,
+              experience: ((formData as any).maxExperience > (formData as any).minExperience)
+                ? `${(formData as any).minExperience} - ${(formData as any).maxExperience} Years`
+                : ((formData as any).experience || (formData as any).experienceRequired),
               minExperience: (formData as any).minExperience,
               maxExperience: (formData as any).maxExperience,
               salary: (formData as any).salary || (formData as any).salaryRange,
+              salaryRange: (formData as any).salaryRange || (formData as any).salary,
+              employmentType: (formData as any).employmentType,
+              customFields,
               recruiterName: userProfile?.name || creatorInfo.name || (user as any)?.displayName || 'Recruiter',
               recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',
               whatsappSessionId: userProfile?.whatsappSessionId || '',
@@ -762,24 +777,24 @@ const CreateInterview: React.FC = () => {
     }
   };
 
-  const inputClass = "geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-[#050505] px-3 text-white outline-none transition-colors placeholder:text-[#6b7280] focus:border-white/[0.28] focus:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50 [color-scheme:dark]";
-  const textareaClass = "geist-caption min-h-[132px] w-full resize-y rounded-[6px] border border-white/[0.11] bg-[#050505] px-3 py-2.5 text-white outline-none transition-colors placeholder:text-[#6b7280] focus:border-white/[0.28] focus:bg-white/[0.04]";
+  const inputClass = "geist-caption h-9 w-full rounded-[6px] border border-gray-300 dark:border-white/[0.14] bg-white dark:bg-[#050505] px-3 text-gray-900 dark:text-white outline-none transition-colors placeholder:text-gray-400 dark:placeholder:text-[#6b7280] focus:border-indigo-500 dark:focus:border-white/[0.28] disabled:cursor-not-allowed disabled:opacity-50";
+  const textareaClass = "geist-caption min-h-[132px] w-full resize-y rounded-[6px] border border-gray-300 dark:border-white/[0.14] bg-white dark:bg-[#050505] px-3 py-2.5 text-gray-900 dark:text-white outline-none transition-colors placeholder:text-gray-400 dark:placeholder:text-[#6b7280] focus:border-indigo-500 dark:focus:border-white/[0.28]";
   const selectClass = `${inputClass} appearance-none`;
-  const labelClass = "geist-label mb-1.5 block text-[#a1a1aa]";
-  const secondaryButtonClass = "geist-caption inline-flex h-9 shrink-0 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
-  const primaryButtonClass = "geist-caption inline-flex h-10 items-center justify-center rounded-[6px] border border-white bg-white px-4 font-medium text-black transition-colors hover:bg-[#eaeaea] disabled:cursor-not-allowed disabled:opacity-50";
-  const panelHeaderClass = "geist-label uppercase text-[#6b7280]";
-  const panelTitleClass = "geist-section-title mt-1 text-white";
-  const helperTextClass = "geist-small mt-1 max-w-2xl text-[#8f8f8f]";
+  const labelClass = "geist-label mb-1.5 block text-gray-700 dark:text-[#a1a1aa]";
+  const secondaryButtonClass = "geist-caption inline-flex h-9 shrink-0 items-center justify-center rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.03] px-3 font-medium text-gray-800 dark:text-[#d4d4d4] transition-colors hover:bg-gray-200 dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
+  const primaryButtonClass = "geist-caption inline-flex h-10 items-center justify-center rounded-[6px] border border-gray-900 dark:border-white bg-gray-900 dark:bg-white px-4 font-medium text-white dark:text-black transition-colors hover:bg-gray-800 dark:hover:bg-[#eaeaea] disabled:cursor-not-allowed disabled:opacity-50";
+  const panelHeaderClass = "geist-label uppercase text-gray-500 dark:text-[#6b7280]";
+  const panelTitleClass = "geist-section-title mt-1 text-gray-900 dark:text-white";
+  const helperTextClass = "geist-small mt-1 max-w-2xl text-gray-600 dark:text-[#8f8f8f]";
 
   return (
-    <div className="w-full min-h-[calc(100dvh-3.5rem)] bg-[#000] text-white">
+    <div className="w-full min-h-[calc(100dvh-3.5rem)] bg-white dark:bg-[#000] text-gray-900 dark:text-white">
 
-      <header className="border-b border-white/[0.11]">
+      <header className="border-b border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#000]">
         <div className="px-4 py-5 sm:px-6 lg:px-7">
-          <p className="geist-label uppercase text-[#6b7280]">Interview setup</p>
-          <h1 className="geist-page-title mt-2 text-white">Create interview</h1>
-          <p className="geist-small mt-1 max-w-2xl text-[#8f8f8f]">
+          <p className="geist-label uppercase text-gray-500 dark:text-[#6b7280]">Interview setup</p>
+          <h1 className="geist-page-title mt-2 text-gray-900 dark:text-white">Create interview</h1>
+          <p className="geist-small mt-1 max-w-2xl text-gray-600 dark:text-[#8f8f8f]">
             Build a structured interview brief, tune the question rules, and prepare candidate invitations from one focused workspace.
           </p>
         </div>
@@ -791,7 +806,7 @@ const CreateInterview: React.FC = () => {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,0.42fr)_1px_minmax(0,1fr)]">
-        <aside className="border-b border-white/[0.11] bg-[#020202] px-4 py-5 sm:px-6 lg:border-b-0 lg:px-7">
+        <aside className="border-b border-gray-200 dark:border-white/[0.11] bg-gray-50 dark:bg-[#020202] px-4 py-5 sm:px-6 lg:border-b-0 lg:px-7">
           <div className="lg:sticky lg:top-[5.25rem] space-y-4">
             <div>
               <p className={panelHeaderClass}>Source</p>
@@ -802,18 +817,18 @@ const CreateInterview: React.FC = () => {
             </div>
 
             {/* Mode Switcher Tabs */}
-            <div className="flex rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-1">
+            <div className="flex rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] p-1 shadow-sm dark:shadow-none">
               <button
                 type="button"
                 onClick={() => setJdImportMode('upload')}
-                className={`flex-1 py-1.5 text-xs font-medium rounded-[4px] transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${jdImportMode === 'upload' ? 'bg-white text-black font-semibold shadow' : 'text-[#8f8f8f] hover:text-white'}`}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-[4px] transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${jdImportMode === 'upload' ? 'bg-gray-900 dark:bg-white text-white dark:text-black font-semibold shadow' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-gray-900 dark:hover:text-white'}`}
               >
                 <i className="fas fa-file-pdf"></i> Upload File
               </button>
               <button
                 type="button"
                 onClick={() => setJdImportMode('paste')}
-                className={`flex-1 py-1.5 text-xs font-medium rounded-[4px] transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${jdImportMode === 'paste' ? 'bg-white text-black font-semibold shadow' : 'text-[#8f8f8f] hover:text-white'}`}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-[4px] transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${jdImportMode === 'paste' ? 'bg-gray-900 dark:bg-white text-white dark:text-black font-semibold shadow' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-gray-900 dark:hover:text-white'}`}
               >
                 <i className="fas fa-paste"></i> Paste JD Text
               </button>
@@ -823,20 +838,20 @@ const CreateInterview: React.FC = () => {
               <>
                 <label
                   htmlFor="jd-upload"
-                  className={`geist-caption flex min-h-28 cursor-pointer flex-col justify-center rounded-[6px] border border-dashed bg-white/[0.025] px-4 py-4 text-[#d4d4d4] transition-colors hover:border-white/[0.3] hover:bg-white/[0.045] ${parsingJd ? 'cursor-not-allowed border-white/[0.12]' : 'border-white/[0.18]'}`}
+                  className={`geist-caption flex min-h-28 cursor-pointer flex-col justify-center rounded-[6px] border border-dashed bg-white dark:bg-white/[0.025] px-4 py-4 text-gray-800 dark:text-[#d4d4d4] transition-colors hover:border-gray-400 dark:hover:border-white/[0.3] ${parsingJd ? 'cursor-not-allowed border-gray-300 dark:border-white/[0.12]' : 'border-gray-300 dark:border-white/[0.18]'}`}
                 >
                   {parsingJd ? (
                     <span className="flex flex-col gap-2" role="status" aria-label="Parsing job description">
                       <SkeletonBlock className="h-4 w-44" />
-                      <SkeletonBlock className="h-3 w-64 max-w-full bg-white/[0.08]" />
-                      <SkeletonBlock className="h-3 w-36 bg-white/[0.08]" />
+                      <SkeletonBlock className="h-3 w-64 max-w-full bg-gray-200 dark:bg-white/[0.08]" />
+                      <SkeletonBlock className="h-3 w-36 bg-gray-200 dark:bg-white/[0.08]" />
                     </span>
                   ) : (
                     <>
-                      <span className="font-medium text-white flex items-center gap-2">
-                        <i className="fas fa-file-upload text-blue-400"></i> Upload job description file
+                      <span className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
+                        <i className="fas fa-file-upload text-blue-600 dark:text-blue-400"></i> Upload job description file
                       </span>
-                      <span className="geist-small mt-1 text-[#8f8f8f]">PDF or TXT document with job requirements.</span>
+                      <span className="geist-small mt-1 text-gray-500 dark:text-[#8f8f8f]">PDF or TXT document with job requirements.</span>
                     </>
                   )}
                 </label>
@@ -849,7 +864,7 @@ const CreateInterview: React.FC = () => {
                   value={pastedJdText}
                   onChange={(e) => setPastedJdText(e.target.value)}
                   placeholder="Paste complete Job Description text here (e.g. 23632 | Production Engineer, Location: Ambad, Experience: 1-2 yrs, Facilities, Bond, Salary, etc.)..."
-                  className="w-full rounded-[6px] border border-white/[0.18] bg-white/[0.03] p-3 text-xs text-white placeholder-gray-500 outline-none focus:border-white leading-relaxed resize-none font-sans"
+                  className="w-full rounded-[6px] border border-gray-300 dark:border-white/[0.18] bg-white dark:bg-white/[0.03] p-3 text-xs text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:border-indigo-500 dark:focus:border-white leading-relaxed resize-none font-sans"
                 />
                 <button
                   type="button"
@@ -870,17 +885,17 @@ const CreateInterview: React.FC = () => {
               </div>
             )}
 
-            <div className="mt-7 border-t border-white/[0.11] pt-5">
+            <div className="mt-7 border-t border-gray-200 dark:border-white/[0.11] pt-5">
               <p className={panelHeaderClass}>Flow</p>
-              <div className="mt-3 divide-y divide-white/[0.11] border border-white/[0.11]">
+              <div className="mt-3 divide-y divide-gray-200 dark:divide-white/[0.11] border border-gray-200 dark:border-white/[0.11] rounded-[6px] bg-white dark:bg-transparent">
                 {[
                   ['Brief', 'Role details and requirements'],
                   ['Questions', 'Difficulty and manual prompts'],
                   ['Invites', 'Candidate emails and resume parsing'],
                 ].map(([title, copy]) => (
                   <div key={title} className="px-3 py-3">
-                    <p className="geist-caption font-medium text-white">{title}</p>
-                    <p className="geist-small mt-0.5 text-[#8f8f8f]">{copy}</p>
+                    <p className="geist-caption font-medium text-gray-900 dark:text-white">{title}</p>
+                    <p className="geist-small mt-0.5 text-gray-500 dark:text-[#8f8f8f]">{copy}</p>
                   </div>
                 ))}
               </div>
@@ -888,10 +903,10 @@ const CreateInterview: React.FC = () => {
           </div>
         </aside>
 
-        <div className="hidden bg-white/[0.11] lg:block" />
+        <div className="hidden bg-gray-200 dark:bg-white/[0.11] lg:block" />
 
-        <form onSubmit={handleSubmit} className="min-w-0">
-          <section className="border-b border-white/[0.11] px-4 py-5 sm:px-6 lg:px-7">
+        <form onSubmit={handleSubmit} className="min-w-0 bg-white dark:bg-[#000]">
+          <section className="border-b border-gray-200 dark:border-white/[0.11] px-4 py-5 sm:px-6 lg:px-7">
             <p className={panelHeaderClass}>Brief</p>
             <h2 className={panelTitleClass}>Role details</h2>
             <p className={helperTextClass}>Keep the requirements specific so the generated interview stays relevant.</p>
@@ -927,18 +942,18 @@ const CreateInterview: React.FC = () => {
                 <label className={labelClass}>Required experience</label>
                 <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
                   <input name="minExperience" type="number" min="0" required placeholder="Min" className={inputClass} value={formData.minExperience} onChange={handleFormChange} />
-                  <span className="geist-small text-[#6b7280]">to</span>
+                  <span className="geist-small text-gray-500 dark:text-[#6b7280]">to</span>
                   <input name="maxExperience" type="number" min="0" required placeholder="Max" className={inputClass} value={formData.maxExperience} onChange={handleFormChange} />
                 </div>
               </div>
 
               <div>
-                <label className={labelClass}>Job location <span className="text-red-400">*</span></label>
+                <label className={labelClass}>Job location <span className="text-red-500 dark:text-red-400">*</span></label>
                 <input name="location" type="text" required className={inputClass} value={formData.location} onChange={handleFormChange} placeholder="e.g. Ambad, Nashik / Remote / Mumbai" />
               </div>
 
               <div>
-                <label className={labelClass}>Salary / Compensation <span className="text-red-400">*</span></label>
+                <label className={labelClass}>Salary / Compensation <span className="text-red-500 dark:text-red-400">*</span></label>
                 <input name="salaryRange" type="text" required className={inputClass} value={formData.salaryRange} onChange={handleFormChange} placeholder="e.g. 20,000 - 22,000 / per month or 4 - 6 LPA" />
               </div>
 
@@ -953,14 +968,14 @@ const CreateInterview: React.FC = () => {
 
               <div className="xl:col-span-2">
                 <label className={labelClass}>Minimum education level</label>
-                <div className="min-h-10 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-2">
+                <div className="min-h-10 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-gray-50 dark:bg-white/[0.025] p-2">
                   <div className="flex flex-wrap gap-2">
                     {formData.education ? formData.education.split(',').map(e => e.trim()).filter(e => e).map(edu => (
-                      <span key={edu} className="geist-small inline-flex h-7 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.05] px-2.5 text-[#d4d4d4]">
+                      <span key={edu} className="geist-small inline-flex h-7 items-center gap-2 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.05] px-2.5 text-gray-900 dark:text-[#d4d4d4] font-medium shadow-sm dark:shadow-none">
                         {edu}
-                        <button type="button" onClick={() => toggleEducation(edu)} className="text-[#8f8f8f] transition-colors hover:text-white">&times;</button>
+                        <button type="button" onClick={() => toggleEducation(edu)} className="text-gray-400 dark:text-[#8f8f8f] transition-colors hover:text-red-500 dark:hover:text-white">&times;</button>
                       </span>
-                    )) : <span className="geist-caption text-[#6b7280]">No education level selected</span>}
+                    )) : <span className="geist-caption text-gray-400 dark:text-[#6b7280]">No education level selected</span>}
                   </div>
                 </div>
 
@@ -1014,19 +1029,19 @@ const CreateInterview: React.FC = () => {
             </div>
           </section>
 
-          <section className="border-b border-white/[0.11] px-4 py-5 sm:px-6 lg:px-7">
+          <section className="border-b border-gray-200 dark:border-white/[0.11] px-4 py-5 sm:px-6 lg:px-7">
             <p className={panelHeaderClass}>Skills</p>
             <h2 className={panelTitleClass}>Required capabilities</h2>
             <p className={helperTextClass}>Select existing skills or add a custom requirement.</p>
 
-            <div className="mt-5 min-h-10 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-2">
+            <div className="mt-5 min-h-10 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-gray-50 dark:bg-white/[0.025] p-2">
               <div className="flex flex-wrap gap-2">
                 {formData.skills ? formData.skills.split(',').map(s => s.trim()).filter(s => s).map(skill => (
-                  <span key={skill} className="geist-small inline-flex h-7 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.05] px-2.5 text-[#d4d4d4]">
+                  <span key={skill} className="geist-small inline-flex h-7 items-center gap-2 rounded-[6px] border border-purple-200 dark:border-white/[0.11] bg-purple-50 dark:bg-white/[0.05] px-2.5 text-purple-700 dark:text-[#d4d4d4] font-medium">
                     {skill}
-                    <button type="button" onClick={() => toggleSkill(skill)} className="text-[#8f8f8f] transition-colors hover:text-white">&times;</button>
+                    <button type="button" onClick={() => toggleSkill(skill)} className="text-purple-400 dark:text-[#8f8f8f] transition-colors hover:text-red-500 dark:hover:text-white">&times;</button>
                   </span>
-                )) : <span className="geist-caption text-[#6b7280]">No skills selected</span>}
+                )) : <span className="geist-caption text-gray-400 dark:text-[#6b7280]">No skills selected</span>}
               </div>
             </div>
 
@@ -1061,7 +1076,7 @@ const CreateInterview: React.FC = () => {
               </button>
             </div>
 
-            <div className="mt-3 max-h-44 overflow-y-auto rounded-[6px] border border-white/[0.11] bg-[#050505] p-2 custom-scrollbar">
+            <div className="mt-3 max-h-44 overflow-y-auto rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-50 dark:bg-[#050505] p-2 custom-scrollbar">
               <div className="flex flex-wrap gap-2">
                 {SKILL_OPTIONS.filter(s => s.toLowerCase().includes(skillSearch.toLowerCase())).map(skill => {
                   const isSelected = formData.skills.split(',').map(s => s.trim()).includes(skill);
@@ -1071,8 +1086,8 @@ const CreateInterview: React.FC = () => {
                       type="button"
                       onClick={() => toggleSkill(skill)}
                       className={`geist-small inline-flex h-7 items-center rounded-[6px] border px-2.5 transition-colors ${isSelected
-                        ? 'border-white/[0.28] bg-white text-black'
-                        : 'border-white/[0.11] bg-white/[0.03] text-[#8f8f8f] hover:bg-white/[0.06] hover:text-white'
+                        ? 'border-purple-300 dark:border-white/[0.28] bg-purple-600 dark:bg-white text-white dark:text-black font-semibold'
+                        : 'border-gray-200 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] text-gray-700 dark:text-[#8f8f8f] hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-white'
                         }`}
                     >
                       {skill}{isSelected && ' ✓'}
@@ -1083,7 +1098,7 @@ const CreateInterview: React.FC = () => {
             </div>
           </section>
 
-          <section className="border-b border-white/[0.11] px-4 py-5 sm:px-6 lg:px-7">
+          <section className="border-b border-gray-200 dark:border-white/[0.11] px-4 py-5 sm:px-6 lg:px-7">
             <p className={panelHeaderClass}>Questions</p>
             <h2 className={panelTitleClass}>Interview rules</h2>
             <p className={helperTextClass}>Set the generated question count, report behavior, and any manual prompts.</p>
@@ -1091,10 +1106,10 @@ const CreateInterview: React.FC = () => {
             <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
               <div>
                 <label className={labelClass}>AI-generated questions</label>
-                <div className="flex h-9 items-center rounded-[6px] border border-white/[0.11] bg-[#050505]">
-                  <button type="button" disabled={formData.numQuestions <= 1} onClick={() => setFormData(prev => ({ ...prev, numQuestions: Math.max(1, prev.numQuestions - 1) }))} className="h-full w-10 border-r border-white/[0.11] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">-</button>
-                  <input name="numQuestions" type="number" min="1" max="25" className="geist-caption h-full min-w-0 flex-1 border-none bg-transparent px-3 text-center font-medium text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" value={formData.numQuestions} onChange={handleFormChange} />
-                  <button type="button" disabled={formData.numQuestions >= 25} onClick={() => setFormData(prev => ({ ...prev, numQuestions: Math.min(25, prev.numQuestions + 1) }))} className="h-full w-10 border-l border-white/[0.11] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-30">+</button>
+                <div className="flex h-9 items-center rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#050505]">
+                  <button type="button" disabled={formData.numQuestions <= 1} onClick={() => setFormData(prev => ({ ...prev, numQuestions: Math.max(1, prev.numQuestions - 1) }))} className="h-full w-10 border-r border-gray-200 dark:border-white/[0.11] text-gray-600 dark:text-[#8f8f8f] transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-30">-</button>
+                  <input name="numQuestions" type="number" min="1" max="25" className="geist-caption h-full min-w-0 flex-1 border-none bg-transparent px-3 text-center font-medium text-gray-900 dark:text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" value={formData.numQuestions} onChange={handleFormChange} />
+                  <button type="button" disabled={formData.numQuestions >= 25} onClick={() => setFormData(prev => ({ ...prev, numQuestions: Math.min(25, prev.numQuestions + 1) }))} className="h-full w-10 border-l border-gray-200 dark:border-white/[0.11] text-gray-600 dark:text-[#8f8f8f] transition-colors hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-30">+</button>
                 </div>
               </div>
 
@@ -1117,7 +1132,7 @@ const CreateInterview: React.FC = () => {
               </div>
             </div>
 
-            <div className="mt-5 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
+            <div className="mt-5 rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-50 dark:bg-white/[0.025] p-3">
               <label className={labelClass}>Manual interview questions</label>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <input
@@ -1139,16 +1154,16 @@ const CreateInterview: React.FC = () => {
               {manualQuestions.length > 0 && (
                 <div className="mt-3 max-h-60 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
                   {manualQuestions.map((q, index) => (
-                    <div key={index} className="flex items-start justify-between gap-3 rounded-[6px] border border-white/[0.11] bg-[#050505] px-3 py-2.5">
-                      <p className="geist-caption min-w-0 text-[#d4d4d4]">{q}</p>
-                      <button type="button" onClick={() => handleRemoveManualQuestion(index)} className="geist-small shrink-0 text-[#8f8f8f] transition-colors hover:text-white">Remove</button>
+                    <div key={index} className="flex items-start justify-between gap-3 rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#050505] px-3 py-2.5">
+                      <p className="geist-caption min-w-0 text-gray-800 dark:text-[#d4d4d4] font-medium">{q}</p>
+                      <button type="button" onClick={() => handleRemoveManualQuestion(index)} className="geist-small shrink-0 text-red-500 dark:text-[#8f8f8f] transition-colors hover:text-red-700 dark:hover:text-white font-semibold">Remove</button>
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            <div className="mt-4 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
+            <div className="mt-4 rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-50 dark:bg-white/[0.025] p-3">
               <label className={labelClass}>Custom fields</label>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                 <input type="text" className={inputClass} placeholder="Field name, e.g. Salary range" value={tempCustomField.key} onChange={e => setTempCustomField({ ...tempCustomField, key: e.target.value })} />
@@ -1159,9 +1174,9 @@ const CreateInterview: React.FC = () => {
               {customFields.length > 0 && (
                 <div className="mt-3 max-h-44 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
                   {customFields.map((field) => (
-                    <div key={field.id} className="flex items-center justify-between gap-3 rounded-[6px] border border-white/[0.11] bg-[#050505] px-3 py-2.5">
-                      <p className="geist-caption min-w-0 truncate text-[#d4d4d4]"><span className="font-medium text-white">{field.key}:</span> {field.value}</p>
-                      <button type="button" onClick={() => handleRemoveCustomField(field.id)} className="geist-small shrink-0 text-[#8f8f8f] transition-colors hover:text-white">Remove</button>
+                    <div key={field.id} className="flex items-center justify-between gap-3 rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#050505] px-3 py-2.5">
+                      <p className="geist-caption min-w-0 truncate text-gray-800 dark:text-[#d4d4d4]"><span className="font-medium text-gray-900 dark:text-white">{field.key}:</span> {field.value}</p>
+                      <button type="button" onClick={() => handleRemoveCustomField(field.id)} className="geist-small shrink-0 text-red-500 dark:text-[#8f8f8f] transition-colors hover:text-red-700 dark:hover:text-white font-semibold">Remove</button>
                     </div>
                   ))}
                 </div>
@@ -1217,27 +1232,27 @@ const CreateInterview: React.FC = () => {
             {candidateDataList.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {candidateDataList.map((candidate, index) => (
-                  <span key={index} className="geist-small inline-flex h-8 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.05] px-3 text-[#d4d4d4]">
+                  <span key={index} className="geist-small inline-flex h-8 items-center gap-2 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-gray-50 dark:bg-white/[0.05] px-3 text-gray-800 dark:text-[#d4d4d4] font-medium shadow-sm dark:shadow-none">
                     {candidate.email ? (
                       <span>✉️ {candidate.email}</span>
                     ) : null}
                     {candidate.phone ? (
-                      <span className="text-[11px] text-emerald-400 font-mono">📱 {candidate.phone}</span>
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono">📱 {candidate.phone}</span>
                     ) : null}
-                    <button type="button" onClick={() => handleRemoveCandidate(index)} className="text-[#8f8f8f] transition-colors hover:text-white font-bold ml-1">&times;</button>
+                    <button type="button" onClick={() => handleRemoveCandidate(index)} className="text-gray-400 dark:text-[#8f8f8f] transition-colors hover:text-red-500 dark:hover:text-white font-bold ml-1">&times;</button>
                   </span>
                 ))}
               </div>
             )}
 
-            <div className="mt-5 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
+            <div className="mt-5 rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-50 dark:bg-white/[0.025] p-3">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <label className={labelClass}>Suggested candidates</label>
-                  <p className="geist-small text-[#8f8f8f]">Matched from Resume Dump using this role's description and required skills. Permanently shortlisted candidates are excluded.</p>
+                  <p className="geist-small text-gray-500 dark:text-[#8f8f8f]">Matched from Resume Dump using this role's description and required skills. Permanently shortlisted candidates are excluded.</p>
                 </div>
                 {requiredSkillSignals.length > 0 && (
-                  <span className="geist-small rounded-[6px] border border-white/[0.11] bg-[#050505] px-2 py-1 text-[#8f8f8f]">
+                  <span className="geist-small rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#050505] px-2 py-1 text-gray-600 dark:text-[#8f8f8f]">
                     {requiredSkillSignals.length} signal{requiredSkillSignals.length === 1 ? '' : 's'}
                   </span>
                 )}
@@ -1246,13 +1261,13 @@ const CreateInterview: React.FC = () => {
               {loadingResumeDumpCandidates || loadingShortlistedCandidates ? (
                 <div className="mt-3 grid gap-2 xl:grid-cols-2">
                   {[0, 1].map((item) => (
-                    <div key={item} className="rounded-[6px] border border-white/[0.11] bg-[#050505] p-3">
+                    <div key={item} className="rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#050505] p-3">
                       <SkeletonBlock className="h-4 w-36" />
-                      <SkeletonBlock className="mt-2 h-3 w-48 max-w-full bg-white/[0.08]" />
+                      <SkeletonBlock className="mt-2 h-3 w-48 max-w-full bg-gray-200 dark:bg-white/[0.08]" />
                       <div className="mt-3 flex gap-2">
-                        <SkeletonBlock className="h-6 w-16 bg-white/[0.08]" />
-                        <SkeletonBlock className="h-6 w-20 bg-white/[0.08]" />
-                        <SkeletonBlock className="h-6 w-14 bg-white/[0.08]" />
+                        <SkeletonBlock className="h-6 w-16 bg-gray-200 dark:bg-white/[0.08]" />
+                        <SkeletonBlock className="h-6 w-20 bg-gray-200 dark:bg-white/[0.08]" />
+                        <SkeletonBlock className="h-6 w-14 bg-gray-200 dark:bg-white/[0.08]" />
                       </div>
                     </div>
                   ))}
@@ -1268,34 +1283,34 @@ const CreateInterview: React.FC = () => {
                     );
 
                     return (
-                      <div key={candidate.id} className="rounded-[6px] border border-white/[0.11] bg-[#050505] p-3">
+                      <div key={candidate.id} className="rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#050505] p-3 shadow-sm dark:shadow-none">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="geist-caption truncate font-semibold text-white" title={candidate.name}>
+                            <p className="geist-caption truncate font-semibold text-gray-900 dark:text-white" title={candidate.name}>
                               {candidate.name || 'Unknown Candidate'}
                             </p>
-                            <p className="geist-small mt-0.5 truncate text-[#8bbde8]" title={candidate.email}>
+                            <p className="geist-small mt-0.5 truncate text-blue-600 dark:text-[#8bbde8]" title={candidate.email}>
                               {candidate.email || (candidate.phone ? `📱 ${candidate.phone}` : 'No contact info')}
                             </p>
                             {(candidate.currentTitle || candidate.totalExperienceYears > 0) && (
-                              <p className="geist-small mt-1 truncate text-[#6b7280]">
+                              <p className="geist-small mt-1 truncate text-gray-500 dark:text-[#6b7280]">
                                 {[candidate.currentTitle, candidate.totalExperienceYears > 0 ? `${candidate.totalExperienceYears} yrs` : ''].filter(Boolean).join(' · ')}
                               </p>
                             )}
                           </div>
-                          <span className="geist-small shrink-0 rounded-[6px] border border-white/[0.14] bg-white/[0.05] px-2 py-1 text-[#d4d4d4]">
+                          <span className="geist-small shrink-0 rounded-[6px] border border-gray-200 dark:border-white/[0.14] bg-gray-100 dark:bg-white/[0.05] px-2 py-1 text-gray-700 dark:text-[#d4d4d4] font-medium">
                             {candidate.matchScore}% match
                           </span>
                         </div>
 
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {candidate.matchedSkills.slice(0, 5).map((skill) => (
-                            <span key={skill} className="geist-small rounded-[6px] border border-white/[0.11] bg-white/[0.04] px-2 py-0.5 text-[#d4d4d4]">
+                            <span key={skill} className="geist-small rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.04] px-2 py-0.5 text-gray-700 dark:text-[#d4d4d4]">
                               {skill}
                             </span>
                           ))}
                           {candidate.matchedSkills.length > 5 && (
-                            <span className="geist-small rounded-[6px] border border-white/[0.11] bg-white/[0.04] px-2 py-0.5 text-[#8f8f8f]">
+                            <span className="geist-small rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.04] px-2 py-0.5 text-gray-500 dark:text-[#8f8f8f]">
                               +{candidate.matchedSkills.length - 5}
                             </span>
                           )}
@@ -1303,10 +1318,10 @@ const CreateInterview: React.FC = () => {
 
                         <div className="mt-2 space-y-1">
                           {candidate.matchReasons.slice(0, 2).map((reason) => (
-                            <p key={reason} className="geist-small text-[#a1a1aa]">✓ {reason}</p>
+                            <p key={reason} className="geist-small text-gray-600 dark:text-[#a1a1aa]">✓ {reason}</p>
                           ))}
                           {candidate.missingSkills.length > 0 && (
-                            <p className="geist-small text-[#8f8f8f]">Missing signals: {candidate.missingSkills.slice(0, 3).join(', ')}{candidate.missingSkills.length > 3 ? ` +${candidate.missingSkills.length - 3}` : ''}</p>
+                            <p className="geist-small text-gray-500 dark:text-[#8f8f8f]">Missing signals: {candidate.missingSkills.slice(0, 3).join(', ')}{candidate.missingSkills.length > 3 ? ` +${candidate.missingSkills.length - 3}` : ''}</p>
                           )}
                         </div>
 
@@ -1316,13 +1331,13 @@ const CreateInterview: React.FC = () => {
                               href={candidate.resumeUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="geist-small inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2.5 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
+                              className="geist-small inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.03] px-2.5 font-medium text-gray-700 dark:text-[#d4d4d4] transition-colors hover:bg-gray-200 dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-white"
                             >
                               <ExternalLink size={13} strokeWidth={1.8} />
                               Open resume
                             </a>
                           ) : (
-                            <span className="geist-small text-[#6b7280]">No resume link</span>
+                            <span className="geist-small text-gray-400 dark:text-[#6b7280]">No resume link</span>
                           )}
 
                           <button
@@ -1339,8 +1354,8 @@ const CreateInterview: React.FC = () => {
                   })}
                 </div>
               ) : (
-                <div className="mt-3 rounded-[6px] border border-dashed border-white/[0.12] bg-[#050505] px-3 py-4 text-center">
-                  <p className={`geist-caption ${shortlistedCandidatesError ? 'text-[#ff8f8f]' : 'text-white'}`}>
+                <div className="mt-3 rounded-[6px] border border-dashed border-gray-300 dark:border-white/[0.12] bg-white dark:bg-[#050505] px-3 py-4 text-center">
+                  <p className={`geist-caption ${shortlistedCandidatesError ? 'text-red-500 dark:text-[#ff8f8f]' : 'text-gray-800 dark:text-white'}`}>
                     {shortlistedCandidatesError
                       ? 'Candidate eligibility could not be verified, so suggestions are temporarily hidden.'
                       : requiredSkillSignals.length === 0
@@ -1351,7 +1366,7 @@ const CreateInterview: React.FC = () => {
                           ? 'All Resume Dump candidates are already permanently shortlisted.'
                         : 'No saved candidates match this role yet.'}
                   </p>
-                  <p className="geist-small mt-1 text-[#8f8f8f]">
+                  <p className="geist-small mt-1 text-gray-500 dark:text-[#8f8f8f]">
                     {shortlistedCandidatesError
                       ? 'Refresh the page to retry the shortlist eligibility check.'
                       : 'Suggestions update automatically as you edit the role.'}
@@ -1360,39 +1375,39 @@ const CreateInterview: React.FC = () => {
               )}
             </div>
 
-            <div className="mt-5 rounded-[6px] border border-white/[0.11] bg-white/[0.025] p-3">
+            <div className="mt-5 rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-50 dark:bg-white/[0.025] p-3">
               <label
                 htmlFor="resume-upload"
-                className={`geist-caption flex cursor-pointer items-center justify-between gap-3 rounded-[6px] border border-dashed bg-[#050505] px-3 py-3 text-[#d4d4d4] transition-colors hover:border-white/[0.3] hover:bg-white/[0.045] ${parsingResumes ? 'cursor-not-allowed border-white/[0.12]' : 'border-white/[0.18]'}`}
+                className={`geist-caption flex cursor-pointer items-center justify-between gap-3 rounded-[6px] border border-dashed bg-white dark:bg-[#050505] px-3 py-3 text-gray-700 dark:text-[#d4d4d4] transition-colors hover:border-gray-400 dark:hover:border-white/[0.3] ${parsingResumes ? 'cursor-not-allowed border-gray-300 dark:border-white/[0.12]' : 'border-gray-300 dark:border-white/[0.18]'}`}
               >
                 {parsingResumes ? (
                   <span className="flex w-full items-center justify-between gap-3" role="status" aria-label="Parsing resumes">
                     <span className="flex min-w-0 flex-1 flex-col gap-2">
                       <SkeletonBlock className="h-4 w-48 max-w-full" />
-                      <SkeletonBlock className="h-3 w-28 bg-white/[0.08]" />
+                      <SkeletonBlock className="h-3 w-28 bg-gray-200 dark:bg-white/[0.08]" />
                     </span>
-                    <SkeletonBlock className="h-3 w-16 bg-white/[0.08]" />
+                    <SkeletonBlock className="h-3 w-16 bg-gray-200 dark:bg-white/[0.08]" />
                   </span>
                 ) : (
                   <>
-                    <span className="font-medium text-white">Upload resumes to parse and save candidates</span>
-                    <span className="geist-small text-[#8f8f8f]">PDF, DOCX, or TXT</span>
+                    <span className="font-medium text-gray-900 dark:text-white">Upload resumes to parse and save candidates</span>
+                    <span className="geist-small text-gray-500 dark:text-[#8f8f8f]">PDF, DOCX, or TXT</span>
                   </>
                 )}
               </label>
               <input id="resume-upload" type="file" multiple accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
-              <p className="geist-small mt-2 text-[#8f8f8f]">Each resume is added to Resume Dump with structured experience, education, skills, and source details. Extracted emails are also queued for review.</p>
+              <p className="geist-small mt-2 text-gray-500 dark:text-[#8f8f8f]">Each resume is added to Resume Dump with structured experience, education, skills, and source details. Extracted emails are also queued for review.</p>
             </div>
           </section>
 
-          <div className="sticky bottom-0 border-t border-white/[0.11] bg-[#000]/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-7">
+          <div className="sticky bottom-0 border-t border-gray-200 dark:border-white/[0.11] bg-white/95 dark:bg-[#000]/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-7 shadow-lg dark:shadow-none">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="geist-small text-[#8f8f8f]">Access codes are generated when the interview is created.</p>
+              <p className="geist-small text-gray-500 dark:text-[#8f8f8f]">Access codes are generated when the interview is created.</p>
               <button type="submit" disabled={loading || sendingEmails || rateLimitLoading || interviewLimitReached} className={primaryButtonClass}>
                 {loading || sendingEmails ? (
                   <span className="flex w-56 max-w-full flex-col items-center gap-1.5" role="status" aria-label={loading ? 'Saving interview' : 'Sending invitations'}>
-                    <SkeletonBlock className="h-3.5 w-40 bg-black/[0.18]" />
-                    <SkeletonBlock className="h-2.5 w-28 bg-black/[0.12]" />
+                    <SkeletonBlock className="h-3.5 w-40 bg-gray-300 dark:bg-black/[0.18]" />
+                    <SkeletonBlock className="h-2.5 w-28 bg-gray-200 dark:bg-black/[0.12]" />
                   </span>
                 ) : interviewLimitReached ? 'Interview limit reached' : 'Create interview and send invitations'}
               </button>

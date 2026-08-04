@@ -16,10 +16,13 @@ export interface WhatsAppInviteOptions {
   location?: string;
   education?: string;
   qualification?: string;
-  experience?: string;
+  experience?: string | number;
   minExperience?: number | string;
   maxExperience?: number | string;
   salary?: string;
+  salaryRange?: string;
+  employmentType?: string;
+  customFields?: Array<{ key: string; value: string }>;
   recruiterName?: string;
   recruiterPhone?: string;
   whatsappSessionId?: string;
@@ -140,7 +143,11 @@ export function buildWhatsAppInviteText(params: {
   const locationDisplay = options?.location || 'As specified in Job Description';
   const qualificationDisplay = options?.qualification || options?.education || 'As per Job Description';
   const expDisplay = formatExperienceDisplay(options);
-  const salaryDisplay = options?.salary || 'Competitive / As per Job Description';
+  const salaryDisplay = options?.salary || options?.salaryRange || 'Competitive / As per Job Description';
+  const empTypeLine = options?.employmentType ? `\n• 💼 *Employment:* ${options.employmentType}` : '';
+  const customLines = options?.customFields && options.customFields.length > 0
+    ? '\n' + options.customFields.map(cf => `• 🔹 *${cf.key}:* ${cf.value}`).join('\n')
+    : '';
 
   const recruiterName = options?.recruiterName || 'Recruiting Team';
   const recruiterPhone = options?.recruiterPhone || '9762588623 / 8484888632';
@@ -159,11 +166,11 @@ export function buildWhatsAppInviteText(params: {
 ${intro}
 
 📌 *JOB REQUIREMENT DETAILS:*
-• 📌 *Post:* ${postDisplay}
+• 📌 *Post:* ${postDisplay}${empTypeLine}
 • 📍 *Location:* ${locationDisplay}
 • 🎓 *Qualification:* ${qualificationDisplay}
 • 💼 *Experience:* ${expDisplay}
-• 💰 *Salary:* ${salaryDisplay}
+• 💰 *Salary:* ${salaryDisplay}${customLines}
 
 🔐 *YOUR ACCESS CREDENTIALS:*
 • 🔑 *Access Code:* *${accessCode}*

@@ -323,8 +323,16 @@ const RecruiterAllJobs: React.FC = () => {
         {
           location: invitingJob.location,
           qualification: invitingJob.qualifications || invitingJob.education,
-          experience: invitingJob.experience,
+          experience: ((invitingJob as any).maxExperience > (invitingJob as any).minExperience)
+            ? `${(invitingJob as any).minExperience} - ${(invitingJob as any).maxExperience} Years`
+            : invitingJob.experience,
+          minExperience: (invitingJob as any).minExperience,
+          maxExperience: (invitingJob as any).maxExperience,
+          gender: (invitingJob as any).gender || (invitingJob as any).genderRequirement,
           salary: invitingJob.salary || invitingJob.salaryRange,
+          salaryRange: invitingJob.salaryRange || invitingJob.salary,
+          employmentType: (invitingJob as any).employmentType,
+          customFields: (invitingJob as any).customFields,
           recruiterName: userProfile?.name || (user as any)?.displayName || 'Hiring Team',
         }
       );
@@ -834,8 +842,16 @@ const RecruiterAllJobs: React.FC = () => {
           {
             location: invitingJob.location,
             qualification: invitingJob.qualifications || invitingJob.education,
-            experience: invitingJob.experience,
+            experience: ((invitingJob as any).maxExperience > (invitingJob as any).minExperience)
+              ? `${(invitingJob as any).minExperience} - ${(invitingJob as any).maxExperience} Years`
+              : invitingJob.experience,
+            minExperience: (invitingJob as any).minExperience,
+            maxExperience: (invitingJob as any).maxExperience,
+            gender: (invitingJob as any).gender || (invitingJob as any).genderRequirement,
             salary: invitingJob.salary || invitingJob.salaryRange,
+            salaryRange: invitingJob.salaryRange || invitingJob.salary,
+            employmentType: (invitingJob as any).employmentType,
+            customFields: (invitingJob as any).customFields,
             recruiterName: userProfile?.name || (user as any)?.displayName || 'Hiring Team',
           }
         );

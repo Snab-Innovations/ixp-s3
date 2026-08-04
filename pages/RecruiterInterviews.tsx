@@ -630,10 +630,15 @@ const RecruiterInterviews: React.FC = () => {
               location: (selectedInterview as any).location,
               education: (selectedInterview as any).education || (selectedInterview as any).qualification,
               qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-              experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+              experience: ((selectedInterview as any).maxExperience > (selectedInterview as any).minExperience)
+                ? `${(selectedInterview as any).minExperience} - ${(selectedInterview as any).maxExperience} Years`
+                : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
               minExperience: (selectedInterview as any).minExperience,
               maxExperience: (selectedInterview as any).maxExperience,
               salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+              salaryRange: (selectedInterview as any).salaryRange || (selectedInterview as any).salary,
+              employmentType: (selectedInterview as any).employmentType,
+              customFields: (selectedInterview as any).customFields,
               recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruitment Team',
               recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
             }
@@ -670,10 +675,15 @@ const RecruiterInterviews: React.FC = () => {
               location: (selectedInterview as any).location,
               education: (selectedInterview as any).education || (selectedInterview as any).qualification,
               qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-              experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+              experience: ((selectedInterview as any).maxExperience > (selectedInterview as any).minExperience)
+                ? `${(selectedInterview as any).minExperience} - ${(selectedInterview as any).maxExperience} Years`
+                : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
               minExperience: (selectedInterview as any).minExperience,
               maxExperience: (selectedInterview as any).maxExperience,
               salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+              salaryRange: (selectedInterview as any).salaryRange || (selectedInterview as any).salary,
+              employmentType: (selectedInterview as any).employmentType,
+              customFields: (selectedInterview as any).customFields,
               recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruitment Team',
               recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
             }
@@ -709,10 +719,15 @@ const RecruiterInterviews: React.FC = () => {
       location: (selectedInterview as any).location,
       education: (selectedInterview as any).education || (selectedInterview as any).qualification,
       qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-      experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+      experience: ((selectedInterview as any).maxExperience > (selectedInterview as any).minExperience)
+        ? `${(selectedInterview as any).minExperience} - ${(selectedInterview as any).maxExperience} Years`
+        : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
       minExperience: (selectedInterview as any).minExperience,
       maxExperience: (selectedInterview as any).maxExperience,
       salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+      salaryRange: (selectedInterview as any).salaryRange || (selectedInterview as any).salary,
+      employmentType: (selectedInterview as any).employmentType,
+      customFields: (selectedInterview as any).customFields,
       recruiterName,
       recruiterPhone,
       whatsappSessionId: userProfile?.whatsappSessionId || '',
@@ -799,10 +814,15 @@ const RecruiterInterviews: React.FC = () => {
               location: (interview as any).location,
               education: (interview as any).education || (interview as any).qualification,
               qualification: (interview as any).qualification || (interview as any).education,
-              experience: (interview as any).experience || (interview as any).experienceRequired,
+              experience: ((interview as any).maxExperience > (interview as any).minExperience)
+                ? `${(interview as any).minExperience} - ${(interview as any).maxExperience} Years`
+                : ((interview as any).experience || (interview as any).experienceRequired),
               minExperience: (interview as any).minExperience,
               maxExperience: (interview as any).maxExperience,
               salary: (interview as any).salary || (interview as any).salaryRange,
+              salaryRange: (interview as any).salaryRange || (interview as any).salary,
+              employmentType: (interview as any).employmentType,
+              customFields: (interview as any).customFields,
               recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruitment Team',
               recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
             }
@@ -866,10 +886,15 @@ const RecruiterInterviews: React.FC = () => {
                   location: (selectedInterview as any).location,
                   education: (selectedInterview as any).education || (selectedInterview as any).qualification,
                   qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-                  experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                  experience: ((selectedInterview as any).maxExperience > (selectedInterview as any).minExperience)
+                    ? `${(selectedInterview as any).minExperience} - ${(selectedInterview as any).maxExperience} Years`
+                    : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
                   minExperience: (selectedInterview as any).minExperience,
                   maxExperience: (selectedInterview as any).maxExperience,
                   salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
+                  salaryRange: (selectedInterview as any).salaryRange || (selectedInterview as any).salary,
+                  employmentType: (selectedInterview as any).employmentType,
+                  customFields: (selectedInterview as any).customFields,
                   recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
                   recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
                 }
@@ -899,7 +924,9 @@ const RecruiterInterviews: React.FC = () => {
                   location: (selectedInterview as any).location,
                   education: (selectedInterview as any).education || (selectedInterview as any).qualification,
                   qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-                  experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                  experience: ((selectedInterview as any).maxExperience > (selectedInterview as any).minExperience)
+                    ? `${(selectedInterview as any).minExperience} - ${(selectedInterview as any).maxExperience} Years`
+                    : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
                   minExperience: (selectedInterview as any).minExperience,
                   maxExperience: (selectedInterview as any).maxExperience,
                   salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
@@ -2171,7 +2198,9 @@ const FullRosterModalContent: React.FC<FullRosterModalContentProps> = ({ intervi
                                                   location: (interview as any).location,
                                                   education: (interview as any).education || (interview as any).qualification,
                                                   qualification: (interview as any).qualification || (interview as any).education,
-                                                  experience: (interview as any).experience || (interview as any).experienceRequired,
+                                                  experience: ((interview as any).maxExperience > (interview as any).minExperience)
+                                                    ? `${(interview as any).minExperience} - ${(interview as any).maxExperience} Years`
+                                                    : ((interview as any).experience || (interview as any).experienceRequired),
                                                   minExperience: (interview as any).minExperience,
                                                   maxExperience: (interview as any).maxExperience,
                                                   salary: (interview as any).salary || (interview as any).salaryRange,

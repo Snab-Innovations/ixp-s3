@@ -175,7 +175,9 @@ const InvitedCandidates: React.FC = () => {
                     location: (selectedInterview as any).location,
                     education: (selectedInterview as any).education || (selectedInterview as any).qualification,
                     qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-                    experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                    experience: ((selectedInterview as any).maxExperience > (selectedInterview as any).minExperience)
+                      ? `${(selectedInterview as any).minExperience} - ${(selectedInterview as any).maxExperience} Years`
+                      : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
                     minExperience: (selectedInterview as any).minExperience,
                     maxExperience: (selectedInterview as any).maxExperience,
                     salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
@@ -235,7 +237,9 @@ const InvitedCandidates: React.FC = () => {
                   location: (selectedInterview as any).location,
                   education: (selectedInterview as any).education || (selectedInterview as any).qualification,
                   qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-                  experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                  experience: ((selectedInterview as any).maxExperience > (selectedInterview as any).minExperience)
+                    ? `${(selectedInterview as any).minExperience} - ${(selectedInterview as any).maxExperience} Years`
+                    : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
                   minExperience: (selectedInterview as any).minExperience,
                   maxExperience: (selectedInterview as any).maxExperience,
                   salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
@@ -472,7 +476,9 @@ const InvitedCandidates: React.FC = () => {
                       location: (selectedInterview as any).location,
                       education: (selectedInterview as any).education || (selectedInterview as any).qualification,
                       qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-                      experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                      experience: ((selectedInterview as any).maxExperience > (selectedInterview as any).minExperience)
+                        ? `${(selectedInterview as any).minExperience} - ${(selectedInterview as any).maxExperience} Years`
+                        : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
                       minExperience: (selectedInterview as any).minExperience,
                       maxExperience: (selectedInterview as any).maxExperience,
                       salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
@@ -499,7 +505,9 @@ const InvitedCandidates: React.FC = () => {
                       location: (selectedInterview as any).location,
                       education: (selectedInterview as any).education || (selectedInterview as any).qualification,
                       qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-                      experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                      experience: ((selectedInterview as any).maxExperience > (selectedInterview as any).minExperience)
+                        ? `${(selectedInterview as any).minExperience} - ${(selectedInterview as any).maxExperience} Years`
+                        : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
                       minExperience: (selectedInterview as any).minExperience,
                       maxExperience: (selectedInterview as any).maxExperience,
                       salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
