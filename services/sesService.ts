@@ -7,7 +7,7 @@ import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 
 const REGION = import.meta.env.VITE_AWS_SES_REGION || 'ap-south-1';
 const FROM_EMAIL = import.meta.env.VITE_SES_FROM_EMAIL || 'noreply@snab.co.in';
-const SENDER_NAME = import.meta.env.VITE_SES_SENDER_NAME || 'InterviewXpert | Dsource';
+const SENDER_NAME = import.meta.env.VITE_SES_SENDER_NAME || 'InterviewXpert';
 const CONFIGURATION_SET = import.meta.env.VITE_SES_CONFIGURATION_SET || 'interviewxpert';
 
 const ACCESS_KEY_ID = (
@@ -36,6 +36,10 @@ export interface JobDetailsOptions {
   salary?: string;
   recruiterName?: string;
   recruiterPhone?: string;
+  detailedJdUrl?: string;
+  aboutCompany?: string;
+  companyDescription?: string;
+  jobDescription?: string;
 }
 
 export interface SendEmailResult {
@@ -101,7 +105,7 @@ export function getDesignerEmailTemplate(
   const headline = isReminder ? 'Pending Interview Reminder' : `Interview Invitation: ${jobTitle}`;
   const subheadline = isReminder
     ? `This is a polite reminder that your AI video interview assessment for the <strong>${jobTitle}</strong> position is still pending.`
-    : `We are pleased to invite you to complete an AI video interview assessment for the <strong>${jobTitle}</strong> position at <strong>SNAB Innovations / Dsource</strong>.`;
+    : `We are pleased to invite you to complete an AI video interview assessment for the <strong>${jobTitle}</strong> position.`;
 
   const detailRows: string[] = [];
   if (options?.location) detailRows.push(detailRow('Location', options.location));
@@ -111,6 +115,12 @@ export function getDesignerEmailTemplate(
   if (options?.experience) detailRows.push(detailRow('Experience', options.experience));
   if (options?.salary) detailRows.push(detailRow('Salary', options.salary));
   if (options?.gender) detailRows.push(detailRow('Gender preference', options.gender));
+  const companyDesc = options?.aboutCompany || options?.companyDescription;
+  if (companyDesc) detailRows.push(detailRow('About Company', companyDesc));
+  if (options?.jobDescription) detailRows.push(detailRow('Job Description', options.jobDescription));
+  if (options?.detailedJdUrl) {
+    detailRows.push(detailRow('Detailed JD', `<a href="${escapeHtml(options.detailedJdUrl)}" target="_blank" style="color:#2563eb;text-decoration:underline;">Click Here for Detailed JD</a>`));
+  }
   if (options?.recruiterName) detailRows.push(detailRow('Recruiter', options.recruiterName));
   if (options?.recruiterPhone) detailRows.push(detailRow('Contact', options.recruiterPhone));
 
@@ -130,7 +140,7 @@ export function getDesignerEmailTemplate(
             <td style="background:#0f172a;padding:28px 32px;">
               <div style="font-size:12px;letter-spacing:0.16em;font-weight:700;color:#93c5fd;text-transform:uppercase;">${badgeText}</div>
               <div style="margin-top:10px;font-size:22px;font-weight:800;color:#ffffff;line-height:1.3;">InterviewXpert</div>
-              <div style="margin-top:4px;font-size:13px;color:#cbd5e1;">Powered by SNAB Innovations / Dsource</div>
+              <div style="margin-top:4px;font-size:13px;color:#cbd5e1;">AI Interview Portal</div>
             </td>
           </tr>
           <tr>

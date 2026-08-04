@@ -41,6 +41,7 @@ export interface ActiveJobItem {
   createdBy?: any;
   createdAt?: any;
   isMock?: boolean;
+  jobNumber?: string;
 }
 
 const parseDeadlineMillis = (deadline: any): number => {
@@ -163,6 +164,7 @@ const ActiveJobsPage: React.FC = () => {
           createdBy: data.createdBy,
           createdAt: data.createdAt,
           isMock: Boolean(data.isMock),
+          jobNumber: data.jobNumber || data.jobNo || '',
         };
       });
 
@@ -200,6 +202,7 @@ const ActiveJobsPage: React.FC = () => {
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch = !q || 
         job.title.toLowerCase().includes(q) ||
+        (job.jobNumber && job.jobNumber.toLowerCase().includes(q)) ||
         (job.location && job.location.toLowerCase().includes(q)) ||
         (job.description && job.description.toLowerCase().includes(q)) ||
         (job.accessCode && job.accessCode.toLowerCase().includes(q)) ||
@@ -370,13 +373,22 @@ const ActiveJobsPage: React.FC = () => {
                   <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-all pointer-events-none" />
 
                   <div>
-                    {/* Top Row: Role Category & Active Indicator */}
+                    {/* Top Row: Role Category, Job Number & Active Indicator */}
                     <div className="flex items-center justify-between gap-2 mb-3">
-                      <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider ${
-                        isDark ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400' : 'bg-blue-50 border border-blue-200 text-blue-600'
-                      }`}>
-                        {job.roleCategory || job.department || 'Active Role'}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider ${
+                          isDark ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400' : 'bg-blue-50 border border-blue-200 text-blue-600'
+                        }`}>
+                          {job.roleCategory || job.department || 'Active Role'}
+                        </span>
+                        {job.jobNumber && (
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
+                            isDark ? 'bg-white/10 border border-white/10 text-white' : 'bg-slate-100 border border-slate-300 text-slate-700'
+                          }`}>
+                            #{job.jobNumber}
+                          </span>
+                        )}
+                      </div>
 
                       <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-500 shrink-0 font-semibold">
                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />

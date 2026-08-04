@@ -2872,3 +2872,152 @@ html.dark {
   background: var(--recruiter-day-subtle) !important;
   color: var(--recruiter-day-ink) !important;
 }
+
+/* ==========================================================================
+   PERFECT DAY MODE (LIGHT THEME) OVERRIDES & COLOR HARMONIZATION
+   ========================================================================== */
+
+:root:not(.dark),
+html:not(.dark) {
+  color-scheme: light;
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+:root:not(.dark) body,
+html:not(.dark) body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* 1. Day Mode Card, Modal & Container Background Overrides */
+html:not(.dark) .bg-\[\#000\],
+html:not(.dark) .bg-\[\#000000\],
+html:not(.dark) .bg-\[\#050505\],
+html:not(.dark) .bg-\[\#0a0a0c\],
+html:not(.dark) .bg-\[\#0a0a0a\],
+html:not(.dark) .bg-\[\#0c0c0e\],
+html:not(.dark) .bg-\[\#0d0d10\],
+html:not(.dark) .bg-\[\#0f0f13\],
+html:not(.dark) .bg-\[\#101014\],
+html:not(.dark) .bg-\[\#121215\],
+html:not(.dark) .bg-\[\#121216\],
+html:not(.dark) .bg-\[\#141419\],
+html:not(.dark) .bg-\[\#16161a\],
+html:not(.dark) .bg-\[\#18181f\],
+html:not(.dark) .bg-[#171717],
+html:not(.dark) .bg-[#18181b],
+html:not(.dark) .bg-black {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* 2. Day Mode Inner Sub-containers & Card Headers */
+html:not(.dark) .bg-\[\#0d0d10\],
+html:not(.dark) .bg-\[\#121814\],
+html:not(.dark) .bg-zinc-900,
+html:not(.dark) .bg-zinc-950,
+html:not(.dark) .bg-gray-900,
+html:not(.dark) .bg-gray-950,
+html:not(.dark) .bg-slate-900,
+html:not(.dark) .bg-slate-950 {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* 3. Day Mode Typography & Colors */
+html:not(.dark) .text-white {
+  color: #0f172a !important;
+}
+
+html:not(.dark) .text-gray-400,
+html:not(.dark) .text-gray-500,
+html:not(.dark) .text-zinc-400,
+html:not(.dark) .text-zinc-500,
+html:not(.dark) .text-slate-400,
+html:not(.dark) .text-slate-500 {
+  color: #475569 !important;
+}
+
+html:not(.dark) .text-gray-300,
+html:not(.dark) .text-gray-200,
+html:not(.dark) .text-zinc-300,
+html:not(.dark) .text-slate-300 {
+  color: #334155 !important;
+}
+
+/* Preserve White Text for Solid Action Buttons in Day Mode */
+html:not(.dark) button.bg-black .text-white,
+html:not(.dark) button.bg-emerald-600 .text-white,
+html:not(.dark) button.bg-emerald-500 .text-white,
+html:not(.dark) button.bg-blue-600 .text-white,
+html:not(.dark) button.bg-blue-500 .text-white,
+html:not(.dark) button.bg-red-600 .text-white,
+html:not(.dark) button.bg-indigo-600 .text-white,
+html:not(.dark) a.bg-black .text-white,
+html:not(.dark) a.bg-emerald-600 .text-white,
+html:not(.dark) a.bg-blue-600 .text-white {
+  color: #ffffff !important;
+}
+
+/* 4. Day Mode Borders & Dividers */
+html:not(.dark) .border-white\/\[0\.1\],
+html:not(.dark) .border-white\/\[0\.08\],
+html:not(.dark) .border-white\/\[0\.06\],
+html:not(.dark) .border-white\/\[0\.11\],
+html:not(.dark) .border-white\/\[0\.12\],
+html:not(.dark) .border-white\/10,
+html:not(.dark) .border-white\/20,
+html:not(.dark) .border-white\/5,
+html:not(.dark) .divide-white\/10 > * + * {
+  border-color: #e2e8f0 !important;
+}
+
+/* 5. Day Mode Inputs, Textareas, Select Dropdowns */
+html:not(.dark) input,
+html:not(.dark) textarea,
+html:not(.dark) select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html:not(.dark) input::placeholder,
+html:not(.dark) textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html:not(.dark) input:focus,
+html:not(.dark) textarea:focus,
+html:not(.dark) select:focus {
+  border-color: #0284c7 !important;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2) !important;
+}
+
+/* 6. Day Mode Hover States & Active Tab Pill Overrides */
+html:not(.dark) .hover\:bg-white\/\[0\.04\]:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.06\]:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.1\]:hover,
+html:not(.dark) .hover\:bg-white\/10:hover {
+  background-color: #e2e8f0 !important;
+}
+
+html:not(.dark) .bg-white\/\[0\.06\],
+html:not(.dark) .bg-white\/\[0\.04\],
+html:not(.dark) .bg-white\/10 {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+/* 7. Day Mode Dialog Modals & Popups */
+html:not(.dark) .fixed.inset-0.bg-black\/85,
+html:not(.dark) .fixed.inset-0.bg-black\/80,
+html:not(.dark) .fixed.inset-0.bg-black\/75,
+html:not(.dark) .fixed.inset-0.bg-black\/70 {
+  background-color: rgba(15, 23, 42, 0.6) !important;
+  backdrop-filter: blur(8px);
+}
+

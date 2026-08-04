@@ -188,20 +188,20 @@ export const RecruiterTeamPanel: React.FC = () => {
   };
 
   return (
-    <div className="border-t border-white/[0.11] bg-black p-4 sm:p-6 lg:p-7 space-y-6">
+    <div className="border-t border-slate-200 dark:border-white/[0.11] bg-white dark:bg-black p-4 sm:p-6 lg:p-7 space-y-6">
       
       {/* Header & Controls */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.11] pb-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-white/[0.11] pb-5">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="geist-section-title text-white flex items-center gap-2">
-              <Users className="h-5 w-5 text-blue-400" /> Team & Audit Logs
+            <h2 className="geist-section-title text-slate-900 dark:text-white flex items-center gap-2">
+              <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" /> Team & Audit Logs
             </h2>
-            <span className="rounded-md bg-blue-500/10 border border-blue-500/30 px-2 py-0.5 text-xs font-semibold text-blue-400">
+            <span className="rounded-md bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-400">
               {teamMembers.length} {teamMembers.length === 1 ? 'Member' : 'Members'}
             </span>
           </div>
-          <p className="geist-caption mt-1 text-[#9ca3af]">
+          <p className="geist-caption mt-1 text-slate-500 dark:text-[#9ca3af]">
             Manage secondary recruiters, share candidate responses, and view real-time audit logs of all job and candidate activities.
           </p>
         </div>
@@ -214,13 +214,13 @@ export const RecruiterTeamPanel: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={activeTab === 'audit' ? 'Search audit logs...' : 'Search members...'}
-              className="w-full rounded-lg border border-white/[0.15] bg-[#0c0c0c] pl-8 pr-8 py-1.5 text-xs text-white placeholder-[#6b7280] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-slate-200 dark:border-white/[0.15] bg-slate-50 dark:bg-[#0c0c0c] pl-8 pr-8 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#6b7280] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
-            <Activity className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-[#6b7280]" />
+            <Activity className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400 dark:text-[#6b7280]" />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-2.5 text-[#6b7280] hover:text-white"
+                className="absolute right-2.5 top-2.5 text-slate-400 dark:text-[#6b7280] hover:text-slate-900 dark:hover:text-white"
               >
                 <X size={12} />
               </button>
@@ -228,11 +228,11 @@ export const RecruiterTeamPanel: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex rounded-lg border border-white/[0.12] bg-[#0c0c0c] p-1">
+            <div className="flex rounded-lg border border-slate-200 dark:border-white/[0.12] bg-slate-100 dark:bg-[#0c0c0c] p-1">
               <button
                 onClick={() => setActiveTab('members')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  activeTab === 'members' ? 'bg-white/[0.1] text-white' : 'text-[#9ca3af] hover:text-white'
+                  activeTab === 'members' ? 'bg-white dark:bg-white/[0.1] text-slate-900 dark:text-white shadow-sm' : 'text-slate-600 dark:text-[#9ca3af] hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 <Users size={14} /> Team Members ({filteredMembers.length})
@@ -240,7 +240,7 @@ export const RecruiterTeamPanel: React.FC = () => {
               <button
                 onClick={() => setActiveTab('audit')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  activeTab === 'audit' ? 'bg-white/[0.1] text-white' : 'text-[#9ca3af] hover:text-white'
+                  activeTab === 'audit' ? 'bg-white dark:bg-white/[0.1] text-slate-900 dark:text-white shadow-sm' : 'text-slate-600 dark:text-[#9ca3af] hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 <Activity size={14} /> Audit Trail
@@ -262,20 +262,20 @@ export const RecruiterTeamPanel: React.FC = () => {
       {/* TAB 1: TEAM MEMBERS LIST */}
       {activeTab === 'members' && (
         <div className="space-y-4">
-          <div className="overflow-x-auto rounded-xl border border-white/[0.11] bg-[#080808]">
-            <table className="min-w-full divide-y divide-white/[0.11]">
-              <thead className="bg-[#0c0c0c]">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/[0.11] bg-white dark:bg-[#080808]">
+            <table className="min-w-full divide-y divide-slate-200 dark:divide-white/[0.11]">
+              <thead className="bg-slate-50 dark:bg-[#0c0c0c]">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#9ca3af] uppercase tracking-wider">Member Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#9ca3af] uppercase tracking-wider">Email Address</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#9ca3af] uppercase tracking-wider">Designation / Role</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#9ca3af] uppercase tracking-wider">Account Access</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#9ca3af] uppercase tracking-wider">Member Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#9ca3af] uppercase tracking-wider">Email Address</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#9ca3af] uppercase tracking-wider">Designation / Role</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-[#9ca3af] uppercase tracking-wider">Account Access</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.08]">
+              <tbody className="divide-y divide-slate-200 dark:divide-white/[0.08]">
                 {filteredMembers.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-xs text-[#9ca3af]">
+                    <td colSpan={4} className="px-4 py-8 text-center text-xs text-slate-500 dark:text-[#9ca3af]">
                       No team members found matching "{searchQuery}".
                     </td>
                   </tr>
@@ -283,37 +283,37 @@ export const RecruiterTeamPanel: React.FC = () => {
                   filteredMembers.map((member) => {
                     const isOwner = !member.parentRecruiterId;
                     return (
-                      <tr key={member.uid} className="hover:bg-white/[0.02] transition-colors">
+                      <tr key={member.uid} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           <div className="flex items-center gap-3">
                             <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${
-                              isOwner ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300' : 'bg-blue-500/20 border border-blue-500/40 text-blue-300'
+                              isOwner ? 'bg-amber-100 dark:bg-amber-500/20 border border-amber-300 dark:border-amber-500/40 text-amber-800 dark:text-amber-300' : 'bg-blue-100 dark:bg-blue-500/20 border border-blue-300 dark:border-blue-500/40 text-blue-800 dark:text-blue-300'
                             }`}>
                               {member.name ? member.name.charAt(0).toUpperCase() : 'R'}
                             </div>
                             <div>
-                              <div className="text-sm font-semibold text-white flex items-center gap-1.5">
+                              <div className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
                                 {member.name || 'Recruiter'}
-                                {isOwner && <Shield size={13} className="text-amber-400" />}
+                                {isOwner && <Shield size={13} className="text-amber-600 dark:text-amber-400" />}
                               </div>
-                              <div className="text-[11px] text-[#6b7280]">UID: {member.uid.slice(0, 10)}...</div>
+                              <div className="text-[11px] text-slate-500 dark:text-[#6b7280]">UID: {member.uid.slice(0, 10)}...</div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5 whitespace-nowrap text-xs text-[#d1d5db]">
+                        <td className="px-4 py-3.5 whitespace-nowrap text-xs text-slate-700 dark:text-[#d1d5db]">
                           {member.email}
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border ${
                             isOwner 
-                              ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                              : 'bg-blue-500/10 border-blue-500/30 text-blue-300'
+                              ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-300'
+                              : 'bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/30 text-blue-800 dark:text-blue-300'
                           }`}>
                             <Briefcase size={12} /> {member.designation || (isOwner ? 'Primary Owner' : 'Sub-Recruiter')}
                           </span>
                         </td>
                         <td className="px-4 py-3.5 whitespace-nowrap text-xs">
-                          <span className="inline-flex items-center gap-1 text-emerald-400 font-medium">
+                          <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
                             <CheckCircle2 size={13} /> Shared Jobs & Responses
                           </span>
                         </td>
@@ -331,45 +331,45 @@ export const RecruiterTeamPanel: React.FC = () => {
       {activeTab === 'audit' && (
         <div className="space-y-4">
           {loadingAuditLogs ? (
-            <div className="text-center py-12 border border-white/[0.11] rounded-xl bg-[#080808] flex items-center justify-center gap-3">
-              <Activity className="animate-spin h-5 w-5 text-blue-400" />
-              <span className="text-xs text-[#9ca3af]">Loading real-time audit logs...</span>
+            <div className="text-center py-12 border border-slate-200 dark:border-white/[0.11] rounded-xl bg-white dark:bg-[#080808] flex items-center justify-center gap-3">
+              <Activity className="animate-spin h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <span className="text-xs text-slate-500 dark:text-[#9ca3af]">Loading real-time audit logs...</span>
             </div>
           ) : filteredLogs.length === 0 ? (
-            <div className="text-center py-12 border border-dashed border-white/[0.11] rounded-xl bg-[#080808]">
-              <Activity className="mx-auto h-8 w-8 text-[#6b7280] mb-2" />
-              <p className="text-xs text-[#9ca3af]">
+            <div className="text-center py-12 border border-dashed border-slate-200 dark:border-white/[0.11] rounded-xl bg-white dark:bg-[#080808]">
+              <Activity className="mx-auto h-8 w-8 text-slate-400 dark:text-[#6b7280] mb-2" />
+              <p className="text-xs text-slate-500 dark:text-[#9ca3af]">
                 {searchQuery ? `No audit events found matching "${searchQuery}".` : 'No audit events recorded yet. Activity like inviting candidates or creating jobs will appear here live.'}
               </p>
             </div>
           ) : (
             <div className="space-y-3">
               {filteredLogs.map((log) => (
-                <div key={log.id} className="p-4 rounded-xl border border-white/[0.1] bg-[#090909] hover:border-white/[0.2] transition-all space-y-3">
+                <div key={log.id} className="p-4 rounded-xl border border-slate-200 dark:border-white/[0.1] bg-white dark:bg-[#090909] hover:border-slate-300 dark:hover:border-white/[0.2] transition-all space-y-3 shadow-sm">
                   {/* Account Header */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-white/[0.06] pb-2.5">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-full bg-blue-500/20 border border-blue-500/40 text-blue-300 flex items-center justify-center font-bold text-xs shrink-0">
+                      <div className="h-7 w-7 rounded-full bg-blue-100 dark:bg-blue-500/20 border border-blue-300 dark:border-blue-500/40 text-blue-800 dark:text-blue-300 flex items-center justify-center font-bold text-xs shrink-0">
                         {(log.performedBy?.name || log.performedBy?.email || 'R').charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                           <span>{log.performedBy?.name || 'Recruiter Account'}</span>
                           {log.performedBy?.email && (
-                            <span className="text-[11px] text-[#9ca3af] font-normal">({log.performedBy.email})</span>
+                            <span className="text-[11px] text-slate-500 dark:text-[#9ca3af] font-normal">({log.performedBy.email})</span>
                           )}
                         </div>
-                        <div className="text-[10px] text-[#6b7280]">
-                          Account Designation: <span className="text-blue-400 font-medium">{log.performedBy?.designation || 'Recruiter'}</span>
+                        <div className="text-[10px] text-slate-500 dark:text-[#6b7280]">
+                          Account Designation: <span className="text-blue-600 dark:text-blue-400 font-medium">{log.performedBy?.designation || 'Recruiter'}</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase border bg-white/[0.04] text-[#d1d5db] border-white/[0.1]">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase border bg-slate-100 dark:bg-white/[0.04] text-slate-700 dark:text-[#d1d5db] border-slate-200 dark:border-white/[0.1]">
                         {log.action.replace(/_/g, ' ')}
                       </span>
-                      <span className="text-[11px] text-[#6b7280] font-mono">
+                      <span className="text-[11px] text-slate-500 dark:text-[#6b7280] font-mono">
                         {log.createdAt ? new Date(log.createdAt).toLocaleString() : 'Just now'}
                       </span>
                     </div>
@@ -377,19 +377,19 @@ export const RecruiterTeamPanel: React.FC = () => {
 
                   {/* Activity Details / Candidate & Job Focus */}
                   <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shrink-0 mt-0.5">
+                    <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">
                       {getLogIcon(log.action || '')}
                     </div>
                     <div className="flex-1 min-w-0 space-y-2">
-                      <p className="text-xs font-semibold text-white leading-relaxed">
+                      <p className="text-xs font-semibold text-slate-900 dark:text-white leading-relaxed">
                         {log.details}
                       </p>
 
                       <div className="flex flex-wrap items-center gap-2 pt-0.5">
                         {/* Inviting Account Email */}
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 border border-blue-500/30 text-[11px] font-medium text-blue-300">
-                          <Mail size={12} className="text-blue-400" />
-                          <span>Invited By Account: <strong className="text-white">{log.performedBy?.name || 'Recruiter'} ({log.performedBy?.email || 'N/A'})</strong></span>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 text-[11px] font-medium text-blue-800 dark:text-blue-300">
+                          <Mail size={12} className="text-blue-600 dark:text-blue-400" />
+                          <span>Invited By Account: <strong className="text-slate-900 dark:text-white">{log.performedBy?.name || 'Recruiter'} ({log.performedBy?.email || 'N/A'})</strong></span>
                         </span>
 
                         {/* Candidate Email & Mobile Badges */}
@@ -406,15 +406,15 @@ export const RecruiterTeamPanel: React.FC = () => {
                           return (
                             <>
                               {candEmails.map((candEmail, idx) => (
-                                <span key={`email-${idx}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-medium text-emerald-300">
-                                  <Mail size={12} className="text-emerald-400" />
-                                  <span>Invited To Candidate Email: <strong className="text-white">{candEmail}</strong></span>
+                                <span key={`email-${idx}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-[11px] font-medium text-emerald-800 dark:text-emerald-300">
+                                  <Mail size={12} className="text-emerald-600 dark:text-emerald-400" />
+                                  <span>Invited To Candidate Email: <strong className="text-slate-900 dark:text-white">{candEmail}</strong></span>
                                 </span>
                               ))}
                               {candPhones.map((phone, idx) => (
-                                <span key={`phone-${idx}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-medium text-emerald-300">
-                                  <Phone size={12} className="text-emerald-400" />
-                                  <span>Candidate Mobile: <strong className="text-white">{phone}</strong></span>
+                                <span key={`phone-${idx}`} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 text-[11px] font-medium text-emerald-800 dark:text-emerald-300">
+                                  <Phone size={12} className="text-emerald-600 dark:text-emerald-400" />
+                                  <span>Candidate Mobile: <strong className="text-slate-900 dark:text-white">{phone}</strong></span>
                                 </span>
                               ))}
                             </>
@@ -432,15 +432,15 @@ export const RecruiterTeamPanel: React.FC = () => {
 
       {/* MODAL: ADD SECONDARY RECRUITER */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="max-w-md w-full rounded-2xl border border-white/[0.15] bg-[#0d0d0d] p-6 shadow-2xl space-y-5">
-            <div className="flex items-center justify-between border-b border-white/[0.1] pb-4">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <UserPlus className="text-blue-400" size={20} /> Add Secondary Recruiter
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-sm p-4">
+          <div className="max-w-md w-full rounded-2xl border border-slate-200 dark:border-white/[0.15] bg-white dark:bg-[#0d0d0d] p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/[0.1] pb-4">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <UserPlus className="text-blue-600 dark:text-blue-400" size={20} /> Add Secondary Recruiter
               </h3>
               <button 
                 onClick={() => setShowAddModal(false)}
-                className="text-[#9ca3af] hover:text-white transition-colors p-1"
+                className="text-slate-400 dark:text-[#9ca3af] hover:text-slate-900 dark:hover:text-white transition-colors p-1"
               >
                 <X size={18} />
               </button>

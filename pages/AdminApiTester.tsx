@@ -154,7 +154,7 @@ export default function AdminApiTester() {
   // Generate Curl Command
   const generateCurlCommand = () => {
     return `curl https://openrouter.ai/api/v1/chat/completions \\
-  -H "Authorization: Bearer ${openRouterApiKey || 'YOUR_OPENROUTER_API_KEY'}" \\
+  -H "Authorization: Bearer ${bedrockApiKey || 'YOUR_BEDROCK_API_KEY'}" \\
   -H "HTTP-Referer: https://interviewxpert.in" \\
   -H "X-Title: InterviewXpert" \\
   -H "Content-Type: application/json" \\

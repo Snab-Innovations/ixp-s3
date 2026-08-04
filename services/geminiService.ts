@@ -68,6 +68,9 @@ export interface ParsedJdResult {
   weeklyOff?: string;
   facilities?: string;
   companyProfile?: string;
+  aboutCompany?: string;
+  detailedJdUrl?: string;
+  jobNumber?: string;
   customFields?: Array<{ key: string; value: string }>;
 }
 
@@ -76,6 +79,7 @@ export async function parseJobDescriptionText(rawText: string): Promise<ParsedJd
 
 Standard Fields to extract (if present):
 - "title": Job title / Role / Designation (e.g. "Production Engineer" or "Jr. Production Engineer")
+- "jobNumber": Job Number / Job Code / Vacancy ID / Job No if present (e.g. "23632", "JOB-102", "38291")
 - "description": Detailed job description and responsibilities
 - "department": Industry / Department / Category (e.g. "Manufacturing" or "Engineering")
 - "employmentType": Employment type (e.g. "Full-Time")
@@ -86,9 +90,11 @@ Standard Fields to extract (if present):
 - "gender": Gender requirement if specified ("Male", "Female", or "Any")
 - "qualification": Qualification & specialization required (e.g. "Diploma Mechanical")
 - "skills": Comma-separated list of required technical and soft skills
+- "detailedJdUrl": Any URL or web link for detailed job description (e.g. "https://..." or "http://...")
+- "aboutCompany": Overview/Profile/Details about the company (e.g. "We are a leading manufacturing firm...")
 
 CRITICAL FEATURE - AUTOMATIC DYNAMIC CUSTOM FIELDS:
-Extract ANY and ALL other extra attributes present in the JD that are not standard single fields (for example: "Job No", "Company Product / Service Sold", "Marital Status", "Interview Dates", "Interview Timing", "No. of Interview Rounds", "Travel Required", "State", "District", "City", "Job Timing", "Service Agreement/Bond", "Weekly Off", "Company Facilities", "Company Profile", "Turnover", "Role Category", etc.).
+Extract ANY and ALL other extra attributes present in the JD that are not standard single fields (for example: "Job No", "Company Product / Service Sold", "Marital Status", "Interview Dates", "Interview Timing", "No. of Interview Rounds", "Travel Required", "State", "District", "City", "Job Timing", "Service Agreement/Bond", "Weekly Off", "Company Facilities", "Turnover", "Role Category", etc.).
 Store all these extra key-value pairs in an array under "customFields" as objects with "key" and "value" string properties!
 
 Return ONLY valid JSON matching this schema.`;

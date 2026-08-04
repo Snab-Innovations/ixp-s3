@@ -10,6 +10,7 @@ import { getCandidateIdentityKeys, isCandidateIdentityInSet, dedupeCandidatesByI
 
 import { sendInterviewInvitations } from '../services/brevoService';
 import { sendBulkWhatsAppInvites } from '../services/waSenderService';
+import { extractJobDetailsOptions } from '../services/jobDetailsHelper';
 import { grokGenerateJson } from '../services/grokService';
 import { parseJobDescriptionText, ParsedJdResult } from '../services/geminiService';
 import {
@@ -173,6 +174,9 @@ const CreateInterview: React.FC = () => {
     location: '',
     salaryRange: '',
     genderRequirement: 'Any',
+    detailedJdUrl: '',
+    aboutCompany: '',
+    jobNumber: '',
     deadline: '',
     numQuestions: 5,
     difficulty: 'Easy',
@@ -432,6 +436,9 @@ const CreateInterview: React.FC = () => {
       salaryRange: parsed.salaryRange || (parsed.minSalary && parsed.maxSalary ? `${parsed.minSalary} - ${parsed.maxSalary}` : (prev as any).salaryRange || ''),
       location: parsed.location || (parsed.city ? `${parsed.city}, ${parsed.state || ''}` : (prev as any).location || ''),
       genderRequirement: parsed.gender || (prev as any).genderRequirement || '',
+      detailedJdUrl: parsed.detailedJdUrl || prev.detailedJdUrl || '',
+      aboutCompany: parsed.aboutCompany || parsed.companyProfile || prev.aboutCompany || '',
+      jobNumber: parsed.jobNumber || prev.jobNumber || '',
     }));
 
     if (parsed.customFields && Array.from(parsed.customFields).length > 0) {
@@ -613,9 +620,12 @@ const CreateInterview: React.FC = () => {
         designation: userProfile?.designation || 'Recruiter'
       };
 
+      const autoJobNumber = formData.jobNumber.trim() || `JOB-${Math.floor(10000 + Math.random() * 90000)}`;
+
       await rds.createInterview({
         id: newRand,
         ...formData,
+        jobNumber: autoJobNumber,
         manualQuestions,
         customFields,
         candidateEmails,
@@ -626,6 +636,14 @@ const CreateInterview: React.FC = () => {
         teamId,
         createdBy: creatorInfo,
         isMock: false,
+        raw: {
+          jobNumber: autoJobNumber,
+          detailedJdUrl: formData.detailedJdUrl,
+          aboutCompany: formData.aboutCompany,
+          recruiterName: creatorInfo.name,
+          recruiterEmail: creatorInfo.email,
+          accessCode: newAccessCode,
+        },
       });
 
       // Log audit trail event
@@ -650,6 +668,8 @@ const CreateInterview: React.FC = () => {
         }
       }
 
+      const jobOpt = extractJobDetailsOptions(formData, userProfile, user);
+
       // 3. Send invitation emails via Brevo if candidate emails are present
       let emailCount = 0;
       if (candidateEmails.length > 0) {
@@ -661,16 +681,7 @@ const CreateInterview: React.FC = () => {
             newInterviewLink,
             newAccessCode,
             false,
-            {
-              gender: (formData as any).gender || (formData as any).genderRequirement,
-              location: (formData as any).location,
-              education: (formData as any).education || (formData as any).qualification,
-              qualification: (formData as any).qualification || (formData as any).education,
-              experience: (formData as any).experience || (formData as any).experienceRequired,
-              salary: (formData as any).salary || (formData as any).salaryRange,
-              recruiterName: userProfile?.name || creatorInfo.name || (user as any)?.displayName || 'Recruiter',
-              recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
-            }
+            jobOpt
           );
 
           if (result.success) {
@@ -699,18 +710,7 @@ const CreateInterview: React.FC = () => {
             newAccessCode,
             false,
             undefined,
-            {
-              gender: (formData as any).gender || (formData as any).genderRequirement,
-              location: (formData as any).location,
-              education: (formData as any).education || (formData as any).qualification,
-              qualification: (formData as any).qualification || (formData as any).education,
-              experience: (formData as any).experience || (formData as any).experienceRequired,
-              salary: (formData as any).salary || (formData as any).salaryRange,
-              recruiterName: userProfile?.name || creatorInfo.name || (user as any)?.displayName || 'Recruiter',
-              recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',
-              whatsappSessionId: userProfile?.whatsappSessionId || '',
-              whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
-            }
+            jobOpt
           );
           if (waResult.success) {
             waCount = waResult.totalSent;
@@ -760,10 +760,10 @@ const CreateInterview: React.FC = () => {
     <div className="-mx-4 -my-8 min-h-[calc(100dvh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8">
       <header className="border-b border-white/[0.11]">
         <div className="px-4 py-5 sm:px-6 lg:px-7">
-          <p className="geist-label uppercase text-[#6b7280]">Interview setup</p>
-          <h1 className="geist-page-title mt-2 text-white">Create interview</h1>
+          <p className="geist-label uppercase text-[#6b7280]">Job setup</p>
+          <h1 className="geist-page-title mt-2 text-white">Create Job</h1>
           <p className="geist-small mt-1 max-w-2xl text-[#8f8f8f]">
-            Build a structured interview brief, tune the question rules, and prepare candidate invitations from one focused workspace.
+            Build a structured job brief, tune the evaluation rules, and prepare candidate invitations from one focused workspace.
           </p>
         </div>
         {interviewLimitReached && (
@@ -886,6 +886,11 @@ const CreateInterview: React.FC = () => {
               </div>
 
               <div>
+                <label className={labelClass}>Job Number / Vacancy ID</label>
+                <input name="jobNumber" type="text" className={inputClass} value={formData.jobNumber} onChange={handleFormChange} placeholder="e.g. 23632 or JOB-101 (Auto-generated if empty)" />
+              </div>
+
+              <div>
                 <label className={labelClass}>Company department</label>
                 <input name="department" type="text" required className={inputClass} value={formData.department} onChange={handleFormChange} placeholder="Engineering" />
               </div>
@@ -932,6 +937,16 @@ const CreateInterview: React.FC = () => {
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
                 </select>
+              </div>
+
+              <div className="xl:col-span-2">
+                <label className={labelClass}>For detailed JD click (Link)</label>
+                <input name="detailedJdUrl" type="url" className={inputClass} value={formData.detailedJdUrl} onChange={handleFormChange} placeholder="e.g. https://drive.google.com/file/... or https://example.com/jd.pdf" />
+              </div>
+
+              <div className="xl:col-span-2">
+                <label className={labelClass}>About Company</label>
+                <textarea name="aboutCompany" rows={3} className={textareaClass} value={formData.aboutCompany} onChange={handleFormChange} placeholder="Overview of company products, services, culture, or background details..." />
               </div>
 
               <div className="xl:col-span-2">
@@ -1370,14 +1385,14 @@ const CreateInterview: React.FC = () => {
 
           <div className="sticky bottom-0 border-t border-white/[0.11] bg-[#000]/95 px-4 py-4 backdrop-blur sm:px-6 lg:px-7">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="geist-small text-[#8f8f8f]">Access codes are generated when the interview is created.</p>
+              <p className="geist-small text-[#8f8f8f]">Access codes are generated when the job is created.</p>
               <button type="submit" disabled={loading || sendingEmails || rateLimitLoading || interviewLimitReached} className={primaryButtonClass}>
                 {loading || sendingEmails ? (
-                  <span className="flex w-56 max-w-full flex-col items-center gap-1.5" role="status" aria-label={loading ? 'Saving interview' : 'Sending invitations'}>
+                  <span className="flex w-56 max-w-full flex-col items-center gap-1.5" role="status" aria-label={loading ? 'Saving job' : 'Sending invitations'}>
                     <SkeletonBlock className="h-3.5 w-40 bg-black/[0.18]" />
                     <SkeletonBlock className="h-2.5 w-28 bg-black/[0.12]" />
                   </span>
-                ) : interviewLimitReached ? 'Interview limit reached' : 'Create interview and send invitations'}
+                ) : interviewLimitReached ? 'Job limit reached' : 'Create Job and send invitations'}
               </button>
             </div>
           </div>

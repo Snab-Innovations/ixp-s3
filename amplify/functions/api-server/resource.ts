@@ -9,15 +9,10 @@ import { defineFunction } from '@aws-amplify/backend';
  * - CI:      Amplify console "Environment variables"
  */
 export const apiServer = defineFunction({
-  name: 'api-server',
   entry: './handler.ts',
   runtime: 22,
   timeoutSeconds: 30, // API Gateway HTTP API caps Lambda integration at 30s
   memoryMB: 1024,
-  logRetention: 7,
-  bundling: {
-    format: 'esm',
-  },
   environment: {
     COGNITO_REGION: process.env.COGNITO_REGION || process.env.VITE_COGNITO_REGION || 'ap-south-1',
     COGNITO_USER_POOL_ID:

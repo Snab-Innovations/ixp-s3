@@ -493,7 +493,7 @@ const RecruiterDashboard: React.FC = () => {
 
   const quickActions = [
     {
-      label: 'Create Interview',
+      label: 'Create Job',
       description: 'Questions and invites.',
       href: '/recruiter/interview/create',
       icon: Video,
@@ -723,74 +723,74 @@ const RecruiterDashboard: React.FC = () => {
         </div>
       </section>
 
-      <div className="border-b border-white/[0.11]">
+      <div className="border-b border-slate-200 dark:border-white/[0.11]">
         <div className="flex flex-col gap-1.5 px-4 py-5 sm:px-6 lg:px-7 md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="geist-section-title text-white">Existing Job Posts</h2>
-            <p className="geist-caption mt-0.5 text-[#9ca3af]">
+            <h2 className="geist-section-title text-slate-900 dark:text-white">Existing Job Posts</h2>
+            <p className="geist-caption mt-0.5 text-slate-500 dark:text-[#9ca3af]">
               Interview-created roles and synced job posts appear here automatically.
             </p>
           </div>
         </div>
 
         {visibleJobPosts.length === 0 ? (
-          <div className="border-t border-dashed border-white/[0.11] py-10 text-center">
-            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#6b7280]">
+          <div className="border-t border-dashed border-slate-200 dark:border-white/[0.11] py-10 text-center">
+            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-white/[0.03] text-slate-400 dark:text-[#6b7280]">
               <i className="fas fa-clipboard-list text-base"></i>
             </div>
-            <p className="geist-caption mb-4 text-[#9ca3af]">
+            <p className="geist-caption mb-4 text-slate-500 dark:text-[#9ca3af]">
               No active recruiter-owned roles are live yet.
             </p>
           </div>
         ) : (
-          <div className="overflow-hidden border-t border-white/[0.11] bg-black">
+          <div className="overflow-hidden border-t border-slate-200 dark:border-white/[0.11] bg-white dark:bg-black">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-white/[0.11]">
-                <thead className="bg-[#080808]">
+              <table className="min-w-full divide-y divide-slate-200 dark:divide-white/[0.11]">
+                <thead className="bg-slate-50 dark:bg-[#080808]">
                   <tr>
-                    <th className="geist-label px-4 py-2.5 text-left uppercase text-[#6b7280] sm:px-6 lg:px-7">
+                    <th className="geist-label px-4 py-2.5 text-left uppercase text-slate-500 dark:text-[#6b7280] sm:px-6 lg:px-7">
                       Job title
                     </th>
-                    <th className="geist-label px-4 py-2.5 text-left uppercase text-[#6b7280]">
+                    <th className="geist-label px-4 py-2.5 text-left uppercase text-slate-500 dark:text-[#6b7280]">
                       Source
                     </th>
-                    <th className="geist-label px-4 py-2.5 text-left uppercase text-[#6b7280]">
+                    <th className="geist-label px-4 py-2.5 text-left uppercase text-slate-500 dark:text-[#6b7280]">
                       Posted date
                     </th>
-                    <th className="geist-label px-4 py-2.5 text-left uppercase text-[#6b7280]">
+                    <th className="geist-label px-4 py-2.5 text-left uppercase text-slate-500 dark:text-[#6b7280]">
                       Deadline
                     </th>
-                    <th className="geist-label px-4 py-2.5 text-left uppercase text-[#6b7280]">
+                    <th className="geist-label px-4 py-2.5 text-left uppercase text-slate-500 dark:text-[#6b7280]">
                       Status
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/[0.11]">
+                <tbody className="divide-y divide-slate-200 dark:divide-white/[0.11]">
                   {visibleJobPosts.map((role) => {
                     const roleStatus = getRoleStatus(role);
 
                     return (
                       <tr
                         key={role.id}
-                        className="group hover:bg-white/[0.025]"
+                        className="group hover:bg-slate-50 dark:hover:bg-white/[0.025]"
                       >
                         <td className="px-4 py-3 sm:px-6 lg:px-7">
-                          <div className="geist-caption font-medium text-white">
+                          <div className="geist-caption font-medium text-slate-900 dark:text-white">
                             {role.title}
                           </div>
-                          <div className="geist-small mt-0.5 text-[#6b7280]">
+                          <div className="geist-small mt-0.5 text-slate-500 dark:text-[#6b7280]">
                             {role.category || role.companyName || role.location}
                           </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
-                          <span className="geist-small inline-flex rounded-[6px] border border-[#24364c] bg-[#06111f] px-2 py-0.5 font-medium text-[#8bbde8]">
+                          <span className="geist-small inline-flex rounded-[6px] border border-blue-200 dark:border-[#24364c] bg-blue-50 dark:bg-[#06111f] px-2 py-0.5 font-medium text-blue-700 dark:text-[#8bbde8]">
                             {role.sourceLabel}
                           </span>
                         </td>
-                        <td className="geist-label whitespace-nowrap px-4 py-3 text-[#9ca3af]">
+                        <td className="geist-label whitespace-nowrap px-4 py-3 text-slate-600 dark:text-[#9ca3af]">
                           {formatDate(role.createdAt)}
                         </td>
-                        <td className="geist-label whitespace-nowrap px-4 py-3 text-[#9ca3af]">
+                        <td className="geist-label whitespace-nowrap px-4 py-3 text-slate-600 dark:text-[#9ca3af]">
                           {role.deadline ? formatDate(role.deadline) : 'Open'}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">

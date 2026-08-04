@@ -169,7 +169,7 @@ export default function AdminStorage() {
 
   // Bulk delete
   const handleDeleteSelected = async () => {
-    const ids = Array.from(selectedKeys);
+    const ids = Array.from(selectedKeys) as string[];
     if (ids.length === 0) return;
 
     setIsDeleting(true);

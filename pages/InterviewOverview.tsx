@@ -61,7 +61,7 @@ const StatCell = ({ label, value, tone = 'text-white' }: { label: string; value:
   </div>
 );
 
-const InfoLine = ({ label, value, mono = false }: { label: string; value: any; mono?: boolean }) => (
+const InfoLine = ({ label, value, mono = false }: { key?: React.Key; label: string; value: any; mono?: boolean }) => (
   <div className="grid grid-cols-1 gap-1 border-b border-white/[0.08] px-4 py-3 last:border-b-0 sm:grid-cols-[132px_minmax(0,1fr)]">
     <dt className="geist-label uppercase text-[#6b7280]">{label}</dt>
     <dd className={`${mono ? 'geist-label tabular-nums' : 'geist-caption'} min-w-0 break-words text-[#d4d4d4]`}>
@@ -70,7 +70,7 @@ const InfoLine = ({ label, value, mono = false }: { label: string; value: any; m
   </div>
 );
 
-const ConfigTile = ({ label, value, mono = false }: { label: string; value: any; mono?: boolean }) => (
+const ConfigTile = ({ label, value, mono = false }: { key?: React.Key; label: string; value: any; mono?: boolean }) => (
   <div className="min-h-[88px] border-b border-white/[0.08] px-4 py-3 sm:px-6 lg:px-7 xl:border-r xl:last:border-r-0">
     <dt className="geist-label uppercase text-[#6b7280]">{label}</dt>
     <dd className={`${mono ? 'geist-label tabular-nums' : 'geist-caption'} mt-2 break-words text-[#d4d4d4]`}>

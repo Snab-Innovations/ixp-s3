@@ -127,8 +127,9 @@ function mapInterview(row) {
     candidateData: row.candidate_data,
     interviewLink: row.interview_link,
     accessCode: row.access_code,
-    createdBy: row.created_by,
-    isMock: row.is_mock,
+    jobNumber: row.job_number || row.raw?.jobNumber || undefined,
+    detailedJdUrl: row.detailed_jd_url || row.raw?.detailedJdUrl || undefined,
+    aboutCompany: row.about_company || row.raw?.aboutCompany || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     ...(row.raw || {}),
@@ -286,7 +287,20 @@ router.get('/users/team/:teamId', requireAuth, async (req, res) => {
 
 router.put('/users/:id', requireAuth, async (req, res) => {
   const id = req.params.id;
-  if (req.caller.role !== 'admin' && req.caller.uid !== id) {
+  let authorized = req.caller.role === 'admin' || req.caller.uid === id;
+  if (!authorized) {
+    const targetRes = await query(`SELECT parent_recruiter_id, team_id FROM users WHERE id = $1 LIMIT 1`, [id]);
+    const target = targetRes.rows[0];
+    if (
+      target &&
+      (target.parent_recruiter_id === req.caller.uid ||
+       target.team_id === req.caller.uid ||
+       (req.caller.user?.team_id && target.team_id === req.caller.user.team_id))
+    ) {
+      authorized = true;
+    }
+  }
+  if (!authorized) {
     return res.status(403).json({ success: false, error: 'Forbidden' });
   }
   const b = req.body || {};
@@ -461,11 +475,13 @@ router.post('/interviews', requireAuth, async (req, res) => {
       min_experience, max_experience, experience, skills, education, location, salary_range,
       gender_requirement, deadline, num_questions, difficulty, strictness,
       manual_questions, custom_fields, candidate_emails, candidate_data,
-      interview_link, access_code, created_by, is_mock, raw
+      interview_link, access_code, created_by, is_mock, raw,
+      job_number, detailed_jd_url, about_company
     ) VALUES (
       COALESCE($1, encode(gen_random_bytes(12),'hex')),
       $2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-      $20::jsonb,$21::jsonb,$22::jsonb,$23::jsonb,$24,$25,$26::jsonb,COALESCE($27,false),$28::jsonb
+      $20::jsonb,$21::jsonb,$22::jsonb,$23::jsonb,$24,$25,$26::jsonb,COALESCE($27,false),$28::jsonb,
+      $29,$30,$31
     ) RETURNING *`,
     [
       id || null,
@@ -496,6 +512,9 @@ router.post('/interviews', requireAuth, async (req, res) => {
       JSON.stringify(b.createdBy || null),
       Boolean(b.isMock),
       JSON.stringify(b.raw || {}),
+      b.jobNumber || null,
+      b.detailedJdUrl || null,
+      b.aboutCompany || null,
     ]
   );
   res.status(201).json({ success: true, interview: mapInterview(r.rows[0]) });
@@ -538,6 +557,9 @@ router.patch('/interviews/:id', requireAuth, async (req, res) => {
       manual_questions = COALESCE($20::jsonb, manual_questions),
       custom_fields = COALESCE($21::jsonb, custom_fields),
       raw = COALESCE($22::jsonb, raw),
+      job_number = COALESCE($23, job_number),
+      detailed_jd_url = COALESCE($24, detailed_jd_url),
+      about_company = COALESCE($25, about_company),
       updated_at = NOW()
      WHERE id = $1 RETURNING *`,
     [
@@ -563,6 +585,9 @@ router.patch('/interviews/:id', requireAuth, async (req, res) => {
       b.manualQuestions ? JSON.stringify(b.manualQuestions) : null,
       b.customFields ? JSON.stringify(b.customFields) : null,
       b.raw ? JSON.stringify(b.raw) : null,
+      b.jobNumber ?? null,
+      b.detailedJdUrl ?? null,
+      b.aboutCompany ?? null,
     ]
   );
   res.json({ success: true, interview: mapInterview(r.rows[0]) });

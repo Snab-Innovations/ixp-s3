@@ -8,3 +8,11 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 REST API Integration Server running on port ${PORT}`);
 });
+
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ Uncaught Exception in server process:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('⚠️ Unhandled Rejection in server process:', reason);
+});

@@ -102,9 +102,16 @@ CREATE TABLE IF NOT EXISTS interviews (
   created_by        JSONB,
   is_mock           BOOLEAN NOT NULL DEFAULT FALSE,
   raw               JSONB NOT NULL DEFAULT '{}'::jsonb,
+  job_number        TEXT,
+  detailed_jd_url   TEXT,
+  about_company     TEXT,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS job_number TEXT;
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS detailed_jd_url TEXT;
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS about_company TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_interviews_recruiter ON interviews(recruiter_uid);
 CREATE INDEX IF NOT EXISTS idx_interviews_team ON interviews(team_id);

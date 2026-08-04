@@ -8,6 +8,7 @@ import ConnectionStatus from './ConnectionStatus';
 import Logo from './Logo';
 import DashboardSidebar from './ui/dashboard-sidebar';
 import RecruiterRateLimitBanner from './RecruiterRateLimitBanner';
+import WhatsAppCredentialsModal from './WhatsAppCredentialsModal';
 
 
 
@@ -16,6 +17,7 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const navigate = useNavigate();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [isWaModalOpen, setIsWaModalOpen] = React.useState(false);
 
   const handleLogout = async () => {
     try {
@@ -89,7 +91,7 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       My Interviews
                     </Link>
                     <Link to="/recruiter/interview/create" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${isActive('/recruiter/interview/create') ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5'}`}>
-                      Create Interview
+                      Create Job
                     </Link>
                     <Link to="/recruiter/tests" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${isActive('/recruiter/tests') ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5'}`}>
                       Assessments
@@ -107,8 +109,36 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             <div className="flex items-center gap-2">
               {user ? (
                 <>
-
-
+                  {userProfile?.role === 'recruiter' && (
+                    <button
+                      type="button"
+                      onClick={() => setIsWaModalOpen(true)}
+                      title={
+                        userProfile?.whatsappSessionId && userProfile?.whatsappSessionPasscode
+                          ? "WhatsApp API Connected (Active) — Click to manage credentials"
+                          : "WhatsApp Disconnected — Click to connect session ID & passcode"
+                      }
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all cursor-pointer ${
+                        userProfile?.whatsappSessionId && userProfile?.whatsappSessionPasscode
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
+                          : "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 animate-pulse"
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${
+                        userProfile?.whatsappSessionId && userProfile?.whatsappSessionPasscode
+                          ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
+                          : "bg-amber-400"
+                      }`} />
+                      <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.964 9.964 0 001.333 4.993L2 22l5.233-1.237a9.96 9.96 0 004.779 1.221h.004c5.505 0 9.988-4.478 9.989-9.984 0-2.669-1.038-5.178-2.925-7.064A9.927 9.927 0 0012.012 2z" />
+                      </svg>
+                      <span className="hidden sm:inline">
+                        {userProfile?.whatsappSessionId && userProfile?.whatsappSessionPasscode
+                          ? "WA Connected"
+                          : "Connect WA"}
+                      </span>
+                    </button>
+                  )}
                   <NotificationCenter />
                 </>
               ) : !authLoading ? (
@@ -371,6 +401,10 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           )}
         </div>
       )}
+      <WhatsAppCredentialsModal
+        isOpen={isWaModalOpen}
+        onClose={() => setIsWaModalOpen(false)}
+      />
     </div>
   );
 };

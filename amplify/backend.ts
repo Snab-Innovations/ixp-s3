@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { defineBackend } from '@aws-amplify/backend';
-import { HttpApi, HttpMethod } from 'aws-cdk-lib/aws-apigatewayv2';
+import { HttpApi, HttpMethod, CorsHttpMethod } from 'aws-cdk-lib/aws-apigatewayv2';
 import { Duration } from 'aws-cdk-lib';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import { apiServer } from './functions/api-server/resource.js';
@@ -25,19 +25,23 @@ if (existsSync(envFile)) {
     ) {
       value = value.slice(1, -1);
     }
-    if (!(key in process.env)) process.env[key] = value;
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
   }
 }
 
-const backend = defineBackend({ apiServer });
+export const backend = defineBackend({
+  apiServer,
+});
 
 /**
- * API Gateway HTTP API exposing the Express Lambda to the internet.
- * Catch-all ANY /{proxy+} route → Lambda (payload format 2.0).
+ * Expose backend API gateway HTTP API integration endpoint
  */
-const httpApi = new HttpApi(backend.stack, 'InterviewXpertHttpApi', {
-  apiName: 'interviewxpert-api',
-  description: 'InterviewXpert REST API (Express via Lambda)',
+const apiServerLambda = backend.apiServer.resources.lambda;
+const httpIntegration = new HttpLambdaIntegration('ApiServerIntegration', apiServerLambda);
+
+const httpApi = new HttpApi(backend.createStack('ApiServerStack'), 'ApiServerHttpApi', {
   corsPreflight: {
     allowHeaders: [
       'Content-Type',
@@ -48,12 +52,12 @@ const httpApi = new HttpApi(backend.stack, 'InterviewXpertHttpApi', {
       'X-Amz-User-Agent',
     ],
     allowMethods: [
-      HttpMethod.GET,
-      HttpMethod.POST,
-      HttpMethod.PUT,
-      HttpMethod.PATCH,
-      HttpMethod.DELETE,
-      HttpMethod.OPTIONS,
+      CorsHttpMethod.GET,
+      CorsHttpMethod.POST,
+      CorsHttpMethod.PUT,
+      CorsHttpMethod.PATCH,
+      CorsHttpMethod.DELETE,
+      CorsHttpMethod.OPTIONS,
     ],
     allowOrigins: ['*'],
     maxAge: Duration.seconds(86400),

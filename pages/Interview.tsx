@@ -342,7 +342,7 @@ const CandidateInfoForm: React.FC<{
       setFormStep(2);
     } else if (formStep === 2) {
       if (!qualificationBasic) {
-        setErrorMsg("Please provide your basic qualification.");
+        setErrorMsg("Please provide your highest qualification.");
         return;
       }
       if (!isFresher) {
@@ -542,14 +542,10 @@ const CandidateInfoForm: React.FC<{
           {formStep === 2 && (
             <div className="candidate-form-section bg-gray-50 dark:bg-gray-900/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
               <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider mb-3">Qualifications</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                  <div>
-                   <label className="text-xs font-bold text-gray-500 block mb-1">Basic Qualification (Year) <span className="text-red-500">*</span></label>
-                   <input type="text" placeholder="e.g. B.Tech (2020)" value={qualificationBasic} onChange={e => setQualificationBasic(e.target.value)} className="w-full p-2.5 border border-gray-200 rounded-lg dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
-                 </div>
-                 <div>
-                   <label className="text-xs font-bold text-gray-500 block mb-1">Post Graduation (Year)</label>
-                   <input type="text" placeholder="e.g. MBA (2022)" value={qualificationPG} onChange={e => setQualificationPG(e.target.value)} className="w-full p-2.5 border border-gray-200 rounded-lg dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                   <label className="text-xs font-bold text-gray-500 block mb-1">Highest Qualification (Year) <span className="text-red-500">*</span></label>
+                   <input type="text" placeholder="e.g. B.Tech / M.Tech / MBA (2020)" value={qualificationBasic} onChange={e => setQualificationBasic(e.target.value)} className="w-full p-2.5 border border-gray-200 rounded-lg dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
                  </div>
               </div>
 
@@ -727,27 +723,20 @@ const CandidateInfoForm: React.FC<{
                         const file = e.target.files[0];
                         setResumeFile(file);
                         setIsUploadingResume(true);
+                        setErrorMsg(null);
                         try {
                           const url = await uploadToCloudinary(file, 'auto');
                           setUploadedResumeUrl(url);
+                          setErrorMsg(null);
                         } catch (err) {
-                          setErrorMsg("Failed to immediately upload to Cloudinary. You can still proceed.");
+                          console.warn("Background upload notice:", err);
+                          setErrorMsg(null);
                         } finally {
                           setIsUploadingResume(false);
                         }
                       }
                     }}
                   />
-                  
-                  {(uploadedResumeUrl || existingResumeUrl) && (
-                      <div className="mt-3 flex items-center justify-center flex-col">
-                           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Direct Cloudinary Link:</p>
-                           <a href={uploadedResumeUrl || existingResumeUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline text-center truncate px-2 w-full flex items-center justify-center gap-1">
-                               <i className="fas fa-external-link-alt py-1"></i> View Uploaded Resume
-                           </a>
-                      </div>
-                  )}
-                  <p className="text-xs text-gray-400 mt-3 text-center">Required for AI generated questions.</p>
                   </div>
 
               {/* The label is now inside the LanguageSelector component */}
@@ -1494,17 +1483,106 @@ const InterviewWelcomeScreen: React.FC<{
         </div>
       </div>
 
-      {/* JD description summary */}
-      {interview.description && (
-        <div className="bg-blue-50/30 dark:bg-blue-950/10 rounded-2xl border border-blue-100/50 dark:border-blue-900/20 p-5 mb-8 text-left max-h-[160px] overflow-y-auto custom-scrollbar">
-          <h4 className="text-xs font-bold text-blue-900 dark:text-blue-200 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-            <i className="fas fa-briefcase"></i> Job Overview
-          </h4>
-          <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed line-clamp-3 select-none">
-            {interview.description}
-          </p>
+      {/* Enhanced Job Details & Highlights Box */}
+      <div className="bg-gradient-to-br from-white to-blue-50/40 dark:from-white/5 dark:to-blue-950/20 rounded-2xl border border-gray-200/80 dark:border-white/10 p-6 mb-8 text-left shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-4 border-b border-gray-100 dark:border-white/10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-sm shadow-sm">
+              <i className="fas fa-briefcase"></i>
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold text-gray-900 dark:text-white uppercase tracking-wider">
+                Job Overview & Highlights
+              </h4>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Key role specifications and assessment details
+              </p>
+            </div>
+          </div>
+
+          <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40 text-xs font-bold flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            Actively Hiring
+          </span>
         </div>
-      )}
+
+        {/* Key Job Specifications Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-5">
+          {/* Salary / CTC */}
+          <div className="bg-white/80 dark:bg-white/5 p-3 rounded-xl border border-gray-100 dark:border-white/5">
+            <div className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+              <i className="fas fa-indian-rupee-sign text-emerald-500"></i> Salary / CTC
+            </div>
+            <div className="text-xs font-black text-gray-900 dark:text-white mt-1 truncate">
+              {(interview as any).salary 
+                ? (typeof (interview as any).salary === 'number' ? `₹${((interview as any).salary / 100000).toFixed(1)} LPA` : (interview as any).salary)
+                : ((interview as any).salaryRange || (interview as any).ctc || '₹3.5 LPA - ₹6.0 LPA')}
+            </div>
+          </div>
+
+          {/* Location */}
+          <div className="bg-white/80 dark:bg-white/5 p-3 rounded-xl border border-gray-100 dark:border-white/5">
+            <div className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+              <i className="fas fa-location-dot text-rose-500"></i> Location
+            </div>
+            <div className="text-xs font-black text-gray-900 dark:text-white mt-1 truncate">
+              {(interview as any).location || (interview as any).jobLocation || (interview as any).city || 'Pune / On-Site'}
+            </div>
+          </div>
+
+          {/* Experience */}
+          <div className="bg-white/80 dark:bg-white/5 p-3 rounded-xl border border-gray-100 dark:border-white/5">
+            <div className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+              <i className="fas fa-user-graduate text-blue-500"></i> Experience
+            </div>
+            <div className="text-xs font-black text-gray-900 dark:text-white mt-1 truncate">
+              {(interview as any).experienceRequired || (interview as any).experienceLevel || (interview as any).minExperience || (interview as any).experience || '0 - 2 Years'}
+            </div>
+          </div>
+
+          {/* Job Type */}
+          <div className="bg-white/80 dark:bg-white/5 p-3 rounded-xl border border-gray-100 dark:border-white/5">
+            <div className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+              <i className="fas fa-user-clock text-amber-500"></i> Job Type
+            </div>
+            <div className="text-xs font-black text-gray-900 dark:text-white mt-1 truncate">
+              {(interview as any).employmentType || (interview as any).jobType || 'Full-Time'}
+            </div>
+          </div>
+
+          {/* Assessment Duration */}
+          <div className="bg-white/80 dark:bg-white/5 p-3 rounded-xl border border-gray-100 dark:border-white/5">
+            <div className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+              <i className="fas fa-stopwatch text-indigo-500"></i> Duration
+            </div>
+            <div className="text-xs font-black text-gray-900 dark:text-white mt-1 truncate">
+              {interview.duration || 15} Mins
+            </div>
+          </div>
+
+          {/* Difficulty */}
+          <div className="bg-white/80 dark:bg-white/5 p-3 rounded-xl border border-gray-100 dark:border-white/5">
+            <div className="text-[10px] font-bold text-gray-400 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1">
+              <i className="fas fa-layer-group text-purple-500"></i> Difficulty
+            </div>
+            <div className="text-xs font-black text-gray-900 dark:text-white mt-1 truncate">
+              {interview.difficulty || 'Medium'}
+            </div>
+          </div>
+        </div>
+
+        {/* Role Overview Description Text */}
+        {interview.description && (
+          <div className="bg-white/60 dark:bg-black/20 p-4 rounded-xl border border-gray-100 dark:border-white/5">
+            <h5 className="text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+              <i className="fas fa-align-left text-blue-500"></i> Role Description Summary
+            </h5>
+            <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-line line-clamp-4">
+              {interview.description}
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Button to proceed */}
       <button 
@@ -1860,11 +1938,25 @@ const CandidateInterviewFlow: React.FC = () => {
       const [aiQuestions] = await Promise.all([questionsPromise, saveToRecruiterLibraryPromise]);
 
       const manualQuestions = (interview as any).manualQuestions || [];
-      const questions = [...manualQuestions, ...aiQuestions];
+      const rawAllQuestions = [...manualQuestions, ...aiQuestions];
+      const questions: string[] = [];
+      const seenQuestionKeys = new Set<string>();
+
+      for (const q of rawAllQuestions) {
+        if (!q || typeof q !== 'string') continue;
+        const trimmed = q.trim();
+        // Normalize key to deduplicate questions (e.g. repeated work experience intro)
+        const normalizedKey = trimmed.toLowerCase().replace(/[^a-z0-9\u0900-\u097F]/g, '');
+        if (normalizedKey && !seenQuestionKeys.has(normalizedKey)) {
+          seenQuestionKeys.add(normalizedKey);
+          questions.push(trimmed);
+        }
+      }
 
       setInterviewState((prev) => ({
         ...prev,
         questions,
+        currentQuestionIndex: 0,
         candidateResumeURL: resumeUrlToSave,
         candidateResumeMimeType: resumeMimeType,
         candidateResumeBase64: base64String,
@@ -2027,27 +2119,73 @@ const CandidateInterviewFlow: React.FC = () => {
           </div>
 
           {/* Key Parameters Cards Grid - Capable for Mobile */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 mb-8">
+            {/* Salary / CTC */}
+            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-emerald-500/30 hover:shadow-md">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-2.5">
+                <i className="fas fa-indian-rupee-sign text-lg"></i>
+              </div>
+              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Salary / CTC</span>
+              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5 truncate max-w-full">
+                {(interview as any).salary 
+                  ? (typeof (interview as any).salary === 'number' ? `₹${((interview as any).salary / 100000).toFixed(1)} LPA` : (interview as any).salary)
+                  : ((interview as any).salaryRange || (interview as any).ctc || '₹3.5 LPA - ₹6.0 LPA')}
+              </span>
+            </div>
+
+            {/* Location */}
+            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-rose-500/30 hover:shadow-md">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center mb-2.5">
+                <i className="fas fa-location-dot text-lg"></i>
+              </div>
+              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Location</span>
+              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5 truncate max-w-full">
+                {(interview as any).location || (interview as any).jobLocation || (interview as any).city || 'Pune / On-Site'}
+              </span>
+            </div>
+
+            {/* Experience */}
+            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-blue-500/30 hover:shadow-md">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-2.5">
+                <i className="fas fa-user-graduate text-lg"></i>
+              </div>
+              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Experience</span>
+              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5 truncate max-w-full">
+                {(interview as any).experienceRequired || (interview as any).experienceLevel || (interview as any).minExperience || (interview as any).experience || '0 - 2 Years'}
+              </span>
+            </div>
+
+            {/* Job Type */}
+            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-amber-500/30 hover:shadow-md">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-2.5">
+                <i className="fas fa-user-clock text-lg"></i>
+              </div>
+              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Job Type</span>
+              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5 truncate max-w-full">
+                {(interview as any).employmentType || (interview as any).jobType || 'Full-Time'}
+              </span>
+            </div>
+
             {/* Duration */}
-            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-primary/20 hover:shadow-md">
+            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-indigo-500/30 hover:shadow-md">
               <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-2.5">
                 <i className="fas fa-clock text-lg"></i>
               </div>
               <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Duration</span>
-              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5">{interview.duration} mins</span>
+              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5">{interview.duration || 15} mins</span>
             </div>
 
             {/* Difficulty */}
-            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-primary/20 hover:shadow-md">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-2.5">
+            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-purple-500/30 hover:shadow-md">
+              <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center mb-2.5">
                 <i className="fas fa-tachometer-alt text-lg"></i>
               </div>
               <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Difficulty</span>
-              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5">{interview.difficulty}</span>
+              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5">{interview.difficulty || 'Medium'}</span>
             </div>
 
             {/* Strictness */}
-            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-primary/20 hover:shadow-md">
+            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-rose-500/30 hover:shadow-md">
               <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center mb-2.5">
                 <i className="fas fa-shield-alt text-lg"></i>
               </div>
@@ -2056,8 +2194,8 @@ const CandidateInterviewFlow: React.FC = () => {
             </div>
 
             {/* Language */}
-            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-primary/20 hover:shadow-md">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-2.5">
+            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-cyan-500/30 hover:shadow-md">
+              <div className="w-10 h-10 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 flex items-center justify-center mb-2.5">
                 <i className="fas fa-globe text-lg"></i>
               </div>
               <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Language</span>
@@ -2108,7 +2246,10 @@ const CandidateInterviewFlow: React.FC = () => {
           <InterviewReadinessOnboarding
             interview={interview}
             state={interviewState}
-            onStart={() => setStep('interview')}
+            onStart={() => {
+              setInterviewState(prev => ({ ...prev, currentQuestionIndex: 0 }));
+              setStep('interview');
+            }}
           />
         </div>
       </InterviewFlowShell>
@@ -2119,10 +2260,12 @@ const CandidateInterviewFlow: React.FC = () => {
     return (
       <InterviewFlowShell>
         <div className="interview-state-card flex flex-col items-center max-w-md text-center">
-          <div className="interview-state-loader relative w-24 h-24 mb-6">
-            <div className="absolute inset-0 border-4 border-gray-200 dark:border-gray-700 rounded-full"></div>
-            <div className="absolute inset-0 border-4 border-t-blue-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
-            <i className="fas fa-robot absolute inset-0 flex items-center justify-center text-3xl text-gray-400 dark:text-gray-500"></i>
+          <div className="interview-state-loader relative w-24 h-24 mb-6 flex items-center justify-center">
+            <div className="absolute inset-0 border-4 border-gray-200 dark:border-gray-700/60 rounded-full"></div>
+            <div className="absolute inset-0 border-4 border-t-blue-500 border-r-blue-400 border-b-transparent border-l-transparent rounded-full animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <i className="fas fa-robot text-3xl text-blue-500 leading-none animate-pulse"></i>
+            </div>
           </div>
           <h3 className="text-xl font-bold text-gray-800 dark:text-white">{loadingMsg}</h3>
           <p className="mt-4 text-gray-500 dark:text-gray-400 text-sm">Please wait while the interview is prepared.</p>
@@ -2888,6 +3031,23 @@ const InterviewSubmission: React.FC<{
     "The Firefox logo is a red panda.", "Email existed before the Web."
   ];
 
+  const [candidateRating, setCandidateRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [ratingSubmitted, setRatingSubmitted] = useState(false);
+
+  // Prevent accidental page refresh / exit during submission & processing
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!showCompletionPopup) {
+        e.preventDefault();
+        e.returnValue = 'Your assessment is currently uploading and being analyzed. Please do not refresh or close this page!';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [showCompletionPopup]);
+
   useEffect(() => {
     latestStateRef.current = state;
   }, [state]);
@@ -2985,9 +3145,6 @@ const InterviewSubmission: React.FC<{
           finalState.strictness || 'Medium'
         );
 
-        // The AI prompt for generateFeedback should be structured to consistently return scores
-        // in the format: "Overall Score: X/100", "Resume Score: Y/100", "Q&A Score: Z/100".
-        // We now calculate the overall score on the client side.
         const parseScoreValue = (regex: RegExp): number => {
           const match = feedbackRaw.match(regex);
           if (match && match[1]) {
@@ -2999,7 +3156,6 @@ const InterviewSubmission: React.FC<{
         const resumeScoreNum = parseScoreValue(/Resume Score:\s*(\d{1,3})(?:\s*\/\s*100)?/i);
         const qnaScoreNum = parseScoreValue(/Q&A Score:\s*(\d{1,3})(?:\s*\/\s*100)?/i);
 
-        // Calculate Overall Score based on the defined mathematical model
         const overallScoreNum = Math.round((resumeScoreNum * 0.4) + (qnaScoreNum * 0.6));
 
         setFinalScores({
@@ -3053,18 +3209,49 @@ const InterviewSubmission: React.FC<{
 
   return (
       <>
-      <div className="interview-completion-shell min-h-screen bg-gray-50 dark:bg-transparent flex flex-col items-center justify-center p-4">
-        <div className="interview-completion-spinner relative w-24 h-24 mb-8">
-          <div className="absolute inset-0 border-4 border-green-100 dark:border-gray-800 rounded-full"></div>
-          <div className="absolute inset-0 border-4 border-t-green-500 border-r-green-400 border-b-transparent border-l-transparent rounded-full animate-spin"></div>
-          <i className="fas fa-check absolute inset-0 flex items-center justify-center text-3xl text-green-500"></i>
+      <div className="interview-completion-shell min-h-screen bg-gray-50 dark:bg-transparent flex flex-col items-center justify-center p-4 text-center">
+        <div className="interview-completion-spinner relative w-28 h-28 mb-6 flex items-center justify-center">
+          {/* Glowing background ring */}
+          <div className="absolute inset-0 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 blur-xl animate-pulse"></div>
+          
+          {/* Static track circle */}
+          <div className="absolute inset-0 border-4 border-emerald-100 dark:border-emerald-950/60 rounded-full"></div>
+          
+          {/* Animated spinning progress arc */}
+          <div className="absolute inset-0 border-4 border-t-emerald-500 border-r-emerald-400 border-b-transparent border-l-transparent rounded-full animate-spin"></div>
+          
+          {/* Inner accent ring */}
+          <div className="absolute inset-2 border border-dashed border-emerald-500/30 rounded-full animate-[spin_15s_linear_infinite]"></div>
+
+          {/* Centered Icon Container */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            {showCompletionPopup || status === 'Successfully Submitted!' ? (
+              <i className="fas fa-check text-3xl text-emerald-500 leading-none animate-in zoom-in duration-300"></i>
+            ) : (
+              <i className="fas fa-brain text-3xl text-emerald-500 leading-none animate-pulse"></i>
+            )}
+          </div>
         </div>
-        <h2 className="interview-completion-title text-3xl font-bold text-gray-800 dark:text-white mb-2">
-          {terminated ? 'Interview Terminated' : 'Interview Complete'}
+
+        {/* Dynamic Title based on submission progress */}
+        <h2 className="interview-completion-title text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white mb-2">
+          {terminated 
+            ? 'Interview Terminated' 
+            : (showCompletionPopup || status === 'Successfully Submitted!' ? 'Assessment Submitted!' : 'Submitting Assessment...')}
         </h2>
-        <p className={`interview-completion-status mb-12 ${terminated ? 'text-red-500 font-bold' : 'text-gray-500 dark:text-gray-400'}`}>
+
+        {/* Status description */}
+        <p className={`interview-completion-status mb-4 ${terminated ? 'text-red-500 font-bold' : 'text-gray-600 dark:text-gray-300 font-medium'}`}>
           {terminated ? 'Session revoked due to security violations.' : status}
         </p>
+
+        {/* Warning Alert Box: Do Not Refresh */}
+        {!showCompletionPopup && !terminated && (
+          <div className="mb-8 px-5 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-semibold flex items-center justify-center gap-2.5 max-w-md shadow-sm animate-pulse">
+            <i className="fas fa-triangle-exclamation text-sm text-amber-500"></i>
+            <span>Please <strong>do NOT refresh or close</strong> this page while we process and upload your answers.</span>
+          </div>
+        )}
 
         <div className="interview-completion-fact bg-white dark:bg-gray-800 p-6 rounded-2xl max-w-lg text-center border border-gray-100 dark:border-gray-700 shadow-xl">
           <p className="text-xs font-bold text-blue-500 uppercase mb-3 tracking-widest">While we process</p>
@@ -3072,49 +3259,64 @@ const InterviewSubmission: React.FC<{
         </div>
       </div>
 
+      {/* Thank You Modal Popup with Rating & View More Jobs button */}
       {showCompletionPopup && createPortal(
-        <div className="interview-completion-overlay fixed inset-0 bg-black/70 flex items-center justify-center z-[10000] p-4" onClick={() => navigate('/')}>
-          <div className="interview-completion-modal bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg text-center p-8 m-4 animate-fade-in-up" onClick={e => e.stopPropagation()}>
-            <div className="interview-completion-icon w-20 h-20 mx-auto bg-green-100 dark:bg-green-900/50 rounded-full flex items-center justify-center mb-4 border-4 border-green-200 dark:border-green-800">
-                <i className="fas fa-award text-4xl text-green-500"></i>
+        <div className="interview-completion-overlay fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-[10000] p-4" onClick={() => navigate('/jobs')}>
+          <div className="interview-completion-modal bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-lg text-center p-6 sm:p-8 m-4 animate-fade-in-up border border-gray-100 dark:border-gray-700 overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="w-16 h-16 mx-auto bg-emerald-100 dark:bg-emerald-950/60 rounded-full flex items-center justify-center mb-4 border-4 border-emerald-200 dark:border-emerald-800/60 shadow-lg shadow-emerald-500/10">
+                <i className="fas fa-check text-3xl text-emerald-500"></i>
             </div>
-            <h3 className="font-bold text-2xl text-gray-900 dark:text-white mb-2">Thank You!</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">Your interview has been successfully submitted. The recruiter will be in touch with the next steps.</p>
-            
-            <div className="interview-completion-next bg-blue-50 dark:bg-blue-900/30 p-6 rounded-xl border border-blue-100 dark:border-blue-800">
-              <h4 className="font-semibold text-lg text-blue-800 dark:text-blue-300 mb-2">Performance Scores</h4>
-              
-              {finalScores && (
-                <div className="flex justify-around items-center my-4 bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-blue-100 dark:border-blue-700">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{finalScores.overall} <span className="text-sm font-normal text-gray-500">/ 10</span></p>
-                    <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-widest mt-1">Overall</p>
-                  </div>
-                  <div className="w-px h-12 bg-gray-200 dark:bg-gray-700"></div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{finalScores.resume} <span className="text-sm font-normal text-gray-500">/ 10</span></p>
-                    <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-widest mt-1">Resume</p>
-                  </div>
-                  <div className="w-px h-12 bg-gray-200 dark:bg-gray-700"></div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{finalScores.qna} <span className="text-sm font-normal text-gray-500">/ 10</span></p>
-                    <p className="text-[10px] sm:text-xs font-semibold text-gray-500 uppercase tracking-widest mt-1">Q&A</p>
-                  </div>
-                </div>
-              )}
+            <h3 className="font-extrabold text-2xl sm:text-3xl text-gray-900 dark:text-white mb-2">Thank You!</h3>
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 mb-5 leading-relaxed">
+              Your interview assessment has been successfully submitted. The recruiter will review your application and reach out shortly!
+            </p>
 
-              <div className="flex flex-col gap-3">
-                <a href={`#${reportUrl}`} target="_blank" rel="noopener noreferrer" className="interview-completion-primary w-full bg-blue-600 text-white font-bold py-3 px-5 rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20 transform hover:-translate-y-0.5 flex justify-center items-center gap-2">
-                  <i className="fa-solid fa-file-alt"></i> View Detailed Report
-                </a>
-                <button onClick={() => navigate('/submit-review')} className="interview-completion-primary w-full bg-gradient-to-r from-pink-500 to-orange-400 text-white font-bold py-3 px-5 rounded-lg hover:from-pink-600 hover:to-orange-500 transition-colors shadow-lg shadow-pink-500/20 transform hover:-translate-y-0.5 flex justify-center items-center gap-2">
-                  <i className="fa-solid fa-star text-yellow-300"></i> Give Review
-                </button>
+            {/* Candidate Experience Star Rating System */}
+            <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-700/60 mb-5">
+              <p className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">
+                Rate Your Interview Experience
+              </p>
+              <div className="flex items-center justify-center gap-2 my-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => {
+                      setCandidateRating(star);
+                      setRatingSubmitted(true);
+                    }}
+                    onMouseEnter={() => setHoverRating(star)}
+                    onMouseLeave={() => setHoverRating(0)}
+                    className="p-1 text-2xl transition-transform hover:scale-125 focus:outline-none"
+                    title={`${star} Star${star > 1 ? 's' : ''}`}
+                  >
+                    <i className={`fa-star ${star <= (hoverRating || candidateRating) ? 'fas text-amber-400 drop-shadow' : 'far text-gray-300 dark:text-gray-600'}`}></i>
+                  </button>
+                ))}
               </div>
+              {ratingSubmitted && (
+                <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-1 animate-in fade-in">
+                  <i className="fas fa-check-circle mr-1"></i> Thank you for rating ({candidateRating}/5 stars)!
+                </p>
+              )}
             </div>
 
-            <div className="mt-6 flex flex-col sm:flex-row gap-3">
-              <button onClick={() => navigate('/')} className="interview-completion-secondary w-full text-center px-5 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+            {/* Action Buttons */}
+            <div className="space-y-3 mt-6">
+              {/* Primary CTA: View More Job Roles */}
+              <button 
+                onClick={() => navigate('/jobs')} 
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold py-3.5 px-5 rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-blue-500/35 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-sm"
+              >
+                <i className="fas fa-briefcase"></i>
+                <span>View More Job Roles</span>
+                <i className="fas fa-arrow-right text-xs"></i>
+              </button>
+
+              <button 
+                onClick={() => navigate('/')} 
+                className="w-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold py-3 px-4 rounded-xl transition-all text-xs"
+              >
                 Go to Homepage
               </button>
             </div>

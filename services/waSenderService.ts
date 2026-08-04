@@ -20,6 +20,10 @@ export interface WhatsAppInviteOptions {
   recruiterPhone?: string;
   whatsappSessionId?: string;
   whatsappSessionPasscode?: string;
+  detailedJdUrl?: string;
+  aboutCompany?: string;
+  companyDescription?: string;
+  jobDescription?: string;
 }
 
 /**
@@ -63,7 +67,7 @@ export async function sendWhatsAppMessage(
     return { success: false, error: 'Invalid or missing phone number.' };
   }
 
-  const apiUrl = WHATSAPP_API_URL || 'https://whatsapp-task-manager-ai4d.onrender.com/api/v1/send-message';
+  const apiUrl = WHATSAPP_API_URL || 'https://whatsapp-sending-api.onrender.com/api/messages/send';
   const sessionId = credentials?.sessionId?.trim() || '';
   const passcode = credentials?.passcode?.trim() || '';
 
@@ -71,7 +75,7 @@ export async function sendWhatsAppMessage(
     console.error('[WhatsApp API] Saved WhatsApp Session credentials missing from profile!');
     return {
       success: false,
-      error: 'WhatsApp Session ID and Passcode are not configured for your account. Please set your WhatsApp Session ID & Passcode in your Profile settings before sending WhatsApp messages.'
+      error: 'WhatsApp Session ID and Passcode are not configured for your account. Please click WA Connect to save your WhatsApp Session ID & Passcode before sending WhatsApp messages.'
     };
   }
 
@@ -84,10 +88,18 @@ export async function sendWhatsAppMessage(
         'Content-Type': 'application/json',
         'x-session-id': sessionId,
         'x-session-passcode': passcode,
+        'sessionId': sessionId,
+        'passcode': passcode,
+        'x_session_id': sessionId,
+        'x_session_passcode': passcode,
       },
       body: JSON.stringify({
         phone: formattedPhone,
         message: text,
+        sessionId: sessionId,
+        passcode: passcode,
+        x_session_id: sessionId,
+        x_session_passcode: passcode,
       }),
     });
 
@@ -107,7 +119,7 @@ export async function sendWhatsAppMessage(
 }
 
 /**
- * Builds full WhatsApp message text matching the email template format.
+ * Builds full WhatsApp message text matching clean professional text format (no emojis, no hardcoded company name).
  */
 export function buildWhatsAppInviteText(params: {
   candidateName?: string;
@@ -121,49 +133,69 @@ export function buildWhatsAppInviteText(params: {
 
   const genderStr = options?.gender ? `, ${options.gender}` : '';
   const postDisplay = `*${jobTitle}${genderStr}*`;
-  const locationDisplay = options?.location || 'As specified in Job Description';
-  const qualificationDisplay = options?.qualification || options?.education || 'As per Job Description';
-  const expDisplay = options?.experience || 'As per Job Description';
-  const salaryDisplay = options?.salary || 'Competitive / As per Job Description';
-
   const recruiterName = options?.recruiterName || 'Recruiting Team';
-  const recruiterPhone = options?.recruiterPhone || '9762588623 / 8484888632';
+  const recruiterPhone = options?.recruiterPhone || '';
 
   const headline = isReminder
-    ? `⏳ *PENDING INTERVIEW REMINDER*`
-    : `🎯 *OFFICIAL INTERVIEW INVITATION*`;
+    ? `*PENDING INTERVIEW REMINDER*`
+    : `*OFFICIAL INTERVIEW INVITATION*`;
 
   const intro = isReminder
-    ? `Dear *${candidateName}*,\n\nThis is a polite reminder to complete your AI video interview assessment for the post of *${jobTitle}* at *SNAB Innovations / Dsource*.`
-    : `Dear *${candidateName}*,\n\nWe are pleased to invite you to complete an AI video interview assessment for the post of *${jobTitle}* at *SNAB Innovations / Dsource*.`;
+    ? `Dear *${candidateName}*,\n\nThis is a polite reminder to complete your AI video interview assessment for the post of *${jobTitle}*.`
+    : `Dear *${candidateName}*,\n\nWe are pleased to invite you to complete an AI video interview assessment for the post of *${jobTitle}*.`;
+
+  const reqLines = [`- Post: ${postDisplay}`];
+
+  if (options?.location) {
+    reqLines.push(`- Location: ${options.location}`);
+  }
+  const qual = options?.qualification || options?.education;
+  if (qual) {
+    reqLines.push(`- Qualification: ${qual}`);
+  }
+  if (options?.experience) {
+    reqLines.push(`- Experience: ${options.experience}`);
+  }
+  if (options?.salary) {
+    reqLines.push(`- Salary: ${options.salary}`);
+  }
+  const companyDesc = options?.aboutCompany || options?.companyDescription;
+  if (companyDesc) {
+    reqLines.push(`- About Company: ${companyDesc}`);
+  }
+  if (options?.jobDescription) {
+    reqLines.push(`- Job Description: ${options.jobDescription}`);
+  }
+  if (options?.detailedJdUrl) {
+    reqLines.push(`- For detailed JD click: ${options.detailedJdUrl}`);
+  }
+
+  const reqDetails = `*JOB REQUIREMENT DETAILS:*\n${reqLines.join('\n')}`;
+
+  let contactDetails = `*RECRUITER / CONTACT PERSON:*
+- Contact Person: *${recruiterName}*`;
+  if (recruiterPhone) {
+    contactDetails += `\n- Mobile / Contact: *${recruiterPhone}*`;
+  }
 
   return `${headline}
 
 ${intro}
 
-📌 *JOB REQUIREMENT DETAILS:*
-• 📌 *Post:* ${postDisplay}
-• 📍 *Location:* ${locationDisplay}
-• 🎓 *Qualification:* ${qualificationDisplay}
-• 💼 *Experience:* ${expDisplay}
-• 💰 *Salary:* ${salaryDisplay}
+${reqDetails}
 
-🔐 *YOUR ACCESS CREDENTIALS:*
-• 🔑 *Access Code:* *${accessCode}*
-• 🌐 *Interview Link:* ${interviewLink}
+*YOUR ACCESS CREDENTIALS:*
+- Access Code: *${accessCode}*
+- Interview Link: ${interviewLink}
 
-👤 *RECRUITER / CONTACT PERSON:*
-• 👤 *Contact Person:* *${recruiterName}*
-• 📞 *Mobile / Contact:* *${recruiterPhone}*
+${contactDetails}
 
-⚠️ *Instructions:*
+*Instructions:*
 1. Ensure a working camera & microphone on your phone or laptop.
 2. Use a stable internet connection in a quiet environment.
 
-Need Technical Help? Call Dsource Support: 9762588623 / 8484888632
-
 Best regards,
-*SNAB Innovations | Dsource Recruitment System*`;
+*Recruitment Team*`;
 }
 
 /**

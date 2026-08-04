@@ -11,6 +11,7 @@ import { sendWhatsAppMessage, sendBulkWhatsAppInvites, sendInterviewWhatsAppInvi
 import { evaluateResumeForMultipleJobs } from '../services/api';
 import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 import { logTeamActivity } from '../services/auditService';
+import { extractJobDetailsOptions } from '../services/jobDetailsHelper';
 
 const InlineBusySkeleton = ({ className = 'bg-current/25' }: { className?: string }) => (
     <span className={`inline-block h-3 w-16 animate-pulse rounded-[4px] ${className}`} aria-hidden="true" />
@@ -221,23 +222,16 @@ const InvitedCandidates: React.FC = () => {
         const candidateData = selectedInterview.candidateData?.find(c => c.email.toLowerCase() === email.toLowerCase());
         const phone = candidateData?.phone || '';
 
+        const jobDetailsOptions = extractJobDetailsOptions(selectedInterview, userProfile, user);
+
         try {
             const result = await sendInterviewInvitations(
                 [email],
                 selectedInterview.title,
                 selectedInterview.interviewLink || '',
                 selectedInterview.accessCode,
-                false,
-                {
-                  gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
-                  location: (selectedInterview as any).location,
-                  education: (selectedInterview as any).education || (selectedInterview as any).qualification,
-                  qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-                  experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
-                  salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
-                  recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
-                  recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
-                }
+                true,
+                jobDetailsOptions
             );
             if (result.success && result.totalEmails > 0) emailSent = true;
 
@@ -247,13 +241,9 @@ const InvitedCandidates: React.FC = () => {
                     selectedInterview.title,
                     selectedInterview.interviewLink || '',
                     selectedInterview.accessCode,
-                    false,
+                    true,
                     undefined,
-                    {
-                        recruiterName: user?.displayName || user?.email || 'Recruiter',
-                        whatsappSessionId: userProfile?.whatsappSessionId || '',
-                        whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
-                    }
+                    jobDetailsOptions
                 );
                 if (waRes.success) waSent = true;
             }
@@ -323,13 +313,42 @@ const InvitedCandidates: React.FC = () => {
                     });
 
                     // Pass 2: Everyone explicitly invited but who HAS NOT submitted
-                    explicitEmails.forEach(email => {
-                        const hasSubmitted = attempts.some(a => (a.candidateInfo?.email || '').toLowerCase() === email);
+                    const seenKeys = new Set<string>();
+
+                    candidateDataArray.forEach((c: any) => {
+                        const email = (c.email || '').toLowerCase();
+                        const phone = c.phone || 'N/A';
+                        const key = (email && !email.includes('@whatsapp.noemail')) ? email : phone;
+                        if (!key || key === 'N/A' || seenKeys.has(key)) return;
+                        seenKeys.add(key);
+
+                        const hasSubmitted = attemptsList.some(a => {
+                            const aEmail = (a.candidateInfo?.email || '').toLowerCase();
+                            const aPhone = (a.candidateInfo as any)?.phone || '';
+                            return (email && !email.includes('@whatsapp.noemail') && aEmail === email) || (phone !== 'N/A' && aPhone === phone);
+                        });
+
                         if (!hasSubmitted) {
-                            const enhancedData = candidateDataArray.find((c: any) => c.email.toLowerCase() === email);
+                            allCands.push({
+                                email: email.includes('@whatsapp.noemail') ? '' : email,
+                                phone: phone,
+                                interviewId: interview.id,
+                                interviewTitle: interview.title || 'Untitled Role',
+                                hasSubmitted: false,
+                                name: c.name || (phone !== 'N/A' ? `Candidate (${phone})` : 'Pending Candidate')
+                            });
+                        }
+                    });
+
+                    explicitEmails.forEach(email => {
+                        if (!email || email.includes('@whatsapp.noemail') || seenKeys.has(email)) return;
+                        seenKeys.add(email);
+
+                        const hasSubmitted = attemptsList.some(a => (a.candidateInfo?.email || '').toLowerCase() === email);
+                        if (!hasSubmitted) {
                             allCands.push({
                                 email: email,
-                                phone: enhancedData?.phone || 'N/A',
+                                phone: 'N/A',
                                 interviewId: interview.id,
                                 interviewTitle: interview.title || 'Untitled Role',
                                 hasSubmitted: false,
@@ -475,6 +494,8 @@ const InvitedCandidates: React.FC = () => {
                 candidateData: mergedCandData
             });
             
+            const bulkJobOptions = extractJobDetailsOptions(selectedInterview, userProfile, user);
+
             let emailCount = 0;
             if (validEmails.length > 0) {
                 const result = await sendInterviewInvitations(
@@ -483,16 +504,7 @@ const InvitedCandidates: React.FC = () => {
                     selectedInterview.interviewLink || '',
                     selectedInterview.accessCode,
                     false,
-                    {
-                      gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
-                      location: (selectedInterview as any).location,
-                      education: (selectedInterview as any).education || (selectedInterview as any).qualification,
-                      qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-                      experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
-                      salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
-                      recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiter',
-                      recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
-                    }
+                    bulkJobOptions
                 );
                 if (result.success) {
                     emailCount = result.totalEmails;
@@ -508,18 +520,7 @@ const InvitedCandidates: React.FC = () => {
                     selectedInterview.accessCode,
                     false,
                     undefined,
-                    {
-                      gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
-                      location: (selectedInterview as any).location,
-                      education: (selectedInterview as any).education || (selectedInterview as any).qualification,
-                      qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-                      experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
-                      salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
-                      recruiterName: userProfile?.name || (user as any)?.displayName || 'Recruiting Team',
-                      recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',
-                      whatsappSessionId: userProfile?.whatsappSessionId || '',
-                      whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
-                    }
+                    bulkJobOptions
                 );
                 if (waResult.success) {
                     waCount = waResult.totalSent;
@@ -586,6 +587,7 @@ const InvitedCandidates: React.FC = () => {
     const filteredInterviews = useMemo(() => {
         return interviews.filter(inv => 
             (inv.title || '').toLowerCase().includes(jobSearchTerm.toLowerCase()) ||
+            (inv.jobNumber || (inv as any).jobNo || '').toLowerCase().includes(jobSearchTerm.toLowerCase()) ||
             (inv.department || '').toLowerCase().includes(jobSearchTerm.toLowerCase())
         );
     }, [interviews, jobSearchTerm]);
@@ -708,7 +710,9 @@ const InvitedCandidates: React.FC = () => {
                             >
                                 <option value="">Choose Active Interview</option>
                                 {filteredInterviews.map(inv => (
-                                    <option key={inv.id} value={inv.id}>{inv.title} ({inv.department || 'General'})</option>
+                                    <option key={inv.id} value={inv.id}>
+                                      {inv.jobNumber || (inv as any).jobNo ? `[#${inv.jobNumber || (inv as any).jobNo}] ` : ''}{inv.title} ({inv.department || 'General'})
+                                    </option>
                                 ))}
                             </select>
                             {selectedInterview && (() => {

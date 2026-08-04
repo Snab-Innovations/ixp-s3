@@ -40,6 +40,12 @@ const poolConfig = buildPoolConfig();
 
 export const pool = poolConfig ? new Pool(poolConfig) : null;
 
+if (pool) {
+  pool.on('error', (err) => {
+    console.error('⚠️ Unexpected error on idle PostgreSQL client in pool:', err.message || err);
+  });
+}
+
 export function dbReady() {
   return Boolean(pool);
 }

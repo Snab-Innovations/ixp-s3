@@ -6,8 +6,10 @@ import { Interview } from '../types';
 import { useMessageBox } from '../components/MessageBox';
 import { createPortal } from 'react-dom';
 import { sendInterviewInvitations } from '../services/brevoService';
-import { sendWhatsAppMessage, sendInterviewWhatsAppInvite, buildWhatsAppInviteText } from '../services/waSenderService';
+import { sendWhatsAppMessage, sendInterviewWhatsAppInvite, buildWhatsAppInviteText, sendBulkWhatsAppInvites } from '../services/waSenderService';
 import EditJobModal from './EditJob';
+import InviteCandidateModal from '../components/InviteCandidateModal';
+import { extractJobDetailsOptions } from '../services/jobDetailsHelper';
 
 import { evaluateResumeMatch } from '../services/api';
 import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
@@ -66,13 +68,13 @@ const getInterviewStatus = (interview: Interview) => {
   return isExpired
     ? {
         label: 'Expired',
-        dotClass: 'bg-[#ff6b6b]',
-        pillClass: 'border-[#3f1d1d] bg-[#180707] text-[#ff8f8f]',
+        dotClass: 'bg-red-500 dark:bg-[#ff6b6b]',
+        pillClass: 'border-red-200 dark:border-[#3f1d1d] bg-red-50 dark:bg-[#180707] text-red-700 dark:text-[#ff8f8f]',
       }
     : {
         label: 'Active',
-        dotClass: 'bg-[#50e3c2]',
-        pillClass: 'border-[#123b2a] bg-[#071a12] text-[#83d0a3]',
+        dotClass: 'bg-emerald-500 dark:bg-[#50e3c2]',
+        pillClass: 'border-emerald-200 dark:border-[#123b2a] bg-emerald-50 dark:bg-[#071a12] text-emerald-800 dark:text-[#83d0a3]',
     };
 };
 
@@ -81,64 +83,64 @@ const ButtonBusySkeleton = ({ className = 'bg-current/25' }: { className?: strin
 );
 
 export const RecruiterInterviewsSkeleton = () => (
-  <div className="-mx-4 -my-8 flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-hidden bg-[#000] text-white sm:-mx-6 lg:-mx-8 animate-pulse">
-    <section className="shrink-0 border-b border-white/[0.11] bg-[#000]">
+  <div className="-mx-4 -my-8 flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-hidden bg-slate-50 dark:bg-[#000] text-slate-900 dark:text-white sm:-mx-6 lg:-mx-8 animate-pulse">
+    <section className="shrink-0 border-b border-slate-200 dark:border-white/[0.11] bg-white dark:bg-[#000]">
       <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-7 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <div className="h-8 w-24 rounded-[6px] bg-white/[0.04]" />
-          <div className="h-7 w-48 rounded-[6px] bg-white/[0.04] mt-3" />
-          <div className="h-4 w-64 rounded-[6px] bg-white/[0.04] mt-2" />
+          <div className="h-8 w-24 rounded-[6px] bg-slate-200 dark:bg-white/[0.04]" />
+          <div className="h-7 w-48 rounded-[6px] bg-slate-300 dark:bg-white/[0.04] mt-3" />
+          <div className="h-4 w-64 rounded-[6px] bg-slate-200 dark:bg-white/[0.04] mt-2" />
         </div>
-        <div className="h-8 w-32 rounded-[6px] bg-white/[0.04]" />
+        <div className="h-8 w-32 rounded-[6px] bg-slate-300 dark:bg-white/[0.04]" />
       </div>
     </section>
 
-    <section className="grid shrink-0 grid-cols-2 border-b border-white/[0.11] lg:grid-cols-4">
+    <section className="grid shrink-0 grid-cols-2 border-b border-slate-200 dark:border-white/[0.11] bg-white dark:bg-transparent lg:grid-cols-4">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="border-r border-white/[0.11] px-4 py-4 last:border-r-0 sm:px-6 lg:px-7">
-          <div className="h-3 w-12 rounded bg-white/[0.04]" />
-          <div className="h-6 w-16 rounded bg-white/[0.04] mt-2" />
+        <div key={i} className="border-r border-slate-200 dark:border-white/[0.11] px-4 py-4 last:border-r-0 sm:px-6 lg:px-7">
+          <div className="h-3 w-12 rounded bg-slate-200 dark:bg-white/[0.04]" />
+          <div className="h-6 w-16 rounded bg-slate-300 dark:bg-white/[0.04] mt-2" />
         </div>
       ))}
     </section>
 
-    <section className="shrink-0 border-b border-white/[0.11]">
+    <section className="shrink-0 border-b border-slate-200 dark:border-white/[0.11] bg-white dark:bg-transparent">
       <div className="flex flex-col gap-3 px-4 py-3 sm:px-6 lg:px-7 xl:flex-row xl:items-center xl:justify-between">
-        <div className="h-9 w-full xl:max-w-xs rounded-[6px] bg-white/[0.04]" />
+        <div className="h-9 w-full xl:max-w-xs rounded-[6px] bg-slate-200 dark:bg-white/[0.04]" />
         <div className="flex flex-wrap items-center gap-2">
-          <div className="h-9 w-28 rounded-[6px] bg-white/[0.04]" />
-          <div className="h-9 w-48 rounded-[6px] bg-white/[0.04]" />
+          <div className="h-9 w-28 rounded-[6px] bg-slate-200 dark:bg-white/[0.04]" />
+          <div className="h-9 w-48 rounded-[6px] bg-slate-200 dark:bg-white/[0.04]" />
         </div>
       </div>
     </section>
 
     <section className="flex min-h-0 flex-1 flex-col">
-      <div className="hidden shrink-0 items-center gap-4 border-b border-white/[0.11] px-4 py-3 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:px-7">
-        <div className="h-3 w-16 rounded bg-white/[0.04]" />
-        <div className="h-3 w-12 rounded bg-white/[0.04] mx-auto" />
-        <div className="h-3 w-16 rounded bg-white/[0.04] mx-auto" />
-        <div className="h-3 w-16 rounded bg-white/[0.04] mx-auto" />
-        <div className="h-3 w-12 rounded bg-white/[0.04] mx-auto" />
-        <div className="h-3 w-12 rounded bg-white/[0.04] mx-auto" />
-        <div className="h-3 w-12 rounded bg-white/[0.04] ml-auto" />
+      <div className="hidden shrink-0 items-center gap-4 border-b border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-[#000] px-4 py-3 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:px-7">
+        <div className="h-3 w-16 rounded bg-slate-300 dark:bg-white/[0.04]" />
+        <div className="h-3 w-12 rounded bg-slate-300 dark:bg-white/[0.04] mx-auto" />
+        <div className="h-3 w-16 rounded bg-slate-300 dark:bg-white/[0.04] mx-auto" />
+        <div className="h-3 w-16 rounded bg-slate-300 dark:bg-white/[0.04] mx-auto" />
+        <div className="h-3 w-12 rounded bg-slate-300 dark:bg-white/[0.04] mx-auto" />
+        <div className="h-3 w-12 rounded bg-slate-300 dark:bg-white/[0.04] mx-auto" />
+        <div className="h-3 w-12 rounded bg-slate-300 dark:bg-white/[0.04] ml-auto" />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-white dark:bg-transparent">
         {[...Array(8)].map((_, idx) => (
           <div
             key={idx}
-            className="grid gap-3 border-b border-white/[0.08] px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:items-center lg:gap-4 lg:px-7"
+            className="grid gap-3 border-b border-slate-200 dark:border-white/[0.08] px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_100px_120px_100px_100px_100px_100px] lg:items-center lg:gap-4 lg:px-7"
           >
             <div className="space-y-2">
-              <div className="h-4 w-40 rounded bg-white/[0.04]" />
-              <div className="h-3 w-20 rounded bg-white/[0.04]" />
+              <div className="h-4 w-40 rounded bg-slate-300 dark:bg-white/[0.04]" />
+              <div className="h-3 w-20 rounded bg-slate-200 dark:bg-white/[0.04]" />
             </div>
-            <div className="h-4 w-12 rounded bg-white/[0.04] mx-auto" />
-            <div className="h-5 w-16 rounded bg-white/[0.04] mx-auto" />
-            <div className="h-4 w-16 rounded bg-white/[0.04] mx-auto" />
-            <div className="h-4 w-16 rounded bg-white/[0.04] mx-auto" />
-            <div className="h-4 w-12 rounded bg-white/[0.04] mx-auto" />
-            <div className="h-8 w-20 rounded bg-white/[0.04] ml-auto" />
+            <div className="h-4 w-12 rounded bg-slate-200 dark:bg-white/[0.04] mx-auto" />
+            <div className="h-5 w-16 rounded bg-slate-200 dark:bg-white/[0.04] mx-auto" />
+            <div className="h-4 w-16 rounded bg-slate-200 dark:bg-white/[0.04] mx-auto" />
+            <div className="h-4 w-16 rounded bg-slate-200 dark:bg-white/[0.04] mx-auto" />
+            <div className="h-4 w-12 rounded bg-slate-200 dark:bg-white/[0.04] mx-auto" />
+            <div className="h-8 w-20 rounded bg-slate-200 dark:bg-white/[0.04] ml-auto" />
           </div>
         ))}
       </div>
@@ -367,22 +369,15 @@ const RecruiterInterviews: React.FC = () => {
           inv.id === selectedInterview.id ? { ...inv, candidateEmails: updatedEmails } : inv
         ));
         
+        const resendOptions = extractJobDetailsOptions(selectedInterview, userProfile, user);
+
         const result = await sendInterviewInvitations(
             [newEmail],
             selectedInterview.title,
             selectedInterview.interviewLink || '',
             selectedInterview.accessCode,
             false,
-            {
-              gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
-              location: (selectedInterview as any).location,
-              education: (selectedInterview as any).education || (selectedInterview as any).qualification,
-              qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-              experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
-              salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
-              recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruitment Team',
-              recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
-            }
+            resendOptions
         );
 
         if (result.success) {
@@ -403,22 +398,14 @@ const RecruiterInterviews: React.FC = () => {
     if (!selectedInterview) return;
     setResendingEmail(email);
     try {
+        const resendOpt = extractJobDetailsOptions(selectedInterview, userProfile, user);
         const result = await sendInterviewInvitations(
             [email],
             selectedInterview.title,
             selectedInterview.interviewLink || '',
             selectedInterview.accessCode,
             false,
-            {
-              gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
-              location: (selectedInterview as any).location,
-              education: (selectedInterview as any).education || (selectedInterview as any).qualification,
-              qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-              experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
-              salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
-              recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruitment Team',
-              recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
-            }
+            resendOpt
         );
 
         if (result.success) {
@@ -546,6 +533,8 @@ const RecruiterInterviews: React.FC = () => {
             : inv
         ));
         
+        const bulkOpt = extractJobDetailsOptions(selectedInterview, userProfile, user);
+
         let emailCount = 0;
         if (validEmails.length > 0) {
             setSendingProgressMsg(`Sending ${validEmails.length} invitation email(s)...`);
@@ -555,16 +544,7 @@ const RecruiterInterviews: React.FC = () => {
                 selectedInterview.interviewLink || '',
                 selectedInterview.accessCode,
                 false,
-                {
-                  gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
-                  location: (selectedInterview as any).location,
-                  education: (selectedInterview as any).education || (selectedInterview as any).qualification,
-                  qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-                  experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
-                  salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
-                  recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
-                  recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
-                }
+                bulkOpt
             );
             if (result.success) emailCount = result.totalEmails;
         }
@@ -586,18 +566,7 @@ const RecruiterInterviews: React.FC = () => {
                         setSendingProgressMsg(`📱 Sending WhatsApp invite ${sentCount}/${totalCount} to ${currentCandidate}...`);
                     }
                 },
-                {
-                  gender: (selectedInterview as any).gender || (selectedInterview as any).genderRequirement,
-                  location: (selectedInterview as any).location,
-                  education: (selectedInterview as any).education || (selectedInterview as any).qualification,
-                  qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
-                  experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
-                  salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
-                  recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
-                  recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',
-                  whatsappSessionId: userProfile?.whatsappSessionId || '',
-                  whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
-                }
+                bulkOpt
             );
             if (waResult.success) waCount = waResult.totalSent;
         }
@@ -651,6 +620,7 @@ const RecruiterInterviews: React.FC = () => {
     const matchesSearch = 
       !searchQuery ||
       interview.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (interview.jobNumber || (interview as any).jobNo || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       interview.department?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       interview.description?.toLowerCase().includes(searchQuery.toLowerCase());
       
@@ -693,21 +663,21 @@ const RecruiterInterviews: React.FC = () => {
 
   const activeInterviews = interviews.filter(interview => getInterviewStatus(interview).label === 'Active').length;
   const expiredInterviews = interviews.length - activeInterviews;
-  const totalResponses = Object.values(submissionsMap).reduce((sum, arr) => sum + arr.length, 0);
+  const totalResponses = Object.values(submissionsMap).reduce<number>((sum, arr) => sum + (Array.isArray(arr) ? arr.length : 0), 0);
 
   return (
-    <div className="-mx-4 -my-8 flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-hidden bg-[#000] text-white sm:-mx-6 lg:-mx-8">
+    <div className="-mx-4 -my-8 sm:-mx-6 lg:-mx-8 flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-hidden bg-slate-50 dark:bg-[#000] text-slate-900 dark:text-white">
 
       {/* Header */}
-      <section className="shrink-0 border-b border-white/[0.11] bg-[#000]">
+      <section className="shrink-0 border-b border-slate-200 dark:border-white/[0.11] bg-white dark:bg-[#000]">
         <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-7 xl:flex-row xl:items-start xl:justify-between">
           <div>
-            <Link to="/recruiter/dashboard" className="geist-caption inline-flex h-8 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white">
+            <Link to="/recruiter/dashboard" className="geist-caption inline-flex h-8 items-center gap-2 rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-white/[0.03] px-3 font-medium text-slate-700 dark:text-[#d4d4d4] transition-colors hover:bg-slate-200 dark:hover:bg-white/[0.06] hover:text-slate-900 dark:hover:text-white">
               <i className="fas fa-arrow-left text-[11px]"></i>
               <span>Dashboard</span>
             </Link>
-            <h1 className="geist-page-title mt-2 text-white">My Interviews</h1>
-            <p className="geist-small mt-1 text-[#8f8f8f]">Manage all your scheduled interviews.</p>
+            <h1 className="geist-page-title mt-2 text-slate-900 dark:text-white">My Interviews</h1>
+            <p className="geist-small mt-1 text-slate-600 dark:text-[#8f8f8f]">Manage all your scheduled interviews.</p>
           </div>
           <div className="flex items-center gap-2">
             <Link
@@ -718,104 +688,104 @@ const RecruiterInterviews: React.FC = () => {
                 messageBox.showWarning(getRateLimitReachedMessage('interviews'));
               }}
               aria-disabled={interviewLimitReached}
-              className={`geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border px-3 font-medium transition-colors ${interviewLimitReached ? 'cursor-not-allowed border-red-500/30 bg-red-500/10 text-red-400' : 'border-white bg-white text-black hover:bg-[#eaeaea]'}`}
+              className={`geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border px-3 font-medium transition-colors ${interviewLimitReached ? 'cursor-not-allowed border-red-500/30 bg-red-500/10 text-red-400' : 'border-slate-900 dark:border-white bg-slate-900 dark:bg-white text-white dark:text-black hover:bg-slate-800 dark:hover:bg-[#eaeaea]'}`}
             >
               <i className="fas fa-plus text-[11px]"></i>
-              <span>{interviewLimitReached ? 'Interview limit reached' : 'Create Interview'}</span>
+              <span>{interviewLimitReached ? 'Interview limit reached' : 'Create Job'}</span>
             </Link>
           </div>
         </div>
       </section>
 
       {/* Stats Strip */}
-      <section className="grid shrink-0 grid-cols-2 border-b border-white/[0.11] lg:grid-cols-4">
-        <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
-          <p className="geist-label uppercase text-[#6b7280]">Total</p>
-          <p className="geist-metric mt-2 tabular-nums text-white">{interviews.length}</p>
+      <section className="grid shrink-0 grid-cols-2 border-b border-slate-200 dark:border-white/[0.11] bg-white dark:bg-transparent lg:grid-cols-4">
+        <div className="border-r border-slate-200 dark:border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
+          <p className="geist-label uppercase text-slate-500 dark:text-[#6b7280]">Total</p>
+          <p className="geist-metric mt-2 tabular-nums text-slate-900 dark:text-white">{interviews.length}</p>
         </div>
-        <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
-          <p className="geist-label uppercase text-[#6b7280]">Active</p>
-          <p className="geist-metric mt-2 tabular-nums text-[#83d0a3]">{activeInterviews}</p>
+        <div className="border-r border-slate-200 dark:border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
+          <p className="geist-label uppercase text-slate-500 dark:text-[#6b7280]">Active</p>
+          <p className="geist-metric mt-2 tabular-nums text-emerald-600 dark:text-[#83d0a3]">{activeInterviews}</p>
         </div>
-        <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
-          <p className="geist-label uppercase text-[#6b7280]">Expired</p>
-          <p className="geist-metric mt-2 tabular-nums text-[#ff8f8f]">{expiredInterviews}</p>
+        <div className="border-r border-slate-200 dark:border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
+          <p className="geist-label uppercase text-slate-500 dark:text-[#6b7280]">Expired</p>
+          <p className="geist-metric mt-2 tabular-nums text-red-600 dark:text-[#ff8f8f]">{expiredInterviews}</p>
         </div>
         <div className="px-4 py-4 sm:px-6 lg:px-7">
-          <p className="geist-label uppercase text-[#6b7280]">Responses</p>
-          <p className="geist-metric mt-2 tabular-nums text-white">{totalResponses}</p>
+          <p className="geist-label uppercase text-slate-500 dark:text-[#6b7280]">Responses</p>
+          <p className="geist-metric mt-2 tabular-nums text-slate-900 dark:text-white">{totalResponses}</p>
         </div>
       </section>
 
       {/* Search & Filter Bar */}
-      <section className="shrink-0 border-b border-white/[0.11]">
+      <section className="shrink-0 border-b border-slate-200 dark:border-white/[0.11] bg-white dark:bg-transparent">
         <div className="flex flex-col gap-3 px-4 py-3 sm:px-6 lg:px-7 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative w-full sm:w-auto sm:min-w-[220px] xl:max-w-xs">
-              <i className="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-[#6b7280]"></i>
+              <i className="fas fa-search pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 dark:text-[#6b7280]"></i>
               <input 
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search interviews..."
-                className="geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] pl-9 pr-3 text-white outline-none transition-colors placeholder:text-[#6b7280] focus:border-white/[0.28] focus:bg-white/[0.05]"
+                className="geist-caption h-9 w-full rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-50 dark:bg-white/[0.03] pl-9 pr-3 text-slate-900 dark:text-white outline-none transition-colors placeholder:text-slate-400 dark:placeholder:text-[#6b7280] focus:border-slate-400 dark:focus:border-white/[0.28] focus:bg-white dark:focus:bg-white/[0.05]"
               />
             </div>
-            <div className="flex rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-0.5">
+            <div className="flex rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-white/[0.03] p-0.5">
               <button
                 type="button"
                 onClick={() => setStatusFilter('active')}
-                className={`geist-caption inline-flex h-7 items-center gap-1.5 rounded-[4px] px-3 font-medium transition-colors ${statusFilter === 'active' ? 'bg-[#071a12] text-[#83d0a3]' : 'text-[#6b7280] hover:text-[#d4d4d4]'}`}
+                className={`geist-caption inline-flex h-7 items-center gap-1.5 rounded-[4px] px-3 font-medium transition-colors cursor-pointer ${statusFilter === 'active' ? 'bg-emerald-100 dark:bg-[#071a12] text-emerald-800 dark:text-[#83d0a3] font-semibold' : 'text-slate-600 dark:text-[#6b7280] hover:text-slate-900 dark:hover:text-[#d4d4d4]'}`}
               >
-                <span className={`h-1.5 w-1.5 rounded-full ${statusFilter === 'active' ? 'bg-[#50e3c2]' : 'bg-[#6b7280]'}`} />
+                <span className={`h-1.5 w-1.5 rounded-full ${statusFilter === 'active' ? 'bg-emerald-500 dark:bg-[#50e3c2]' : 'bg-slate-400 dark:bg-[#6b7280]'}`} />
                 Active
               </button>
               <button
                 type="button"
                 onClick={() => setStatusFilter('expired')}
-                className={`geist-caption inline-flex h-7 items-center gap-1.5 rounded-[4px] px-3 font-medium transition-colors ${statusFilter === 'expired' ? 'bg-[#180707] text-[#ff8f8f]' : 'text-[#6b7280] hover:text-[#d4d4d4]'}`}
+                className={`geist-caption inline-flex h-7 items-center gap-1.5 rounded-[4px] px-3 font-medium transition-colors cursor-pointer ${statusFilter === 'expired' ? 'bg-red-100 dark:bg-[#180707] text-red-700 dark:text-[#ff8f8f] font-semibold' : 'text-slate-600 dark:text-[#6b7280] hover:text-slate-900 dark:hover:text-[#d4d4d4]'}`}
               >
-                <span className={`h-1.5 w-1.5 rounded-full ${statusFilter === 'expired' ? 'bg-[#ff6b6b]' : 'bg-[#6b7280]'}`} />
+                <span className={`h-1.5 w-1.5 rounded-full ${statusFilter === 'expired' ? 'bg-red-500 dark:bg-[#ff6b6b]' : 'bg-slate-400 dark:bg-[#6b7280]'}`} />
                 Expired
               </button>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2">
-              <span className="geist-label uppercase text-[#6b7280]">Dept</span>
+              <span className="geist-label uppercase text-slate-500 dark:text-[#6b7280]">Dept</span>
               <select
                 value={selectedDept}
                 onChange={(e) => setSelectedDept(e.target.value)}
-                className="geist-caption h-9 rounded-[6px] border border-white/[0.11] bg-[#050505] px-3 text-[#d4d4d4] outline-none transition-colors focus:border-white/[0.28]"
+                className="geist-caption h-9 rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-50 dark:bg-[#050505] px-3 text-slate-800 dark:text-[#d4d4d4] outline-none transition-colors focus:border-slate-400 dark:focus:border-white/[0.28] cursor-pointer"
               >
                 {departments.map(dept => (
                   <option key={dept} value={dept}>{dept}</option>
                 ))}
               </select>
             </div>
-            <div className="flex items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1">
-              <div className="flex rounded-[4px] bg-white/[0.03] p-0.5">
-                <button type="button" onClick={() => setDateMode('range')} className={`geist-caption px-2 py-0.5 rounded-[4px] font-medium transition-colors ${dateMode === 'range' ? 'bg-white/[0.08] text-white' : 'text-[#6b7280] hover:text-[#d4d4d4]'}`}>Range</button>
-                <button type="button" onClick={() => setDateMode('specific')} className={`geist-caption px-2 py-0.5 rounded-[4px] font-medium transition-colors ${dateMode === 'specific' ? 'bg-white/[0.08] text-white' : 'text-[#6b7280] hover:text-[#d4d4d4]'}`}>Specific</button>
+            <div className="flex items-center gap-2 rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-white/[0.03] px-2 py-1">
+              <div className="flex rounded-[4px] bg-slate-200/60 dark:bg-white/[0.03] p-0.5">
+                <button type="button" onClick={() => setDateMode('range')} className={`geist-caption px-2 py-0.5 rounded-[4px] font-medium transition-colors cursor-pointer ${dateMode === 'range' ? 'bg-white dark:bg-white/[0.08] text-slate-900 dark:text-white shadow-sm' : 'text-slate-600 dark:text-[#6b7280] hover:text-slate-900 dark:hover:text-[#d4d4d4]'}`}>Range</button>
+                <button type="button" onClick={() => setDateMode('specific')} className={`geist-caption px-2 py-0.5 rounded-[4px] font-medium transition-colors cursor-pointer ${dateMode === 'specific' ? 'bg-white dark:bg-white/[0.08] text-slate-900 dark:text-white shadow-sm' : 'text-slate-600 dark:text-[#6b7280] hover:text-slate-900 dark:hover:text-[#d4d4d4]'}`}>Specific</button>
               </div>
               {dateMode === 'specific' ? (
                 <div className="flex items-center gap-1.5">
-                  <span className="geist-label uppercase text-[#6b7280]">On</span>
-                  <input type="date" value={specificDate} onChange={(e) => setSpecificDate(e.target.value)} className="geist-caption bg-transparent text-[#d4d4d4] outline-none [color-scheme:dark]" />
+                  <span className="geist-label uppercase text-slate-500 dark:text-[#6b7280]">On</span>
+                  <input type="date" value={specificDate} onChange={(e) => setSpecificDate(e.target.value)} className="geist-caption bg-transparent text-slate-800 dark:text-[#d4d4d4] outline-none dark:[color-scheme:dark]" />
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5">
-                  <span className="geist-label uppercase text-[#6b7280]">From</span>
-                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="geist-caption bg-transparent text-[#d4d4d4] outline-none [color-scheme:dark]" />
-                  <span className="geist-small text-[#6b7280]">to</span>
-                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="geist-caption bg-transparent text-[#d4d4d4] outline-none [color-scheme:dark]" />
+                  <span className="geist-label uppercase text-slate-500 dark:text-[#6b7280]">From</span>
+                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="geist-caption bg-transparent text-slate-800 dark:text-[#d4d4d4] outline-none dark:[color-scheme:dark]" />
+                  <span className="geist-small text-slate-500 dark:text-[#6b7280]">to</span>
+                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="geist-caption bg-transparent text-slate-800 dark:text-[#d4d4d4] outline-none dark:[color-scheme:dark]" />
                 </div>
               )}
             </div>
             {(searchQuery || statusFilter !== 'active' || selectedDept !== 'All' || startDate || endDate || specificDate) && (
               <button
                 onClick={() => { setSearchQuery(''); setStatusFilter('active'); setSelectedDept('All'); setStartDate(''); setEndDate(''); setSpecificDate(''); }}
-                className="geist-caption inline-flex h-8 items-center justify-center gap-1 rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-3 font-medium text-[#ff8f8f] transition-colors hover:bg-[#260b0b]"
+                className="geist-caption inline-flex h-8 items-center justify-center gap-1 rounded-[6px] border border-red-200 dark:border-[#3f1d1d] bg-red-50 dark:bg-[#180707] px-3 font-medium text-red-700 dark:text-[#ff8f8f] transition-colors hover:bg-red-100 dark:hover:bg-[#260b0b] cursor-pointer"
               >
                 <i className="fas fa-undo-alt text-[10px]"></i>
                 <span>Clear</span>
@@ -828,28 +798,28 @@ const RecruiterInterviews: React.FC = () => {
       {/* Content */}
       <section className="flex min-h-0 flex-1 flex-col">
         {interviews.length === 0 ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto border-b border-dashed border-white/[0.11] px-4 py-16 text-center sm:px-6 lg:px-7">
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto border-b border-dashed border-slate-200 dark:border-white/[0.11] bg-white dark:bg-transparent px-4 py-16 text-center sm:px-6 lg:px-7">
             <div>
-              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f]">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-white/[0.03] text-slate-500 dark:text-[#8f8f8f]">
                 <i className="fas fa-video"></i>
               </div>
-              <p className="geist-caption mt-4 text-[#d4d4d4]">You haven't created any interviews yet.</p>
-              <Link to="/recruiter/interview/create" className="geist-caption mt-3 inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3 font-medium text-black transition-colors hover:bg-[#eaeaea]">
+              <p className="geist-caption mt-4 text-slate-700 dark:text-[#d4d4d4]">You haven't created any interviews yet.</p>
+              <Link to="/recruiter/interview/create" className="geist-caption mt-3 inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-slate-900 dark:border-white bg-slate-900 dark:bg-white px-3 font-medium text-white dark:text-black transition-colors hover:bg-slate-800 dark:hover:bg-[#eaeaea]">
                 <i className="fas fa-plus text-[11px]"></i>
-                <span>Create your first interview</span>
+                <span>Create your first job</span>
               </Link>
             </div>
           </div>
         ) : filteredInterviews.length === 0 ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto border-b border-dashed border-white/[0.11] px-4 py-16 text-center sm:px-6 lg:px-7">
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto border-b border-dashed border-slate-200 dark:border-white/[0.11] bg-white dark:bg-transparent px-4 py-16 text-center sm:px-6 lg:px-7">
             <div>
-              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#8f8f8f]">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-white/[0.03] text-slate-500 dark:text-[#8f8f8f]">
                 <i className="fas fa-search"></i>
               </div>
-              <p className="geist-caption mt-4 text-[#d4d4d4]">No interviews match your filters.</p>
+              <p className="geist-caption mt-4 text-slate-700 dark:text-[#d4d4d4]">No interviews match your filters.</p>
               <button
                 onClick={() => { setSearchQuery(''); setStatusFilter('active'); setSelectedDept('All'); setStartDate(''); setEndDate(''); setSpecificDate(''); }}
-                className="geist-caption mt-3 inline-flex h-8 items-center justify-center rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-3 font-medium text-[#ff8f8f] transition-colors hover:bg-[#260b0b]"
+                className="geist-caption mt-3 inline-flex h-8 items-center justify-center rounded-[6px] border border-red-200 dark:border-[#3f1d1d] bg-red-50 dark:bg-[#180707] px-3 font-medium text-red-700 dark:text-[#ff8f8f] transition-colors hover:bg-red-100 dark:hover:bg-[#260b0b] cursor-pointer"
               >
                 Reset Filters
               </button>
@@ -858,18 +828,18 @@ const RecruiterInterviews: React.FC = () => {
         ) : (
           <>
             {/* Column Headers */}
-            <div className="hidden shrink-0 items-center gap-4 border-b border-white/[0.11] bg-[#000] px-4 py-2 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_90px_110px_90px_80px_80px_230px] lg:px-7">
-              <span className="geist-label uppercase text-[#6b7280]">Name</span>
-              <span className="geist-label text-center uppercase text-[#6b7280]">Status</span>
-              <span className="geist-label text-center uppercase text-[#6b7280]">Department</span>
-              <span className="geist-label text-center uppercase text-[#6b7280]">Difficulty</span>
-              <span className="geist-label text-center uppercase text-[#6b7280]">ID</span>
-              <span className="geist-label text-center uppercase text-[#6b7280]">Deadline</span>
-              <span className="geist-label text-right uppercase text-[#6b7280]">Actions</span>
+            <div className="hidden shrink-0 items-center gap-4 border-b border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-[#000] px-4 py-2 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_90px_110px_90px_80px_80px_230px] lg:px-7">
+              <span className="geist-label uppercase text-slate-600 dark:text-[#6b7280]">Name</span>
+              <span className="geist-label text-center uppercase text-slate-600 dark:text-[#6b7280]">Status</span>
+              <span className="geist-label text-center uppercase text-slate-600 dark:text-[#6b7280]">Department</span>
+              <span className="geist-label text-center uppercase text-slate-600 dark:text-[#6b7280]">Difficulty</span>
+              <span className="geist-label text-center uppercase text-slate-600 dark:text-[#6b7280]">ID</span>
+              <span className="geist-label text-center uppercase text-slate-600 dark:text-[#6b7280]">Deadline</span>
+              <span className="geist-label text-right uppercase text-slate-600 dark:text-[#6b7280]">Actions</span>
             </div>
 
             {/* List Rows */}
-            <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-color:#27272a_#000] [scrollbar-width:thin]">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-white dark:bg-transparent [scrollbar-color:#cbd5e1_#f8fafc] dark:[scrollbar-color:#27272a_#000] [scrollbar-width:thin]">
               {filteredInterviews.map(interview => {
                 const candidateCount = (interview.candidateEmails || []).length;
                 const status = getInterviewStatus(interview);
@@ -879,25 +849,32 @@ const RecruiterInterviews: React.FC = () => {
                 return (
                   <article 
                     key={interview.id} 
-                    className="grid gap-3 border-b border-white/[0.08] px-4 py-3 transition-colors hover:bg-white/[0.025] sm:px-6 lg:grid-cols-[minmax(0,1fr)_90px_110px_90px_80px_80px_230px] lg:items-center lg:gap-4 lg:px-7"
+                    className="grid gap-3 border-b border-slate-200 dark:border-white/[0.08] px-4 py-3 transition-colors hover:bg-slate-100/70 dark:hover:bg-white/[0.025] sm:px-6 lg:grid-cols-[minmax(0,1fr)_90px_110px_90px_80px_80px_230px] lg:items-center lg:gap-4 lg:px-7"
                   >
                     {/* Name */}
                     <div className="min-w-0">
-                      <Link 
-                        to={`/recruiter/interview/${interview.id}/overview`}
-                        className="geist-caption block truncate font-semibold text-white hover:underline"
-                        title={interview.title}
-                      >
-                        {interview.title}
-                      </Link>
-                      <p className="geist-small mt-0.5 text-[#8f8f8f]">
+                      <div className="flex items-center gap-2 truncate">
+                        <Link 
+                          to={`/recruiter/interview/${interview.id}/overview`}
+                          className="geist-caption truncate font-semibold text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 hover:underline"
+                          title={interview.title}
+                        >
+                          {interview.title}
+                        </Link>
+                        {(interview.jobNumber || (interview as any).jobNo) && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 shrink-0">
+                            #{interview.jobNumber || (interview as any).jobNo}
+                          </span>
+                        )}
+                      </div>
+                      <p className="geist-small mt-0.5 text-slate-500 dark:text-[#8f8f8f]">
                         {candidateCount > 0 ? `${candidateCount} candidates` : 'No candidates invited'}
                       </p>
                     </div>
 
                     {/* Status */}
                     <div className="flex items-center justify-between gap-3 lg:justify-center">
-                      <span className="geist-label uppercase text-[#6b7280] lg:hidden">Status</span>
+                      <span className="geist-label uppercase text-slate-500 dark:text-[#6b7280] lg:hidden">Status</span>
                       <span className={`geist-small inline-flex items-center gap-1.5 rounded-[6px] border px-2 py-1 font-mono ${status.pillClass}`}>
                         <span className={`h-1.5 w-1.5 rounded-full ${status.dotClass}`} />
                         {status.label}
@@ -906,28 +883,28 @@ const RecruiterInterviews: React.FC = () => {
 
                     {/* Department */}
                     <div className="flex items-center justify-between gap-3 lg:justify-center">
-                      <span className="geist-label uppercase text-[#6b7280] lg:hidden">Department</span>
-                      <span className="geist-small inline-block rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1 font-medium text-[#d4d4d4]">
+                      <span className="geist-label uppercase text-slate-500 dark:text-[#6b7280] lg:hidden">Department</span>
+                      <span className="geist-small inline-block rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-white/[0.03] px-2 py-1 font-medium text-slate-700 dark:text-[#d4d4d4]">
                         {interview.department || "General"}
                       </span>
                     </div>
 
                     {/* Difficulty */}
                     <div className="flex items-center justify-between gap-3 lg:justify-center">
-                      <span className="geist-label uppercase text-[#6b7280] lg:hidden">Difficulty</span>
-                      <span className="geist-small text-[#8f8f8f]">{interview.difficulty || "Medium"}</span>
+                      <span className="geist-label uppercase text-slate-500 dark:text-[#6b7280] lg:hidden">Difficulty</span>
+                      <span className="geist-small text-slate-600 dark:text-[#8f8f8f]">{interview.difficulty || "Medium"}</span>
                     </div>
 
                     {/* ID */}
                     <div className="flex items-center justify-between gap-3 lg:justify-center">
-                      <span className="geist-label uppercase text-[#6b7280] lg:hidden">ID</span>
-                      <span className="geist-label text-[#6b7280]">{shortId}</span>
+                      <span className="geist-label uppercase text-slate-500 dark:text-[#6b7280] lg:hidden">ID</span>
+                      <span className="geist-label text-slate-600 dark:text-[#6b7280] font-mono">{shortId}</span>
                     </div>
 
                     {/* Deadline */}
                     <div className="flex items-center justify-between gap-3 lg:justify-center">
-                      <span className="geist-label uppercase text-[#6b7280] lg:hidden">Deadline</span>
-                      <span className="geist-small text-[#8f8f8f]">{deadlineText}</span>
+                      <span className="geist-label uppercase text-slate-500 dark:text-[#6b7280] lg:hidden">Deadline</span>
+                      <span className="geist-small text-slate-600 dark:text-[#8f8f8f]">{deadlineText}</span>
                     </div>
 
                     {/* Actions */}
@@ -938,15 +915,15 @@ const RecruiterInterviews: React.FC = () => {
                           setSelectedInterview(interview);
                           setIsInviteModalOpen(true);
                         }}
-                        className="group geist-caption inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[6px] border border-blue-500/40 bg-blue-500/10 px-3 font-semibold text-blue-400 transition-all hover:border-blue-400 hover:bg-blue-500/20 hover:text-white cursor-pointer shrink-0"
+                        className="group geist-caption inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[6px] border border-blue-200 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/10 px-3 font-semibold text-blue-700 dark:text-blue-400 transition-all hover:border-blue-300 dark:hover:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20 cursor-pointer shrink-0"
                         title="Add/Invite Candidate to this interview"
                       >
-                        <UserPlus size={13} className="text-blue-400 group-hover:text-white transition-colors shrink-0" />
+                        <UserPlus size={13} className="text-blue-600 dark:text-blue-400 group-hover:text-blue-700 dark:group-hover:text-white transition-colors shrink-0" />
                         <span className="whitespace-nowrap font-semibold tracking-tight">+ Add Candidate</span>
                       </button>
                       <Link
                         to={`/recruiter/interview/${interview.id}/overview`}
-                        className="geist-caption inline-flex h-8 items-center justify-center gap-2 whitespace-nowrap rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white shrink-0"
+                        className="geist-caption inline-flex h-8 items-center justify-center gap-2 whitespace-nowrap rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-white/[0.03] px-3 font-medium text-slate-700 dark:text-[#d4d4d4] transition-colors hover:bg-slate-200 dark:hover:bg-white/[0.06] hover:text-slate-900 dark:hover:text-white shrink-0"
                       >
                         Manage
                       </Link>
@@ -960,235 +937,14 @@ const RecruiterInterviews: React.FC = () => {
       </section>
 
 
-    {isInviteModalOpen && selectedInterview && createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col text-gray-900 dark:text-white">
-                <h3 className="font-bold text-lg p-4 border-b border-gray-200 dark:border-gray-700">Invite Candidates</h3>
-                <div className="p-4 space-y-4 overflow-y-auto">
-                    <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg space-y-3">
-                        <div>
-                            <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-1">Access Code</h4>
-                            <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-600">
-                                <span className="font-mono tracking-widest">{selectedInterview.accessCode}</span>
-                                <button onClick={() => {navigator.clipboard.writeText(selectedInterview.accessCode || ''); messageBox.showSuccess('Access code copied!');}} className="text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors" title="Copy Access Code">
-                                    <i className="fas fa-copy"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div>
-                            <h4 className="font-semibold text-sm text-gray-700 dark:text-gray-300 mb-1">Interview Link</h4>
-                            <div className="flex items-center justify-between bg-white dark:bg-gray-800 p-2 rounded border border-gray-200 dark:border-gray-600">
-                                <span className="text-sm truncate mr-2 text-gray-600 dark:text-gray-400">
-                                    {selectedInterview.interviewLink || `${window.location.origin}/#/interview/${selectedInterview.id}`}
-                                </span>
-                                <button onClick={() => {
-                                    const link = selectedInterview.interviewLink || `${window.location.origin}/#/interview/${selectedInterview.id}`;
-                                    navigator.clipboard.writeText(link);
-                                    messageBox.showSuccess('Interview link copied!');
-                                }} className="text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors" title="Copy Interview Link">
-                                    <i className="fas fa-link"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div className="pt-2 text-right">
-                             <button onClick={() => {
-                                    const link = selectedInterview.interviewLink || `${window.location.origin}/#/interview/${selectedInterview.id}`;
-                                    const text = `You've been invited to an interview for ${selectedInterview.title}.\n\nInterview Link: ${link}\nAccess Code: ${selectedInterview.accessCode}`;
-                                    navigator.clipboard.writeText(text);
-                                    messageBox.showSuccess('Full invite details copied!');
-                             }} className="text-xs font-semibold text-primary hover:text-primary-dark">
-                                 <i className="fas fa-clipboard-list mr-1"></i> Copy Full Invite Details
-                             </button>
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium mb-2">Upload Candidate File or Resumes</label>
-                        <label className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-50 dark:bg-gray-700 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-                            {parsingResumes ? (
-                              <>
-                                <ButtonBusySkeleton className="w-5 bg-gray-400/40 dark:bg-white/30" />
-                                <ButtonBusySkeleton className="w-40 bg-gray-400/40 dark:bg-white/30" />
-                              </>
-                            ) : (
-                              <>
-                                <i className="fas fa-file-excel text-green-500 text-lg"></i>
-                                <span className="font-medium text-sm">Upload Excel, CSV, PDF, DOCX, or TXT (Auto-extracts Name, Phone & Email)</span>
-                              </>
-                            )}
-                            <input type="file" multiple accept=".xlsx,.xls,.csv,.pdf,.txt,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,text/csv" className="hidden" onChange={handleResumeUpload} disabled={parsingResumes} />
-                        </label>
-                    </div>
-                    {sendingProgressMsg && (
-                        <div className="p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg text-xs font-medium text-blue-800 dark:text-blue-200 flex items-center gap-2 animate-pulse">
-                            <i className="fas fa-spinner fa-spin"></i>
-                            <span>{sendingProgressMsg}</span>
-                        </div>
-                    )}
-                    <div>
-                        <label className="block text-sm font-medium mb-2">Add Candidate Manually</label>
-                        <div className="flex gap-2">
-                            <input 
-                                type="email" 
-                                value={newEmail} 
-                                onChange={(e) => setNewEmail(e.target.value)} 
-                                placeholder="Candidate email" 
-                                className="flex-1 p-2 border rounded bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-sm outline-none" 
-                            />
-                            <input 
-                                type="tel" 
-                                value={manualPhone} 
-                                onChange={(e) => setManualPhone(e.target.value)} 
-                                placeholder="Phone number (optional)" 
-                                className="w-1/3 p-2 border rounded bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-sm outline-none" 
-                            />
-                            <button 
-                                onClick={() => {
-                                    if (!newEmail) return;
-                                    setNewEmails([...newEmails, newEmail]);
-                                    if (manualPhone) {
-                                        setParsedCandidates(prev => [...prev, { email: newEmail.toLowerCase(), phone: manualPhone, matchScore: 'N/A' }]);
-                                    }
-                                    setNewEmail('');
-                                    setManualPhone('');
-                                }} 
-                                className="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 transition-colors"
-                            >
-                                Add
-                            </button>
-                        </div>
-                    </div>
-                    <div>
-                        <h4 className="font-semibold mb-2 text-sm">New Candidates to Invite:</h4>
-                        {newEmails.length === 0 ? (
-                             <p className="text-xs text-gray-500 italic">No candidates added yet. Upload resumes or add manually.</p>
-                        ) : (
-                            <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto">
-                                {newEmails.map(email => {
-                                    const parsedData = parsedCandidates.find(c => c.email === email);
-                                    
-                                    let ScoreBadge = null;
-                                    if (parsedData?.matchScore && parsedData.matchScore !== 'N/A') {
-                                        const numScore = parseFloat(parsedData.matchScore);
-                                        let badgeColor = 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700';
-                                        let icon = 'fas fa-minus-circle';
-                                        
-                                        if (!isNaN(numScore)) {
-                                            if (numScore >= 75) {
-                                                badgeColor = 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border shadow-sm border-green-200 dark:border-green-800';
-                                                icon = 'fas fa-check-circle';
-                                            } else if (numScore >= 50) {
-                                                badgeColor = 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300 border shadow-sm border-yellow-200 dark:border-yellow-800';
-                                                icon = 'fas fa-exclamation-circle';
-                                            } else {
-                                                badgeColor = 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border shadow-sm border-red-200 dark:border-red-800';
-                                                icon = 'fas fa-times-circle';
-                                            }
-                                        }
-                                        
-                                        ScoreBadge = (
-                                            <div className={`mt-1 flex w-fit items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-bold ${badgeColor}`} title="AI Resume Match Score vs Job Description">
-                                                <i className={icon}></i> Match: {parsedData.matchScore}%
-                                            </div>
-                                        );
-                                    }
-
-                                    return (
-                                        <div key={email} className="flex items-start justify-between text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 shadow-sm transition-colors hover:border-gray-300 dark:hover:border-gray-500">
-                                            <div className="flex flex-col">
-                                                <span className="font-semibold text-gray-900 dark:text-white mb-0.5">{email}</span>
-                                                {parsedData?.phone && parsedData.phone !== 'N/A' && (
-                                                    <span className="text-xs text-blue-600 dark:text-blue-400 font-mono flex items-center gap-1.5"><i className="fas fa-phone-alt"></i>{parsedData.phone}</span>
-                                                )}
-                                                {ScoreBadge}
-                                            </div>
-                                            <button onClick={() => handleRemoveNewEmail(email)} className="text-gray-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700" title="Remove Candidate">
-                                                <i className="fas fa-trash-alt"></i>
-                                            </button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-                    {selectedInterview.candidateEmails && selectedInterview.candidateEmails.length > 0 && (
-                        <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                            <h4 className="font-semibold mb-2 text-sm">Previously Invited Candidates:</h4>
-                            <div className="flex flex-col gap-2 max-h-[200px] overflow-y-auto pr-1">
-                                {selectedInterview.candidateEmails.map((email) => {
-                                    const isEditing = editingCandidateEmail === email;
-                                    const isResending = resendingEmail === email;
-                                    
-                                    return (
-                                        <div key={email} className="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 shadow-sm">
-                                            {isEditing ? (
-                                                <div className="flex-1 flex gap-2 mr-2">
-                                                    <input 
-                                                        type="email" 
-                                                        value={editedEmailValue} 
-                                                        onChange={(e) => setEditedEmailValue(e.target.value)} 
-                                                        className="w-full p-1.5 text-sm border rounded bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-1 focus:ring-primary"
-                                                        autoFocus
-                                                    />
-                                                    <button 
-                                                        onClick={() => handleEditAndResend(email, editedEmailValue)}
-                                                        disabled={resendingEmail !== null}
-                                                        className="bg-green-500 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-green-600 disabled:opacity-50 flex items-center gap-1 shrink-0"
-                                                    >
-                                                        {isResending ? <ButtonBusySkeleton className="w-12 bg-white/45" /> : <><i className="fas fa-save"></i> Save</>}
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => setEditingCandidateEmail(null)}
-                                                        disabled={resendingEmail !== null}
-                                                        className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-3 py-1.5 rounded text-xs font-semibold hover:bg-gray-300 dark:hover:bg-gray-500 shrink-0"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <span className="font-medium text-gray-900 dark:text-white truncate max-w-[200px]" title={email}>{email}</span>
-                                                    <div className="flex items-center gap-2">
-                                                        <button 
-                                                            onClick={() => { setEditingCandidateEmail(email); setEditedEmailValue(email); }}
-                                                            disabled={resendingEmail !== null}
-                                                            className="text-gray-500 hover:text-blue-500 transition-colors p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700" 
-                                                            title="Edit Email & Resend"
-                                                        >
-                                                            <i className="fas fa-pencil-alt text-xs"></i>
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => handleResend(email)}
-                                                            disabled={resendingEmail !== null}
-                                                            className="text-gray-500 hover:text-green-500 transition-colors p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-1" 
-                                                            title="Resend Invitation"
-                                                        >
-                                                            {isResending ? <ButtonBusySkeleton className="w-5 bg-gray-400/40 dark:bg-white/30" /> : <i className="fas fa-paper-plane text-xs"></i>}
-                                                        </button>
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-                </div>
-                <div className="flex justify-end gap-2 p-4 border-t border-gray-200 dark:border-gray-700">
-                    <button onClick={() => setIsInviteModalOpen(false)} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded">Cancel</button>
-                    <button 
-                        onClick={handleSendInvites} 
-                        disabled={sendingEmails || newEmails.length === 0}
-                        className="bg-green-500 text-white px-4 py-2 rounded flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {sendingEmails ? (
-                            <ButtonBusySkeleton className="w-20 bg-white/45" />
-                        ) : 'Send Invites'}
-                    </button>
-                </div>
-            </div>
-        </div>,
-        document.body
+    {isInviteModalOpen && selectedInterview && (
+      <InviteCandidateModal
+        job={selectedInterview}
+        onClose={() => {
+          setIsInviteModalOpen(false);
+          setSelectedInterview(null);
+        }}
+      />
     )}
 
     {editingJobId && <EditJobModal jobId={editingJobId} onClose={() => setEditingJobId(null)} />}

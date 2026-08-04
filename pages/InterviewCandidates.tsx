@@ -14,6 +14,7 @@ import { logTeamActivity } from '../services/auditService';
 import { Interview } from '../types';
 import { poll, rds } from '../services/rdsApi';
 import { dedupeCandidatesByIdentity, normalizeCandidatePhone } from '../services/candidateIdentity';
+import { extractJobDetailsOptions } from '../services/jobDetailsHelper';
 
 type CandidateDraft = { email: string; phone: string; matchScore?: string };
 type RosterCandidate = { email: string; hasSubmitted: boolean; attemptId?: string; allowReattempt?: boolean };
@@ -235,7 +236,27 @@ const InterviewCandidates: React.FC = () => {
       });
     });
 
+    const candData = (interview as any).candidateData || [];
+    candData.forEach((c: any) => {
+      const email = (c.email || '').toLowerCase();
+      const phone = c.phone || '';
+      const displayId = (email && !email.includes('@whatsapp.noemail')) ? email : (phone ? `${phone}` : '');
+      if (!displayId) return;
+
+      const hasSubmitted = submissions.some((submission) => {
+        const subEmail = (submission.candidateInfo?.email || '').toLowerCase();
+        const subPhone = normalizeCandidatePhone((submission.candidateInfo as any)?.phone);
+        const invitedPhone = normalizeCandidatePhone(phone);
+        return (email && !email.includes('@whatsapp.noemail') && subEmail === email) || Boolean(subPhone && invitedPhone && subPhone === invitedPhone);
+      });
+
+      if (!hasSubmitted && !unifiedList.some((candidate) => candidate.email.toLowerCase() === displayId.toLowerCase())) {
+        unifiedList.push({ email: displayId, hasSubmitted: false });
+      }
+    });
+
     explicitEmails.forEach((email) => {
+      if (!email || email.includes('@whatsapp.noemail')) return;
       const hasSubmitted = submissions.some((submission) => {
         const subEmail = (submission.candidateInfo?.email || '').toLowerCase();
         if (subEmail && subEmail === email) return true;
@@ -392,6 +413,8 @@ const InterviewCandidates: React.FC = () => {
         candidateData: mergedCandidateData,
       } as any);
 
+      const jobOptions = extractJobDetailsOptions(interview, userProfile, user);
+
       let emailCount = 0;
       if (validEmails.length > 0) {
         setSendingProgressMsg(`Sending ${validEmails.length} invitation email(s)...`);
@@ -401,16 +424,7 @@ const InterviewCandidates: React.FC = () => {
           interview.interviewLink || '',
           interview.accessCode,
           false,
-          {
-            gender: (interview as any).gender || (interview as any).genderRequirement,
-            location: (interview as any).location,
-            education: (interview as any).education || (interview as any).qualification,
-            qualification: (interview as any).qualification || (interview as any).education,
-            experience: (interview as any).experience || (interview as any).experienceRequired,
-            salary: (interview as any).salary || (interview as any).salaryRange,
-            recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiting Team',
-            recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
-          }
+          jobOptions
         );
         if (result.success) {
           emailCount = result.totalEmails;
@@ -433,16 +447,7 @@ const InterviewCandidates: React.FC = () => {
               setSendingProgressMsg(`📱 Sending WhatsApp invite ${sentCount}/${totalCount} to ${currentCandidate}...`);
             }
           },
-          {
-            gender: (interview as any).gender || (interview as any).genderRequirement,
-            location: (interview as any).location,
-            education: (interview as any).education || (interview as any).qualification,
-            qualification: (interview as any).qualification || (interview as any).education,
-            experience: (interview as any).experience || (interview as any).experienceRequired,
-            salary: (interview as any).salary || (interview as any).salaryRange,
-            recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiting Team',
-            recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
-          }
+          jobOptions
         );
         if (waResult.success) {
           waCount = waResult.totalSent;
@@ -470,6 +475,7 @@ const InterviewCandidates: React.FC = () => {
 
     setReminding(true);
     try {
+      const reminderJobOptions = extractJobDetailsOptions(interview, userProfile, user);
       let emailCount = 0;
       let waCount = 0;
 
@@ -479,16 +485,7 @@ const InterviewCandidates: React.FC = () => {
         interview.interviewLink || '',
         interview.accessCode,
         true,
-        {
-          gender: (interview as any).gender || (interview as any).genderRequirement,
-          location: (interview as any).location,
-          education: (interview as any).education || (interview as any).qualification,
-          qualification: (interview as any).qualification || (interview as any).education,
-          experience: (interview as any).experience || (interview as any).experienceRequired,
-          salary: (interview as any).salary || (interview as any).salaryRange,
-          recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiter',
-          recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
-        }
+        reminderJobOptions
       );
       if (result.success) emailCount = result.totalEmails;
 
@@ -504,7 +501,9 @@ const InterviewCandidates: React.FC = () => {
           interview.title,
           interview.interviewLink || '',
           interview.accessCode,
-          true
+          true,
+          undefined,
+          reminderJobOptions
         );
         if (waResult.success) waCount = waResult.totalSent;
       }
@@ -522,6 +521,7 @@ const InterviewCandidates: React.FC = () => {
     if (!interview) return;
     setResendingEmail(email);
     try {
+      const resendJobOptions = extractJobDetailsOptions(interview, userProfile, user);
       let emailSent = false;
       let waSent = false;
 
@@ -532,16 +532,7 @@ const InterviewCandidates: React.FC = () => {
           interview.interviewLink || '',
           interview.accessCode,
           false,
-          {
-            gender: (interview as any).gender || (interview as any).genderRequirement,
-            location: (interview as any).location,
-            education: (interview as any).education || (interview as any).qualification,
-            qualification: (interview as any).qualification || (interview as any).education,
-            experience: (interview as any).experience || (interview as any).experienceRequired,
-            salary: (interview as any).salary || (interview as any).salaryRange,
-            recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiter',
-            recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
-          }
+          resendJobOptions
         );
         if (result.success) emailSent = true;
       }
@@ -557,10 +548,7 @@ const InterviewCandidates: React.FC = () => {
           jobTitle: interview.title,
           interviewLink: interview.interviewLink || '',
           accessCode: interview.accessCode,
-          options: {
-            whatsappSessionId: userProfile?.whatsappSessionId || '',
-            whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
-          }
+          options: resendJobOptions
         });
         if (waRes.success) waSent = true;
       }

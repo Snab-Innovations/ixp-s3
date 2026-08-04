@@ -1,6 +1,7 @@
 import * as mammoth from 'mammoth';
 import * as pdfjsLib from 'pdfjs-dist';
 import { uploadToCloudinary } from './api';
+import { bedrockGenerateJson } from './bedrockService';
 import { grokGenerateJson } from './grokService';
 import { rds } from './rdsApi';
 
@@ -405,39 +406,86 @@ export const analyzeResumeText = async (
   if (normalizeWhitespace(text).length < 80) return { ...fallback, ...overrides };
 
   try {
-    const ai = await grokGenerateJson<AIResumeProfile>(
-      'You extract factual resume data for recruiters. Never infer missing facts, protected traits, personality, or candidate quality. Return only valid JSON.',
-      `Extract this resume into the exact JSON shape below. Keep skills canonical and concise. Experience must contain only roles explicitly present in the resume. totalExperienceYears must be a number.\n\n{"name":"","email":"","phone":"","location":"","currentTitle":"","summary":"","totalExperienceYears":0,"skills":[],"experience":[{"title":"","company":"","startDate":"","endDate":"","highlights":[],"skills":[]}],"education":[{"degree":"","institution":"","year":""}],"certifications":[],"languages":[],"keywords":[],"linkedinUrl":"","portfolioUrl":""}\n\nRESUME:\n${text.slice(0, 18_000)}`,
-      0.1,
-      1800
-    );
+    let ai: AIResumeProfile;
+    try {
+      ai = await bedrockGenerateJson<AIResumeProfile>(
+        'You are an expert executive talent recruiter and AI resume parser powered by Amazon Bedrock GLM 4.7 Flash. Extract rich, highly organized, and 100% factual resume profile data. Split complex text into distinct, canonical skill badges and clear experience entries. Return only valid JSON.',
+        `Extract this candidate resume into the exact JSON shape below. Ensure all technical skills, tools, domain competencies, certifications, and education degrees are thoroughly identified and categorized as separate clean strings in skills array.
+
+JSON Schema:
+{"name":"","email":"","phone":"","location":"","currentTitle":"","summary":"","totalExperienceYears":0,"skills":[],"experience":[{"title":"","company":"","startDate":"","endDate":"","highlights":[],"skills":[]}],"education":[{"degree":"","institution":"","year":""}],"certifications":[],"languages":[],"keywords":[],"linkedinUrl":"","portfolioUrl":""}
+
+RESUME CONTENT:
+${text.slice(0, 20_000)}`,
+        0.1,
+        'default',
+        2000
+      );
+    } catch (bedrockErr) {
+      console.warn('Bedrock GLM-4.7-flash resume extraction encountered issue; trying secondary AI backup.', bedrockErr);
+      ai = await grokGenerateJson<AIResumeProfile>(
+        'You are an expert executive talent recruiter and AI resume parser. Extract rich, highly organized, and 100% factual resume profile data. Return only valid JSON.',
+        `Extract this candidate resume into the exact JSON shape below:\n\n{"name":"","email":"","phone":"","location":"","currentTitle":"","summary":"","totalExperienceYears":0,"skills":[],"experience":[{"title":"","company":"","startDate":"","endDate":"","highlights":[],"skills":[]}],"education":[{"degree":"","institution":"","year":""}],"certifications":[],"languages":[],"keywords":[],"linkedinUrl":"","portfolioUrl":""}\n\nRESUME CONTENT:\n${text.slice(0, 20_000)}`,
+        0.1,
+        2000
+      );
+    }
 
     const aiSkills = Array.isArray(ai.skills) ? ai.skills.map((skill) => canonicalizeSkill(safeString(skill, 60))) : [];
     const aiExperience = parseAIExperience(ai.experience);
     const experienceSkills = aiExperience.flatMap((entry) => entry.skills);
+    const deterministicSkills = fallback.skills || [];
+
+    // Comprehensive skill signal merging (AI + Experience + Deterministic Signals)
+    const allSkills = uniqueStrings(
+      [...aiSkills, ...experienceSkills, ...deterministicSkills]
+        .map(canonicalizeSkill)
+        .filter((s) => s && s.length >= 2 && s.length <= 50),
+      50
+    );
+
+    const totalExpYears = safeNumber(ai.totalExperienceYears) || fallback.totalExperienceYears;
+    const name = safeString(ai.name, 100) || fallback.name;
+    const currentTitle = safeString(ai.currentTitle, 150) || fallback.currentTitle;
+
+    let summary = safeString(ai.summary, 1200) || fallback.summary;
+    if (!summary && (currentTitle || allSkills.length > 0)) {
+      summary = `${name || 'Candidate'} is a ${currentTitle || 'Professional'} with ${totalExpYears ? `${totalExpYears} years of` : 'relevant'} industry experience proficient in ${allSkills.slice(0, 6).join(', ')}.`;
+    }
+
     const profile: ParsedResumeProfile = {
-      name: safeString(ai.name, 100) || fallback.name,
+      name,
       email: safeString(ai.email, 150).toLowerCase() || fallback.email,
       phone: formatExtractedPhone(safeString(ai.phone, 50)) || fallback.phone,
       location: safeString(ai.location, 150) || fallback.location,
-      currentTitle: safeString(ai.currentTitle, 150) || fallback.currentTitle,
-      summary: safeString(ai.summary, 1200) || fallback.summary,
-      totalExperienceYears: safeNumber(ai.totalExperienceYears) || fallback.totalExperienceYears,
-      skills: uniqueStrings([...aiSkills, ...experienceSkills, ...fallback.skills].map(canonicalizeSkill), 40),
+      currentTitle,
+      summary,
+      totalExperienceYears: totalExpYears,
+      skills: allSkills,
       experience: aiExperience,
       education: parseAIEducation(ai.education).length ? parseAIEducation(ai.education) : fallback.education,
-      certifications: uniqueStrings(Array.isArray(ai.certifications) ? ai.certifications : fallback.certifications, 12),
-      languages: uniqueStrings(Array.isArray(ai.languages) ? ai.languages : fallback.languages, 8),
-      keywords: uniqueStrings(Array.isArray(ai.keywords) ? ai.keywords : [], 20),
+      certifications: uniqueStrings(Array.isArray(ai.certifications) ? ai.certifications : fallback.certifications, 15),
+      languages: uniqueStrings(Array.isArray(ai.languages) ? ai.languages : fallback.languages, 10),
+      keywords: uniqueStrings(Array.isArray(ai.keywords) ? ai.keywords : [], 25),
       linkedinUrl: safeString(ai.linkedinUrl, 500) || fallback.linkedinUrl,
       portfolioUrl: safeString(ai.portfolioUrl, 500) || fallback.portfolioUrl,
       parsingMethod: 'hybrid',
       parserVersion: PARSER_VERSION,
     };
-    return { ...profile, ...Object.fromEntries(Object.entries(overrides).filter(([, value]) => Boolean(value))) };
+    return {
+      ...profile,
+      ...Object.fromEntries(
+        Object.entries(overrides).filter(([, value]) => value !== undefined && value !== null && value !== '')
+      )
+    };
   } catch (error) {
     console.warn('AI resume extraction failed; using deterministic parser.', error);
-    return { ...fallback, ...Object.fromEntries(Object.entries(overrides).filter(([, value]) => Boolean(value))) };
+    return {
+      ...fallback,
+      ...Object.fromEntries(
+        Object.entries(overrides).filter(([, value]) => value !== undefined && value !== null && value !== '')
+      )
+    };
   }
 };
 
@@ -466,11 +514,17 @@ export const readResumeText = async (fileOrBlob: Blob, fileName = '') => {
 
 export const ingestResumeFile = async (
   file: File,
-  overrides: Partial<Pick<ParsedResumeProfile, 'name' | 'email' | 'phone'>> = {},
-  existingResumeUrl = ''
+  overrides: Partial<Pick<ParsedResumeProfile, 'name' | 'email' | 'phone' | 'totalExperienceYears' | 'skills'>> = {},
+  existingResumeUrl = '',
+  extraNotes = ''
 ): Promise<ResumeIngestionResult> => {
-  const resumeText = await readResumeText(file, file.name);
+  let resumeText = await readResumeText(file, file.name);
   if (!resumeText) throw new Error('No readable text was found in this resume.');
+
+  if (extraNotes && extraNotes.trim()) {
+    resumeText = `RECRUITER PRIORITY NOTES (MUST TAKE HIGHEST PRECEDENCE OVER PDF CONTENT):\n${extraNotes.trim()}\n\nORIGINAL RESUME FILE TEXT:\n${resumeText}`;
+  }
+
   const [profile, uploadedUrl] = await Promise.all([
     analyzeResumeText(resumeText, file.name, overrides),
     existingResumeUrl ? Promise.resolve(existingResumeUrl) : uploadToCloudinary(file, 'auto'),
@@ -633,6 +687,7 @@ export const scoreCandidateForRole = (
   candidate: ResumeDumpRecord,
   role: { title: string; description: string; requiredSkills: string[]; minExperience?: number; maxExperience?: number }
 ): CandidateMatch | null => {
+  if (candidate.isHired || candidate.doNotSuggest) return null;
   const requiredSkills = uniqueStrings(role.requiredSkills.map(canonicalizeSkill), 30);
   const candidateSkills = uniqueStrings([...(candidate.skills || []), ...(candidate.experience || []).flatMap((entry) => entry.skills || [])].map(canonicalizeSkill), 50);
   const evidenceText = `${candidate.currentTitle || ''} ${candidate.summary || ''} ${(candidate.experience || []).map((entry) => `${entry.title} ${entry.company} ${(entry.highlights || []).join(' ')}`).join(' ')} ${candidate.resumeText || ''}`;

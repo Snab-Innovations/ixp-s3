@@ -1,10 +1,10 @@
 import React from 'react';
 
-const SkeletonBlock = ({ className = '' }: { className?: string }) => (
+const SkeletonBlock = ({ className = '' }: { key?: React.Key; className?: string }) => (
   <div className={`animate-pulse rounded-[6px] bg-white/[0.08] ${className}`} />
 );
 
-const SkeletonLine = ({ className = '' }: { className?: string }) => (
+const SkeletonLine = ({ className = '' }: { key?: React.Key; className?: string }) => (
   <SkeletonBlock className={`h-3 ${className}`} />
 );
 

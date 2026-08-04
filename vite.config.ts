@@ -8,7 +8,17 @@ export default defineConfig(({ mode }) => {
     return {
       server: {
         port: 3000,
-        host: '0.0.0.0'
+        host: '0.0.0.0',
+        proxy: {
+          '/auth': {
+            target: 'http://localhost:8080',
+            changeOrigin: true,
+          },
+          '/api': {
+            target: 'http://localhost:8080',
+            changeOrigin: true,
+          },
+        },
       },
       plugins: [tailwindcss(), react()],
       optimizeDeps: {

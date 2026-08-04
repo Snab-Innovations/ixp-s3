@@ -6,6 +6,4 @@ import app from '../../../api-server/app.js';
  * Wraps the Express app for AWS Lambda via the API Gateway HTTP API.
  * serverless-http auto-detects API Gateway payload format 1.0 / 2.0.
  */
-const proxy = serverless(app) as unknown as APIGatewayProxyHandlerV2;
-
-export const handler: APIGatewayProxyHandlerV2 = async (event, context) => proxy(event, context);
+export const handler = serverless(app);

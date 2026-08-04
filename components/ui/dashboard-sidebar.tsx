@@ -35,6 +35,13 @@ const recruiterNavGroups: NavGroupData[] = [
         match: (path) => path === '/recruiter/jobs',
       },
       {
+        id: 'all-jobs',
+        title: 'All Jobs',
+        icon: BriefcaseBusiness,
+        href: '/recruiter/all-jobs',
+        match: (path) => path === '/recruiter/all-jobs',
+      },
+      {
         id: 'interviews',
         title: 'My Interviews',
         icon: Video,
@@ -42,7 +49,7 @@ const recruiterNavGroups: NavGroupData[] = [
         match: (path) =>
           path === '/recruiter/interviews' ||
           path.startsWith('/recruiter/interview/responses') ||
-          (path.startsWith('/recruiter/interview/') && !path.startsWith('/recruiter/interview/create')),
+          (path.startsWith('/recruiter/interview/') && !['create'].includes(path.split('/')[3] || '')),
       },
       {
         id: 'candidate-hub',
@@ -60,7 +67,7 @@ const recruiterNavGroups: NavGroupData[] = [
       },
       {
         id: 'create-interview',
-        title: 'Create Interview',
+        title: 'Create Job',
         icon: BriefcaseBusiness,
         href: '/recruiter/interview/create',
         match: (path) => path === '/recruiter/interview/create',
@@ -92,31 +99,36 @@ function NavItem({
       type="button"
       onClick={() => onNavigate(item.href)}
       className={cn(
-        'group flex w-full items-center justify-between rounded-[6px] px-2 py-1.5 text-left transition-all duration-200',
+        'group relative flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition-all duration-300 ease-out bg-transparent hover:translate-x-1.5 cursor-pointer',
+        'before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-4 before:w-1 before:rounded-r-full before:bg-blue-600 dark:before:bg-blue-400 before:transition-all before:duration-300',
         isActive
-          ? 'bg-white/[0.07] text-white font-medium'
-          : 'text-[#8f8f8f] hover:bg-white/[0.04] hover:text-white'
+          ? 'text-blue-600 dark:text-blue-400 font-bold before:opacity-100 before:scale-y-100'
+          : 'text-slate-600 dark:text-[#8f8f8f] hover:text-slate-900 dark:hover:text-white before:opacity-0 hover:before:opacity-100 before:scale-y-75 hover:before:scale-y-100'
       )}
     >
-      <span className="flex min-w-0 items-center gap-2">
+      <span className="flex min-w-0 items-center gap-2.5">
         <item.icon
           className={cn(
-            'size-[15px] shrink-0 transition-colors',
-            isActive ? 'text-white' : 'text-[#6b7280] group-hover:text-white'
+            'size-4 shrink-0 transition-all duration-300 ease-out group-hover:scale-110',
+            isActive 
+              ? 'text-blue-600 dark:text-blue-400 drop-shadow-[0_0_8px_rgba(37,99,235,0.4)] dark:drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]' 
+              : 'text-slate-500 dark:text-[#6b7280] group-hover:text-blue-600 dark:group-hover:text-blue-400 group-hover:drop-shadow-[0_0_6px_rgba(59,130,246,0.35)]'
           )}
-          strokeWidth={1.5}
+          strokeWidth={1.75}
         />
-        <span className="geist-small truncate">{item.title}</span>
+        <span className="geist-small truncate font-medium group-hover:font-semibold group-hover:text-slate-900 dark:group-hover:text-white transition-all duration-300">
+          {item.title}
+        </span>
       </span>
 
       <span className="flex items-center gap-2">
         {item.shortcut && (
-          <kbd className="hidden h-5 items-center justify-center rounded-[4px] border border-border bg-background px-1.5 font-mono text-[10px] font-medium text-muted-foreground shadow-sm group-hover:inline-flex">
+          <kbd className="hidden h-5 items-center justify-center rounded-[4px] border border-slate-200 dark:border-border bg-transparent px-1.5 font-mono text-[10px] font-medium text-slate-500 dark:text-muted-foreground shadow-sm group-hover:inline-flex group-hover:border-blue-300 dark:group-hover:border-blue-500/40 transition-colors">
             {item.shortcut}
           </kbd>
         )}
         {item.badge && (
-          <span className="flex h-5 min-w-5 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.04] px-1.5 text-[10px] font-medium text-white">
+          <span className="flex h-5 min-w-5 items-center justify-center rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-transparent px-1.5 text-[10px] font-medium text-slate-900 dark:text-white group-hover:scale-105 group-hover:border-blue-300 dark:group-hover:border-blue-500/40 transition-all">
             {item.badge}
           </span>
         )}
@@ -162,12 +174,12 @@ export function DashboardSidebar({
     : [];
 
   return (
-      <aside className={cn('recruiter-sidebar flex h-full w-[190px] flex-col border-r border-white/[0.11] bg-[#000] p-2 pt-3 font-sans text-white', className)}>
+      <aside className={cn('recruiter-sidebar flex h-full w-[190px] flex-col border-r border-slate-200 dark:border-white/[0.11] bg-transparent p-2 pt-3 font-sans text-slate-900 dark:text-white', className)}>
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {recruiterNavGroups.map((group, index) => (
             <div key={group.heading || index} className="flex flex-col gap-0.5">
               {group.heading && (
-                <span className="geist-label mb-1 px-2 uppercase text-[#6b7280]">
+                <span className="geist-label mb-1 px-2 uppercase text-slate-500 dark:text-[#6b7280]">
                   {group.heading}
                 </span>
               )}
@@ -175,7 +187,7 @@ export function DashboardSidebar({
                 <div key={item.id}>
                   <NavItem item={item} activePath={activePath} onNavigate={handleNavigate} />
                   {item.id === 'interviews' && manageSubItems.length > 0 && (
-                    <div className="ml-[17px] mt-1 border-l border-white/[0.13] pl-3">
+                    <div className="ml-[17px] mt-1 border-l border-slate-300 dark:border-white/[0.13] pl-3">
                       <div className="flex flex-col gap-0.5">
                         {manageSubItems.map((subItem) => {
                           const isActive = activeManageSection === subItem.id;
@@ -185,13 +197,13 @@ export function DashboardSidebar({
                               type="button"
                               onClick={() => handleNavigate(subItem.href)}
                               className={cn(
-                                'group flex w-full items-center rounded-[6px] px-2 py-1.5 text-left transition-colors',
+                                'group relative flex w-full items-center rounded-md px-2 py-1.5 text-left transition-all duration-300 ease-out bg-transparent hover:translate-x-1.5 cursor-pointer',
                                 isActive
-                                  ? 'bg-white/[0.07] text-white font-medium'
-                                  : 'text-[#8f8f8f] hover:bg-white/[0.04] hover:text-white'
+                                  ? 'text-blue-600 dark:text-blue-400 font-bold'
+                                  : 'text-slate-600 dark:text-[#8f8f8f] hover:text-slate-900 dark:hover:text-white'
                               )}
                             >
-                              <span className="geist-small truncate">{subItem.title}</span>
+                              <span className="geist-small truncate font-medium group-hover:font-semibold transition-colors duration-300">{subItem.title}</span>
                             </button>
                           );
                         })}
@@ -199,7 +211,7 @@ export function DashboardSidebar({
                     </div>
                   )}
                   {item.id === 'assessments' && assessmentSubItems.length > 0 && (
-                    <div className="ml-[17px] mt-1 border-l border-white/[0.13] pl-3">
+                    <div className="ml-[17px] mt-1 border-l border-slate-300 dark:border-white/[0.13] pl-3">
                       <div className="flex flex-col gap-0.5">
                         {assessmentSubItems.map((subItem) => {
                           const isActive = activeAssessmentSection === subItem.id;
@@ -209,13 +221,13 @@ export function DashboardSidebar({
                               type="button"
                               onClick={() => handleNavigate(subItem.href)}
                               className={cn(
-                                'group flex w-full items-center rounded-[6px] px-2 py-1.5 text-left transition-colors',
+                                'group relative flex w-full items-center rounded-md px-2 py-1.5 text-left transition-all duration-300 ease-out bg-transparent hover:translate-x-1.5 cursor-pointer',
                                 isActive
-                                  ? 'bg-white/[0.07] text-white font-medium'
-                                  : 'text-[#8f8f8f] hover:bg-white/[0.04] hover:text-white'
+                                  ? 'text-blue-600 dark:text-blue-400 font-bold'
+                                  : 'text-slate-600 dark:text-[#8f8f8f] hover:text-slate-900 dark:hover:text-white'
                               )}
                             >
-                              <span className="geist-small truncate">{subItem.title}</span>
+                              <span className="geist-small truncate font-medium group-hover:font-semibold transition-colors duration-300">{subItem.title}</span>
                             </button>
                           );
                         })}

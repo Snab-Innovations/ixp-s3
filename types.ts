@@ -14,6 +14,16 @@ export interface Interview {
     status: 'Pending' | 'Invited' | 'Completed' | 'Cancelled';
     interviewLink?: string;
     accessCode: string;
+    location?: string;
+    salaryRange?: string;
+    education?: string;
+    employmentType?: string;
+    minExperience?: number;
+    maxExperience?: number;
+    skills?: string;
+    detailedJdUrl?: string;
+    aboutCompany?: string;
+    jobNumber?: string;
     report?: InterviewReport;
     createdAt: any;
     updatedAt: any;
