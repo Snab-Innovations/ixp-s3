@@ -7,7 +7,7 @@ import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 
 const REGION = import.meta.env.VITE_AWS_SES_REGION || import.meta.env.VITE_AWS_REGION || 'us-east-1';
 const FROM_EMAIL = import.meta.env.VITE_SES_FROM_EMAIL || 'noreply@interviewxpert.in';
-const SENDER_NAME = import.meta.env.VITE_SES_SENDER_NAME || 'SNAB Innovations | Dsource';
+const SENDER_NAME = import.meta.env.VITE_SES_SENDER_NAME || 'Dsource';
 
 const ACCESS_KEY_ID = (import.meta.env.VITE_AWS_ACCESS_KEY_ID || import.meta.env.VITE_AWS_S3_ACCESS_KEY_ID || '').replace(/['"]/g, '').trim();
 const SECRET_ACCESS_KEY = (import.meta.env.VITE_AWS_SECRET_ACCESS_KEY || import.meta.env.VITE_AWS_S3_SECRET_ACCESS_KEY || '').replace(/['"]/g, '').trim();
@@ -18,6 +18,8 @@ export interface JobDetailsOptions {
   education?: string;
   qualification?: string;
   experience?: string;
+  minExperience?: number | string;
+  maxExperience?: number | string;
   salary?: string;
   recruiterName?: string;
   recruiterPhone?: string;
@@ -44,6 +46,44 @@ const getSESClient = (): SESv2Client => {
   }
   return sesClientInstance;
 };
+
+/**
+ * Formats job experience display string.
+ * Handles ranges like 5-8 yrs, minExperience & maxExperience, single numbers, etc.
+ */
+export function formatExperienceDisplay(options?: {
+  experience?: string;
+  minExperience?: number | string;
+  maxExperience?: number | string;
+}): string {
+  if (!options) return 'As per Job Description';
+
+  const minExp = options.minExperience !== undefined && options.minExperience !== null && String(options.minExperience).trim() !== '' ? String(options.minExperience).trim() : null;
+  const maxExp = options.maxExperience !== undefined && options.maxExperience !== null && String(options.maxExperience).trim() !== '' ? String(options.maxExperience).trim() : null;
+
+  if (minExp !== null && maxExp !== null) {
+    if (minExp === maxExp) return `${minExp} ${Number(minExp) === 1 ? 'Year' : 'Years'}`;
+    return `${minExp} - ${maxExp} Years`;
+  } else if (minExp !== null) {
+    return `${minExp}+ Years`;
+  }
+
+  const expStr = options.experience !== undefined && options.experience !== null ? String(options.experience).trim() : '';
+  if (!expStr) return 'As per Job Description';
+
+  const rangeMatch = expStr.match(/^(\d+)\s*(?:-|to)\s*(\d+)\s*(?:yrs?|years?)?$/i);
+  if (rangeMatch) {
+    return `${rangeMatch[1]} - ${rangeMatch[2]} Years`;
+  }
+
+  const singleMatch = expStr.match(/^(\d+)\s*(?:yrs?|years?)?$/i);
+  if (singleMatch) {
+    const num = singleMatch[1];
+    return `${num} ${Number(num) === 1 ? 'Year' : 'Years'}`;
+  }
+
+  return expStr;
+}
 
 /**
  * Derives a clean candidate name from an email address if name is not explicitly passed.
@@ -76,13 +116,13 @@ export function getDesignerEmailTemplate(
   const headline = isReminder ? "Pending Interview Reminder" : `Interview Invitation: ${jobTitle}`;
   const subheadline = isReminder
     ? `This is a polite reminder that your AI video interview assessment for the <strong>${jobTitle}</strong> position is still pending.`
-    : `We are pleased to invite you to complete an AI video interview assessment for the <strong>${jobTitle}</strong> position at <strong>SNAB Innovations / Dsource</strong>.`;
+    : `We are pleased to invite you to complete an AI video interview assessment for the <strong>${jobTitle}</strong> position at <strong>Dsource</strong>.`;
 
   const genderStr = options?.gender ? `, ${options.gender}` : '';
   const jobPostDisplay = `${jobTitle}${genderStr}`;
   const jobLocationDisplay = options?.location || 'As specified in Job Description';
   const jobQualificationDisplay = options?.qualification || options?.education || 'As per Job Description';
-  const jobExpDisplay = options?.experience || 'As per Job Description';
+  const jobExpDisplay = formatExperienceDisplay(options);
   const jobSalaryDisplay = options?.salary || 'Competitive / As per Job Description';
 
   const recruiterName = options?.recruiterName || 'HR Recruiting Team';
@@ -220,7 +260,7 @@ export function getDesignerEmailTemplate(
                 Need Technical Assistance? Call Dsource Support: <strong style="color:#0f172a;">9762588623 / 8484888632</strong>
               </p>
               <p style="margin:0;font-size:11px;color:#94a3b8;">
-                &copy; ${new Date().getFullYear()} SNAB Innovations | Dsource Recruitment System. All rights reserved.
+                &copy; ${new Date().getFullYear()} Dsource Recruitment System. All rights reserved.
               </p>
             </td>
           </tr>
@@ -303,7 +343,7 @@ export async function sendInterviewInvitations(
 
     const candidateName = deriveNameFromEmail(email);
     const htmlContent = getDesignerEmailTemplate(candidateName, jobTitle, interviewLink, accessCode, isReminder, options);
-    const subject = `${isReminder ? 'Reminder: ' : ''}Interview Invitation — ${jobTitle} | SNAB Innovations / Dsource`;
+    const subject = `${isReminder ? 'Reminder: ' : ''}Interview Invitation — ${jobTitle} | Dsource`;
 
     const result = await sendSingleEmail(email, candidateName, subject, htmlContent);
 

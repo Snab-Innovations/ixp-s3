@@ -679,6 +679,8 @@ const CreateInterview: React.FC = () => {
               education: (formData as any).education || (formData as any).qualification,
               qualification: (formData as any).qualification || (formData as any).education,
               experience: (formData as any).experience || (formData as any).experienceRequired,
+              minExperience: (formData as any).minExperience,
+              maxExperience: (formData as any).maxExperience,
               salary: (formData as any).salary || (formData as any).salaryRange,
               recruiterName: userProfile?.name || creatorInfo.name || (user as any)?.displayName || 'Recruiter',
               recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
@@ -717,6 +719,8 @@ const CreateInterview: React.FC = () => {
               education: (formData as any).education || (formData as any).qualification,
               qualification: (formData as any).qualification || (formData as any).education,
               experience: (formData as any).experience || (formData as any).experienceRequired,
+              minExperience: (formData as any).minExperience,
+              maxExperience: (formData as any).maxExperience,
               salary: (formData as any).salary || (formData as any).salaryRange,
               recruiterName: userProfile?.name || creatorInfo.name || (user as any)?.displayName || 'Recruiter',
               recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',

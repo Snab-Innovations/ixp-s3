@@ -631,6 +631,8 @@ const RecruiterInterviews: React.FC = () => {
               education: (selectedInterview as any).education || (selectedInterview as any).qualification,
               qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
               experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+              minExperience: (selectedInterview as any).minExperience,
+              maxExperience: (selectedInterview as any).maxExperience,
               salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
               recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruitment Team',
               recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
@@ -669,6 +671,8 @@ const RecruiterInterviews: React.FC = () => {
               education: (selectedInterview as any).education || (selectedInterview as any).qualification,
               qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
               experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+              minExperience: (selectedInterview as any).minExperience,
+              maxExperience: (selectedInterview as any).maxExperience,
               salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
               recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruitment Team',
               recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
@@ -706,6 +710,8 @@ const RecruiterInterviews: React.FC = () => {
       education: (selectedInterview as any).education || (selectedInterview as any).qualification,
       qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
       experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+      minExperience: (selectedInterview as any).minExperience,
+      maxExperience: (selectedInterview as any).maxExperience,
       salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
       recruiterName,
       recruiterPhone,
@@ -794,6 +800,8 @@ const RecruiterInterviews: React.FC = () => {
               education: (interview as any).education || (interview as any).qualification,
               qualification: (interview as any).qualification || (interview as any).education,
               experience: (interview as any).experience || (interview as any).experienceRequired,
+              minExperience: (interview as any).minExperience,
+              maxExperience: (interview as any).maxExperience,
               salary: (interview as any).salary || (interview as any).salaryRange,
               recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruitment Team',
               recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
@@ -859,6 +867,8 @@ const RecruiterInterviews: React.FC = () => {
                   education: (selectedInterview as any).education || (selectedInterview as any).qualification,
                   qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
                   experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                  minExperience: (selectedInterview as any).minExperience,
+                  maxExperience: (selectedInterview as any).maxExperience,
                   salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
                   recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
                   recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
@@ -890,6 +900,8 @@ const RecruiterInterviews: React.FC = () => {
                   education: (selectedInterview as any).education || (selectedInterview as any).qualification,
                   qualification: (selectedInterview as any).qualification || (selectedInterview as any).education,
                   experience: (selectedInterview as any).experience || (selectedInterview as any).experienceRequired,
+                  minExperience: (selectedInterview as any).minExperience,
+                  maxExperience: (selectedInterview as any).maxExperience,
                   salary: (selectedInterview as any).salary || (selectedInterview as any).salaryRange,
                   recruiterName: userProfile?.name || (user as any)?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
                   recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || '',
@@ -2160,6 +2172,8 @@ const FullRosterModalContent: React.FC<FullRosterModalContentProps> = ({ intervi
                                                   education: (interview as any).education || (interview as any).qualification,
                                                   qualification: (interview as any).qualification || (interview as any).education,
                                                   experience: (interview as any).experience || (interview as any).experienceRequired,
+                                                  minExperience: (interview as any).minExperience,
+                                                  maxExperience: (interview as any).maxExperience,
                                                   salary: (interview as any).salary || (interview as any).salaryRange,
                                                   recruiterName: (interview as any).createdBy?.name || 'Recruiter',
                                                   recruiterPhone: ''

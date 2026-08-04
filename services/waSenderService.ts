@@ -1,6 +1,8 @@
 // WhatsApp Messaging Service
 // Uses WhatsApp Task Manager REST API (https://whatsapp-task-manager-ai4d.onrender.com/api/v1/send-message)
 
+import { formatExperienceDisplay } from './sesService';
+
 const WHATSAPP_API_URL = import.meta.env.VITE_WHATSAPP_API_URL;
 
 export interface SendWhatsAppResponse {
@@ -15,6 +17,8 @@ export interface WhatsAppInviteOptions {
   education?: string;
   qualification?: string;
   experience?: string;
+  minExperience?: number | string;
+  maxExperience?: number | string;
   salary?: string;
   recruiterName?: string;
   recruiterPhone?: string;
@@ -135,7 +139,7 @@ export function buildWhatsAppInviteText(params: {
   const postDisplay = `*${jobTitle}${genderStr}*`;
   const locationDisplay = options?.location || 'As specified in Job Description';
   const qualificationDisplay = options?.qualification || options?.education || 'As per Job Description';
-  const expDisplay = options?.experience || 'As per Job Description';
+  const expDisplay = formatExperienceDisplay(options);
   const salaryDisplay = options?.salary || 'Competitive / As per Job Description';
 
   const recruiterName = options?.recruiterName || 'Recruiting Team';
@@ -147,8 +151,8 @@ export function buildWhatsAppInviteText(params: {
 
 
   const intro = isReminder
-    ? `Dear *${candidateName}*,\n\nThis is a polite reminder to complete your AI video interview assessment for the post of *${jobTitle}* at *SNAB Innovations / Dsource*.`
-    : `Dear *${candidateName}*,\n\nWe are pleased to invite you to complete an AI video interview assessment for the post of *${jobTitle}* at *SNAB Innovations / Dsource*.`;
+    ? `Dear *${candidateName}*,\n\nThis is a polite reminder to complete your AI video interview assessment for the post of *${jobTitle}* at *Dsource*.`
+    : `Dear *${candidateName}*,\n\nWe are pleased to invite you to complete an AI video interview assessment for the post of *${jobTitle}* at *Dsource*.`;
 
   return `${headline}
 
@@ -176,7 +180,7 @@ ${intro}
 Need Technical Help? Call Dsource Support: 9762588623 / 8484888632
 
 Best regards,
-*SNAB Innovations | Dsource Recruitment System*`;
+*Dsource Recruitment System*`;
 }
 
 /**

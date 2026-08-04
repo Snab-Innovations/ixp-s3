@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { doc, getDoc, updateDoc, serverTimestamp, Timestamp, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { useAuth } from '../context/AuthContext'; // Assuming userProfile is available here
+import { useAuth } from '../context/AuthContext';
 import { createPortal } from 'react-dom';
 import { SKILL_OPTIONS, JOB_CATEGORIES } from './Profile';
 import { parseJobDescriptionText, ParsedJdResult } from '../services/geminiService';
@@ -12,21 +12,58 @@ interface EditJobModalProps {
   onClose: () => void;
 }
 
+export interface CandidateContact {
+  email: string;
+  phone: string;
+  name?: string;
+}
+
 const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
   const { user, userProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
   interface CustomField { id: number; key: string; value: string; }
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [accessCode, setAccessCode] = useState('');
   const [tempCustomField, setTempCustomField] = useState({ key: '', value: '' });
   const [manualQuestions, setManualQuestions] = useState<string[]>([]);
   const [currentManualQuestion, setCurrentManualQuestion] = useState('');
+
+  // Candidates contacts state (email & phone)
   const [candidateEmails, setCandidateEmails] = useState<string[]>([]);
+  const [candidateDataList, setCandidateDataList] = useState<CandidateContact[]>([]);
   const [currentEmail, setCurrentEmail] = useState('');
+  const [currentPhone, setCurrentPhone] = useState('');
+
+  // AI JD Auto-Fill state
   const [parsingJd, setParsingJd] = useState(false);
   const [jdImportMode, setJdImportMode] = useState<'upload' | 'paste'>('upload');
   const [pastedJdText, setPastedJdText] = useState('');
+
+  const [eduInput, setEduInput] = useState('');
+  const [skillSearch, setSkillSearch] = useState('');
+
+  const [formData, setFormData] = useState({
+    title: '',
+    companyName: '',
+    qualifications: '',
+    deadline: '',
+    description: '',
+    permission: 'anyone',
+    skills: '',
+    category: '',
+    numQuestions: 5,
+    employmentType: 'Full-time',
+    minExperience: 0,
+    maxExperience: 0,
+    experience: 0,
+    difficulty: 'Easy',
+    location: '',
+    salaryRange: '',
+    genderRequirement: 'Any',
+    strictness: 'Low',
+  });
 
   const handleApplyParsedJdData = (parsed: ParsedJdResult) => {
     setFormData(prev => ({
@@ -40,6 +77,9 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
       experience: parsed.minExperience !== undefined ? Number(parsed.minExperience) : prev.experience,
       skills: parsed.skills || (parsed.technicalSkills && parsed.softSkills ? `${parsed.technicalSkills}, ${parsed.softSkills}` : prev.skills),
       qualifications: parsed.qualification || parsed.education || prev.qualifications,
+      location: (parsed as any).location || prev.location,
+      salaryRange: (parsed as any).salaryRange || (parsed as any).salary || prev.salaryRange,
+      genderRequirement: (parsed as any).genderRequirement || (parsed as any).gender || prev.genderRequirement,
     }));
 
     if (parsed.customFields && Array.from(parsed.customFields).length > 0) {
@@ -117,32 +157,11 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     }
   };
 
-  const [eduInput, setEduInput] = useState('');
-  const [formData, setFormData] = useState({
-    title: '',
-    companyName: '',
-    qualifications: '',
-    deadline: '',
-    description: '',
-    permission: 'anyone',
-    skills: '',
-    category: '',
-    // New fields
-    numQuestions: 5,
-    employmentType: 'Full-time',
-    minExperience: 0,
-    maxExperience: 0,
-    experience: 0,
-    difficulty: 'Easy',
-  });
-  const [skillSearch, setSkillSearch] = useState('');
-
   useEffect(() => {
     const fetchJob = async () => {
       try {
-        if (!jobId || !user) {
-            return;
-        }
+        if (!jobId || !user) return;
+
         const jobDocRef = doc(db, 'jobs', jobId);
         const interviewDocRef = doc(db, 'interviews', jobId);
 
@@ -152,47 +171,62 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         ]);
 
         if (jobDocSnap.exists() || interviewDocSnap.exists()) {
-            const jobData = jobDocSnap.data() || {};
-            const interviewData = interviewDocSnap.data() || {};
-            const sourceData = jobDocSnap.exists() ? jobData : interviewData;
+          const jobData = jobDocSnap.data() || {};
+          const interviewData = interviewDocSnap.data() || {};
+          const sourceData = jobDocSnap.exists() ? jobData : interviewData;
 
-            if (sourceData.recruiterUID !== user.uid) {
-                alert("You do not have permission to edit this item.");
-                onClose();
-                return;
+          if (sourceData.recruiterUID !== user.uid) {
+            alert("You do not have permission to edit this item.");
+            onClose();
+            return;
+          }
+
+          setAccessCode(sourceData.accessCode || interviewData.accessCode || jobData.accessCode || '');
+
+          let deadlineStr = '';
+          const deadlineSource = jobData.applyDeadline || interviewData.deadline || jobData.deadline;
+          if (deadlineSource) {
+            if (deadlineSource.toDate) {
+              deadlineStr = deadlineSource.toDate().toISOString().split('T')[0];
+            } else if (typeof deadlineSource === 'string') {
+              deadlineStr = deadlineSource;
             }
-
-            setAccessCode(sourceData.accessCode || '');
-
-            let deadlineStr = '';
-            const deadlineSource = jobData.applyDeadline || interviewData.deadline;
-            if (deadlineSource) {
-                if (deadlineSource.toDate) { // Timestamp
-                    deadlineStr = deadlineSource.toDate().toISOString().split('T')[0];
-                } else if (typeof deadlineSource === 'string') { // String 'YYYY-MM-DD'
-                    deadlineStr = deadlineSource;
-                }
-            }
+          }
 
           setFormData({
             title: jobData.title || interviewData.title?.replace(' Interview', '') || '',
-            companyName: jobData.companyName || 'N/A', // Company name might not be on interview doc
-            qualifications: jobData.qualifications || interviewData.education || '',
+            companyName: jobData.companyName || interviewData.companyName || 'N/A',
+            qualifications: jobData.qualifications || interviewData.education || interviewData.qualification || '',
             deadline: deadlineStr,
             description: jobData.description || interviewData.description || '',
-            permission: jobData.interviewPermission || 'anyone',
+            permission: jobData.interviewPermission || jobData.permission || interviewData.permission || 'anyone',
             skills: jobData.skills || interviewData.skills || '',
             category: jobData.category || interviewData.department || '',
             numQuestions: jobData.numQuestions || interviewData.numQuestions || 5,
-            employmentType: interviewData.employmentType || 'Full-time',
-            minExperience: interviewData.minExperience || interviewData.experience || 0,
-            maxExperience: interviewData.maxExperience || interviewData.experience || 0,
-            experience: interviewData.experience || 0,
-            difficulty: jobData.difficulty || interviewData.difficulty || 'Medium',
+            employmentType: jobData.employmentType || interviewData.employmentType || 'Full-time',
+            minExperience: jobData.minExperience ?? interviewData.minExperience ?? jobData.experience ?? interviewData.experience ?? 0,
+            maxExperience: jobData.maxExperience ?? interviewData.maxExperience ?? jobData.experience ?? interviewData.experience ?? 0,
+            experience: jobData.experience ?? interviewData.experience ?? 0,
+            difficulty: jobData.difficulty || interviewData.difficulty || 'Easy',
+            location: jobData.location || interviewData.location || '',
+            salaryRange: jobData.salaryRange || jobData.salary || interviewData.salaryRange || interviewData.salary || '',
+            genderRequirement: jobData.genderRequirement || jobData.gender || interviewData.genderRequirement || interviewData.gender || 'Any',
+            strictness: jobData.strictness || interviewData.strictness || 'Low',
           });
+
           setCustomFields(jobData.customFields || interviewData.customFields || []);
-          setManualQuestions(interviewData.manualQuestions || []);
-          setCandidateEmails(interviewData.candidateEmails || []);
+          setManualQuestions(interviewData.manualQuestions || jobData.manualQuestions || []);
+
+          // Parse candidates
+          const emails = interviewData.candidateEmails || jobData.candidateEmails || [];
+          setCandidateEmails(emails);
+
+          const candDataRaw = interviewData.candidateData || interviewData.candidateDataList || jobData.candidateData || jobData.candidateDataList || [];
+          if (Array.isArray(candDataRaw) && candDataRaw.length > 0) {
+            setCandidateDataList(candDataRaw);
+          } else if (emails.length > 0) {
+            setCandidateDataList(emails.map((e: string) => ({ email: e, phone: '' })));
+          }
 
         } else {
           alert("Job or Interview not found.");
@@ -246,15 +280,41 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     setManualQuestions(manualQuestions.filter((_, i) => i !== index));
   };
 
-  const handleAddEmail = () => {
-    if (currentEmail && !candidateEmails.includes(currentEmail)) {
-      setCandidateEmails([...candidateEmails, currentEmail]);
-      setCurrentEmail('');
+  const handleAddCandidate = () => {
+    const trimmedEmail = currentEmail.trim();
+    const trimmedPhone = currentPhone.trim();
+
+    if (!trimmedEmail && !trimmedPhone) return;
+
+    const newContact: CandidateContact = {
+      email: trimmedEmail,
+      phone: trimmedPhone
+    };
+
+    if (trimmedEmail && !candidateEmails.includes(trimmedEmail)) {
+      setCandidateEmails(prev => [...prev, trimmedEmail]);
     }
+
+    setCandidateDataList(prev => {
+      const exists = prev.some(c => (trimmedEmail && c.email === trimmedEmail) || (trimmedPhone && c.phone === trimmedPhone));
+      if (!exists) {
+        return [...prev, newContact];
+      }
+      return prev;
+    });
+
+    setCurrentEmail('');
+    setCurrentPhone('');
   };
 
-  const handleRemoveEmail = (emailToRemove: string) => {
-    setCandidateEmails(candidateEmails.filter(email => email !== emailToRemove));
+  const handleRemoveCandidate = (index: number) => {
+    const target = candidateDataList[index];
+    if (!target) return;
+
+    setCandidateDataList(prev => prev.filter((_, i) => i !== index));
+    if (target.email) {
+      setCandidateEmails(prev => prev.filter(e => e !== target.email));
+    }
   };
 
   const toggleSkill = (skill: string) => {
@@ -287,9 +347,9 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !jobId) return; // Should not happen if button is enabled
+    if (!user || !jobId) return;
 
-    if (formData.maxExperience < formData.minExperience) {
+    if (Number(formData.maxExperience) < Number(formData.minExperience)) {
       alert("❌ Maximum experience cannot be less than minimum experience.");
       return;
     }
@@ -297,9 +357,14 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     setSaving(true);
 
     try {
-      const deadlineDate = new Date(formData.deadline);
+      const deadlineDate = formData.deadline ? new Date(formData.deadline) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       const jobDocRef = doc(db, 'jobs', jobId);
       const interviewDocRef = doc(db, 'interviews', jobId);
+
+      const allEmails = Array.from(new Set([
+        ...candidateEmails,
+        ...candidateDataList.map(c => c.email).filter(Boolean)
+      ]));
 
       const jobPayload = {
         title: formData.title,
@@ -307,16 +372,27 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         qualifications: formData.qualifications,
         description: formData.description,
         interviewPermission: formData.permission,
+        permission: formData.permission,
         skills: formData.skills,
         numQuestions: Number(formData.numQuestions),
         customFields,
         category: formData.category,
+        department: formData.category,
+        employmentType: formData.employmentType,
+        minExperience: Number(formData.minExperience),
+        maxExperience: Number(formData.maxExperience),
+        experience: Number(formData.minExperience),
+        location: formData.location,
+        salaryRange: formData.salaryRange,
+        salary: formData.salaryRange,
+        genderRequirement: formData.genderRequirement,
+        gender: formData.genderRequirement,
+        strictness: formData.strictness,
         applyDeadline: Timestamp.fromDate(deadlineDate),
         difficulty: formData.difficulty,
         updatedAt: serverTimestamp(),
-        // Fields needed if we are creating the job doc for the first time
         recruiterUID: user.uid,
-        recruiterName: userProfile?.fullname || user.email,
+        recruiterName: userProfile?.fullname || (userProfile as any)?.name || user.email,
         recruiterEmail: user.email,
         interviewLink: `${window.location.origin}/#/interview/${jobId}`,
         accessCode: accessCode,
@@ -330,20 +406,31 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         employmentType: formData.employmentType,
         minExperience: Number(formData.minExperience),
         maxExperience: Number(formData.maxExperience),
-        experience: Number(formData.minExperience), // keep backward compatibility
+        experience: Number(formData.minExperience),
         skills: formData.skills,
         education: formData.qualifications,
+        qualification: formData.qualifications,
+        location: formData.location,
+        salaryRange: formData.salaryRange,
+        salary: formData.salaryRange,
+        genderRequirement: formData.genderRequirement,
+        gender: formData.genderRequirement,
+        strictness: formData.strictness,
         deadline: formData.deadline,
         numQuestions: Number(formData.numQuestions),
         customFields,
         difficulty: formData.difficulty,
         manualQuestions,
-        candidateEmails,
+        candidateEmails: allEmails,
+        candidateData: candidateDataList,
+        candidateDataList: candidateDataList,
         updatedAt: serverTimestamp(),
       };
 
       await setDoc(jobDocRef, jobPayload, { merge: true });
-      await updateDoc(interviewDocRef, interviewPayload);
+      await updateDoc(interviewDocRef, interviewPayload).catch(async () => {
+        await setDoc(interviewDocRef, interviewPayload, { merge: true });
+      });
 
       onClose();
     } catch (err) {
@@ -354,119 +441,59 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     }
   };
 
+  const inputClass = "w-full px-3.5 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-xs font-medium outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all";
+  const labelClass = "block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wider";
+  const panelClass = "p-4 rounded-2xl border border-gray-200 dark:border-zinc-800 bg-gray-50/70 dark:bg-zinc-900/40 space-y-3";
+
   return createPortal(
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <style>{`
-        .geist-edit-modal {
-          font-family: var(--font-geist-sans, ui-sans-serif, system-ui, sans-serif);
-        }
-        .geist-edit-modal label {
-          display: block;
-          margin-bottom: 6px;
-          color: #a1a1aa !important;
-          font-family: var(--font-geist-sans, ui-sans-serif, system-ui, sans-serif);
-          font-size: 12px !important;
-          line-height: 16px !important;
-          font-weight: 500 !important;
-        }
-        .geist-edit-modal input:not([type="file"]),
-        .geist-edit-modal select,
-        .geist-edit-modal textarea {
-          width: 100%;
-          min-height: 36px;
-          border-radius: 6px !important;
-          border: 1px solid rgba(255, 255, 255, 0.11) !important;
-          background: #050505 !important;
-          color: #ededed !important;
-          padding: 8px 10px !important;
-          font-size: 13px !important;
-          line-height: 18px !important;
-          outline: none !important;
-          box-shadow: none !important;
-          color-scheme: dark;
-        }
-        .geist-edit-modal textarea {
-          min-height: 116px;
-          resize: vertical;
-        }
-        .geist-edit-modal input:focus,
-        .geist-edit-modal select:focus,
-        .geist-edit-modal textarea:focus {
-          border-color: rgba(255, 255, 255, 0.28) !important;
-          box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16) !important;
-        }
-        .geist-edit-modal input::placeholder,
-        .geist-edit-modal textarea::placeholder {
-          color: #6b7280 !important;
-        }
-        .geist-edit-modal .rounded-xl,
-        .geist-edit-modal .rounded-2xl,
-        .geist-edit-modal .rounded-full,
-        .geist-edit-modal .rounded-lg {
-          border-radius: 6px !important;
-        }
-        .geist-edit-modal .form-panel {
-          border: 1px solid rgba(255, 255, 255, 0.11) !important;
-          background: rgba(255, 255, 255, 0.025) !important;
-        }
-        .geist-edit-modal form button {
-          min-height: 32px;
-          border-radius: 6px !important;
-          font-size: 13px !important;
-          line-height: 18px !important;
-          font-weight: 500 !important;
-        }
-        .geist-edit-modal .custom-scrollbar::-webkit-scrollbar {
-          width: 8px;
-        }
-        .geist-edit-modal .custom-scrollbar::-webkit-scrollbar-track {
-          background: #000;
-        }
-        .geist-edit-modal .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #333;
-          border-radius: 999px;
-          border: 2px solid #000;
-        }
-      `}</style>
-      <div className="geist-edit-modal bg-[#000] text-white rounded-[8px] shadow-2xl w-full max-w-5xl max-h-[88vh] flex flex-col border border-white/[0.11] overflow-hidden">
-        <div className="px-5 py-4 border-b border-white/[0.11] flex justify-between items-center bg-[#050505]">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-5">
+      <div className="bg-white dark:bg-zinc-950 text-gray-900 dark:text-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col border border-gray-200 dark:border-zinc-800 overflow-hidden">
+        
+        {/* Modal Header */}
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-zinc-800 flex justify-between items-center bg-gray-50/80 dark:bg-zinc-900/60">
           <div>
-            <p className="geist-label uppercase text-[#6b7280]">Interview setup</p>
-            <h2 className="geist-section-title mt-1 text-white flex items-center gap-2">
-              Edit job
+            <span className="text-[10px] font-black uppercase tracking-widest text-primary">Interview Setup</span>
+            <h2 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-2 mt-0.5">
+              <i className="fa-solid fa-pen-to-square text-primary text-base"></i>
+              Edit Job Details
             </h2>
           </div>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-white/[0.11] text-[#8f8f8f] hover:bg-white/[0.06] hover:text-white transition-colors">
+          <button 
+            onClick={onClose} 
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-gray-200 dark:border-zinc-800 text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+          >
             <i className="fas fa-times text-xs"></i>
           </button>
         </div>
 
         {loading ? (
-          <div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div></div>
+          <div className="flex-1 flex items-center justify-center py-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
-            <div className="p-5 space-y-5 overflow-y-auto custom-scrollbar bg-[#000]">
+            <div className="p-5 sm:p-6 space-y-5 overflow-y-auto custom-card-scrollbar">
 
               {/* AI JD Import & Auto-Fill Box */}
-              <div className="p-4 rounded-xl border border-blue-500/30 bg-blue-500/5 space-y-3 mb-2">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-500/20 pb-2">
-                  <div className="flex items-center gap-2 text-blue-400 font-bold text-xs">
+              <div className="p-4 rounded-2xl border border-blue-500/30 bg-blue-500/5 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-500/20 pb-2.5">
+                  <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold text-xs">
                     <i className="fas fa-wand-magic-sparkles"></i>
                     <span>AI JD Import & Auto-Fill</span>
                   </div>
 
-                  <div className="flex rounded-md border border-white/10 bg-black/40 p-0.5 text-xs">
+                  <div className="flex rounded-xl border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-0.5 text-xs">
                     <button
                       type="button"
                       onClick={() => setJdImportMode('upload')}
-                      className={`px-2.5 py-1 rounded text-xs transition-colors flex items-center gap-1 ${jdImportMode === 'upload' ? 'bg-blue-600 text-white font-bold' : 'text-gray-400 hover:text-white'}`}
+                      className={`px-3 py-1 rounded-lg text-xs transition-colors flex items-center gap-1.5 font-bold ${jdImportMode === 'upload' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
                     >
                       <i className="fas fa-file-pdf"></i> Upload File
                     </button>
                     <button
                       type="button"
                       onClick={() => setJdImportMode('paste')}
-                      className={`px-2.5 py-1 rounded text-xs transition-colors flex items-center gap-1 ${jdImportMode === 'paste' ? 'bg-blue-600 text-white font-bold' : 'text-gray-400 hover:text-white'}`}
+                      className={`px-3 py-1 rounded-lg text-xs transition-colors flex items-center gap-1.5 font-bold ${jdImportMode === 'paste' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
                     >
                       <i className="fas fa-paste"></i> Paste JD Text
                     </button>
@@ -475,11 +502,11 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
 
                 {jdImportMode === 'upload' ? (
                   <div className="flex items-center gap-3">
-                    <label htmlFor="edit-jd-upload" className="flex-1 cursor-pointer p-2.5 border border-dashed border-white/20 rounded-lg text-center text-xs text-gray-300 hover:bg-white/5 transition-colors">
+                    <label htmlFor="edit-jd-upload" className="flex-1 cursor-pointer p-3 border border-dashed border-blue-400/40 rounded-xl text-center text-xs text-gray-700 dark:text-gray-300 hover:bg-blue-500/10 transition-colors font-medium">
                       {parsingJd ? (
                         <span><i className="fas fa-spinner fa-spin mr-1"></i> Parsing JD file...</span>
                       ) : (
-                        <span><i className="fas fa-file-upload mr-1 text-blue-400"></i> Upload JD PDF/TXT File to Auto-Fill</span>
+                        <span><i className="fas fa-file-upload mr-1 text-blue-500"></i> Upload JD PDF or TXT File to Auto-Fill All Fields</span>
                       )}
                     </label>
                     <input id="edit-jd-upload" type="file" accept=".pdf,.txt" className="hidden" onChange={handleJDUpload} disabled={parsingJd} />
@@ -487,353 +514,438 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                 ) : (
                   <div className="space-y-2">
                     <textarea
-                      rows={4}
+                      rows={3}
                       value={pastedJdText}
                       onChange={(e) => setPastedJdText(e.target.value)}
                       placeholder="Paste full Job Description text here..."
-                      className="w-full p-2.5 rounded-lg border border-white/10 bg-black/40 text-xs text-white placeholder-gray-500 outline-none focus:border-blue-500 leading-relaxed"
+                      className={inputClass}
                     />
                     <button
                       type="button"
                       onClick={handleParsePastedJDText}
                       disabled={parsingJd || !pastedJdText.trim()}
-                      className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                      className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-sm"
                     >
                       {parsingJd ? <><i className="fas fa-spinner fa-spin"></i> Parsing...</> : <><i className="fas fa-wand-magic-sparkles"></i> Auto-Fill Details & Custom Fields</>}
                     </button>
                   </div>
                 )}
               </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Job Title</label>
-            <input 
-              type="text" required 
-              className="mt-1 w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white"
-              value={formData.title}
-              onChange={handleFormChange} name="title"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Company</label>
-            <input 
-              type="text" required 
-              className="mt-1 w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white"
-              value={formData.companyName}
-              onChange={handleFormChange} name="companyName"
-            />
-          </div>
-        </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Qualifications</label>
-          <div className="flex flex-wrap gap-2 mb-2 min-h-[44px] p-2 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl">
-            {formData.qualifications ? formData.qualifications.split(',').map(e => e.trim()).filter(e => e).map(edu => (
-              <span key={edu} className="px-3 py-1 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 rounded-lg text-sm flex items-center gap-2 animate-in fade-in zoom-in duration-200">
-                {edu}
-                <button type="button" onClick={() => toggleEducation(edu)} className="hover:text-black dark:hover:text-white transition-colors">&times;</button>
-              </span>
-            )) : <span className="text-gray-400 dark:text-gray-500 text-sm p-1.5 italic">No qualifications selected</span>}
-          </div>
+              {/* Basic Information */}
+              <div className={panelClass}>
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-zinc-800 pb-2">
+                  <i className="fa-solid fa-briefcase text-primary"></i> Basic Job Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>Job Title *</label>
+                    <input 
+                      type="text" required 
+                      className={inputClass}
+                      value={formData.title}
+                      onChange={handleFormChange} name="title"
+                      placeholder="e.g. Senior Frontend Developer"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Company Name *</label>
+                    <input 
+                      type="text" required 
+                      className={inputClass}
+                      value={formData.companyName}
+                      onChange={handleFormChange} name="companyName"
+                      placeholder="e.g. TechCorp Solutions"
+                    />
+                  </div>
+                </div>
 
-          <div className="flex flex-col gap-2">
-            <select
-              className="w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all text-sm"
-              value=""
-              onChange={(e) => {
-                if (e.target.value) {
-                  toggleEducation(e.target.value);
-                  e.target.value = "";
-                }
-              }}
-            >
-              <option value="">-- Select Predefined Level --</option>
-              {["High School", "Bachelor's", "Master's", "PhD"].map(edu => (
-                <option key={edu} value={edu}>{edu}</option>
-              ))}
-            </select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>Job Category / Department</label>
+                    <select 
+                      name="category" 
+                      value={formData.category} 
+                      onChange={handleFormChange}
+                      className={inputClass}
+                    >
+                      <option value="">Select a Category</option>
+                      {JOB_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                  </div>
 
-            <div className="flex gap-2">
-              <input
-                type="text"
-                className="flex-1 min-w-0 px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all text-sm"
-                placeholder="Or type custom qualification..."
-                value={eduInput}
-                onChange={e => setEduInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (eduInput.trim()) {
-                      toggleEducation(eduInput.trim());
-                      setEduInput('');
-                    }
-                  }
-                }}
-              />
-              <button
+                  <div>
+                    <label className={labelClass}>Employment Type</label>
+                    <select name="employmentType" value={formData.employmentType} onChange={handleFormChange} className={inputClass}>
+                      <option value="Full-time">Full-time</option>
+                      <option value="Part-time">Part-time</option>
+                      <option value="Contract">Contract</option>
+                      <option value="Internship">Internship</option>
+                      <option value="Freelance">Freelance</option>
+                      <option value="Remote">Remote</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Experience, Location & Compensation */}
+              <div className={panelClass}>
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-zinc-800 pb-2">
+                  <i className="fa-solid fa-location-dot text-emerald-500"></i> Experience, Location & Salary
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className={labelClass}>Min Exp (Years)</label>
+                    <input
+                      type="number"
+                      name="minExperience"
+                      placeholder="0"
+                      value={formData.minExperience}
+                      onChange={handleFormChange}
+                      min="0"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Max Exp (Years)</label>
+                    <input
+                      type="number"
+                      name="maxExperience"
+                      placeholder="0"
+                      value={formData.maxExperience}
+                      onChange={handleFormChange}
+                      min="0"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Job Location</label>
+                    <input 
+                      type="text" 
+                      name="location" 
+                      placeholder="e.g. Mumbai / Remote"
+                      value={formData.location}
+                      onChange={handleFormChange} 
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Salary Range / CTC</label>
+                    <input 
+                      type="text" 
+                      name="salaryRange" 
+                      placeholder="e.g. ₹50,000 / month or 8-12 LPA"
+                      value={formData.salaryRange}
+                      onChange={handleFormChange} 
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  <div>
+                    <label className={labelClass}>Gender Requirement</label>
+                    <select name="genderRequirement" value={formData.genderRequirement} onChange={handleFormChange} className={inputClass}>
+                      <option value="Any">Any Gender</option>
+                      <option value="Male Only">Male Only</option>
+                      <option value="Female Only">Female Only</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>AI Strictness Level</label>
+                    <select name="strictness" value={formData.strictness} onChange={handleFormChange} className={inputClass}>
+                      <option value="Low">Low Strictness</option>
+                      <option value="Medium">Medium Strictness</option>
+                      <option value="High">High Strictness</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Qualifications */}
+              <div className={panelClass}>
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-zinc-800 pb-2">
+                  <i className="fa-solid fa-graduation-cap text-indigo-500"></i> Qualifications & Education
+                </h3>
+                <div className="flex flex-wrap gap-2 min-h-[40px] p-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl">
+                  {formData.qualifications ? formData.qualifications.split(',').map(e => e.trim()).filter(e => e).map(edu => (
+                    <span key={edu} className="px-3 py-1 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 rounded-lg text-xs font-semibold flex items-center gap-2 animate-in fade-in zoom-in duration-200">
+                      {edu}
+                      <button type="button" onClick={() => toggleEducation(edu)} className="hover:text-red-500 transition-colors font-bold">&times;</button>
+                    </span>
+                  )) : <span className="text-gray-400 dark:text-gray-500 text-xs p-1 italic">No qualifications specified</span>}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <select
+                    className={inputClass}
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        toggleEducation(e.target.value);
+                        e.target.value = "";
+                      }
+                    }}
+                  >
+                    <option value="">-- Select Predefined Level --</option>
+                    {["High School", "Diploma", "Bachelor's Degree", "B.E. / B.Tech", "M.E. / M.Tech", "Master's Degree", "MBA", "PhD"].map(edu => (
+                      <option key={edu} value={edu}>{edu}</option>
+                    ))}
+                  </select>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className={inputClass}
+                      placeholder="Or type custom qualification..."
+                      value={eduInput}
+                      onChange={e => setEduInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          if (eduInput.trim()) {
+                            toggleEducation(eduInput.trim());
+                            setEduInput('');
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (eduInput.trim()) {
+                          toggleEducation(eduInput.trim());
+                          setEduInput('');
+                        }
+                      }}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs transition-colors shrink-0"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Skills */}
+              <div className={panelClass}>
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-zinc-800 pb-2">
+                  <i className="fa-solid fa-code text-purple-500"></i> Required Skills
+                </h3>
+
+                <div className="flex gap-2">
+                  <input 
+                    type="text"
+                    className={inputClass}
+                    placeholder="Search or add custom skill..."
+                    value={skillSearch}
+                    onChange={e => setSkillSearch(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (skillSearch.trim()) {
+                          toggleSkill(skillSearch.trim());
+                          setSkillSearch('');
+                        }
+                      }
+                    }}
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      if (skillSearch.trim()) {
+                        toggleSkill(skillSearch.trim());
+                        setSkillSearch('');
+                      }
+                    }}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold text-xs transition-colors shrink-0"
+                  >
+                    Add Skill
+                  </button>
+                </div>
+
+                <div className="border border-gray-200 dark:border-zinc-800 rounded-xl p-3 max-h-36 overflow-y-auto bg-white dark:bg-zinc-900 custom-card-scrollbar">
+                  <div className="flex flex-wrap gap-1.5">
+                    {SKILL_OPTIONS.filter(s => s.toLowerCase().includes(skillSearch.toLowerCase())).map(skill => {
+                      const isSelected = formData.skills.split(',').map(s => s.trim()).includes(skill);
+                      return (
+                        <button
+                          key={skill}
+                          type="button"
+                          onClick={() => toggleSkill(skill)}
+                          className={`px-2.5 py-1 rounded-lg text-xs border transition-all ${
+                            isSelected 
+                              ? 'bg-purple-500/20 border-purple-500/40 text-purple-700 dark:text-purple-300 font-bold' 
+                              : 'bg-gray-50 dark:bg-zinc-800/50 border-gray-200 dark:border-zinc-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-700'
+                          }`}
+                        >
+                          {skill} {isSelected && '✓'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Interview Rules & Settings */}
+              <div className={panelClass}>
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-zinc-800 pb-2">
+                  <i className="fa-solid fa-sliders text-amber-500"></i> Interview Rules & Settings
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className={labelClass}>Deadline *</label>
+                    <input 
+                      type="date" required 
+                      className={inputClass}
+                      value={formData.deadline}
+                      onChange={handleFormChange} name="deadline"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Access Permission</label>
+                    <select 
+                      className={inputClass}
+                      value={formData.permission}
+                      onChange={handleFormChange} name="permission"
+                    >
+                      <option value="anyone">Direct Start (Anyone with link/code)</option>
+                      <option value="request">Request Permission Needed</option>
+                      <option value="code_only">Access Code Only</option>
+                      <option value="candidate_list">Invited Candidate Email Only</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Number of AI Questions</label>
+                    <input type="number" name="numQuestions" value={formData.numQuestions} onChange={handleFormChange} min="1" max="15" className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Difficulty Level</label>
+                    <select name="difficulty" value={formData.difficulty} onChange={handleFormChange} className={inputClass}>
+                      <option value="Easy">Easy</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Hard">Hard</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className={panelClass}>
+                <label className={labelClass}>Job Description *</label>
+                <textarea 
+                  required rows={4}
+                  className={inputClass}
+                  value={formData.description}
+                  onChange={handleFormChange} name="description"
+                  placeholder="Provide complete job details, responsibilities, and requirements..."
+                />
+              </div>
+
+              {/* Custom Fields */}
+              <div className={panelClass}>
+                <div>
+                  <label className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider">Dynamic Custom Fields</label>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Add additional key-value specifications for candidates.</p>
+                </div>
+                <div className="flex gap-2">
+                  <input type="text" className={inputClass} placeholder="Field Name (e.g. Shift Timing)" value={tempCustomField.key} onChange={e => setTempCustomField({ ...tempCustomField, key: e.target.value })} />
+                  <input type="text" className={inputClass} placeholder="Field Value (e.g. Day Shift)" value={tempCustomField.value} onChange={e => setTempCustomField({ ...tempCustomField, value: e.target.value })} />
+                  <button type="button" onClick={handleAddCustomField} className="px-4 py-2 bg-gray-200 dark:bg-zinc-800 text-gray-900 dark:text-white font-bold text-xs rounded-xl hover:bg-gray-300 dark:hover:bg-zinc-700 transition-colors shrink-0">Add</button>
+                </div>
+                {customFields.length > 0 && (
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-card-scrollbar">
+                    {customFields.map((field) => (
+                      <div key={field.id} className="flex items-center justify-between p-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl text-xs">
+                        <div className="flex gap-2">
+                          <strong className="text-gray-900 dark:text-white">{field.key}:</strong>
+                          <span className="text-gray-600 dark:text-gray-300">{field.value}</span>
+                        </div>
+                        <button type="button" onClick={() => handleRemoveCustomField(field.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1">
+                          <i className="fa-solid fa-trash-can"></i>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Manual Questions */}
+              <div className="p-4 rounded-2xl border border-blue-500/30 bg-blue-500/5 space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <i className="fa-solid fa-clipboard-question text-blue-500"></i>
+                    Manual Interview Questions (Optional)
+                  </label>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Specify custom questions you want the AI voice avatar to ask.</p>
+                </div>
+                <div className="flex gap-2">
+                  <input type="text" className={inputClass} placeholder="e.g. Explain your recent project architecture..." value={currentManualQuestion} onChange={e => setCurrentManualQuestion(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddManualQuestion())} />
+                  <button type="button" onClick={handleAddManualQuestion} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs transition-colors shrink-0">Add</button>
+                </div>
+                {manualQuestions.length > 0 && (
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1 custom-card-scrollbar">
+                    {manualQuestions.map((q, index) => (
+                      <div key={index} className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl text-xs">
+                        <p className="text-gray-800 dark:text-gray-200 font-medium">{q}</p>
+                        <button type="button" onClick={() => handleRemoveManualQuestion(index)} className="text-gray-400 hover:text-red-500 transition-colors p-1"><i className="fa-solid fa-trash-can"></i></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Candidate Invites */}
+              <div className="p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <i className="fa-solid fa-user-plus text-emerald-500"></i>
+                    Candidate Contact Invitations (Email & Phone)
+                  </label>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">Add candidate email addresses and/or WhatsApp numbers for automated invitations.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                  <input type="email" className={`${inputClass} sm:col-span-2`} placeholder="candidate@example.com" value={currentEmail} onChange={e => setCurrentEmail(e.target.value)} />
+                  <input type="tel" className={`${inputClass} sm:col-span-2`} placeholder="+91 9876543210 (Mobile)" value={currentPhone} onChange={e => setCurrentPhone(e.target.value)} />
+                  <button type="button" onClick={handleAddCandidate} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs transition-colors shrink-0 sm:col-span-1">Add</button>
+                </div>
+                {candidateDataList.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1 max-h-40 overflow-y-auto custom-card-scrollbar">
+                    {candidateDataList.map((cand, idx) => (
+                      <div key={idx} className="flex items-center gap-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl px-3 py-1.5 text-xs shadow-sm">
+                        <i className="fa-solid fa-user text-emerald-500"></i>
+                        <span className="font-semibold text-gray-800 dark:text-gray-200">{cand.email || 'No email'}</span>
+                        {cand.phone && <span className="text-gray-500 dark:text-gray-400">({cand.phone})</span>}
+                        <button type="button" onClick={() => handleRemoveCandidate(idx)} className="text-gray-400 hover:text-red-500 transition-colors font-bold ml-1">&times;</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex gap-3 p-4 border-t border-gray-200 dark:border-zinc-800 bg-gray-50/80 dark:bg-zinc-900/60 mt-auto">
+              <button 
                 type="button"
-                onClick={() => {
-                  if (eduInput.trim()) {
-                    toggleEducation(eduInput.trim());
-                    setEduInput('');
-                  }
-                }}
-                className="px-4 py-3 bg-gray-100 dark:bg-white/5 text-gray-900 dark:text-white border border-gray-200 dark:border-white/10 rounded-xl hover:bg-gray-200 dark:hover:bg-white/10 transition-colors font-medium text-sm shrink-0"
+                onClick={onClose}
+                className="w-1/3 border border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-gray-700 dark:text-gray-300 font-bold py-2.5 px-4 rounded-xl hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors text-xs"
               >
-                Add
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                disabled={saving}
+                className="w-2/3 bg-primary hover:bg-primary/90 text-white font-bold py-2.5 px-4 rounded-xl transition-all shadow-md disabled:opacity-50 text-xs flex items-center justify-center gap-2"
+              >
+                {saving ? (
+                  <><i className="fas fa-spinner fa-spin"></i> Saving Changes...</>
+                ) : (
+                  <><i className="fa-solid fa-check"></i> Save & Update Job Details</>
+                )}
               </button>
             </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Deadline</label>
-            <input 
-              type="date" required 
-              className="mt-1 w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white dark:[color-scheme:dark]"
-              value={formData.deadline}
-              onChange={handleFormChange} name="deadline"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Interview Access</label>
-            <select 
-              className="mt-1 w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white"
-              value={formData.permission}
-              onChange={handleFormChange} name="permission"
-            >
-              <option value="anyone">Direct Start (No Request)</option>
-              <option value="request">Request Permission Needed</option>
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Job Description</label>
-          <textarea 
-            required rows={5}
-            className="mt-1 w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white"
-            value={formData.description}
-            onChange={handleFormChange} name="description"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Job Category</label>
-          <select 
-            name="category" 
-            value={formData.category} 
-            onChange={handleFormChange}
-            className="mt-1 w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white"
-          >
-            <option value="">Select a Category</option>
-            {JOB_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-          </select>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Employment Type</label>
-              <select name="employmentType" value={formData.employmentType} onChange={handleFormChange} className="mt-1 w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white">
-                <option value="Full-time">Full-time</option>
-                <option value="Part-time">Part-time</option>
-                <option value="Contract">Contract</option>
-                <option value="Internship">Internship</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Required Experience (Years)</label>
-              <div className="flex items-center gap-2 mt-1">
-                <input
-                  type="number"
-                  name="minExperience"
-                  placeholder="Min"
-                  value={formData.minExperience}
-                  onChange={handleFormChange}
-                  min="0"
-                  className="w-1/2 px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white"
-                />
-                <span className="text-gray-400 dark:text-gray-500 font-medium">to</span>
-                <input
-                  type="number"
-                  name="maxExperience"
-                  placeholder="Max"
-                  value={formData.maxExperience}
-                  onChange={handleFormChange}
-                  min="0"
-                  className="w-1/2 px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white"
-                />
-              </div>
-            </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Number of AI Questions</label>
-              <input type="number" name="numQuestions" value={formData.numQuestions} onChange={handleFormChange} min="1" max="15" className="mt-1 w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Difficulty Level</label>
-              <select name="difficulty" value={formData.difficulty} onChange={handleFormChange} className="mt-1 w-full px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white">
-                <option value="Easy">Easy</option>
-                <option value="Medium">Medium</option>
-                <option value="Hard">Hard</option>
-              </select>
-            </div>
-        </div>
-
-        <div className="form-panel space-y-4 p-4 bg-gray-50/50 dark:bg-gray-800/20 border border-gray-100 dark:border-white/10 rounded-2xl">
-            <div>
-                <label className="text-sm font-semibold text-gray-900 dark:text-white">Custom Fields</label>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Add other relevant info (e.g., Salary Range).</p>
-            </div>
-            <div className="flex gap-2">
-                <input type="text" className="flex-1 px-4 py-2 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-sm" placeholder="Field Name" value={tempCustomField.key} onChange={e => setTempCustomField({ ...tempCustomField, key: e.target.value })} />
-                <input type="text" className="flex-1 px-4 py-2 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-sm" placeholder="Field Value" value={tempCustomField.value} onChange={e => setTempCustomField({ ...tempCustomField, value: e.target.value })} />
-                <button type="button" onClick={handleAddCustomField} className="px-4 py-2 bg-gray-100 dark:bg-white/5 text-gray-900 dark:text-white border border-gray-200 dark:border-white/10 rounded-xl hover:bg-gray-200 dark:hover:bg-white/10 transition-colors font-medium text-sm">Add</button>
-            </div>
-            {customFields.length > 0 && (
-                <div className="space-y-2 mt-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                    {customFields.map((field) => (
-                        <div key={field.id} className="flex items-center justify-between p-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl animate-in fade-in">
-                            <div className="flex gap-2 text-sm">
-                                <strong className="text-gray-800 dark:text-gray-200">{field.key}:</strong>
-                                <span className="text-gray-600 dark:text-gray-400">{field.value}</span>
-                            </div>
-                            <button type="button" onClick={() => handleRemoveCustomField(field.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1">
-                                <i className="fa-solid fa-trash-can text-xs"></i>
-                            </button>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Required Skills</label>
-
-          <div className="flex gap-2 mb-2">
-             <input 
-               type="text"
-               className="flex-1 px-4 py-3 bg-gray-50 dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-gray-900 dark:text-white"
-               placeholder="Search or add custom skill..."
-               value={skillSearch}
-               onChange={e => setSkillSearch(e.target.value)}
-               onKeyDown={e => {
-                 if (e.key === 'Enter') {
-                   e.preventDefault();
-                   if (skillSearch.trim()) {
-                     toggleSkill(skillSearch.trim());
-                     setSkillSearch('');
-                   }
-                 }
-               }}
-             />
-             <button 
-               type="button"
-               onClick={() => {
-                 if (skillSearch.trim()) {
-                   toggleSkill(skillSearch.trim());
-                   setSkillSearch('');
-                 }
-               }}
-               className="px-6 py-3 bg-gray-100 dark:bg-white/5 text-gray-900 dark:text-white border border-gray-200 dark:border-white/10 rounded-xl hover:bg-gray-200 dark:hover:bg-white/10 transition-colors font-medium"
-             >
-               Add
-             </button>
-          </div>
-
-          <div className="border border-gray-200 dark:border-white/10 rounded-xl p-3 max-h-40 overflow-y-auto bg-gray-50 dark:bg-[#1a1a1a] custom-scrollbar">
-            <div className="flex flex-wrap gap-2">
-              {SKILL_OPTIONS.filter(s => s.toLowerCase().includes(skillSearch.toLowerCase())).map(skill => {
-                 const isSelected = formData.skills.split(',').map(s => s.trim()).includes(skill);
-                 return (
-                   <button
-                     key={skill}
-                     type="button"
-                     onClick={() => toggleSkill(skill)}
-                     className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${
-                       isSelected 
-                         ? 'bg-primary/20 border-primary/50 text-gray-900 dark:text-white font-medium' 
-                         : 'bg-white dark:bg-white/5 border-gray-200 dark:border-white/5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white'
-                     }`}
-                   >
-                     {skill} {isSelected && '✓'}
-                   </button>
-                 );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Manual Questions */}
-        <div className="form-panel space-y-4 p-4 bg-blue-50/50 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/20 rounded-2xl">
-            <div>
-              <label className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <i className="fa-solid fa-clipboard-question text-blue-500"></i>
-                Manual Interview Questions (Optional)
-              </label>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Add specific questions you want the AI to ask.</p>
-            </div>
-            <div className="flex gap-2">
-              <input type="text" className="flex-1 px-4 py-2 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-sm" placeholder="e.g. Tell us about your experience with React..." value={currentManualQuestion} onChange={e => setCurrentManualQuestion(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddManualQuestion())} />
-              <button type="button" onClick={handleAddManualQuestion} className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-colors font-medium text-sm">Add</button>
-            </div>
-            {manualQuestions.length > 0 && (
-              <div className="space-y-2 mt-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                {manualQuestions.map((q, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl animate-in fade-in">
-                    <p className="text-sm text-gray-700 dark:text-gray-300">{q}</p>
-                    <button type="button" onClick={() => handleRemoveManualQuestion(index)} className="text-gray-400 hover:text-red-500 transition-colors p-1"><i className="fa-solid fa-trash-can text-xs"></i></button>
-                  </div>
-                ))}
-              </div>
-            )}
-        </div>
-
-        {/* Candidate Emails */}
-        <div className="form-panel space-y-4 p-4 bg-green-50/50 dark:bg-green-500/5 border border-green-100 dark:border-green-500/20 rounded-2xl">
-            <div>
-              <label className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <i className="fa-solid fa-envelope text-green-500"></i>
-                Candidate Emails (Optional)
-              </label>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Add emails to send interview invites.</p>
-            </div>
-            <div className="flex gap-2">
-              <input type="email" className="flex-1 px-4 py-2 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl text-sm" placeholder="candidate@example.com" value={currentEmail} onChange={e => setCurrentEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddEmail())} />
-              <button type="button" onClick={handleAddEmail} className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl transition-colors font-medium text-sm">Add</button>
-            </div>
-            {candidateEmails.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                {candidateEmails.map((email) => (
-                  <div key={email} className="flex items-center gap-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-full px-3 py-1 text-sm animate-in fade-in">
-                    <span className="text-gray-700 dark:text-gray-300">{email}</span>
-                    <button type="button" onClick={() => handleRemoveEmail(email)} className="text-gray-400 hover:text-red-500 transition-colors">&times;</button>
-                  </div>
-                ))}
-              </div>
-            )}
-        </div>
-
-            </div>
-            <div className="flex gap-3 p-4 border-t border-white/[0.11] bg-[#050505] mt-auto">
-            <button 
-              type="button"
-              onClick={onClose}
-              className="w-1/3 border border-white/[0.11] bg-transparent text-[#d4d4d4] font-medium py-2 px-4 rounded-[6px] hover:bg-white/[0.06] hover:text-white transition-colors"
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit" 
-              disabled={saving}
-              className="w-2/3 border border-white bg-white hover:bg-[#ededed] text-black font-medium py-2 px-4 rounded-[6px] transition-colors disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Update Job'}
-            </button>
-        </div>
           </form>
         )}
       </div>

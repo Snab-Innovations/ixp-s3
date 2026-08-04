@@ -64,7 +64,7 @@ const Profile: React.FC = () => {
   });
   // WhatsApp Testing & Credential States
   const [testPhone, setTestPhone] = useState('');
-  const [testMessage, setTestMessage] = useState('Hello! This is a test message from SNAB Innovations WhatsApp API system.');
+  const [testMessage, setTestMessage] = useState('Hello! This is a test message from Dsource WhatsApp API system.');
   const [savingWaCredentials, setSavingWaCredentials] = useState(false);
   const [testingWa, setTestingWa] = useState(false);
 
