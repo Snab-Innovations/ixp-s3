@@ -11,6 +11,7 @@ import Logo from './Logo';
 import DashboardSidebar from './ui/dashboard-sidebar';
 import RecruiterRateLimitBanner from './RecruiterRateLimitBanner';
 import WhatsAppConnectModal from './WhatsAppConnectModal';
+import { fetchWhatsAppStatus } from '../services/waSenderService';
 
 const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, userProfile, loading: authLoading } = useAuth();
@@ -18,6 +19,31 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = React.useState(false);
+  const [waRealStatus, setWaRealStatus] = React.useState<'CONNECTED' | 'DISCONNECTED' | 'CHECKING'>('CHECKING');
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const checkRealWaStatus = async () => {
+      if (!userProfile?.whatsappSessionId || !userProfile?.whatsappSessionPasscode) {
+        if (isMounted) setWaRealStatus('DISCONNECTED');
+        return;
+      }
+      try {
+        const res = await fetchWhatsAppStatus(userProfile.whatsappSessionId, userProfile.whatsappSessionPasscode);
+        const isConnected = res.status === 'CONNECTED' || res.status === 'AUTHENTICATED' || res.status === 'READY' || !!res.userInfo;
+        if (isMounted) setWaRealStatus(isConnected ? 'CONNECTED' : 'DISCONNECTED');
+      } catch (err) {
+        if (isMounted) setWaRealStatus('DISCONNECTED');
+      }
+    };
+
+    checkRealWaStatus();
+    const interval = setInterval(checkRealWaStatus, 15000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [userProfile?.whatsappSessionId, userProfile?.whatsappSessionPasscode]);
 
   const handleLogout = async () => {
     try {
@@ -87,11 +113,8 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     <Link to="/recruiter/jobs" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${isActive('/recruiter/jobs') ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5'}`}>
                       Dashboard
                     </Link>
-                    <Link to="/recruiter/all-jobs" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${isActive('/recruiter/all-jobs') ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5'}`}>
+                    <Link to="/recruiter/all-jobs" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${isActive('/recruiter/all-jobs') || isActive('/recruiter/interviews') ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5'}`}>
                       All Jobs
-                    </Link>
-                    <Link to="/recruiter/interviews" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${isActive('/recruiter/interviews') ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5'}`}>
-                      My Interviews
                     </Link>
                     <Link to="/recruiter/interview/create" className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-300 ${isActive('/recruiter/interview/create') ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5'}`}>
                       Create Job
@@ -116,18 +139,18 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                     <button
                       type="button"
                       onClick={() => setIsWhatsAppModalOpen(true)}
-                      title="Manage WhatsApp API Credentials & Connection"
+                      title={waRealStatus === 'CONNECTED' ? "WhatsApp is Active & Connected (Click to manage)" : "WhatsApp Disconnected (Click to scan QR code & connect)"}
                       className={`geist-caption inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border px-2.5 text-xs font-semibold transition-all ${
-                        Boolean(userProfile?.whatsappSessionId && userProfile?.whatsappSessionPasscode)
+                        waRealStatus === 'CONNECTED'
                           ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20'
                           : 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20'
                       }`}
                     >
                       <i className="fab fa-whatsapp text-sm text-emerald-600 dark:text-emerald-400"></i>
                       <span className="hidden md:inline">
-                        {Boolean(userProfile?.whatsappSessionId && userProfile?.whatsappSessionPasscode) ? 'WhatsApp Connected' : 'Connect WhatsApp'}
+                        {waRealStatus === 'CONNECTED' ? 'WhatsApp Connected' : 'WhatsApp Disconnected (Scan QR)'}
                       </span>
-                      <span className={`h-2 w-2 rounded-full ${Boolean(userProfile?.whatsappSessionId && userProfile?.whatsappSessionPasscode) ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                      <span className={`h-2 w-2 rounded-full ${waRealStatus === 'CONNECTED' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-ping'}`} />
                     </button>
                   )}
 

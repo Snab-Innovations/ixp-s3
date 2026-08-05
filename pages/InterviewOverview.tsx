@@ -246,11 +246,11 @@ const InterviewOverview: React.FC = () => {
             <div className="min-w-0">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <Link
-                  to="/recruiter/interviews"
+                  to="/recruiter/all-jobs"
                   className="geist-caption inline-flex h-8 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
                 >
                   <i className="fas fa-arrow-left text-[11px]"></i>
-                  <span>Back to interviews</span>
+                  <span>Back to jobs</span>
                 </Link>
                 <span className="geist-label uppercase text-[#9ca3af]">Overview</span>
               </div>
@@ -300,7 +300,7 @@ const InterviewOverview: React.FC = () => {
                 <ActionButton
                   type="button"
                   onClick={handleDelete}
-                  className="border-[#512828] bg-[#180808] text-[#ff8f8f] hover:bg-[#250d0d] hover:text-[#ffc3c3]"
+                  className="border-rose-300 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 dark:border-[#512828] dark:bg-[#180808] dark:text-[#ff8f8f] dark:hover:bg-[#250d0d] dark:hover:text-[#ffc3c3]"
                 >
                   <i className="fas fa-trash text-[11px]"></i>
                   <span>Delete</span>

@@ -123,6 +123,7 @@ export default function PublicJobSeekerUpload() {
   const [candidateName, setCandidateName] = useState('');
   const [candidateEmail, setCandidateEmail] = useState('');
   const [candidatePhone, setCandidatePhone] = useState('');
+  const [candidateGender, setCandidateGender] = useState('');
   const [candidateLocation, setCandidateLocation] = useState('');
   const [candidateExp, setCandidateExp] = useState('');
   const [candidateEducation, setCandidateEducation] = useState('');
@@ -209,6 +210,10 @@ export default function PublicJobSeekerUpload() {
       messageBox.showError("Please enter your Phone / WhatsApp Contact Number.");
       return;
     }
+    if (!candidateGender.trim()) {
+      messageBox.showError("Please select your Gender.");
+      return;
+    }
     if (!candidateLocation.trim()) {
       messageBox.showError("Please select or type your Location / City.");
       return;
@@ -245,6 +250,7 @@ export default function PublicJobSeekerUpload() {
       finalProfile.name = candidateName.trim();
       finalProfile.email = candidateEmail.trim().toLowerCase();
       finalProfile.phone = candidatePhone.trim();
+      finalProfile.gender = candidateGender;
       finalProfile.location = candidateLocation.trim();
       finalProfile.skills = extractedSkills;
 
@@ -508,7 +514,7 @@ export default function PublicJobSeekerUpload() {
               </div>
 
               {/* Personal Details Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
                     Full Name <span className="text-red-500">*</span>
@@ -558,6 +564,23 @@ export default function PublicJobSeekerUpload() {
                       className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
+                    Gender <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={candidateGender}
+                    onChange={(e) => setCandidateGender(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all font-semibold"
+                  >
+                    <option value="">-- Select Gender --</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Any">Prefer Not To Say / Any</option>
+                  </select>
                 </div>
               </div>
 

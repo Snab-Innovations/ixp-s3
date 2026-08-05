@@ -276,14 +276,15 @@ service cloud.firestore {
                       && sameCandidateIdentity(resource.data, request.resource.data)
                     );
 
-      // Single document get
-      allow get: if request.auth != null;
-
-      // Query listing for authenticated recruiters and sub-recruiters
-      allow list: if request.auth != null;
+      // Single document get and query listing for candidate lookup & recruiters
+      allow get, list: if true;
 
       // Delete permission
       allow delete: if request.auth != null;
+    }
+
+    match /resumeDump/{candidateId} {
+      allow read, write: if true;
     }
 
     // --- Transactions Collection Rules ---

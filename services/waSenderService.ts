@@ -32,23 +32,32 @@ export async function fetchWhatsAppStatus(
     return { status: 'DISCONNECTED', error: 'Missing session ID or passcode' };
   }
 
-  const url = 'https://whatsapp-sending-api.onrender.com/api/status';
+  const endpoints = [
+    'https://whatsapp-sending-api.onrender.com/api/status',
+    'https://whatsapp-task-manager-ai4d.onrender.com/api/v1/status',
+    'https://whatsapp-task-manager-ai4d.onrender.com/api/status'
+  ];
 
-  try {
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'x-session-id': sessionId.trim(),
-        'x-session-passcode': passcode.trim(),
-      },
-    });
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'x-session-id': sessionId.trim(),
+          'x-session-passcode': passcode.trim(),
+        },
+      });
 
-    const data = await res.json();
-    return data;
-  } catch (err: any) {
-    console.error('[WhatsApp API] Error fetching status:', err);
-    return { status: 'ERROR', error: err.message || 'Failed to connect to WhatsApp API service' };
+      if (res.ok) {
+        const data = await res.json();
+        return data;
+      }
+    } catch (err: any) {
+      // Silently fall back to next endpoint if service instance is sleeping/restarting
+    }
   }
+
+  return { status: 'DISCONNECTED', error: 'WhatsApp API service is waking up or temporarily offline.' };
 }
 
 export interface WhatsAppInviteOptions {
@@ -122,9 +131,21 @@ export async function sendWhatsAppMessage(
     return { success: false, error: 'Invalid or missing phone number.' };
   }
 
-  const apiUrl = WHATSAPP_API_URL || 'https://whatsapp-task-manager-ai4d.onrender.com/api/v1/send-message';
-  const sessionId = credentials?.sessionId?.trim() || '';
-  const passcode = credentials?.passcode?.trim() || '';
+  let sessionId = credentials?.sessionId?.trim() || '';
+  let passcode = credentials?.passcode?.trim() || '';
+
+  if (!sessionId || !passcode) {
+    try {
+      const stored = localStorage.getItem('wa_session_credentials');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.sessionId && parsed.passcode) {
+          sessionId = parsed.sessionId.trim();
+          passcode = parsed.passcode.trim();
+        }
+      }
+    } catch (e) {}
+  }
 
   if (!sessionId || !passcode) {
     console.error('[WhatsApp API] Saved WhatsApp Session credentials missing from profile!');
@@ -134,35 +155,43 @@ export async function sendWhatsAppMessage(
     };
   }
 
-  console.log('[WhatsApp API] Sending message via Session ID:', sessionId, 'to:', formattedPhone);
+  const sendApiUrls = [
+    WHATSAPP_API_URL || 'https://whatsapp-task-manager-ai4d.onrender.com/api/v1/send-message',
+    'https://whatsapp-sending-api.onrender.com/api/send-message',
+    'https://whatsapp-task-manager-ai4d.onrender.com/api/send-message'
+  ];
 
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-session-id': sessionId,
-        'x-session-passcode': passcode,
-      },
-      body: JSON.stringify({
-        phone: formattedPhone,
-        message: text,
-      }),
-    });
+  let lastError = 'Failed to send WhatsApp message.';
 
-    const data = await response.json();
-    console.log('[WhatsApp API] Response status:', response.status, '| Data:', data);
+  for (const apiUrl of sendApiUrls) {
+    try {
+      console.log('[WhatsApp API] Sending message via endpoint:', apiUrl, '| Session ID:', sessionId, 'to:', formattedPhone);
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-id': sessionId,
+          'x-session-passcode': passcode,
+        },
+        body: JSON.stringify({
+          phone: formattedPhone,
+          message: text,
+        }),
+      });
 
-    if (!response.ok) {
-      const errorMsg = data.message || data.error || `WhatsApp API returned HTTP ${response.status}`;
-      return { success: false, data, error: errorMsg };
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, data };
+      } else {
+        const data = await response.json().catch(() => ({}));
+        lastError = data.message || data.error || `HTTP ${response.status}`;
+      }
+    } catch (err: any) {
+      lastError = err.message || 'Network failure sending WhatsApp message.';
     }
-
-    return { success: true, data };
-  } catch (err: any) {
-    console.error('[WhatsApp API] Fetch error:', err);
-    return { success: false, error: err.message || 'Network error sending WhatsApp message.' };
   }
+
+  return { success: false, error: lastError };
 }
 
 /**

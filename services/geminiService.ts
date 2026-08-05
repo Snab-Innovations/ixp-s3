@@ -69,7 +69,86 @@ export interface ParsedJdResult {
   facilities?: string;
   jobNo?: string;
   companyProfile?: string;
+  establishmentYear?: string;
+  typeOfCompany?: string;
+  companyType?: string;
+  employeeCount?: string;
+  noOfOfficesOrFactories?: string;
+  officeLocations?: string;
+  turnover?: string;
+  companyProductOrService?: string;
+  strictGenderMatch?: boolean;
+  strictLocationMatch?: boolean;
+  strictEducationMatch?: boolean;
+  strictExperienceMatch?: boolean;
   customFields?: Array<{ key: string; value: string }>;
+}
+
+export function compileCompanyProfile(parsed: Partial<ParsedJdResult>, customFields: Array<{ key: string; value: string }> = []): string {
+  const parts: string[] = [];
+
+  const estYear = parsed.establishmentYear;
+  const companyType = parsed.typeOfCompany || parsed.companyType;
+  const employees = parsed.employeeCount;
+  const offices = parsed.noOfOfficesOrFactories;
+  const locations = parsed.officeLocations;
+  const turnover = parsed.turnover;
+  const product = parsed.companyProductOrService;
+
+  if (estYear) parts.push(`• Establishment Year: ${estYear}`);
+  if (companyType) parts.push(`• Type of Company: ${companyType}`);
+  if (employees) parts.push(`• Number of People Working: ${employees}`);
+  if (offices) parts.push(`• Number of Offices/Factories: ${offices}`);
+  if (locations) parts.push(`• Office Locations: ${locations}`);
+  if (turnover) parts.push(`• Turnover: ${turnover}`);
+  if (product) parts.push(`• Company Product / Service: ${product}`);
+
+  const companyKeysMap: { [key: string]: string } = {
+    'establishment year': 'Establishment Year',
+    'established': 'Establishment Year',
+    'est year': 'Establishment Year',
+    'est. year': 'Establishment Year',
+    'type of company': 'Type of Company',
+    'company type': 'Type of Company',
+    'number of people working': 'Number of People Working',
+    'employee count': 'Number of People Working',
+    'employees': 'Number of People Working',
+    'headcount': 'Number of People Working',
+    'number of offices/factories': 'Number of Offices/Factories',
+    'no. of offices/factories': 'Number of Offices/Factories',
+    'number of offices': 'Number of Offices/Factories',
+    'number of factories': 'Number of Offices/Factories',
+    'factories': 'Number of Offices/Factories',
+    'office locations': 'Office Locations',
+    'factory locations': 'Office Locations',
+    'turnover': 'Turnover',
+    'annual turnover': 'Turnover',
+    'company product / service': 'Company Product / Service',
+    'company product': 'Company Product / Service',
+    'company service': 'Company Product / Service',
+    'product / service': 'Company Product / Service',
+    'company profile': 'Company Profile',
+  };
+
+  if (Array.isArray(customFields)) {
+    customFields.forEach(cf => {
+      const keyLower = cf.key.trim().toLowerCase();
+      for (const [pattern, label] of Object.entries(companyKeysMap)) {
+        if (keyLower.includes(pattern) && cf.value.trim()) {
+          const entryStr = `• ${label}: ${cf.value.trim()}`;
+          if (!parts.some(p => p.toLowerCase().includes(label.toLowerCase()))) {
+            parts.push(entryStr);
+          }
+        }
+      }
+    });
+  }
+
+  if (parsed.companyProfile && !parts.some(p => p.toLowerCase().includes(parsed.companyProfile!.toLowerCase()))) {
+    parts.unshift(parsed.companyProfile);
+  }
+
+  return parts.join('\n');
 }
 
 export async function parseJobDescriptionText(rawText: string): Promise<ParsedJdResult> {
@@ -88,6 +167,18 @@ Standard Fields to extract (if present):
 - "gender": Gender requirement if specified ("Male", "Female", or "Any")
 - "qualification": Qualification & specialization required (e.g. "Diploma Mechanical")
 - "skills": Comma-separated list of required technical and soft skills
+- "companyProfile": Overview of the company if present
+- "establishmentYear": Year of establishment / founded year (e.g. "1974")
+- "typeOfCompany": Type of company / industry (e.g. "Manufacturing")
+- "employeeCount": Number of people working / headcount (e.g. "14")
+- "noOfOfficesOrFactories": Number of offices/factories (e.g. "4")
+- "officeLocations": Office or factory locations (e.g. "Mumbai, Nashik, Gujrat")
+- "turnover": Company turnover / revenue (e.g. "250 Cr")
+- "companyProductOrService": Products or services provided (e.g. "Switchgear")
+- "strictGenderMatch": Set to true if the JD states gender is MANDATORY / compulsory / required / Male Only / Female Only.
+- "strictLocationMatch": Set to true if the JD states location or local candidate is MANDATORY / compulsory / required / local candidates only.
+- "strictEducationMatch": Set to true if qualification/degree is MANDATORY / compulsory / required.
+- "strictExperienceMatch": Set to true if experience years is MANDATORY / compulsory / required.
 
 CRITICAL FEATURE - AUTOMATIC DYNAMIC CUSTOM FIELDS:
 Extract ANY and ALL other extra attributes present in the JD that are not standard single fields (for example: "Job No", "Company Product / Service Sold", "Marital Status", "Interview Dates", "Interview Timing", "No. of Interview Rounds", "Travel Required", "State", "District", "City", "Job Timing", "Service Agreement/Bond", "Weekly Off", "Company Facilities", "Company Profile", "Turnover", "Role Category", etc.).

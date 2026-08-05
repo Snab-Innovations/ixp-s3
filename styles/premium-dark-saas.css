@@ -2909,6 +2909,8 @@ html.dark {
 }
 
 :root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-[#180707]"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-[#180808]"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-[#250d0d]"],
 :root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-[#3f1d1d]"] {
   background-color: #fee2e2 !important;
   border-color: #fca5a5 !important;

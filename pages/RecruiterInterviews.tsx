@@ -17,7 +17,7 @@ import { LocationCityInput } from '../components/LocationCityInput';
 import { EducationInput } from '../components/EducationInput';
 
 import { evaluateResumeMatch } from '../services/api';
-import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
+import { ingestResumeFile, saveResumeDumpCandidate, checkMandatoryCriteriaMatch } from '../services/resumeService';
 import { parseCandidateDocument } from '../services/candidateFileParser';
 import { logTeamActivity } from '../services/auditService';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
@@ -177,6 +177,11 @@ function getAISuggestedCandidatesForJob(job: any, candidates: any[], alreadyInvi
       if (normalizedInvited.includes(email) || (pseudoEmail && normalizedInvited.includes(pseudoEmail))) {
         return false;
       }
+
+      // Check strict mandatory criteria FIRST!
+      const mandatory = checkMandatoryCriteriaMatch(job, c);
+      if (!mandatory.isMatch) return false;
+
       return true;
     })
     .map(candidate => {
@@ -214,7 +219,12 @@ function getAISuggestedCandidatesForJob(job: any, candidates: any[], alreadyInvi
         }
       }
 
-      const matchScore = Math.round(Math.min(100, Math.max(20, (skillScore * 0.7) + (titleScore * 0.3))));
+      const rawScore = Math.round((skillScore * 0.7) + (titleScore * 0.3));
+      if (jobSkills.length > 0 && rawScore < 15 && titleScore < 20) {
+        return null;
+      }
+
+      const matchScore = Math.round(Math.min(100, Math.max(35, rawScore)));
 
       return {
         id: candidate.id,
@@ -228,6 +238,7 @@ function getAISuggestedCandidatesForJob(job: any, candidates: any[], alreadyInvi
         matchScore
       };
     })
+    .filter((c): c is NonNullable<typeof c> => c !== null)
     .sort((a, b) => b.matchScore - a.matchScore);
 }
 
@@ -1527,10 +1538,10 @@ const RecruiterInterviews: React.FC = () => {
                                     type="button"
                                     onClick={handleAnalyzeAndSaveResumeCandidate}
                                     disabled={!selectedResumeFile || analyzingResumeAI}
-                                    className="geist-caption inline-flex h-8 w-full items-center justify-center gap-2 rounded-[6px] border border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 px-3 font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    className="geist-caption inline-flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border border-emerald-600 bg-emerald-600 px-3 text-xs font-bold text-white shadow-sm transition-all hover:bg-emerald-500 disabled:border-emerald-700/50 disabled:bg-emerald-800/60 disabled:text-emerald-100/70 disabled:cursor-not-allowed cursor-pointer"
                                 >
-                                    <Sparkles className="w-3.5 h-3.5" />
-                                    <span>{analyzingResumeAI ? 'Analyzing with AI & Saving to Resume Dump...' : 'Analyze Resume with AI & Save to Resume Dump'}</span>
+                                    <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
+                                    <span className="font-bold text-white">{analyzingResumeAI ? 'Analyzing with AI & Saving to Resume Dump...' : 'Analyze Resume with AI & Save to Resume Dump'}</span>
                                 </button>
                             </div>
 

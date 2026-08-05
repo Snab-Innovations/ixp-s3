@@ -7,6 +7,7 @@ import { SKILL_OPTIONS } from './Profile';
 import * as pdfjsLib from 'pdfjs-dist';
 import { ExternalLink, Sparkles, Building2 } from 'lucide-react';
 import { LocationCityInput } from '../components/LocationCityInput';
+import { resolveStrictListedCity } from '../data/maharashtraCities';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rateLimitService';
 import { getCandidateIdentityKeys, isCandidateIdentityInSet, dedupeCandidatesByIdentity } from '../services/candidateIdentity';
@@ -14,7 +15,7 @@ import { getCandidateIdentityKeys, isCandidateIdentityInSet, dedupeCandidatesByI
 import { sendInterviewInvitations } from '../services/brevoService';
 import { sendBulkWhatsAppInvites } from '../services/waSenderService';
 import { grokGenerateJson } from '../services/grokService';
-import { parseJobDescriptionText, ParsedJdResult } from '../services/geminiService';
+import { parseJobDescriptionText, ParsedJdResult, compileCompanyProfile } from '../services/geminiService';
 import {
   extractSkillSignals,
   ingestResumeFile,
@@ -236,6 +237,10 @@ const CreateInterview: React.FC = () => {
     jobLink: '',
     salaryRange: '',
     genderRequirement: 'Any',
+    strictGenderMatch: false,
+    strictLocationMatch: false,
+    strictEducationMatch: false,
+    strictExperienceMatch: false,
     deadline: getDefaultDeadlineDate(),
     numQuestions: 5,
     difficulty: 'Easy',
@@ -392,11 +397,13 @@ const CreateInterview: React.FC = () => {
   ), [resumeDumpCandidates, shortlistedCandidateIdentityKeys]);
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
+    const target = e.target as HTMLInputElement;
+    const { name, value, type } = target;
+    const val = type === 'checkbox' ? target.checked : value;
     setFormData(prev => {
       const updated = {
         ...prev,
-        [name]: ['experience', 'minExperience', 'maxExperience', 'numQuestions'].includes(name) ? Number(value) : value
+        [name]: ['experience', 'minExperience', 'maxExperience', 'numQuestions'].includes(name) ? Number(value) : val
       };
       if (name === 'minExperience') {
         updated.experience = Number(value);
@@ -513,6 +520,16 @@ const CreateInterview: React.FC = () => {
     let extractedJobNo = parsed.jobNo || '';
     const remainingCustomFields: { key: string; value: string }[] = [];
 
+    const companyProfileKeys = [
+      'company profile', 'company overview', 'company detail', 'about company',
+      'establishment year', 'established', 'est year', 'est. year',
+      'type of company', 'company type', 'number of people working', 'employee count',
+      'employees', 'headcount', 'number of offices/factories', 'no. of offices/factories',
+      'number of offices', 'number of factories', 'factories', 'office locations',
+      'factory locations', 'turnover', 'annual turnover', 'company product / service',
+      'company product', 'company service', 'product / service'
+    ];
+
     if (parsed.customFields && Array.isArray(parsed.customFields)) {
       parsed.customFields.forEach(cf => {
         const keyLower = cf.key.trim().toLowerCase();
@@ -524,22 +541,41 @@ const CreateInterview: React.FC = () => {
           keyLower.includes('requisition')
         ) {
           if (!extractedJobNo) extractedJobNo = cf.value.trim();
-        } else if (
-          keyLower.includes('company profile') ||
-          keyLower.includes('company overview') ||
-          keyLower.includes('company detail') ||
-          keyLower.includes('about company') ||
-          keyLower.includes('company product') ||
-          keyLower.includes('company turnover')
-        ) {
-          if (!extractedCompanyInfo.includes(cf.value.trim())) {
-            extractedCompanyInfo += (extractedCompanyInfo ? '\n\n' : '') + `${cf.key.trim()}: ${cf.value.trim()}`;
-          }
+        } else if (companyProfileKeys.some(k => keyLower.includes(k))) {
+          // Handled by compileCompanyProfile
         } else {
           remainingCustomFields.push(cf);
         }
       });
     }
+
+    const compiledProfile = compileCompanyProfile(parsed, parsed.customFields || []);
+
+    const fullJdText = `${parsed.title || ''} ${parsed.description || ''} ${parsed.skills || ''} ${parsed.qualification || ''} ${parsed.location || ''} ${parsed.gender || ''}`.toLowerCase();
+    const hasMandatoryKeyword = /\b(mandatory|compulsory|must have|strictly|strict|non-negotiable|only|required)\b/i.test(fullJdText);
+
+    const autoStrictGender = parsed.strictGenderMatch ?? (
+      (parsed.gender && !['any', 'no preference', 'both', 'all'].includes(parsed.gender.toLowerCase())) &&
+      (hasMandatoryKeyword || /\b(male only|female only|male candidate|female candidate|gender.*mandatory)\b/i.test(fullJdText))
+    );
+
+    const autoStrictLocation = parsed.strictLocationMatch ?? (
+      Boolean(parsed.location || parsed.city) &&
+      (hasMandatoryKeyword || /\b(local candidates? only|location.*mandatory|based in.*only|must be from)\b/i.test(fullJdText))
+    );
+
+    const autoStrictEdu = parsed.strictEducationMatch ?? (
+      Boolean(parsed.qualification || parsed.education) &&
+      (hasMandatoryKeyword || /\b(education.*mandatory|qualification.*mandatory|degree required)\b/i.test(fullJdText))
+    );
+
+    const autoStrictExp = parsed.strictExperienceMatch ?? (
+      (Number(parsed.minExperience) > 0 || Number(parsed.maxExperience) > 0) &&
+      (hasMandatoryKeyword || /\b(experience.*mandatory|exp.*mandatory|min.*yrs required)\b/i.test(fullJdText))
+    );
+
+    const rawLocCandidate = `${parsed.location || ''} ${parsed.city || ''} ${parsed.state || ''} ${fullJdText}`;
+    const resolvedStrictCity = resolveStrictListedCity(rawLocCandidate);
 
     setFormData(prev => ({
       ...prev,
@@ -558,10 +594,14 @@ const CreateInterview: React.FC = () => {
       skills: parsed.skills || (parsed.technicalSkills && parsed.softSkills ? `${parsed.technicalSkills}, ${parsed.softSkills}` : prev.skills),
       education: parsed.qualification || parsed.education || prev.education,
       salaryRange: parsed.salaryRange || (parsed.minSalary && parsed.maxSalary ? `${parsed.minSalary} - ${parsed.maxSalary}` : (prev as any).salaryRange || ''),
-      location: parsed.location || (parsed.city ? `${parsed.city}${parsed.state ? `, ${parsed.state}` : ''}` : prev.location || ''),
-      city: parsed.city || (parsed.location ? parsed.location.split(',')[0].trim() : prev.city || ''),
-      companyDetails: extractedCompanyInfo || prev.companyDetails || '',
+      location: resolvedStrictCity || prev.location || '',
+      city: resolvedStrictCity || prev.city || '',
+      companyDetails: compiledProfile || extractedCompanyInfo || prev.companyDetails || '',
       genderRequirement: parsed.gender || (prev as any).genderRequirement || 'Any',
+      strictGenderMatch: Boolean(autoStrictGender),
+      strictLocationMatch: Boolean(autoStrictLocation),
+      strictEducationMatch: Boolean(autoStrictEdu),
+      strictExperienceMatch: Boolean(autoStrictExp),
     }));
 
     if (remainingCustomFields.length > 0) {
@@ -1190,6 +1230,87 @@ const CreateInterview: React.FC = () => {
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
                 </select>
+              </div>
+
+              {/* Strict Mandatory AI Candidate Matching Criteria Checkboxes */}
+              <div className="xl:col-span-2 rounded-[8px] border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    <span className="geist-label uppercase font-bold text-amber-900 dark:text-amber-300 text-xs tracking-wider">
+                      Strict Mandatory AI Criteria Checkmarks
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-amber-700 dark:text-amber-400/80 font-mono">
+                    AI checks checkmarked fields first. Non-matching candidates won't be recommended.
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                  <label className="flex items-center gap-2.5 cursor-pointer p-2.5 rounded-[6px] border border-amber-200 dark:border-amber-800/40 bg-white dark:bg-neutral-900/70 hover:border-amber-400 transition-all">
+                    <input
+                      type="checkbox"
+                      name="strictGenderMatch"
+                      checked={formData.strictGenderMatch}
+                      onChange={handleFormChange}
+                      className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 accent-amber-600 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-semibold text-gray-900 dark:text-amber-100 block">Strict Gender</span>
+                      <span className="text-[10px] text-gray-500 dark:text-amber-300/70 block">
+                        {formData.genderRequirement === 'Any' ? 'Any -> Shows all genders' : `Must be ${formData.genderRequirement}`}
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 cursor-pointer p-2.5 rounded-[6px] border border-amber-200 dark:border-amber-800/40 bg-white dark:bg-neutral-900/70 hover:border-amber-400 transition-all">
+                    <input
+                      type="checkbox"
+                      name="strictLocationMatch"
+                      checked={formData.strictLocationMatch}
+                      onChange={handleFormChange}
+                      className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 accent-amber-600 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-semibold text-gray-900 dark:text-amber-100 block">Strict Location</span>
+                      <span className="text-[10px] text-gray-500 dark:text-amber-300/70 block truncate max-w-[120px]">
+                        {formData.city || formData.location ? `Must match ${formData.city || formData.location}` : 'Must match City'}
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 cursor-pointer p-2.5 rounded-[6px] border border-amber-200 dark:border-amber-800/40 bg-white dark:bg-neutral-900/70 hover:border-amber-400 transition-all">
+                    <input
+                      type="checkbox"
+                      name="strictEducationMatch"
+                      checked={formData.strictEducationMatch}
+                      onChange={handleFormChange}
+                      className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 accent-amber-600 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-semibold text-gray-900 dark:text-amber-100 block">Strict Education</span>
+                      <span className="text-[10px] text-gray-500 dark:text-amber-300/70 block truncate max-w-[120px]">
+                        {formData.education ? `Must match ${formData.education}` : 'Must match Qualification'}
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 cursor-pointer p-2.5 rounded-[6px] border border-amber-200 dark:border-amber-800/40 bg-white dark:bg-neutral-900/70 hover:border-amber-400 transition-all">
+                    <input
+                      type="checkbox"
+                      name="strictExperienceMatch"
+                      checked={formData.strictExperienceMatch}
+                      onChange={handleFormChange}
+                      className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 accent-amber-600 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-semibold text-gray-900 dark:text-amber-100 block">Strict Experience</span>
+                      <span className="text-[10px] text-gray-500 dark:text-amber-300/70 block">
+                        {formData.minExperience || formData.maxExperience ? `${formData.minExperience}-${formData.maxExperience} Yrs` : 'Must fit Yrs range'}
+                      </span>
+                    </div>
+                  </label>
+                </div>
               </div>
 
               <div className="xl:col-span-2">

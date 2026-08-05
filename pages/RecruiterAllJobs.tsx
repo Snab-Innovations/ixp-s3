@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { collection, query, onSnapshot, where, doc, updateDoc, deleteDoc, arrayUnion, getDocs } from 'firebase/firestore';
 
 import { db } from '../services/firebase';
@@ -8,9 +9,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMessageBox } from '../components/MessageBox';
 import { sendInterviewInvitations } from '../services/brevoService';
 import { parseCandidateDocument } from '../services/candidateFileParser';
-import { ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
+import { ingestResumeFile, saveResumeDumpCandidate, checkMandatoryCriteriaMatch } from '../services/resumeService';
 import { sendInterviewWhatsAppInvite, formatPhoneForWhatsApp, buildWhatsAppInviteText, openWhatsAppWebInvite, sendBulkWhatsAppInvites } from '../services/waSenderService';
 import EditJobModal from './EditJob';
+import WhatsAppConnectModal from '../components/WhatsAppConnectModal';
+import { useTheme } from '../context/ThemeContext';
 import { useBackgroundSend } from '../context/BackgroundSendContext';
 import { LocationCityInput } from '../components/LocationCityInput';
 import { EducationInput } from '../components/EducationInput';
@@ -75,6 +78,14 @@ export interface AllJobItem {
   deadline?: any;
   applyDeadline?: any;
   customFields?: { id?: number; key: string; value: string }[];
+  genderRequirement?: string;
+  strictness?: string;
+  difficulty?: string;
+  permission?: string;
+  numQuestions?: number;
+  manualQuestions?: string[];
+  recruiterName?: string;
+  recruiterEmail?: string;
   recruiterUID?: string;
   hasJobDoc?: boolean;
   hasInterviewDoc?: boolean;
@@ -139,6 +150,11 @@ function getAISuggestedCandidatesForJob(job: any, candidates: any[], alreadyInvi
       if (normalizedInvited.includes(email) || (pseudoEmail && normalizedInvited.includes(pseudoEmail))) {
         return false;
       }
+
+      // Check strict mandatory criteria FIRST!
+      const mandatory = checkMandatoryCriteriaMatch(job, c);
+      if (!mandatory.isMatch) return false;
+
       return true;
     })
     .map(candidate => {
@@ -176,7 +192,12 @@ function getAISuggestedCandidatesForJob(job: any, candidates: any[], alreadyInvi
         }
       }
 
-      const matchScore = Math.round(Math.min(100, Math.max(20, (skillScore * 0.7) + (titleScore * 0.3))));
+      const rawScore = Math.round((skillScore * 0.7) + (titleScore * 0.3));
+      if (jobSkills.length > 0 && rawScore < 15 && titleScore < 20) {
+        return null;
+      }
+
+      const matchScore = Math.round(Math.min(100, Math.max(35, rawScore)));
 
       return {
         id: candidate.id,
@@ -190,11 +211,13 @@ function getAISuggestedCandidatesForJob(job: any, candidates: any[], alreadyInvi
         matchScore
       };
     })
+    .filter((c): c is NonNullable<typeof c> => c !== null)
     .sort((a, b) => b.matchScore - a.matchScore);
 }
 
 const RecruiterAllJobs: React.FC = () => {
   const { user, userProfile } = useAuth();
+  const { isDark } = useTheme();
   const navigate = useNavigate();
   const messageBox = useMessageBox();
   const { startBackgroundSend } = useBackgroundSend();
@@ -210,7 +233,6 @@ const RecruiterAllJobs: React.FC = () => {
 
   // Modals
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
-  const [viewingJobDetails, setViewingJobDetails] = useState<AllJobItem | null>(null);
   const [invitingJob, setInvitingJob] = useState<AllJobItem | null>(null);
 
   // Invite candidate state
@@ -256,6 +278,12 @@ const RecruiterAllJobs: React.FC = () => {
   // Reminder States
   const [remindingCandidateEmail, setRemindingCandidateEmail] = useState<string | null>(null);
   const [remindingWhatsAppEmail, setRemindingWhatsAppEmail] = useState<string | null>(null);
+
+  // Roster Bulk Reminder States
+  const [bulkSendingRoster, setBulkSendingRoster] = useState(false);
+  const [showRosterWaDelayModal, setShowRosterWaDelayModal] = useState(false);
+  const [rosterWaTarget, setRosterWaTarget] = useState<'whatsapp' | 'both'>('whatsapp');
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
   const handleEditCandidate = async (oldEmail: string, newEmail: string, newPhone: string) => {
     if (!invitingJob || !user) return;
@@ -430,6 +458,115 @@ const RecruiterAllJobs: React.FC = () => {
       setRemindingWhatsAppEmail(null);
     }
   };
+  const handleSendRosterBulkEmailReminders = async () => {
+    if (!invitingJob || !invitingJob.candidateEmails || invitingJob.candidateEmails.length === 0) return;
+    const targetLink = invitingJob.interviewLink || `${window.location.origin}/#/interview/${invitingJob.id}`;
+    const candidatesPayload = invitingJob.candidateEmails.map((email: string) => ({ email }));
+
+    startBackgroundSend({
+      candidates: candidatesPayload,
+      jobTitle: invitingJob.title,
+      interviewLink: targetLink,
+      accessCode: invitingJob.accessCode || '',
+      isReminder: true,
+      sendEmailChannel: true,
+      sendWhatsAppChannel: false,
+      options: {
+        location: invitingJob.location,
+        qualification: invitingJob.qualifications || invitingJob.education,
+        experience: ((invitingJob as any).maxExperience > (invitingJob as any).minExperience)
+          ? `${(invitingJob as any).minExperience} - ${(invitingJob as any).maxExperience} Years`
+          : invitingJob.experience,
+        minExperience: (invitingJob as any).minExperience,
+        maxExperience: (invitingJob as any).maxExperience,
+        gender: (invitingJob as any).gender || (invitingJob as any).genderRequirement,
+        salary: invitingJob.salary || invitingJob.salaryRange,
+        salaryRange: invitingJob.salaryRange || invitingJob.salary,
+        recruiterName: userProfile?.name || userProfile?.fullname || userProfile?.displayName || (user as any)?.displayName || 'Hiring Team',
+        recruiterPhone: userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || (user as any)?.phoneNumber || ''
+      }
+    });
+
+    messageBox.showSuccess(`🚀 Background Email reminders started for ${candidatesPayload.length} candidate(s)! You can freely navigate to any page.`);
+  };
+
+  const executeSendRosterBulkWhatsAppReminders = async (minDelay = 15, maxDelay = 25, delayUnit: 'sec' | 'min' = 'sec') => {
+    if (!invitingJob || !invitingJob.candidateEmails || invitingJob.candidateEmails.length === 0) return;
+
+    const candData = (invitingJob as any).candidateData || [];
+    const candidatesWithPhones = invitingJob.candidateEmails.map((email: string) => {
+      const match = candData.find((c: any) => c.email && c.email.toLowerCase() === email.toLowerCase());
+      return { email, phone: match?.phone, name: match?.name || email.split('@')[0] };
+    }).filter((c: any) => c.phone && c.phone !== 'N/A');
+
+    if (candidatesWithPhones.length === 0) {
+      messageBox.showInfo("No candidate phone numbers found in roster for WhatsApp reminders.");
+      return;
+    }
+
+    const targetLink = invitingJob.interviewLink || `${window.location.origin}/#/interview/${invitingJob.id}`;
+
+    startBackgroundSend({
+      candidates: candidatesWithPhones,
+      jobTitle: invitingJob.title,
+      interviewLink: targetLink,
+      accessCode: invitingJob.accessCode || '',
+      isReminder: true,
+      sendEmailChannel: false,
+      sendWhatsAppChannel: true,
+      waMinDelay: Number(minDelay) || 15,
+      waMaxDelay: Number(maxDelay) || 25,
+      waDelayUnit: delayUnit,
+      options: {
+        location: invitingJob.location,
+        qualification: invitingJob.qualifications || invitingJob.education,
+        experience: invitingJob.experience,
+        salary: invitingJob.salary || invitingJob.salaryRange,
+        recruiterName: userProfile?.name || userProfile?.displayName || userProfile?.fullName || 'Recruiter',
+        recruiterPhone: userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || '',
+        whatsappSessionId: userProfile?.whatsappSessionId,
+        whatsappSessionPasscode: userProfile?.whatsappSessionPasscode
+      }
+    });
+
+    messageBox.showSuccess(`🚀 Background WhatsApp reminders started for ${candidatesWithPhones.length} candidate(s)! You can freely navigate to any page.`);
+  };
+
+  const executeSendRosterBulkBothReminders = async (minDelay = 15, maxDelay = 25, delayUnit: 'sec' | 'min' = 'sec') => {
+    if (!invitingJob || !invitingJob.candidateEmails || invitingJob.candidateEmails.length === 0) return;
+    const candData = (invitingJob as any).candidateData || [];
+    const candidatesPayload = invitingJob.candidateEmails.map((email: string) => {
+      const match = candData.find((c: any) => c.email && c.email.toLowerCase() === email.toLowerCase());
+      return { email, phone: match?.phone, name: match?.name || email.split('@')[0] };
+    });
+
+    const targetLink = invitingJob.interviewLink || `${window.location.origin}/#/interview/${invitingJob.id}`;
+
+    startBackgroundSend({
+      candidates: candidatesPayload,
+      jobTitle: invitingJob.title,
+      interviewLink: targetLink,
+      accessCode: invitingJob.accessCode || '',
+      isReminder: true,
+      sendEmailChannel: true,
+      sendWhatsAppChannel: true,
+      waMinDelay: Number(minDelay) || 15,
+      waMaxDelay: Number(maxDelay) || 25,
+      waDelayUnit: delayUnit,
+      options: {
+        location: invitingJob.location,
+        qualification: invitingJob.qualifications || invitingJob.education,
+        experience: invitingJob.experience,
+        salary: invitingJob.salary || invitingJob.salaryRange,
+        recruiterName: userProfile?.name || userProfile?.displayName || userProfile?.fullName || 'Recruiter',
+        recruiterPhone: userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || '',
+        whatsappSessionId: userProfile?.whatsappSessionId,
+        whatsappSessionPasscode: userProfile?.whatsappSessionPasscode
+      }
+    });
+
+    messageBox.showSuccess(`🚀 Background reminders (Email + WhatsApp) started for ${candidatesPayload.length} candidate(s)! You can freely navigate to any page.`);
+  };
 
 
   useEffect(() => {
@@ -505,6 +642,14 @@ const RecruiterAllJobs: React.FC = () => {
           createdAt: j.createdAt || j.postedAt || j.updatedAt,
           deadline: j.applyDeadline || j.deadline,
           customFields: j.customFields || [],
+          genderRequirement: j.genderRequirement || j.gender || 'Any',
+          strictness: j.strictness || 'Low',
+          difficulty: j.difficulty || 'Easy',
+          permission: j.interviewPermission || j.permission || 'anyone',
+          numQuestions: j.numQuestions || 5,
+          manualQuestions: j.manualQuestions || [],
+          recruiterName: j.recruiterName || '',
+          recruiterEmail: j.recruiterEmail || '',
           recruiterUID: j.recruiterUID,
           hasJobDoc: true,
           hasInterviewDoc: false,
@@ -539,6 +684,14 @@ const RecruiterAllJobs: React.FC = () => {
           createdAt: existing?.createdAt || i.createdAt || i.updatedAt,
           deadline: existing?.deadline || i.deadline || i.applyDeadline,
           customFields: i.customFields || existing?.customFields || [],
+          genderRequirement: i.genderRequirement || i.gender || existing?.genderRequirement || 'Any',
+          strictness: i.strictness || existing?.strictness || 'Low',
+          difficulty: i.difficulty || existing?.difficulty || 'Easy',
+          permission: i.interviewPermission || i.permission || existing?.permission || 'anyone',
+          numQuestions: i.numQuestions || existing?.numQuestions || 5,
+          manualQuestions: i.manualQuestions || existing?.manualQuestions || [],
+          recruiterName: i.recruiterName || existing?.recruiterName || '',
+          recruiterEmail: i.recruiterEmail || existing?.recruiterEmail || '',
           recruiterUID: i.recruiterUID || existing?.recruiterUID,
           hasJobDoc: existing?.hasJobDoc || false,
           hasInterviewDoc: true,
@@ -653,9 +806,6 @@ const RecruiterAllJobs: React.FC = () => {
           deleteDoc(doc(db, 'interviews', jobId)).catch(() => {})
         ]);
         messageBox.showSuccess(`Job "${title}" deleted successfully.`);
-        if (viewingJobDetails?.id === jobId) {
-          setViewingJobDetails(null);
-        }
       } catch (err) {
         console.error("Failed to delete job", err);
         messageBox.showError("Failed to delete job. Please try again.");
@@ -1167,7 +1317,8 @@ const RecruiterAllJobs: React.FC = () => {
               return (
                 <article
                   key={job.id}
-                  className="group rounded-[6px] border border-white/[0.11] bg-white/[0.02] p-4 transition-all hover:bg-white/[0.04] hover:border-white/[0.22] flex flex-col justify-between"
+                  onClick={() => navigate(`/recruiter/interview/${job.id}/overview`)}
+                  className="group rounded-[6px] border border-white/[0.11] bg-white/[0.02] p-4 transition-all hover:bg-white/[0.04] hover:border-white/[0.22] flex flex-col justify-between cursor-pointer"
                 >
                   <div>
                     {/* Top Row: Category & Status */}
@@ -1193,9 +1344,8 @@ const RecruiterAllJobs: React.FC = () => {
 
                     {/* Job Title & Company */}
                     <h2
-                      onClick={() => setViewingJobDetails(job)}
-                      className="geist-caption text-base font-semibold text-white group-hover:text-primary transition-colors cursor-pointer truncate"
-                      title="Click to view details"
+                      className="geist-caption text-base font-semibold text-white group-hover:text-primary transition-colors truncate"
+                      title={job.title}
                     >
                       {job.title}
                     </h2>
@@ -1216,10 +1366,7 @@ const RecruiterAllJobs: React.FC = () => {
                     </div>
 
                     {/* Short Description */}
-                    <p
-                      onClick={() => setViewingJobDetails(job)}
-                      className="geist-small mt-2 text-[#8f8f8f] line-clamp-2 cursor-pointer hover:text-[#d4d4d4] transition-colors"
-                    >
+                    <p className="geist-small mt-2 text-[#8f8f8f] line-clamp-2 hover:text-[#d4d4d4] transition-colors">
                       {job.description || 'No description provided.'}
                     </p>
 
@@ -1267,7 +1414,10 @@ const RecruiterAllJobs: React.FC = () => {
                   <div className="mt-4 pt-3 border-t border-white/[0.08] flex items-center justify-between gap-2">
                     <button
                       type="button"
-                      onClick={() => setInvitingJob(job)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInvitingJob(job);
+                      }}
                       className="geist-caption flex-1 inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-white bg-white px-3 font-semibold text-black transition-colors hover:bg-[#eaeaea]"
                       title="Invite candidate"
                     >
@@ -1277,25 +1427,29 @@ const RecruiterAllJobs: React.FC = () => {
 
                     <button
                       type="button"
-                      onClick={() => setViewingJobDetails(job)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/recruiter/interview/${job.id}/responses`);
+                      }}
                       className="geist-caption inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2.5 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
-                      title="View description"
+                      title="See candidate responses"
                     >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Details</span>
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Responses</span>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setEditingJobId(job.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingJobId(job.id);
+                      }}
                       className="geist-caption inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2.5 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
                       title="Edit job"
                     >
                       <Edit className="w-3.5 h-3.5" />
                       <span>Edit</span>
                     </button>
-
-
                   </div>
                 </article>
               );
@@ -1312,160 +1466,7 @@ const RecruiterAllJobs: React.FC = () => {
         />
       )}
 
-      {/* Job Description Modal */}
-      {viewingJobDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="relative w-full max-w-3xl max-h-[90vh] bg-[#000] border border-white/[0.13] rounded-[8px] shadow-2xl flex flex-col overflow-hidden">
-            <div className="flex items-start justify-between border-b border-white/[0.11] bg-[#000] px-5 py-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="geist-small inline-block rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-0.5 font-medium text-[#d4d4d4]">
-                    {viewingJobDetails.category || viewingJobDetails.department || 'General'}
-                  </span>
-                  {viewingJobDetails.employmentType && (
-                    <span className="geist-small text-[#8f8f8f]">• {viewingJobDetails.employmentType}</span>
-                  )}
-                </div>
-                <h2 className="geist-section-title text-white text-lg font-bold">{viewingJobDetails.title}</h2>
-                <p className="geist-small text-[#8f8f8f] mt-0.5">
-                  {viewingJobDetails.jobNo ? <span className="font-mono text-emerald-400 font-bold mr-2">Job No: {viewingJobDetails.jobNo} •</span> : null}
-                  {viewingJobDetails.location || 'Remote'}
-                </p>
-              </div>
 
-              <button
-                onClick={() => setViewingJobDetails(null)}
-                className="text-[#8f8f8f] hover:text-white p-1 rounded-[6px] hover:bg-white/10"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 overflow-y-auto space-y-4 text-white geist-small [scrollbar-color:#27272a_#000] [scrollbar-width:thin]">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-white/[0.02] border border-white/[0.08] rounded-[6px]">
-                <div>
-                  <span className="geist-label uppercase text-[#6b7280] block">Experience</span>
-                  <span className="text-white font-medium">{viewingJobDetails.experience !== undefined ? `${viewingJobDetails.experience} Years` : 'N/A'}</span>
-                </div>
-                <div>
-                  <span className="geist-label uppercase text-[#6b7280] block">Salary</span>
-                  <span className="text-white font-medium">{viewingJobDetails.salary || viewingJobDetails.salaryRange || 'Disclosed later'}</span>
-                </div>
-                <div>
-                  <span className="geist-label uppercase text-[#6b7280] block">Access Code</span>
-                  <code className="text-[#83d0a3] font-mono">{viewingJobDetails.accessCode || 'N/A'}</code>
-                </div>
-                <div>
-                  <span className="geist-label uppercase text-[#6b7280] block">Deadline</span>
-                  <span className="text-white font-medium">{formatDate(viewingJobDetails.deadline)}</span>
-                </div>
-              </div>
-
-              <div>
-                <span className="geist-label uppercase text-[#6b7280] block mb-1">Job Description</span>
-                <div className="bg-[#050505] border border-white/[0.08] rounded-[6px] p-3 text-[#d4d4d4] leading-relaxed whitespace-pre-wrap">
-                  {viewingJobDetails.description || 'No description provided for this role.'}
-                </div>
-              </div>
-
-              {(viewingJobDetails.qualifications || viewingJobDetails.education) && (
-                <div>
-                  <span className="geist-label uppercase text-[#6b7280] block mb-1">Qualifications</span>
-                  <div className="bg-[#050505] border border-white/[0.08] rounded-[6px] p-3 text-[#d4d4d4]">
-                    {viewingJobDetails.qualifications || viewingJobDetails.education}
-                  </div>
-                </div>
-              )}
-
-              {formatSkillsList(viewingJobDetails.skills).length > 0 && (
-                <div>
-                  <span className="geist-label uppercase text-[#6b7280] block mb-1">Required Skills</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {formatSkillsList(viewingJobDetails.skills).map((skill, sIdx) => (
-                      <span
-                        key={sIdx}
-                        className="geist-small px-2 py-1 rounded-[4px] bg-white/[0.05] border border-white/[0.1] text-[#d4d4d4]"
-                      >
-                        {skill}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="p-3 bg-white/[0.02] border border-white/[0.08] rounded-[6px] flex flex-col sm:flex-row items-center justify-between gap-2">
-                <span className="geist-small text-[#8f8f8f] font-mono truncate max-w-md">
-                  {viewingJobDetails.interviewLink || `${window.location.origin}/#/interview/${viewingJobDetails.id}`}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleCopyLink(viewingJobDetails.interviewLink || `${window.location.origin}/#/interview/${viewingJobDetails.id}`)}
-                  className="geist-caption shrink-0 inline-flex h-8 items-center gap-1.5 px-3 rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#d4d4d4] hover:bg-white/[0.06] hover:text-white"
-                >
-                  {copiedLink ? <Check className="w-3.5 h-3.5 text-[#83d0a3]" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedLink ? 'Copied' : 'Copy Link'}</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="border-t border-white/[0.11] bg-[#000] px-5 py-3 flex items-center justify-between gap-2">
-              {canUserDeleteJob() ? (
-                <button
-                  type="button"
-                  onClick={() => handleDeleteJob(viewingJobDetails.id, viewingJobDetails.title)}
-                  className="geist-caption text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete Job</span>
-                </button>
-              ) : <div />}
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const jobId = viewingJobDetails.id;
-                    setViewingJobDetails(null);
-                    navigate(`/recruiter/interview/${jobId}/responses`);
-                  }}
-                  className="geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-blue-500/30 bg-blue-500/10 px-3 font-medium text-blue-400 hover:bg-blue-500/20 transition-colors"
-                  title="See Responses"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>See Responses</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const j = viewingJobDetails;
-                    setViewingJobDetails(null);
-                    setEditingJobId(j.id);
-                  }}
-                  className="geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] hover:bg-white/[0.06] hover:text-white"
-                >
-                  <Edit className="w-3.5 h-3.5" />
-                  <span>Edit Job</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const j = viewingJobDetails;
-                    setViewingJobDetails(null);
-                    setInvitingJob(j);
-                  }}
-                  className="geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-white bg-white px-3 font-medium text-black hover:bg-[#eaeaea]"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span>Invite Candidate</span>
-                </button>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Invite Candidate Modal */}
       {invitingJob && (
@@ -1643,10 +1644,10 @@ const RecruiterAllJobs: React.FC = () => {
                       type="button"
                       onClick={handleAnalyzeAndSaveResumeCandidate}
                       disabled={!selectedResumeFile || analyzingResumeAI}
-                      className="geist-caption inline-flex h-8 w-full items-center justify-center gap-2 rounded-[6px] border border-emerald-500/40 bg-emerald-500/10 px-3 font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="geist-caption inline-flex h-9 w-full items-center justify-center gap-2 rounded-[6px] border border-emerald-600 bg-emerald-600 px-3 text-xs font-bold text-white shadow-sm transition-all hover:bg-emerald-500 disabled:border-emerald-700/50 disabled:bg-emerald-800/60 disabled:text-emerald-100/70 disabled:cursor-not-allowed cursor-pointer"
                     >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>{analyzingResumeAI ? 'Analyzing with AI & Saving to Resume Dump...' : 'Analyze Resume with AI & Save to Resume Dump'}</span>
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
+                      <span className="font-bold text-white">{analyzingResumeAI ? 'Analyzing with AI & Saving to Resume Dump...' : 'Analyze Resume with AI & Save to Resume Dump'}</span>
                     </button>
                   </div>
 
@@ -1767,10 +1768,53 @@ const RecruiterAllJobs: React.FC = () => {
 
               {inviteMode === 'invited' && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-2">
                     <span className="geist-label uppercase text-[#6b7280] block font-semibold text-xs">
                       Invited Candidates Roster ({(invitingJob.candidateEmails || []).length})
                     </span>
+
+                    {Boolean((invitingJob.candidateEmails || []).length > 0) && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={handleSendRosterBulkEmailReminders}
+                          disabled={bulkSendingRoster}
+                          className="geist-caption inline-flex h-7 items-center justify-center gap-1 rounded border border-blue-500/40 bg-blue-500/10 px-2 text-[11px] font-semibold text-blue-300 hover:bg-blue-500/20 disabled:opacity-40 transition-colors"
+                          title="Send bulk Email reminders to all candidates"
+                        >
+                          <Mail className="w-3 h-3 text-blue-400" />
+                          <span>Email Reminders</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRosterWaTarget('whatsapp');
+                            setShowRosterWaDelayModal(true);
+                          }}
+                          disabled={bulkSendingRoster}
+                          className="geist-caption inline-flex h-7 items-center justify-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/10 px-2 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-40 transition-colors"
+                          title="Configure delay & send bulk WhatsApp reminders"
+                        >
+                          <i className="fab fa-whatsapp text-xs text-emerald-400"></i>
+                          <span>WhatsApp Reminders</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRosterWaTarget('both');
+                            setShowRosterWaDelayModal(true);
+                          }}
+                          disabled={bulkSendingRoster}
+                          className="geist-caption inline-flex h-7 items-center justify-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-2 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/20 disabled:opacity-40 transition-colors"
+                          title="Configure delay & send BOTH Email + WhatsApp reminders"
+                        >
+                          <Send className="w-3 h-3 text-amber-400" />
+                          <span>Both (Mail + WhatsApp)</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {(!invitingJob.candidateEmails || invitingJob.candidateEmails.length === 0) ? (
@@ -2209,6 +2253,111 @@ const RecruiterAllJobs: React.FC = () => {
           </div>
         </div>
       )}
+
+      {showRosterWaDelayModal &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0a0a0a] p-6 text-white shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="rounded-full bg-emerald-500/20 p-2 text-emerald-400">
+                    <i className="fab fa-whatsapp text-lg"></i>
+                  </div>
+                  <div>
+                    <h3 className="geist-caption font-bold text-base text-white">WhatsApp Anti-Spam Delay Settings</h3>
+                    <p className="geist-small text-xs text-[#8f8f8f]">Set min/max delay between candidate reminders</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowRosterWaDelayModal(false)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-[11px] text-[#8f8f8f] block mb-1 font-medium">Min Delay</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="360"
+                    value={waMinDelay}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setWaMinDelay(val === '' ? '' : Math.max(1, parseInt(val) || 1));
+                    }}
+                    placeholder="15"
+                    className="w-full h-9 rounded-[6px] border border-white/15 bg-white/[0.04] px-2.5 text-xs text-white outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-[#8f8f8f] block mb-1 font-medium">Max Delay</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="360"
+                    value={waMaxDelay}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setWaMaxDelay(val === '' ? '' : Math.max(1, parseInt(val) || 1));
+                    }}
+                    placeholder="25"
+                    className="w-full h-9 rounded-[6px] border border-white/15 bg-white/[0.04] px-2.5 text-xs text-white outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-[#8f8f8f] block mb-1 font-medium">Delay Unit</label>
+                  <select
+                    value={waDelayUnit}
+                    onChange={(e) => setWaDelayUnit(e.target.value as 'sec' | 'min')}
+                    className="w-full h-9 rounded-[6px] border border-white/15 bg-[#121212] px-2 text-xs text-white outline-none focus:border-emerald-500 cursor-pointer"
+                  >
+                    <option value="sec">Seconds (sec)</option>
+                    <option value="min">Minutes (min)</option>
+                  </select>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-emerald-400 italic">
+                * Each WhatsApp message will pause for a random delay between {waMinDelay || 15} - {waMaxDelay || 25} {waDelayUnit} to protect your WhatsApp number from spam blocking.
+              </p>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setShowRosterWaDelayModal(false)}
+                  className="geist-caption h-9 px-4 rounded-[6px] border border-white/15 bg-white/[0.04] text-xs font-medium text-[#d4d4d4] hover:bg-white/[0.08]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRosterWaDelayModal(false);
+                    if (rosterWaTarget === 'whatsapp') {
+                      executeSendRosterBulkWhatsAppReminders(Number(waMinDelay) || 15, Number(waMaxDelay) || 25, waDelayUnit);
+                    } else {
+                      executeSendRosterBulkBothReminders(Number(waMinDelay) || 15, Number(waMaxDelay) || 25, waDelayUnit);
+                    }
+                  }}
+                  className="geist-caption h-9 px-4 rounded-[6px] border border-emerald-500 bg-emerald-600 text-xs font-semibold text-white hover:bg-emerald-500 shadow-sm flex items-center gap-1.5"
+                >
+                  <i className="fab fa-whatsapp"></i>
+                  <span>Send Reminders Now</span>
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      <WhatsAppConnectModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => setIsWhatsAppModalOpen(false)}
+      />
     </div>
   );
 };

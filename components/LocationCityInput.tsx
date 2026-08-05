@@ -11,7 +11,7 @@ interface LocationCityInputProps {
 export const LocationCityInput: React.FC<LocationCityInputProps> = ({
   value,
   onChange,
-  placeholder = "e.g. Nashik, Mumbai, Pune...",
+  placeholder = "Select or search city (e.g. Nashik, Pune, Mumbai...)",
   className = "w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
 }) => {
   const listId = useId();
@@ -25,20 +25,31 @@ export const LocationCityInput: React.FC<LocationCityInputProps> = ({
 
   return (
     <div className="relative w-full">
-      <input
-        type="text"
-        list={listId}
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
-          setIsOpen(true);
-        }}
-        onFocus={() => setIsOpen(true)}
-        onBlur={() => setTimeout(() => setIsOpen(false), 200)}
-        placeholder={placeholder}
-        className={className}
-        autoComplete="off"
-      />
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          list={listId}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+          onBlur={() => setTimeout(() => setIsOpen(false), 200)}
+          placeholder={placeholder}
+          className={`${className} pr-8`}
+          autoComplete="off"
+        />
+
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => setIsOpen(!isOpen)}
+          className="absolute right-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors pointer-events-auto cursor-pointer"
+        >
+          <i className={`fas fa-chevron-down text-xs transition-transform ${isOpen ? 'rotate-180' : ''}`}></i>
+        </button>
+      </div>
 
       <datalist id={listId}>
         {MAHARASHTRA_CITIES.map(city => (
@@ -46,10 +57,14 @@ export const LocationCityInput: React.FC<LocationCityInputProps> = ({
         ))}
       </datalist>
 
-      {/* Floating suggestion popup for faster visual clicking */}
-      {isOpen && value.trim().length > 0 && filteredCities.length > 0 && (
-        <div className="absolute left-0 right-0 top-full mt-1 z-[9999] max-h-48 overflow-y-auto rounded-md border border-gray-200 dark:border-white/15 bg-white dark:bg-black/95 shadow-xl backdrop-blur-md divide-y divide-gray-100 dark:divide-white/10 text-xs">
-          {filteredCities.slice(0, 10).map(city => (
+      {/* Floating suggestion dropdown list (shows all cities on focus/click even if value is empty) */}
+      {isOpen && filteredCities.length > 0 && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-[9999] max-h-56 overflow-y-auto rounded-xl border border-gray-200 dark:border-white/15 bg-white dark:bg-slate-900 shadow-2xl backdrop-blur-md divide-y divide-gray-100 dark:divide-white/10 text-xs animate-in fade-in duration-150">
+          <div className="p-2 bg-gray-50 dark:bg-white/[0.04] text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex justify-between items-center">
+            <span>Select City ({filteredCities.length})</span>
+            <span>Click to Pick</span>
+          </div>
+          {filteredCities.map(city => (
             <button
               key={city}
               type="button"
@@ -58,10 +73,18 @@ export const LocationCityInput: React.FC<LocationCityInputProps> = ({
                 onChange(city);
                 setIsOpen(false);
               }}
-              className="w-full text-left px-3 py-2 text-slate-800 dark:text-gray-200 hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 flex items-center justify-between transition-colors"
+              className={`w-full text-left px-3.5 py-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/40 flex items-center justify-between transition-colors cursor-pointer ${
+                value.toLowerCase() === city.toLowerCase()
+                  ? 'bg-blue-50 dark:bg-blue-950/60 font-bold text-blue-600 dark:text-blue-400'
+                  : 'text-slate-800 dark:text-gray-200'
+              }`}
             >
-              <span>{city}</span>
-              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">Maharashtra</span>
+              <span className="font-semibold text-xs">{city}</span>
+              {value.toLowerCase() === city.toLowerCase() ? (
+                <i className="fas fa-check text-blue-600 dark:text-blue-400 text-xs"></i>
+              ) : (
+                <span className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">Maharashtra</span>
+              )}
             </button>
           ))}
         </div>

@@ -30,6 +30,7 @@ export interface ParsedResumeProfile {
   name: string;
   email: string;
   phone: string;
+  gender?: string;
   location: string;
   currentTitle: string;
   summary: string;
@@ -395,10 +396,16 @@ const deterministicParse = (text: string, fallbackFileName: string): ParsedResum
   const location = topLines.find((line) => /\b(?:india|maharashtra|pune|mumbai|delhi|bengaluru|bangalore|hyderabad|chennai|kolkata|noida|gurugram|gurgaon|nashik|nagpur|remote)\b/i.test(line)
     && !EMAIL_REGEX.test(line) && !PHONE_REGEX.test(line) && line.length <= 100) || '';
 
+  const email = cleanText.match(EMAIL_REGEX)?.[1]?.toLowerCase() || '';
+  const phone = formatExtractedPhone(extractPhoneFromText(cleanText));
+  const detectedG = detectCandidateGender({ name, email, summary, resumeText: cleanText });
+  const gender = detectedG === 'female' ? 'Female' : detectedG === 'male' ? 'Male' : 'Unspecified';
+
   return {
     name,
-    email: cleanText.match(EMAIL_REGEX)?.[1]?.toLowerCase() || '',
-    phone: formatExtractedPhone(extractPhoneFromText(cleanText)),
+    email,
+    phone,
+    gender,
     location,
     currentTitle: extractCurrentTitle(cleanText, name),
     summary,
@@ -420,6 +427,7 @@ interface AIResumeProfile {
   name?: unknown;
   email?: unknown;
   phone?: unknown;
+  gender?: unknown;
   location?: unknown;
   currentTitle?: unknown;
   summary?: unknown;
@@ -467,41 +475,11 @@ const parseAIEducation = (value: unknown): ResumeEducationEntry[] => {
   }).filter((item) => item.degree || item.institution);
 };
 
+import { resolveStrictListedCity } from '../data/maharashtraCities';
+
 export const normalizeStandardCityName = (rawLocation: string): string => {
   if (!rawLocation || typeof rawLocation !== 'string') return '';
-  const clean = rawLocation.trim();
-  if (!clean) return '';
-  
-  const lower = clean.toLowerCase();
-  
-  // Standard city alias mappings
-  if (lower.includes('nasik') || lower.includes('nashik')) return 'Nashik';
-  if (lower.includes('mumbai') || lower.includes('bombay')) return 'Mumbai';
-  if (lower.includes('pune') || lower.includes('poona')) return 'Pune';
-  if (lower.includes('nagpur')) return 'Nagpur';
-  if (lower.includes('thane')) return 'Thane';
-  if (lower.includes('aurangabad') || lower.includes('sambhajinagar')) return 'Chhatrapati Sambhajinagar';
-  if (lower.includes('solapur') || lower.includes('sholapur')) return 'Solapur';
-  if (lower.includes('kolhapur')) return 'Kolhapur';
-  if (lower.includes('amravati')) return 'Amravati';
-  if (lower.includes('jalgaon')) return 'Jalgaon';
-  if (lower.includes('nanded')) return 'Nanded';
-  if (lower.includes('sangli')) return 'Sangli';
-  if (lower.includes('latur')) return 'Latur';
-  if (lower.includes('dhule')) return 'Dhule';
-  if (lower.includes('ahmednagar')) return 'Ahmednagar';
-  if (lower.includes('satara')) return 'Satara';
-  if (lower.includes('delhi')) return 'Delhi';
-  if (lower.includes('bengaluru') || lower.includes('bangalore')) return 'Bengaluru';
-  if (lower.includes('hyderabad')) return 'Hyderabad';
-  if (lower.includes('chennai') || lower.includes('madras')) return 'Chennai';
-  if (lower.includes('kolkata') || lower.includes('calcutta')) return 'Kolkata';
-
-  // Capitalize standard proper words if not matched above
-  return clean
-    .split(/\s+/)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
+  return resolveStrictListedCity(rawLocation);
 };
 
 export const analyzeResumeText = async (
@@ -514,8 +492,8 @@ export const analyzeResumeText = async (
 
   try {
     let ai: AIResumeProfile;
-    const sysPrompt = 'You extract factual resume data for recruiters. Never infer missing facts or protected traits. CRITICAL: Extract ONLY standard, recognized technical/engineering/domain skills (e.g. AutoCAD, Site Supervision, Python, Quantity Surveying, Billing & Estimation, RCC Design, Tally, REVIT, Financial Modeling, Project Management). Strictly EXCLUDE any non-technical buzzwords or senseless phrases (e.g., "hard working", "team player", "good communication", "honest", "curriculum vitae", "quick learner"). Return only valid JSON.';
-    const userPrompt = `Extract this resume into the exact JSON shape below. Fill ALL fields automatically from the resume text. Ensure skills contain ONLY standard domain/technical skills and NO senseless generic words. totalExperienceYears must be a number.\n\n{"name":"","email":"","phone":"","location":"","currentTitle":"","summary":"","totalExperienceYears":0,"skills":[],"experience":[{"title":"","company":"","startDate":"","endDate":"","highlights":[],"skills":[]}],"education":[{"degree":"","institution":"","year":""}],"certifications":[],"languages":[],"keywords":[],"linkedinUrl":"","portfolioUrl":""}\n\nRESUME TEXT:\n${text.slice(0, 18_000)}`;
+    const sysPrompt = 'You extract factual resume data for recruiters. Extract candidate gender if specified or inferrable ("Male", "Female", or "Unspecified"). CRITICAL: Extract ONLY standard, recognized technical/engineering/domain skills (e.g. AutoCAD, Site Supervision, Python, Quantity Surveying, Billing & Estimation, RCC Design, Tally, REVIT, Financial Modeling, Project Management). Strictly EXCLUDE any non-technical buzzwords or senseless phrases. Return only valid JSON.';
+    const userPrompt = `Extract this resume into the exact JSON shape below. Fill ALL fields automatically from the resume text. Ensure skills contain ONLY standard domain/technical skills and NO senseless generic words. totalExperienceYears must be a number.\n\n{"name":"","email":"","phone":"","gender":"","location":"","currentTitle":"","summary":"","totalExperienceYears":0,"skills":[],"experience":[{"title":"","company":"","startDate":"","endDate":"","highlights":[],"skills":[]}],"education":[{"degree":"","institution":"","year":""}],"certifications":[],"languages":[],"keywords":[],"linkedinUrl":"","portfolioUrl":""}\n\nRESUME TEXT:\n${text.slice(0, 18_000)}`;
 
     try {
       ai = await geminiGenerateJson<AIResumeProfile>(
@@ -537,13 +515,29 @@ export const analyzeResumeText = async (
     const aiExperience = parseAIExperience(ai.experience);
     const experienceSkills = aiExperience.flatMap((entry) => entry.skills);
     const rawSkills = [...aiSkills, ...experienceSkills, ...fallback.skills];
+
+    const nameToUse = safeString(ai.name, 100) || fallback.name;
+    const emailToUse = safeString(ai.email, 150).toLowerCase() || fallback.email;
+    const summaryToUse = safeString(ai.summary, 1200) || fallback.summary;
+
+    const detectedGender = detectCandidateGender({
+      gender: safeString(ai.gender, 20),
+      name: nameToUse,
+      email: emailToUse,
+      summary: summaryToUse,
+      resumeText: text
+    });
+
+    const finalGender = detectedGender === 'female' ? 'Female' : detectedGender === 'male' ? 'Male' : 'Unspecified';
+
     const profile: ParsedResumeProfile = {
-      name: safeString(ai.name, 100) || fallback.name,
-      email: safeString(ai.email, 150).toLowerCase() || fallback.email,
+      name: nameToUse,
+      email: emailToUse,
       phone: formatExtractedPhone(safeString(ai.phone, 50)) || fallback.phone,
+      gender: finalGender,
       location: normalizeStandardCityName(safeString(ai.location, 150) || fallback.location),
       currentTitle: safeString(ai.currentTitle, 150) || fallback.currentTitle,
-      summary: safeString(ai.summary, 1200) || fallback.summary,
+      summary: summaryToUse,
       totalExperienceYears: safeNumber(ai.totalExperienceYears) || fallback.totalExperienceYears,
       skills: sanitizeDomainSkills(rawSkills).slice(0, 40),
       experience: aiExperience,
@@ -806,10 +800,210 @@ const skillMatches = (candidateSkill: string, requiredSkill: string) => {
   return Boolean(candidate && required && (candidate === required || (candidate.length >= 5 && required.length >= 5 && (candidate.includes(required) || required.includes(candidate)))));
 };
 
+const COMMON_MALE_NAME_PATTERNS = [
+  'javed', 'pankaj', 'rahul', 'amit', 'sanjay', 'rajesh', 'vijay', 'anil', 'pradeep', 'mahesh',
+  'deepak', 'sunil', 'vikas', 'manoj', 'ajay', 'suresh', 'ramesh', 'dinesh', 'ashok', 'rohit',
+  'sachin', 'gaurav', 'vishal', 'abhishek', 'praveen', 'prashant', 'santosh', 'nitin', 'aditya',
+  'varun', 'shivam', 'saurabh', 'akash', 'harsh', 'karan', 'ankit', 'mohit', 'yash', 'sumit',
+  'roshan', 'suraj', 'dhiraj', 'brijesh', 'chetan', 'ganesh', 'shrikant', 'dnyaneshwar', 'nilesh',
+  'mangesh', 'tushar', 'swapnil', 'amol', 'prasad', 'hemant', 'kiran', 'siddharth', 'siddhesh',
+  'akshay', 'arun', 'alok', 'anand', 'arvind', 'bhaskar', 'chirag', 'devendra', 'dheeraj', 'gautam',
+  'harish', 'jagdish', 'jitendra', 'kapil', 'lokesh', 'madhav', 'mayank', 'mohan', 'mukesh', 'naresh',
+  'naveen', 'narendra', 'omkar', 'pawan', 'prakash', 'rajan', 'rakesh', 'ravi', 'rishabh', 'rohan',
+  'samir', 'sandeep', 'satish', 'shubham', 'subhash', 'tarun', 'utkarsh', 'vaibhav', 'vinay', 'vinod',
+  'yogesh', 'salman', 'shahrukh', 'aamir', 'tariq', 'imran', 'irfan', 'sameer', 'firoz', 'asif',
+  'arman', 'wasim', 'danish', 'faizan', 'noman', 'zishan', 'tahir', 'rehan', 'shubam', 'tejas',
+  'bhanu', 'gopichand', 'narasimha', 'venkat', 'srinivas', 'subba', 'raghav', 'govind', 'krishna',
+  'balaji', 'keshav', 'shiva', 'shankar', 'gopal', 'narayan', 'parth', 'dhruv', 'ayush', 'dhananjay'
+];
+
+const COMMON_FEMALE_NAME_PATTERNS = [
+  'priya', 'pooja', 'neha', 'anita', 'sunita', 'shweta', 'divya', 'aarti', 'jyoti', 'kavita',
+  'meena', 'rekha', 'seema', 'swati', 'sneha', 'monika', 'sakshi', 'richa', 'sonam', 'neetu',
+  'anjali', 'archana', 'bhavna', 'deepika', 'isha', 'kajal', 'kanchan', 'komal', 'mamta', 'nisha',
+  'payal', 'prachi', 'radha', 'reshma', 'roshni', 'ruchi', 'sapna', 'shikha', 'shilpa', 'shruti',
+  'smita', 'sonal', 'suman', 'tanvi', 'vaishali', 'varsha', 'vidya', 'ashwini', 'pranali', 'sayali',
+  'aishwarya', 'akanksha', 'alka', 'ananya', 'apoorva', 'barkha', 'chanda', 'dimple', 'ekta', 'gayatri',
+  'geeta', 'indira', 'jaya', 'karishma', 'kirti', 'lata', 'laxmi', 'madhuri', 'manju', 'mayuri',
+  'megha', 'nandini', 'nidhi', 'pallavi', 'poonam', 'pratibha', 'preeti', 'punita', 'rachna', 'rashmi',
+  'renu', 'rita', 'rupa', 'sangeeta', 'savita', 'shalini', 'sheetal', 'shobha', 'simran', 'snehal',
+  'sridevi', 'suchitra', 'sushma', 'trupti', 'urmila', 'vandana', 'vinita', 'yamini', 'fatima',
+  'aisha', 'zoya', 'sara', 'hina', 'sania', 'simra', 'sumaiya', 'bushra', 'aliza', 'humaira',
+  'parveen', 'shabana', 'nargis', 'nasreen', 'yasmin', 'farida', 'tasneem', 'zainab', 'samreen'
+];
+
+export function detectCandidateGender(candidate: any): 'male' | 'female' | 'unknown' {
+  if (!candidate) return 'unknown';
+
+  const candGenderRaw = (candidate.gender || candidate.genderRequirement || '').toString().trim().toLowerCase();
+  if (candGenderRaw === 'female' || candGenderRaw === 'f' || candGenderRaw === 'woman') return 'female';
+  if (candGenderRaw === 'male' || candGenderRaw === 'm' || candGenderRaw === 'man') return 'male';
+
+  const rawName = (candidate.name || '').toString().trim().toLowerCase();
+  const rawEmail = (candidate.email || '').toString().trim().toLowerCase();
+  const nameAndEmail = `${rawName} ${rawEmail}`;
+  const fullText = `${nameAndEmail} ${candidate.summary || ''} ${candidate.resumeText || ''}`.toLowerCase();
+
+  // Honorifics check
+  if (/\b(mr\.|mr\b|male candidate|father|husband|he\/him)\b/i.test(fullText) && !/\b(ms\.|mrs\.|female candidate)\b/i.test(fullText)) {
+    return 'male';
+  }
+  if (/\b(ms\.|mrs\.|miss\b|female candidate|mother|wife|she\/her)\b/i.test(fullText)) {
+    return 'female';
+  }
+
+  // Tokenize candidate name
+  const nameTokens = rawName.split(/[\s_.-]+/).filter((t: string) => t.length > 1);
+  const emailTokens = rawEmail.split('@')[0].split(/[\s_.-]+/).filter((t: string) => t.length > 1);
+  const allTokens = [...nameTokens, ...emailTokens];
+
+  // 1. Direct First Name Match
+  for (const token of allTokens) {
+    if (COMMON_FEMALE_NAME_PATTERNS.includes(token)) return 'female';
+    if (COMMON_MALE_NAME_PATTERNS.includes(token)) return 'male';
+  }
+
+  // 2. Substring Name Match
+  for (const maleName of COMMON_MALE_NAME_PATTERNS) {
+    if (new RegExp(`\\b${maleName}\\b`, 'i').test(nameAndEmail)) {
+      return 'male';
+    }
+  }
+  for (const femaleName of COMMON_FEMALE_NAME_PATTERNS) {
+    if (new RegExp(`\\b${femaleName}\\b`, 'i').test(nameAndEmail)) {
+      return 'female';
+    }
+  }
+
+  // 3. Indian Suffix Rules
+  const firstName = nameTokens[0] || '';
+  if (firstName.length >= 3) {
+    if (/\b\w+(esh|andra|endra|raj|pal|kumar|singh|ram|dev|nath|bhai|kant|vrat)\b/i.test(firstName)) {
+      return 'male';
+    }
+    if (/\b\w+(ita|isha|ikha|alika|kumari|devi)\b/i.test(firstName)) {
+      return 'female';
+    }
+  }
+
+  // Explicit keyword check in resume text
+  const mentionsFemale = /\b(female|woman|girl|lady)\b/i.test(fullText);
+  const mentionsMale = /\b(male|man|boy)\b/i.test(fullText);
+
+  if (mentionsFemale && !mentionsMale) return 'female';
+  if (mentionsMale && !mentionsFemale) return 'male';
+
+  return 'unknown';
+}
+
+export function checkMandatoryCriteriaMatch(
+  job: {
+    genderRequirement?: string;
+    gender?: string;
+    strictGenderMatch?: boolean;
+    location?: string;
+    city?: string;
+    strictLocationMatch?: boolean;
+    education?: string;
+    qualification?: string;
+    qualifications?: string;
+    strictEducationMatch?: boolean;
+    minExperience?: number | string;
+    maxExperience?: number | string;
+    experience?: number | string;
+    strictExperienceMatch?: boolean;
+  },
+  candidate: any
+): { isMatch: boolean; failReasons: string[] } {
+  const failReasons: string[] = [];
+
+  // 1. Gender Requirement Check
+  const reqGenderRaw = (job.genderRequirement || job.gender || '').toString().trim().toLowerCase();
+  const isStrictGender = Boolean(job.strictGenderMatch);
+
+  // IF reqGender is 'any', 'no preference', 'nopreference', 'both', 'all', or empty -> SHOW ALL GENDERS (PASS!)
+  const isAnyGender = !reqGenderRaw || ['any', 'no preference', 'nopreference', 'both', 'all', 'none'].includes(reqGenderRaw);
+
+  if (!isAnyGender || isStrictGender) {
+    const candidateGender = detectCandidateGender(candidate);
+
+    if (reqGenderRaw.includes('female')) {
+      if (candidateGender === 'male') {
+        failReasons.push(`Gender Mismatch: Job requires Female candidates only (Candidate is Male).`);
+      }
+    } else if (reqGenderRaw.includes('male') && !reqGenderRaw.includes('female')) {
+      if (candidateGender === 'female') {
+        failReasons.push(`Gender Mismatch: Job requires Male candidates only (Candidate is Female).`);
+      }
+    }
+  }
+
+  // 2. Location Check
+  const reqLocation = (job.location || job.city || '').toString().trim().toLowerCase();
+  const isStrictLocation = Boolean(job.strictLocationMatch);
+
+  if (isStrictLocation && reqLocation) {
+    const candLoc = (candidate.location || candidate.city || '').toString().trim().toLowerCase();
+    const candText = `${candidate.summary || ''} ${candidate.resumeText || ''} ${candLoc}`.toLowerCase();
+
+    const targetCity = resolveStrictListedCity(reqLocation) || reqLocation;
+    const cityTokens = targetCity.toLowerCase().split(/[\s,/-]+/).filter((t) => t.length > 2);
+
+    const matchesCity = cityTokens.some((tok) => candLoc.includes(tok) || candText.includes(tok));
+
+    if (!matchesCity) {
+      failReasons.push(`Location Mismatch: Job requires ${job.location || job.city}.`);
+    }
+  }
+
+  // 3. Education Check
+  const reqEdu = (job.education || job.qualification || job.qualifications || '').toString().trim().toLowerCase();
+  const isStrictEdu = Boolean(job.strictEducationMatch);
+
+  if (isStrictEdu && reqEdu) {
+    const candEduList = Array.isArray(candidate.education)
+      ? candidate.education.map((e: any) => (typeof e === 'string' ? e : `${e.degree || ''} ${e.institution || ''}`)).join(' ').toLowerCase()
+      : '';
+    const candEduField = (candidate.educationLevel || candidate.highestEducation || candidate.education || candidate.qualification || '').toString().toLowerCase();
+    const combinedEduText = `${candEduField} ${candEduList} ${candidate.summary || ''} ${candidate.resumeText || ''}`.toLowerCase();
+
+    const eduTokens = reqEdu.split(/[\s,/()\-]+/).filter((t) => t.length > 1);
+    const matchesEdu = eduTokens.length === 0 || eduTokens.some((tok) => combinedEduText.includes(tok));
+
+    if (!matchesEdu) {
+      failReasons.push(`Education Mismatch: Job requires ${job.education || job.qualification}.`);
+    }
+  }
+
+  // 4. Experience Check
+  const isStrictExp = Boolean(job.strictExperienceMatch);
+  if (isStrictExp) {
+    const minExp = Math.max(0, Number(job.minExperience) || Number(job.experience) || 0);
+    const maxExp = Math.max(0, Number(job.maxExperience) || 0);
+    const rawCandExp = candidate.totalExperienceYears ?? candidate.experience ?? 0;
+    const candExp = Math.max(0, parseFloat(String(rawCandExp).replace(/[^0-9.]/g, '')) || 0);
+
+    if (minExp > 0 && candExp < minExp) {
+      failReasons.push(`Experience Mismatch: Min ${minExp} yrs required (candidate has ${candExp} yrs).`);
+    }
+    if (maxExp > 0 && maxExp >= minExp && candExp > maxExp) {
+      failReasons.push(`Experience Mismatch: Max ${maxExp} yrs required (candidate has ${candExp} yrs).`);
+    }
+  }
+
+  return {
+    isMatch: failReasons.length === 0,
+    failReasons
+  };
+}
+
 export const scoreCandidateForRole = (
   candidate: ResumeDumpRecord,
-  role: { title: string; description: string; requiredSkills: string[]; minExperience?: number; maxExperience?: number }
+  role: { title: string; description: string; requiredSkills: string[]; minExperience?: number; maxExperience?: number; [key: string]: any }
 ): CandidateMatch | null => {
+  const mandatory = checkMandatoryCriteriaMatch(role, candidate);
+  if (!mandatory.isMatch) return null;
+
   const requiredSkills = uniqueStrings(role.requiredSkills.map(canonicalizeSkill), 30);
   const candidateSkills = uniqueStrings([...(candidate.skills || []), ...(candidate.experience || []).flatMap((entry) => entry.skills || [])].map(canonicalizeSkill), 50);
   const evidenceText = `${candidate.currentTitle || ''} ${candidate.summary || ''} ${(candidate.experience || []).map((entry) => `${entry.title} ${entry.company} ${(entry.highlights || []).join(' ')}`).join(' ')} ${candidate.resumeText || ''}`;

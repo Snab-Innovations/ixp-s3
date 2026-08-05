@@ -502,6 +502,20 @@ const InterviewReport: React.FC = () => {
             y += 4;
         }
 
+        // 4b. PROFILE CRITERIA MISMATCHES
+        if (submission.candidateInfo?.criteriaMismatches && submission.candidateInfo.criteriaMismatches.length > 0) {
+            drawSectionHeader("Profile Criteria Mismatches Noted");
+            submission.candidateInfo.criteriaMismatches.forEach((m: string) => {
+                checkPage(10);
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(9);
+                pdf.setTextColor(180, 83, 9);
+                pdf.text(`• ${m}`, margin + 4, y);
+                y += 5;
+            });
+            y += 4;
+        }
+
         // 5. AI EVALUATION
         drawSectionHeader("AI Evaluation");
         const aiSections = [
@@ -971,6 +985,24 @@ const InterviewReport: React.FC = () => {
             <div className={`grid grid-cols-1 gap-6 ${isCompareMode ? '' : 'lg:grid-cols-3'}`}>
                 {/* Main Content */}
                 <div className={`space-y-6 ${isCompareMode ? '' : 'lg:col-span-2'}`}>
+                    {/* Candidate Profile Requirement Mismatch Banner */}
+                    {submission.candidateInfo?.criteriaMismatches && submission.candidateInfo.criteriaMismatches.length > 0 && (
+                        <div className="bg-amber-50 dark:bg-amber-950/40 rounded-2xl p-6 border border-amber-300 dark:border-amber-700/60 shadow-sm text-amber-900 dark:text-amber-200 space-y-2">
+                            <div className="flex items-center gap-2.5 font-extrabold text-base text-amber-800 dark:text-amber-300">
+                                <i className="fas fa-exclamation-triangle text-amber-600 dark:text-amber-400"></i>
+                                <span>Candidate Profile Criteria Mismatch Noted</span>
+                            </div>
+                            <p className="text-xs text-amber-800/90 dark:text-amber-300/90">
+                                The candidate proceeded to take the interview despite the following profile requirement mismatches:
+                            </p>
+                            <ul className="list-disc list-inside text-xs font-semibold space-y-1 pl-1">
+                                {submission.candidateInfo.criteriaMismatches.map((mismatch: string, idx: number) => (
+                                    <li key={idx} className="text-amber-900 dark:text-amber-200">{mismatch}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
                     {/* AI Summary Card */}
                     <div className="bg-white dark:bg-white/5 rounded-2xl p-6 md:p-8 border border-gray-200 dark:border-white/10 shadow-sm">
                         <h2 className="text-xl font-bold mb-6 flex items-center gap-3"><Brain size={24} className="text-primary"/> Hiring Manager Evaluation</h2>

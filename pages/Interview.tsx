@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { doc, getDoc, collection, serverTimestamp, updateDoc, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, serverTimestamp, updateDoc, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { uploadToCloudinary, generateInterviewQuestions, requestTranscription, fetchTranscriptText, generateFeedback } from '../services/api';
-import { speak } from '../lib/tts';
+import { speak, unlockTTSAudio } from '../lib/tts';
 import { Interview, InterviewState } from '../types';
 import { createPortal } from 'react-dom';
 import { LanguageSelector } from './LanguageSelector';
@@ -15,6 +15,8 @@ import { getCandidateRateLimitReachedMessage, isRateLimitReached, loadCompanyRat
 import { analyzeResumeText, readResumeText, saveResumeDumpCandidate } from '../services/resumeService';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { saveCandidateConsent } from '../services/candidateConsent';
+import { LocationCityInput } from '../components/LocationCityInput';
+import { EducationInput } from '../components/EducationInput';
 
 // Setup PDF.js worker to enable PDF parsing
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -44,6 +46,7 @@ type CandidateInfo = {
   highlightedSkillsForJob: string;
   isFresher: boolean;
   language: string;
+  criteriaMismatches?: string[];
 };
 
 // --- Sarvam AI Transcription Helper ---
@@ -236,12 +239,13 @@ const TicTacToe: React.FC = () => {
 const CandidateInfoForm: React.FC<{
   jobTitle?: string;
   interviewId: string;
+  interviewData?: Interview | null;
   onBackToWelcome: () => void;
   onSubmit: (info: CandidateInfo, file: File | null, existingResumeUrl?: string, cloudinaryUrl?: string) => void;
   errorMsg: string | null;
   user: any;
   userProfile: any;
-}> = ({ jobTitle, interviewId, onBackToWelcome, onSubmit, errorMsg: initialError, user, userProfile }) => {
+}> = ({ jobTitle, interviewId, interviewData, onBackToWelcome, onSubmit, errorMsg: initialError, user, userProfile }) => {
   const [name, setName] = useState(userProfile?.fullname || userProfile?.name || '');
   const [email, setEmail] = useState(user?.email || '');
   const [phone, setPhone] = useState(userProfile?.phone || '');
@@ -252,55 +256,6 @@ const CandidateInfoForm: React.FC<{
   const [showDuplicatePopup, setShowDuplicatePopup] = useState(false);
   const { isDark } = useTheme();
   const [language, setLanguage] = useState('en');
-
-  // Debounced check in Firestore to see if this email or phone is already used
-  useEffect(() => {
-    if (!email.trim() && !phone.trim()) return;
-
-    let isCancelled = false;
-    const checkDuplicate = async () => {
-      try {
-        const attemptsRef = collection(db, 'interviews', interviewId, 'attempts');
-
-        // Check email
-        if (email.trim()) {
-          const emailQuery = query(attemptsRef, where('candidateInfo.email', '==', email.trim()));
-          const emailSnap = await getDocs(emailQuery);
-          if (!emailSnap.empty && !isCancelled) {
-            const hasReattempt = emailSnap.docs.some(doc => doc.data().allowReattempt === true);
-            if (!hasReattempt) {
-              setShowDuplicatePopup(true);
-              return;
-            }
-          }
-        }
-
-        // Check phone
-        if (phone.trim()) {
-          const phoneQuery = query(attemptsRef, where('candidateInfo.phone', '==', phone.trim()));
-          const phoneSnap = await getDocs(phoneQuery);
-          if (!phoneSnap.empty && !isCancelled) {
-            const hasReattempt = phoneSnap.docs.some(doc => doc.data().allowReattempt === true);
-            if (!hasReattempt) {
-              setShowDuplicatePopup(true);
-              return;
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Auto duplicate check failed:", err);
-      }
-    };
-
-    const timer = setTimeout(() => {
-      checkDuplicate();
-    }, 600);
-
-    return () => {
-      isCancelled = true;
-      clearTimeout(timer);
-    };
-  }, [email, phone, interviewId]);
 
   // Pre-interview questionnaire states
   const [gender, setGender] = useState('');
@@ -322,29 +277,197 @@ const CandidateInfoForm: React.FC<{
   const [manualSkillInput, setManualSkillInput] = useState('');
   const [isFresher, setIsFresher] = useState(false);
   const [formStep, setFormStep] = useState(1);
+  const [previewModalUrl, setPreviewModalUrl] = useState<string | null>(null);
 
   const existingResumeUrl = userProfile?.resumeURL || userProfile?.resumeUrl;
+  const [foundDumpCandidate, setFoundDumpCandidate] = useState<any | null>(null);
+  const [isSearchingResumeDump, setIsSearchingResumeDump] = useState(false);
+
+  // Email Lookup in Resume Dump for instant autofill & resume preview
+  useEffect(() => {
+    const trimmedEmail = (email || '').trim().toLowerCase();
+    if (!trimmedEmail || !trimmedEmail.includes('@') || !trimmedEmail.includes('.')) {
+      setFoundDumpCandidate(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingResumeDump(true);
+      try {
+        let snap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('email', '==', trimmedEmail), limit(1))).catch(() => null);
+        if (!snap || snap.empty) {
+          snap = await getDocs(query(collection(db, 'resumeDump'), where('email', '==', trimmedEmail), limit(1))).catch(() => null);
+        }
+
+        if (snap && !snap.empty) {
+          const record = snap.docs[0].data();
+          setFoundDumpCandidate(record);
+
+          // Autofill fields from saved resume dump record if current state is empty
+          if (record.name && !name) setName(record.name);
+          if (record.phone && !phone) setPhone(record.phone);
+          if (record.gender && !gender) setGender(record.gender);
+          if ((record.location || record.city) && !currentCity) setCurrentCity(record.location || record.city);
+          if ((record.totalExperienceYears !== undefined || record.experienceYears !== undefined || record.experience !== undefined) && !totalExperienceYears) {
+            const expVal = record.totalExperienceYears ?? record.experienceYears ?? record.experience;
+            if (typeof expVal === 'number' || typeof expVal === 'string') {
+              const numExp = parseFloat(expVal.toString());
+              if (!isNaN(numExp)) {
+                if (numExp === 0) setIsFresher(true);
+                setTotalExperienceYears(numExp.toString());
+              }
+            }
+          }
+          if (record.currentCompanyName && !currentCompanyName) setCurrentCompanyName(record.currentCompanyName);
+          if (record.designation && !designation) setDesignation(record.designation);
+          if ((record.qualificationBasic || record.education) && !qualificationBasic) {
+            const eduStr = typeof record.education === 'string' ? record.education : (record.qualificationBasic || '');
+            setQualificationBasic(eduStr);
+          }
+          if (record.resumeUrl || record.resumeURL) {
+            setUploadedResumeUrl(record.resumeUrl || record.resumeURL);
+          }
+        } else {
+          setFoundDumpCandidate(null);
+        }
+      } catch (err) {
+        setFoundDumpCandidate(null);
+      } finally {
+        setIsSearchingResumeDump(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [email]);
 
   useEffect(() => {
       setErrorMsg(initialError);
   }, [initialError]);
 
+  const getProfileMismatches = (): string[] => {
+    if (!interviewData) return [];
+    const mismatches: string[] = [];
+
+    // 1. Gender Mismatch (ONLY if candidate filled gender)
+    const reqGender = (interviewData.genderRequirement || (interviewData as any).gender || '').toString().toLowerCase();
+    if (reqGender && !reqGender.includes('any') && !reqGender.includes('both') && !reqGender.includes('all')) {
+      const candidateG = (gender || '').trim().toLowerCase();
+      if (candidateG && !candidateG.includes('any') && !candidateG.includes('other')) {
+        if (reqGender.includes('female') && !candidateG.includes('female')) {
+          mismatches.push(`Gender Mismatch: Role prefers Female candidates (Your selection: ${gender})`);
+        } else if (reqGender.includes('male') && !reqGender.includes('fe') && !candidateG.includes('male')) {
+          mismatches.push(`Gender Mismatch: Role prefers Male candidates (Your selection: ${gender})`);
+        }
+      }
+    }
+
+    // 2. Location / City Mismatch (ONLY if candidate filled currentCity)
+    const reqLoc = ((interviewData as any).location || (interviewData as any).jobLocation || (interviewData as any).city || '').toString().trim();
+    if (reqLoc && currentCity.trim()) {
+      const candidateCityNorm = currentCity.trim().toLowerCase();
+      const reqLocNorm = reqLoc.toLowerCase();
+      if (!reqLocNorm.includes(candidateCityNorm) && !candidateCityNorm.includes(reqLocNorm)) {
+        mismatches.push(`Location Mismatch: Preferred job location is ${reqLoc} (Your city: ${currentCity})`);
+      }
+    }
+
+    // 3. Experience Mismatch (ONLY if candidate entered experience or checked isFresher)
+    const reqExpText = ((interviewData as any).experienceRequired || (interviewData as any).minExperience || (interviewData as any).experience || '').toString();
+    const reqExpMinMatch = reqExpText.match(/(\d+)/);
+    const hasEnteredExp = isFresher || totalExperienceYears.trim() !== '';
+    if (reqExpMinMatch && hasEnteredExp) {
+      const minYears = parseFloat(reqExpMinMatch[1]);
+      const candExp = isFresher ? 0 : (parseFloat(totalExperienceYears) || 0);
+      if (candExp < minYears) {
+        mismatches.push(`Experience Mismatch: Role requires minimum ${minYears} year(s) experience (You specified: ${candExp} year(s))`);
+      }
+    }
+
+    // 4. Education Mismatch (ONLY if candidate filled qualificationBasic)
+    const reqEdu = ((interviewData as any).education || (interviewData as any).qualification || '').toString().trim();
+    if (reqEdu && qualificationBasic.trim()) {
+      const candEduNorm = qualificationBasic.toLowerCase();
+      const reqEduNorm = reqEdu.toLowerCase();
+      if (!candEduNorm.includes(reqEduNorm) && !reqEduNorm.includes(candEduNorm)) {
+        mismatches.push(`Education Mismatch: Preferred qualification is ${reqEdu} (Your qualification: ${qualificationBasic})`);
+      }
+    }
+
+    return mismatches;
+  };
+
   const handleNext = () => {
     if (formStep === 1) {
-      if (!name || !email || !phone || !gender || !dob || !maritalStatus || !currentCity || !nativePlace) {
-        setErrorMsg("Please fill in all contact and personal details.");
+      if (!name || !name.trim()) {
+        setErrorMsg("Please enter your Full Name.");
+        return;
+      }
+      if (!email || !email.trim()) {
+        setErrorMsg("Please enter your Email Address.");
+        return;
+      }
+      if (!phone || !phone.trim()) {
+        setErrorMsg("Please enter your Contact Number.");
+        return;
+      }
+      const digits = phone.replace(/\D/g, '');
+      if (digits.length < 10 || digits.length > 15) {
+        setErrorMsg("Please enter a valid 10-digit mobile number or format like +91 9545556045.");
+        return;
+      }
+      if (!gender || !gender.trim()) {
+        setErrorMsg("Please select your Gender.");
+        return;
+      }
+      if (!dob || !dob.trim()) {
+        setErrorMsg("Please select your Date of Birth.");
+        return;
+      }
+      if (!maritalStatus || !maritalStatus.trim()) {
+        setErrorMsg("Please select your Marital Status.");
+        return;
+      }
+      if (!currentCity || !currentCity.trim()) {
+        setErrorMsg("Please select/enter your Current City.");
+        return;
+      }
+      if (!nativePlace || !nativePlace.trim()) {
+        setErrorMsg("Please enter your Native Place.");
         return;
       }
       setErrorMsg(null);
       setFormStep(2);
     } else if (formStep === 2) {
-      if (!qualificationBasic) {
-        setErrorMsg("Please provide your highest qualification.");
+      if (!qualificationBasic || !qualificationBasic.trim()) {
+        setErrorMsg("Please select or enter your Highest Qualification.");
         return;
       }
       if (!isFresher) {
-        if (!totalExperienceYears || !totalExperienceMonths || !currentCompanyName || !designation || !currentSalary || !noticePeriodDays || !reasonForJobChange) {
-          setErrorMsg("Please fill in all professional details.");
+        if (!totalExperienceYears || !totalExperienceYears.toString().trim()) {
+          setErrorMsg("Please enter your Total Work Experience (Years).");
+          return;
+        }
+        if (!totalExperienceMonths || !totalExperienceMonths.toString().trim()) {
+          setTotalExperienceMonths('0');
+        }
+        if (!currentCompanyName || !currentCompanyName.trim()) {
+          setErrorMsg("Please enter your Current Company Name.");
+          return;
+        }
+        if (!designation || !designation.trim()) {
+          setErrorMsg("Please enter your Current Designation.");
+          return;
+        }
+        if (!currentSalary || !currentSalary.trim()) {
+          setErrorMsg("Please enter your Current Salary (CTC Per annum).");
+          return;
+        }
+        if (!noticePeriodDays || !noticePeriodDays.toString().trim()) {
+          setErrorMsg("Please enter your Notice Period (in number of days).");
+          return;
+        }
+        if (!reasonForJobChange || !reasonForJobChange.trim()) {
+          setErrorMsg("Please select your Reason for job change.");
           return;
         }
       }
@@ -384,11 +507,14 @@ const CandidateInfoForm: React.FC<{
 
     setErrorMsg(null);
 
+    const detectedMismatches = getProfileMismatches();
+
     onSubmit({ 
       name, email, phone, gender, dob, age: calculatedAge, maritalStatus, currentCity, nativePlace,
       qualificationBasic, qualificationPG, totalExperienceYears, totalExperienceMonths,
       currentCompanyName, designation, currentSalary, noticePeriodDays, reasonForJobChange,
-      resumeUpdated, highlightedSkillsForJob, isFresher, language
+      resumeUpdated, highlightedSkillsForJob, isFresher, language,
+      criteriaMismatches: detectedMismatches
     }, resumeFile, existingResumeUrl, uploadedResumeUrl || undefined);
   };
 
@@ -480,17 +606,49 @@ const CandidateInfoForm: React.FC<{
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Email Address <span className="text-red-500">*</span></label>
+                    {isSearchingResumeDump && (
+                      <span className="text-[11px] text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/40 px-2.5 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 animate-pulse">
+                        <i className="fas fa-circle-notch fa-spin"></i> Checking saved resume...
+                      </span>
+                    )}
+                  </div>
+                  <input type="email" placeholder="Email Address (e.g. john@example.com)" required value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none" />
+                </div>
+                <div>
                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Full Name <span className="text-red-500">*</span></label>
                   <input type="text" placeholder="John Doe" required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Email Address <span className="text-red-500">*</span></label>
-                  <input type="email" placeholder="Email Address" required value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none" />
-                </div>
               </div>
+
+              {foundDumpCandidate && (
+                <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700/60 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs text-emerald-900 dark:text-emerald-200 animate-in fade-in duration-300">
+                  <div className="flex items-center gap-2.5 font-bold">
+                    <i className="fas fa-check-circle text-emerald-600 dark:text-emerald-400 text-lg"></i>
+                    <div>
+                      <p className="font-extrabold text-xs">Saved Resume & Profile Found for <span className="underline">{foundDumpCandidate.email}</span></p>
+                      <p className="text-[11px] font-normal text-emerald-800 dark:text-emerald-300">Details autofilled automatically. You can review or edit below.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {(uploadedResumeUrl || foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL) && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewModalUrl(uploadedResumeUrl || foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL)}
+                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 transition-all shadow-sm text-xs cursor-pointer"
+                      >
+                        <i className="fas fa-eye text-sm"></i>
+                        <span>View Saved Resume</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Contact Number <span className="text-red-500">*</span></label>
-                <input type="tel" required placeholder="Contact Number" value={phone} onChange={e => setPhone(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none" />
+                <input type="tel" required placeholder="e.g. 9545556045 or +91 9545556045" value={phone} onChange={e => setPhone(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none" />
               </div>
 
               <div className="candidate-form-section bg-gray-50 dark:bg-gray-900/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 space-y-4 mt-6">
@@ -522,14 +680,37 @@ const CandidateInfoForm: React.FC<{
                    </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                    <div>
                      <label className="text-xs font-bold text-gray-500 block mb-1">Current City <span className="text-red-500">*</span></label>
-                     <input type="text" placeholder="e.g. Mumbai" required value={currentCity} onChange={e => setCurrentCity(e.target.value)} className="w-full p-2.5 border border-gray-200 rounded-lg dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                     <LocationCityInput
+                       value={currentCity}
+                       onChange={setCurrentCity}
+                       placeholder="Search city (e.g. Nashik, Pune, Mumbai)..."
+                       className="w-full p-2.5 border border-gray-200 rounded-lg dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                     />
                    </div>
                    <div>
                      <label className="text-xs font-bold text-gray-500 block mb-1">Native Place <span className="text-red-500">*</span></label>
                      <input type="text" placeholder="e.g. Pune" required value={nativePlace} onChange={e => setNativePlace(e.target.value)} className="w-full p-2.5 border border-gray-200 rounded-lg dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                   </div>
+                   <div>
+                     <div className="flex items-center justify-between mb-1">
+                       <label className="text-xs font-bold text-gray-500 block">Experience (Years)</label>
+                       <label className="flex items-center gap-1 cursor-pointer">
+                         <input type="checkbox" checked={isFresher} onChange={e => setIsFresher(e.target.checked)} className="w-3.5 h-3.5 rounded text-blue-600 border-gray-300 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700" />
+                         <span className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">Fresher</span>
+                       </label>
+                     </div>
+                     <input 
+                       type="number" 
+                       min="0" 
+                       disabled={isFresher} 
+                       placeholder={isFresher ? "0 Years (Fresher)" : "Years (e.g. 2)"} 
+                       value={isFresher ? "0" : totalExperienceYears} 
+                       onChange={e => setTotalExperienceYears(e.target.value)} 
+                       className="w-full p-2.5 border border-gray-200 rounded-lg dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none text-sm disabled:opacity-60 disabled:bg-gray-100 dark:disabled:bg-gray-800" 
+                     />
                    </div>
                 </div>
               </div>
@@ -541,8 +722,13 @@ const CandidateInfoForm: React.FC<{
               <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider mb-3">Qualifications</h3>
               <div className="grid grid-cols-1 gap-4">
                  <div>
-                   <label className="text-xs font-bold text-gray-500 block mb-1">Highest Qualification (Year) <span className="text-red-500">*</span></label>
-                   <input type="text" placeholder="e.g. B.Tech / M.Tech / MBA (2020)" value={qualificationBasic} onChange={e => setQualificationBasic(e.target.value)} className="w-full p-2.5 border border-gray-200 rounded-lg dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                   <label className="text-xs font-bold text-gray-500 block mb-1">Highest Qualification <span className="text-red-500">*</span></label>
+                   <EducationInput
+                     value={qualificationBasic}
+                     onChange={setQualificationBasic}
+                     placeholder="Search or select degree (e.g. B.Tech Civil, BE Mech, Diploma, MBA, B.Com...)"
+                     className="w-full p-2.5 border border-gray-200 rounded-lg dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                   />
                  </div>
               </div>
 
@@ -700,14 +886,27 @@ const CandidateInfoForm: React.FC<{
                 </div>
               </div>
               
-              <div className="candidate-resume-section bg-gray-50 dark:bg-gray-900/30 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Resume Data</label>
+              <div className="candidate-resume-section bg-gray-50 dark:bg-gray-900/30 p-4 rounded-xl border border-gray-100 dark:border-gray-700 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Resume File <span className="text-red-500">*</span></label>
+                    {(uploadedResumeUrl || existingResumeUrl || (foundDumpCandidate && (foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL))) && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewModalUrl(uploadedResumeUrl || existingResumeUrl || (foundDumpCandidate?.resumeUrl || foundDumpCandidate?.resumeURL))}
+                        className="text-xs font-extrabold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded-lg border border-blue-200 dark:border-blue-800 cursor-pointer"
+                      >
+                        <i className="fas fa-eye text-blue-500"></i>
+                        <span>View Current Saved Resume</span>
+                      </button>
+                    )}
+                  </div>
+
                   <label
                     htmlFor="resume-upload-input"
                     className={`candidate-upload-trigger w-full font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border cursor-pointer ${isUploadingResume ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-600 border-yellow-200' : uploadedResumeUrl ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-200 dark:hover:bg-blue-800/60'} ${isUploadingResume ? 'opacity-70 cursor-not-allowed' : ''}`}
                   >
                     <i className={isUploadingResume ? "fas fa-spinner fa-spin" : uploadedResumeUrl ? "fas fa-check-circle" : "fas fa-cloud-upload-alt"}></i>
-                    <span>{isUploadingResume ? 'Uploading to Cloudinary...' : uploadedResumeUrl ? 'Resume Uploaded Successfully' : resumeFile ? resumeFile.name : existingResumeUrl ? 'Using resume saved in your profile (click to replace)' : 'Browse/Upload Resume (PDF, DOCX, or TXT)'}</span>
+                    <span>{isUploadingResume ? 'Uploading to Cloudinary...' : uploadedResumeUrl ? 'Resume Uploaded (Click to Replace)' : resumeFile ? resumeFile.name : (existingResumeUrl || (foundDumpCandidate && (foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL))) ? 'Using saved resume from database (Click to Upload & Replace)' : 'Browse/Upload Resume (PDF, DOCX, or TXT)'}</span>
                   </label>
                   <input
                     id="resume-upload-input"
@@ -741,6 +940,38 @@ const CandidateInfoForm: React.FC<{
             </div>
           )}
 
+          {/* Mismatch Alert Notice Banner */}
+          {getProfileMismatches().length > 0 && (
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-900 dark:text-amber-200 space-y-2 my-4 animate-in fade-in duration-300">
+              <div className="flex items-center gap-2 font-bold text-sm text-amber-800 dark:text-amber-300">
+                <i className="fas fa-exclamation-triangle text-amber-600 dark:text-amber-400"></i>
+                <span>Profile Criteria Notice</span>
+              </div>
+              <p className="text-xs leading-relaxed text-amber-800/90 dark:text-amber-300/90">
+                Your specified profile details differ from the preferred criteria for this role:
+              </p>
+              <ul className="list-disc list-inside text-xs font-semibold space-y-1 pl-1">
+                {getProfileMismatches().map((msg, idx) => (
+                  <li key={idx} className="text-amber-900 dark:text-amber-200">{msg}</li>
+                ))}
+              </ul>
+              <div className="text-xs pt-2 border-t border-amber-200 dark:border-amber-800/60 flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium text-amber-800 dark:text-amber-300">
+                  You may still proceed to take the interview, or explore positions tailored to your profile:
+                </span>
+                <a
+                  href="/#/jobs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 font-extrabold text-xs text-blue-700 dark:text-blue-400 hover:underline bg-white/90 dark:bg-black/40 px-3 py-1.5 rounded-xl border border-blue-200 dark:border-blue-800 shadow-sm"
+                >
+                  <span>Explore More Matching Jobs</span>
+                  <i className="fas fa-external-link-alt text-[10px]"></i>
+                </a>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-4 mt-6">
             {formStep > 1 && (
               <button 
@@ -770,6 +1001,54 @@ const CandidateInfoForm: React.FC<{
             )}
           </div>
         </form>
+
+        {/* Resume Document Preview Popup Modal */}
+        {previewModalUrl && (
+          <div className="fixed inset-0 z-[10000] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 w-full max-w-4xl h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-slate-950 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center text-sm font-bold shadow-sm">
+                    <i className="fas fa-file-pdf"></i>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-gray-900 dark:text-white">Resume Document Preview</h3>
+                    <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">{name || email || 'Candidate Resume'}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={previewModalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 hover:bg-blue-100 text-xs font-bold transition-all flex items-center gap-1.5 border border-blue-200 dark:border-blue-800"
+                  >
+                    <i className="fas fa-external-link-alt"></i> Open in New Tab
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewModalUrl(null)}
+                    className="w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center justify-center text-sm font-bold transition-all cursor-pointer"
+                  >
+                    <i className="fas fa-times"></i>
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Body / Embedded PDF/Doc Iframe */}
+              <div className="flex-1 bg-gray-100 dark:bg-slate-950 relative overflow-hidden">
+                <iframe
+                  src={previewModalUrl.includes('google.com') || previewModalUrl.endsWith('.doc') || previewModalUrl.endsWith('.docx')
+                    ? `https://docs.google.com/gview?url=${encodeURIComponent(previewModalUrl)}&embedded=true`
+                    : previewModalUrl}
+                  title="Resume Preview Modal"
+                  className="w-full h-full border-0"
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
   );
 };
@@ -967,6 +1246,7 @@ const InterviewReadinessOnboarding: React.FC<{
       window.clearTimeout(speechTimeoutRef.current);
     }
 
+    unlockTTSAudio();
     speak.stop();
     setIsSpeaking(true);
 
@@ -1331,20 +1611,40 @@ const InterviewWelcomeScreen: React.FC<{
 }> = ({ interview, onProceed }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  useEffect(() => {
-    // Speak welcome message
+  const playWelcomeVoice = () => {
+    unlockTTSAudio();
+    speak.stop();
+    setIsSpeaking(true);
     const welcomeText = `Hello! Welcome to your AI interview for the role of ${interview.title}. I am your AI Recruiter today. Let me explain the hiring process. First, you will enter your details and upload your resume. Second, you will review the job description. Third, we will verify your hardware including camera, microphone, and internet. Finally, we will begin the interview where I will ask you questions one by one. Let's get started!`;
-    
+    speak(welcomeText, {
+      onEnd: () => setIsSpeaking(false),
+      onError: () => setIsSpeaking(false),
+    });
+  };
+
+  useEffect(() => {
+    // Auto-trigger voice greeting immediately when landing on Welcome screen
     const timeout = setTimeout(() => {
-      setIsSpeaking(true);
-      speak(welcomeText, {
-        onEnd: () => setIsSpeaking(false),
-        onError: () => setIsSpeaking(false),
-      });
-    }, 800);
+      playWelcomeVoice();
+    }, 400);
+
+    // Also auto-trigger on first mouse movement, touch, or click anywhere on screen
+    const autoPlayOnInteraction = () => {
+      playWelcomeVoice();
+      window.removeEventListener('pointerdown', autoPlayOnInteraction);
+      window.removeEventListener('pointermove', autoPlayOnInteraction);
+      window.removeEventListener('keydown', autoPlayOnInteraction);
+    };
+
+    window.addEventListener('pointerdown', autoPlayOnInteraction, { once: true });
+    window.addEventListener('pointermove', autoPlayOnInteraction, { once: true });
+    window.addEventListener('keydown', autoPlayOnInteraction, { once: true });
 
     return () => {
       clearTimeout(timeout);
+      window.removeEventListener('pointerdown', autoPlayOnInteraction);
+      window.removeEventListener('pointermove', autoPlayOnInteraction);
+      window.removeEventListener('keydown', autoPlayOnInteraction);
       speak.stop();
     };
   }, [interview.title]);
@@ -1416,20 +1716,31 @@ const InterviewWelcomeScreen: React.FC<{
           )}
         </div>
 
-        <div className="mt-3 text-center z-10">
+        <div className="mt-3 text-center z-10 flex flex-col items-center">
           <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all duration-300 ${
             isSpeaking ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
           }`}>
             <span className={`w-1.5 h-1.5 rounded-full ${isSpeaking ? 'bg-blue-400 animate-ping' : 'bg-emerald-400'}`}></span>
             {isSpeaking ? 'AI Recruiter speaking' : 'AI Recruiter (Standby)'}
           </span>
+          <button
+            type="button"
+            onClick={playWelcomeVoice}
+            className="mt-2.5 px-4 py-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer z-20"
+          >
+            <i className="fas fa-volume-up"></i>
+            <span>Listen to Voice Greeting</span>
+          </button>
         </div>
       </div>
 
       {/* Mobile-only Start Onboarding CTA (directly below avatar card for quick access) */}
       <div className="block md:hidden mb-6">
         <button 
-          onClick={onProceed}
+          onClick={() => {
+            unlockTTSAudio();
+            onProceed();
+          }}
           className="w-full max-w-xs px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold rounded-2xl shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mx-auto"
         >
           <span>Start Onboarding</span>
@@ -1583,7 +1894,10 @@ const InterviewWelcomeScreen: React.FC<{
 
       {/* Button to proceed */}
       <button 
-        onClick={onProceed}
+        onClick={() => {
+          unlockTTSAudio();
+          onProceed();
+        }}
         className="px-10 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-blue-500/35 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 mx-auto"
       >
         <span>Start Onboarding</span>
@@ -1912,18 +2226,36 @@ const CandidateInterviewFlow: React.FC = () => {
         { name: submittedInfo.name, email: submittedInfo.email, phone: submittedInfo.phone }
       );
       const saveToRecruiterLibraryPromise = recruiterUID
-        ? parsedProfilePromise.then((profile) => saveResumeDumpCandidate({
-            recruiterUID,
-            profile,
-            resumeText: resumeTextContent,
-            resumeUrl: resumeUrlToSave,
-            fileName: submittedFile?.name || resumeUrlToSave.split('/').pop()?.split('?')[0] || 'candidate-resume',
-            mimeType: resumeMimeType,
-            fileSize: submittedFile?.size,
-            source: 'candidate_interview',
-            sourceInterviewId: interviewId!,
-            sourceJobTitle: interview!.title,
-          })).catch((error) => {
+        ? parsedProfilePromise.then((profile) => {
+            // Overwrite parsed profile with candidate-entered preferred data
+            const preferredProfile = {
+              ...profile,
+              name: submittedInfo.name || profile.name,
+              email: submittedInfo.email || profile.email,
+              phone: submittedInfo.phone || profile.phone,
+              gender: submittedInfo.gender || profile.gender,
+              location: submittedInfo.currentCity || profile.location,
+              currentTitle: submittedInfo.designation || profile.currentTitle,
+              currentCompany: submittedInfo.currentCompanyName || (profile as any).currentCompany || '',
+              totalExperienceYears: submittedInfo.isFresher ? 0 : (parseFloat(submittedInfo.totalExperienceYears) || profile.totalExperienceYears || 0),
+              education: submittedInfo.qualificationBasic
+                ? [{ degree: submittedInfo.qualificationBasic, institution: '', year: '' }]
+                : profile.education,
+            };
+
+            return saveResumeDumpCandidate({
+              recruiterUID,
+              profile: preferredProfile,
+              resumeText: resumeTextContent,
+              resumeUrl: resumeUrlToSave,
+              fileName: submittedFile?.name || resumeUrlToSave.split('/').pop()?.split('?')[0] || 'candidate-resume',
+              mimeType: resumeMimeType,
+              fileSize: submittedFile?.size,
+              source: 'candidate_interview',
+              sourceInterviewId: interviewId!,
+              sourceJobTitle: interview!.title,
+            });
+          }).catch((error) => {
             console.error('Could not save candidate resume to recruiter library:', error);
           })
         : Promise.resolve();
@@ -2080,6 +2412,7 @@ const CandidateInterviewFlow: React.FC = () => {
           <CandidateInfoForm 
             jobTitle={interviewState.jobTitle}
             interviewId={interviewId!}
+            interviewData={interview}
             onBackToWelcome={() => setStep('welcome')}
             onSubmit={handleInfoSubmit} 
             errorMsg={errorMsg}
@@ -2571,6 +2904,7 @@ const ActiveInterviewSession: React.FC<{
 
     // Small delay so the question text renders before audio starts
     const timeout = setTimeout(() => {
+      unlockTTSAudio();
       setIsSpeaking(true);
       speak(currentQ, {
         lang: ttsLang,
@@ -2583,7 +2917,7 @@ const ActiveInterviewSession: React.FC<{
           console.warn('[TTS] Error reading question:', err);
         },
       });
-    }, 400);
+    }, 300);
 
     return () => {
       clearTimeout(timeout);
@@ -2860,7 +3194,7 @@ const ActiveInterviewSession: React.FC<{
             </div>
 
             {/* Speaking/Listening Status Indicator */}
-            <div className="mt-3 md:mt-4 text-center z-10">
+            <div className="mt-3 md:mt-4 text-center z-10 flex flex-col items-center">
               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] md:text-xs font-bold transition-all duration-300 ${
                 isSpeaking 
                   ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
@@ -2869,7 +3203,27 @@ const ActiveInterviewSession: React.FC<{
                 <span className={`w-1.5 h-1.5 rounded-full ${isSpeaking ? 'bg-blue-400 animate-ping' : 'bg-emerald-400'}`}></span>
                 {isSpeaking ? 'AI Speaking' : 'Listening...'}
               </span>
-              <p className="text-[10px] md:text-xs text-slate-400 mt-1.5 font-bold uppercase tracking-widest">AI Recruiter</p>
+              <button
+                type="button"
+                onClick={() => {
+                  unlockTTSAudio();
+                  speak.stop();
+                  setIsSpeaking(true);
+                  const langMap: Record<string, string> = { en: 'en', hi: 'hi-IN', mr: 'mr-IN' };
+                  const ttsLang = langMap[state.language] || 'en';
+                  speak(currentQ, {
+                    lang: ttsLang,
+                    onEnd: () => setIsSpeaking(false),
+                    onError: () => setIsSpeaking(false),
+                  });
+                }}
+                className="mt-2 px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-extrabold shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer z-20"
+                title="Click to replay question voice"
+              >
+                <i className="fas fa-volume-up"></i>
+                <span>Replay Voice</span>
+              </button>
+              <p className="text-[10px] md:text-xs text-slate-400 mt-1 font-bold uppercase tracking-widest">AI Recruiter</p>
             </div>
           </div>
 
@@ -2961,7 +3315,27 @@ const ActiveInterviewSession: React.FC<{
             </div>
 
             {/* Action Buttons */}
-            <div className="interview-room-question-actions flex items-center justify-end gap-2 md:gap-3 px-3 md:px-6 py-2.5 md:py-4 border-t border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
+            <div className="interview-room-question-actions flex items-center justify-between gap-2 md:gap-3 px-3 md:px-6 py-2.5 md:py-4 border-t border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  unlockTTSAudio();
+                  speak.stop();
+                  setIsSpeaking(true);
+                  const langMap: Record<string, string> = { en: 'en', hi: 'hi-IN', mr: 'mr-IN' };
+                  const ttsLang = langMap[state.language] || 'en';
+                  speak(currentQ, {
+                    lang: ttsLang,
+                    onEnd: () => setIsSpeaking(false),
+                    onError: () => setIsSpeaking(false),
+                  });
+                }}
+                className="px-3.5 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="Replay Voice Aloud"
+              >
+                <i className="fas fa-volume-up text-indigo-600 dark:text-indigo-400"></i>
+                <span>Replay Voice</span>
+              </button>
 
               {/* Next / Stop Button */}
               {isRecording ? (

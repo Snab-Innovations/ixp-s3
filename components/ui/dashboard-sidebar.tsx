@@ -6,6 +6,7 @@ import {
   Archive,
   Users,
   Video,
+  Upload,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -39,24 +40,18 @@ const recruiterNavGroups: NavGroupData[] = [
         title: 'All Jobs',
         icon: BriefcaseBusiness,
         href: '/recruiter/all-jobs',
-        match: (path) => path === '/recruiter/all-jobs',
-      },
-      {
-        id: 'interviews',
-        title: 'My Interviews',
-        icon: Video,
-        href: '/recruiter/interviews',
         match: (path) =>
+          path === '/recruiter/all-jobs' ||
           path === '/recruiter/interviews' ||
           path.startsWith('/recruiter/interview/responses') ||
           (path.startsWith('/recruiter/interview/') && !path.startsWith('/recruiter/interview/create')),
       },
       {
-        id: 'candidate-hub',
-        title: 'Candidate Hub',
-        icon: Users,
-        href: '/recruiter/invites',
-        match: (path) => path === '/recruiter/invites',
+        id: 'upload-candidate-cv',
+        title: 'Upload Candidate CV',
+        icon: Upload,
+        href: '/upload-resume',
+        match: (path) => path === '/upload-resume',
       },
       {
         id: 'resume-dump',
@@ -181,7 +176,7 @@ export function DashboardSidebar({
               {group.items.map((item) => (
                 <div key={item.id}>
                   <NavItem item={item} activePath={activePath} onNavigate={handleNavigate} />
-                  {item.id === 'interviews' && manageSubItems.length > 0 && (
+                  {item.id === 'all-jobs' && manageSubItems.length > 0 && (
                     <div className="ml-[17px] mt-1 border-l border-white/[0.13] pl-3">
                       <div className="flex flex-col gap-0.5">
                         {manageSubItems.map((subItem) => {

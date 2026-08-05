@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { doc, getDoc, updateDoc, serverTimestamp, Timestamp, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { createPortal } from 'react-dom';
 import { SKILL_OPTIONS, JOB_CATEGORIES } from './Profile';
-import { parseJobDescriptionText, ParsedJdResult } from '../services/geminiService';
+import { parseJobDescriptionText, ParsedJdResult, compileCompanyProfile } from '../services/geminiService';
+import { resolveStrictListedCity } from '../data/maharashtraCities';
 import * as pdfjsLib from 'pdfjs-dist';
 
 interface EditJobModalProps {
@@ -20,6 +22,7 @@ export interface CandidateContact {
 
 const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
   const { user, userProfile } = useAuth();
+  const { isDark } = useTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -43,6 +46,36 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
 
   const [eduInput, setEduInput] = useState('');
   const [skillSearch, setSkillSearch] = useState('');
+  const [suggestedRoleSkills, setSuggestedRoleSkills] = useState<string[]>([]);
+
+  const handleGenerateSkillsForRole = () => {
+    const combinedText = `${formData.title} ${formData.category} ${formData.description}`.toLowerCase();
+    let skills: string[] = [];
+
+    if (combinedText.includes('civil') || combinedText.includes('site') || combinedText.includes('construction') || combinedText.includes('rcc') || combinedText.includes('building') || combinedText.includes('architect')) {
+      skills = ["Site Management", "Construction Site Management", "RCC & Finishing Work", "Quantity Surveying", "AutoCAD", "Bill Verification", "Safety Norms", "Material Management", "Civil Engineering", "Project Execution"];
+    } else if (combinedText.includes('front') || combinedText.includes('react') || combinedText.includes('ui') || combinedText.includes('web') || combinedText.includes('frontend')) {
+      skills = ["JavaScript", "TypeScript", "React.js", "HTML5 & CSS3", "Tailwind CSS", "Next.js", "Redux", "REST APIs", "Git & GitHub", "Responsive Design"];
+    } else if (combinedText.includes('back') || combinedText.includes('node') || combinedText.includes('java') || combinedText.includes('python') || combinedText.includes('api') || combinedText.includes('backend')) {
+      skills = ["Node.js", "Express.js", "Python", "Java", "SQL", "PostgreSQL", "MongoDB", "REST APIs", "Docker", "AWS", "Microservices"];
+    } else if (combinedText.includes('data') || combinedText.includes('analytics') || combinedText.includes('machine learning') || combinedText.includes('ai') || combinedText.includes('python')) {
+      skills = ["Python", "SQL", "Data Analysis", "Pandas & NumPy", "Machine Learning", "Tableau", "Power BI", "Statistics", "TensorFlow"];
+    } else if (combinedText.includes('sale') || combinedText.includes('business') || combinedText.includes('marketing') || combinedText.includes('account executive') || combinedText.includes('growth')) {
+      skills = ["Lead Generation", "B2B Sales", "Client Relationship Management", "CRM (Salesforce/HubSpot)", "Digital Marketing", "Negotiation", "Cold Outreach", "Market Research"];
+    } else if (combinedText.includes('hr') || combinedText.includes('recruiter') || combinedText.includes('talent') || combinedText.includes('people') || combinedText.includes('human resource')) {
+      skills = ["Talent Acquisition", "Resume Screening", "HR Operations", "Employee Relations", "Payroll Management", "Onboarding", "Interviewing"];
+    } else if (combinedText.includes('finance') || combinedText.includes('account') || combinedText.includes('tax') || combinedText.includes('ca') || combinedText.includes('audit')) {
+      skills = ["Financial Analysis", "Accounting", "GST & Taxation", "Tally Prime", "Auditing", "MS Excel", "Balance Sheet Preparation", "Budgeting"];
+    } else if (combinedText.includes('design') || combinedText.includes('graphic') || combinedText.includes('figma') || combinedText.includes('ux')) {
+      skills = ["Figma", "UI/UX Design", "Wireframing", "Prototyping", "Adobe Photoshop", "Illustrator", "User Research"];
+    } else if (combinedText.includes('support') || combinedText.includes('customer') || combinedText.includes('helpdesk')) {
+      skills = ["Customer Support", "Query Resolution", "Communication Skills", "Helpdesk Tools", "Ticket Management", "Call Handling"];
+    } else {
+      skills = ["Problem Solving", "Communication Skills", "Team Management", "Project Management", "Time Management", "Leadership", "Analytical Skills", "Domain Knowledge"];
+    }
+
+    setSuggestedRoleSkills(skills);
+  };
 
   const [formData, setFormData] = useState({
     title: '',
@@ -62,10 +95,40 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     location: '',
     salaryRange: '',
     genderRequirement: 'Any',
+    strictGenderMatch: false,
+    strictLocationMatch: false,
+    strictEducationMatch: false,
+    strictExperienceMatch: false,
     strictness: 'Low',
   });
 
   const handleApplyParsedJdData = (parsed: ParsedJdResult) => {
+    const fullJdText = `${parsed.title || ''} ${parsed.description || ''} ${parsed.skills || ''} ${parsed.qualification || ''} ${parsed.location || ''} ${parsed.gender || ''}`.toLowerCase();
+    const hasMandatoryKeyword = /\b(mandatory|compulsory|must have|strictly|strict|non-negotiable|only|required)\b/i.test(fullJdText);
+
+    const autoStrictGender = parsed.strictGenderMatch ?? (
+      (parsed.gender && !['any', 'no preference', 'both', 'all'].includes(parsed.gender.toLowerCase())) &&
+      (hasMandatoryKeyword || /\b(male only|female only|male candidate|female candidate|gender.*mandatory)\b/i.test(fullJdText))
+    );
+
+    const autoStrictLocation = parsed.strictLocationMatch ?? (
+      Boolean(parsed.location || parsed.city) &&
+      (hasMandatoryKeyword || /\b(local candidates? only|location.*mandatory|based in.*only|must be from)\b/i.test(fullJdText))
+    );
+
+    const autoStrictEdu = parsed.strictEducationMatch ?? (
+      Boolean(parsed.qualification || parsed.education) &&
+      (hasMandatoryKeyword || /\b(education.*mandatory|qualification.*mandatory|degree required)\b/i.test(fullJdText))
+    );
+
+    const autoStrictExp = parsed.strictExperienceMatch ?? (
+      (Number(parsed.minExperience) > 0 || Number(parsed.maxExperience) > 0) &&
+      (hasMandatoryKeyword || /\b(experience.*mandatory|exp.*mandatory|min.*yrs required)\b/i.test(fullJdText))
+    );
+
+    const rawLocCandidate = `${(parsed as any).location || ''} ${(parsed as any).city || ''} ${(parsed as any).state || ''} ${fullJdText}`;
+    const resolvedStrictCity = resolveStrictListedCity(rawLocCandidate);
+
     setFormData(prev => ({
       ...prev,
       title: parsed.title || parsed.vacancyName || parsed.designation || prev.title,
@@ -77,9 +140,13 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
       experience: parsed.minExperience !== undefined ? Number(parsed.minExperience) : prev.experience,
       skills: parsed.skills || (parsed.technicalSkills && parsed.softSkills ? `${parsed.technicalSkills}, ${parsed.softSkills}` : prev.skills),
       qualifications: parsed.qualification || parsed.education || prev.qualifications,
-      location: (parsed as any).location || prev.location,
+      location: resolvedStrictCity || prev.location || '',
       salaryRange: (parsed as any).salaryRange || (parsed as any).salary || prev.salaryRange,
       genderRequirement: (parsed as any).genderRequirement || (parsed as any).gender || prev.genderRequirement,
+      strictGenderMatch: Boolean(autoStrictGender),
+      strictLocationMatch: Boolean(autoStrictLocation),
+      strictEducationMatch: Boolean(autoStrictEdu),
+      strictExperienceMatch: Boolean(autoStrictExp),
     }));
 
     if (parsed.customFields && Array.from(parsed.customFields).length > 0) {
@@ -193,6 +260,19 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
             }
           }
 
+          const loadedCategory = 
+            jobData.category || 
+            jobData.department || 
+            jobData.roleCategory || 
+            jobData.jobCategory || 
+            jobData.industry || 
+            interviewData.category || 
+            interviewData.department || 
+            interviewData.roleCategory || 
+            interviewData.jobCategory || 
+            interviewData.industry || 
+            '';
+
           setFormData({
             title: jobData.title || interviewData.title?.replace(' Interview', '') || '',
             companyName: jobData.companyName || interviewData.companyName || 'N/A',
@@ -201,7 +281,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
             description: jobData.description || interviewData.description || '',
             permission: jobData.interviewPermission || jobData.permission || interviewData.permission || 'anyone',
             skills: jobData.skills || interviewData.skills || '',
-            category: jobData.category || interviewData.department || '',
+            category: loadedCategory,
             numQuestions: jobData.numQuestions || interviewData.numQuestions || 5,
             employmentType: jobData.employmentType || interviewData.employmentType || 'Full-time',
             minExperience: jobData.minExperience ?? interviewData.minExperience ?? jobData.experience ?? interviewData.experience ?? 0,
@@ -211,6 +291,10 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
             location: jobData.location || interviewData.location || '',
             salaryRange: jobData.salaryRange || jobData.salary || interviewData.salaryRange || interviewData.salary || '',
             genderRequirement: jobData.genderRequirement || jobData.gender || interviewData.genderRequirement || interviewData.gender || 'Any',
+            strictGenderMatch: jobData.strictGenderMatch ?? interviewData.strictGenderMatch ?? false,
+            strictLocationMatch: jobData.strictLocationMatch ?? interviewData.strictLocationMatch ?? false,
+            strictEducationMatch: jobData.strictEducationMatch ?? interviewData.strictEducationMatch ?? false,
+            strictExperienceMatch: jobData.strictExperienceMatch ?? interviewData.strictExperienceMatch ?? false,
             strictness: jobData.strictness || interviewData.strictness || 'Low',
           });
 
@@ -256,11 +340,13 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
   };
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
+    const target = e.target as HTMLInputElement;
+    const { name, value, type } = target;
+    const val = type === 'checkbox' ? target.checked : value;
     setFormData(prev => {
       const updated = {
         ...prev,
-        [name]: ['experience', 'minExperience', 'maxExperience', 'numQuestions'].includes(name) ? Number(value) : value
+        [name]: ['experience', 'minExperience', 'maxExperience', 'numQuestions'].includes(name) ? Number(value) : val
       };
       if (name === 'minExperience') {
         updated.experience = Number(value);
@@ -393,6 +479,8 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         customFields,
         category: formData.category,
         department: formData.category,
+        roleCategory: formData.category,
+        jobCategory: formData.category,
         employmentType: formData.employmentType,
         minExperience: minExp,
         maxExperience: maxExp,
@@ -402,6 +490,10 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         salary: formData.salaryRange,
         genderRequirement: formData.genderRequirement,
         gender: formData.genderRequirement,
+        strictGenderMatch: formData.strictGenderMatch,
+        strictLocationMatch: formData.strictLocationMatch,
+        strictEducationMatch: formData.strictEducationMatch,
+        strictExperienceMatch: formData.strictExperienceMatch,
         strictness: formData.strictness,
         applyDeadline: Timestamp.fromDate(deadlineDate),
         difficulty: formData.difficulty,
@@ -417,7 +509,10 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
       const interviewPayload = {
         title: `${formData.title} Interview`,
         description: formData.description,
+        category: formData.category,
         department: formData.category,
+        roleCategory: formData.category,
+        jobCategory: formData.category,
         employmentType: formData.employmentType,
         minExperience: minExp,
         maxExperience: maxExp,
@@ -460,34 +555,52 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     ? formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0)
     : [];
 
-  const inputClass = "w-full px-3.5 py-2.5 bg-white dark:bg-[#050505] text-gray-900 dark:text-white border border-gray-300 dark:border-white/[0.14] focus:border-indigo-500 dark:focus:border-white/[0.35] rounded-[6px] text-xs font-medium outline-none focus:ring-1 focus:ring-indigo-500/20 transition-colors placeholder-gray-400 dark:placeholder-[#6b7280]";
-  const labelClass = "block text-[11px] font-medium text-gray-700 dark:text-[#a1a1aa] mb-1 uppercase tracking-wider geist-label";
-  const panelClass = "p-4 rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-50/60 dark:bg-white/[0.025] space-y-3";
+  const inputClass = isDark
+    ? "w-full px-3.5 py-2.5 bg-[#0d0d0d] text-white border border-white/[0.14] focus:border-indigo-500 rounded-[6px] text-xs font-medium outline-none transition-colors placeholder-slate-500"
+    : "w-full px-3.5 py-2.5 bg-slate-50 text-slate-900 border border-slate-300 focus:border-indigo-600 focus:bg-white rounded-[6px] text-xs font-medium outline-none transition-colors placeholder-slate-400";
+  
+  const labelClass = isDark
+    ? "block text-[11px] font-mono font-bold text-slate-400 mb-1 uppercase tracking-wider"
+    : "block text-[11px] font-mono font-bold text-slate-600 mb-1 uppercase tracking-wider";
+
+  const panelClass = isDark
+    ? "p-4 sm:p-5 rounded-[6px] border border-white/[0.1] bg-white/[0.02] space-y-3"
+    : "p-4 sm:p-5 rounded-[6px] border border-slate-200 bg-slate-50/60 space-y-3";
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-5">
-      <div className="bg-white dark:bg-[#000] text-gray-900 dark:text-white rounded-[8px] shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col border border-gray-200 dark:border-white/[0.14] overflow-hidden">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[100] p-3 sm:p-5 animate-in fade-in duration-200">
+      <div className={`relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-[8px] border shadow-2xl overflow-hidden transition-colors ${
+        isDark ? 'bg-[#000] border-white/[0.13] text-white' : 'bg-white border-slate-200 text-slate-900'
+      }`}>
         
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-white/[0.11] flex justify-between items-center bg-gray-50 dark:bg-[#050505]">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-[#6b7280]">Job Setup</span>
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mt-0.5">
-              <i className="fa-solid fa-pen-to-square text-indigo-600 dark:text-white text-base"></i>
-              Edit Job Details
-            </h2>
+        <div className={`px-6 py-4 border-b flex justify-between items-center transition-colors ${
+          isDark ? 'bg-[#050505] border-white/[0.11]' : 'bg-slate-50/80 border-slate-200/80'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-[6px] border flex items-center justify-center ${
+              isDark ? 'bg-white/10 border-white/20 text-white' : 'bg-slate-900 text-white border-slate-900 shadow-sm'
+            }`}>
+              <i className="fa-solid fa-pen-to-square text-sm"></i>
+            </div>
+            <div>
+              <span className={`text-[10px] font-mono font-bold uppercase tracking-wider ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>Job Setup</span>
+              <h2 className={`text-base sm:text-lg font-bold leading-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Edit Job Details</h2>
+            </div>
           </div>
           <button 
             onClick={onClose} 
-            className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-gray-300 dark:border-white/[0.11] text-gray-500 dark:text-[#8f8f8f] hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-white transition-colors"
+            className={`flex h-8 w-8 items-center justify-center rounded-[6px] transition-colors cursor-pointer ${
+              isDark ? 'text-slate-400 hover:bg-white/10 hover:text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+            }`}
           >
-            <i className="fas fa-times text-xs"></i>
+            <i className="fas fa-times text-sm"></i>
           </button>
         </div>
 
         {loading ? (
           <div className="flex-1 flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-600 dark:border-white"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-4 border-emerald-500 border-t-transparent"></div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
@@ -589,6 +702,11 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                       className={inputClass}
                     >
                       <option value="">Select a Category</option>
+                      {formData.category && !JOB_CATEGORIES.includes(formData.category) && (
+                        <option key={formData.category} value={formData.category}>
+                          {formData.category}
+                        </option>
+                      )}
                       {JOB_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                     </select>
                   </div>
@@ -678,6 +796,81 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                       <option value="Medium">Medium Strictness</option>
                       <option value="High">High Strictness</option>
                     </select>
+                  </div>
+                </div>
+
+                {/* Strict Mandatory AI Criteria Checkmarks */}
+                <div className="mt-3 rounded-[8px] border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 p-3.5 space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <i className="fa-solid fa-square-check text-amber-600 dark:text-amber-400 text-xs"></i>
+                    <span className="font-bold uppercase text-amber-900 dark:text-amber-300 text-[11px] tracking-wider">
+                      Strict Mandatory AI Criteria Checkmarks
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                    <label className="flex items-center gap-2 cursor-pointer p-2 rounded-[6px] border border-amber-200 dark:border-amber-800/40 bg-white dark:bg-neutral-900/70 hover:border-amber-400 transition-all">
+                      <input
+                        type="checkbox"
+                        name="strictGenderMatch"
+                        checked={formData.strictGenderMatch}
+                        onChange={handleFormChange}
+                        className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 accent-amber-600 cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-xs font-semibold text-gray-900 dark:text-amber-100 block">Strict Gender</span>
+                        <span className="text-[10px] text-gray-500 dark:text-amber-300/70 block">
+                          {formData.genderRequirement === 'Any' ? 'Any -> All genders' : `Must be ${formData.genderRequirement}`}
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer p-2 rounded-[6px] border border-amber-200 dark:border-amber-800/40 bg-white dark:bg-neutral-900/70 hover:border-amber-400 transition-all">
+                      <input
+                        type="checkbox"
+                        name="strictLocationMatch"
+                        checked={formData.strictLocationMatch}
+                        onChange={handleFormChange}
+                        className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 accent-amber-600 cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-xs font-semibold text-gray-900 dark:text-amber-100 block">Strict Location</span>
+                        <span className="text-[10px] text-gray-500 dark:text-amber-300/70 block truncate max-w-[100px]">
+                          {formData.location ? `Must match ${formData.location}` : 'Must match City'}
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer p-2 rounded-[6px] border border-amber-200 dark:border-amber-800/40 bg-white dark:bg-neutral-900/70 hover:border-amber-400 transition-all">
+                      <input
+                        type="checkbox"
+                        name="strictEducationMatch"
+                        checked={formData.strictEducationMatch}
+                        onChange={handleFormChange}
+                        className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 accent-amber-600 cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-xs font-semibold text-gray-900 dark:text-amber-100 block">Strict Education</span>
+                        <span className="text-[10px] text-gray-500 dark:text-amber-300/70 block truncate max-w-[100px]">
+                          {formData.qualifications ? `Must match ${formData.qualifications}` : 'Must match Qualification'}
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer p-2 rounded-[6px] border border-amber-200 dark:border-amber-800/40 bg-white dark:bg-neutral-900/70 hover:border-amber-400 transition-all">
+                      <input
+                        type="checkbox"
+                        name="strictExperienceMatch"
+                        checked={formData.strictExperienceMatch}
+                        onChange={handleFormChange}
+                        className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 accent-amber-600 cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-xs font-semibold text-gray-900 dark:text-amber-100 block">Strict Experience</span>
+                        <span className="text-[10px] text-gray-500 dark:text-amber-300/70 block">
+                          {formData.minExperience || formData.maxExperience ? `${formData.minExperience}-${formData.maxExperience} Yrs` : 'Must fit Yrs range'}
+                        </span>
+                      </div>
+                    </label>
                   </div>
                 </div>
               </div>
@@ -822,28 +1015,62 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                   </button>
                 </div>
 
-                {/* Predefined Suggestions Grid */}
-                <div className="border border-gray-200 dark:border-white/[0.11] rounded-[6px] p-3 max-h-36 overflow-y-auto bg-white dark:bg-[#050505] custom-card-scrollbar">
-                  <span className="block text-[10px] font-bold text-gray-500 dark:text-[#6b7280] uppercase tracking-wider mb-2">Predefined Suggestions</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {SKILL_OPTIONS.filter(s => s.toLowerCase().includes(skillSearch.toLowerCase())).map(skill => {
-                      const isSelected = selectedSkillsList.includes(skill);
-                      return (
-                        <button
-                          key={skill}
-                          type="button"
-                          onClick={() => toggleSkill(skill)}
-                          className={`px-2.5 py-1 rounded-[4px] text-xs border transition-all ${
-                            isSelected 
-                              ? 'bg-purple-600 dark:bg-purple-500/30 border-purple-600 dark:border-purple-500/60 text-white dark:text-purple-200 font-bold' 
-                              : 'bg-gray-100 dark:bg-white/[0.04] border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/[0.08] hover:text-gray-900 dark:hover:text-white'
-                          }`}
-                        >
-                          {skill} {isSelected && '✓'}
-                        </button>
-                      );
-                    })}
+                {/* Role-Based Skill Recommendations Button & Grid */}
+                <div className={`p-4 rounded-[6px] border transition-colors mt-3 ${
+                  isDark ? 'bg-[#050505] border-white/[0.1]' : 'bg-slate-50/70 border-slate-200/80'
+                }`}>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div>
+                      <span className={`text-[11px] font-mono font-bold uppercase tracking-wider block ${
+                        isDark ? 'text-slate-300' : 'text-slate-700'
+                      }`}>
+                        Role-Based Skill Recommendations
+                      </span>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Generate skills tailored for <strong className="text-slate-700 dark:text-slate-200">{formData.title || formData.category || 'this job role'}</strong>.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleGenerateSkillsForRole}
+                      className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-[6px] text-xs font-bold transition-all border cursor-pointer shrink-0 shadow-sm ${
+                        isDark 
+                          ? 'bg-white/10 border-white/20 text-white hover:bg-white/15' 
+                          : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100'
+                      }`}
+                    >
+                      <i className="fas fa-wand-magic-sparkles text-indigo-500"></i>
+                      <span>Suggest Skills by Role</span>
+                    </button>
                   </div>
+
+                  {suggestedRoleSkills.length > 0 && (
+                    <div className="pt-3 mt-3 border-t border-slate-200 dark:border-white/10">
+                      <span className="block text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">
+                        Suggested Skills (Click to Add):
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {suggestedRoleSkills.map(skill => {
+                          const isSelected = selectedSkillsList.includes(skill);
+                          return (
+                            <button
+                              key={skill}
+                              type="button"
+                              onClick={() => toggleSkill(skill)}
+                              className={`px-3 py-1.5 rounded-[4px] text-xs font-semibold border transition-all cursor-pointer ${
+                                isSelected 
+                                  ? (isDark ? 'bg-white text-black border-white font-bold' : 'bg-slate-900 text-white border-slate-900 font-bold') 
+                                  : (isDark ? 'bg-white/[0.05] border-white/10 text-slate-300 hover:bg-white/10' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100')
+                              }`}
+                            >
+                              {skill} {isSelected && '✓'}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -986,18 +1213,28 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex gap-3 p-4 border-t border-gray-200 dark:border-white/[0.11] bg-gray-50 dark:bg-[#050505] mt-auto">
+            <div className={`flex gap-3 p-4 border-t transition-colors ${
+              isDark ? 'bg-[#050505] border-white/[0.1]' : 'bg-slate-50/80 border-slate-200/80'
+            }`}>
               <button 
                 type="button"
                 onClick={onClose}
-                className="w-1/3 border border-gray-300 dark:border-white/[0.11] bg-transparent text-gray-700 dark:text-[#d4d4d4] font-medium py-2.5 px-4 rounded-[6px] hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-white transition-colors text-xs"
+                className={`w-1/3 py-2.5 px-4 rounded-[6px] text-xs font-bold border transition-colors cursor-pointer ${
+                  isDark 
+                    ? 'border-white/[0.12] text-slate-300 hover:bg-white/10 hover:text-white' 
+                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 shadow-sm'
+                }`}
               >
                 Cancel
               </button>
               <button 
                 type="submit" 
                 disabled={saving}
-                className="w-2/3 border border-black dark:border-white bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 text-white dark:text-black font-semibold py-2.5 px-4 rounded-[6px] transition-colors disabled:opacity-50 text-xs flex items-center justify-center gap-2 shadow-md cursor-pointer"
+                className={`w-2/3 py-2.5 px-4 rounded-[6px] font-bold text-xs transition-all shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer ${
+                  isDark 
+                    ? 'bg-white text-black hover:bg-[#eaeaea]' 
+                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                }`}
               >
                 {saving ? (
                   <><i className="fas fa-spinner fa-spin"></i> Saving Changes...</>

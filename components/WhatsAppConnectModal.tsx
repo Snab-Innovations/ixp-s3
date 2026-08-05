@@ -60,6 +60,10 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
       await updateDoc(userRef, updatedData).catch(() => setDoc(userRef, updatedData, { merge: true }));
       await updateDoc(profileRef, updatedData).catch(() => setDoc(profileRef, updatedData, { merge: true }));
 
+      try {
+        localStorage.setItem('wa_session_credentials', JSON.stringify({ sessionId: sid.trim(), passcode: spass.trim() }));
+      } catch (e) {}
+
       await refreshProfile();
       if (!quiet) {
         messageBox.showSuccess('✅ WhatsApp Session saved successfully!');
@@ -151,6 +155,7 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
       setSessionId(sid);
       setSessionPasscode(spass);
     }
+    await saveCredentialsToFirestore(sid, spass, true);
     await pollStatus(sid, spass);
   };
 
@@ -163,7 +168,11 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
     setStatus('INITIALIZING');
     setUserInfo(null);
     setShowQrCode(true);
-    isAutoSavedRef.current = false;
+    isAutoSavedRef.current = true;
+    
+    // Save fresh session credentials immediately to Firestore & localStorage
+    await saveCredentialsToFirestore(newSessionId, newPasscode, true);
+
     messageBox.showInfo('Generating fresh WhatsApp QR Code session...');
     await pollStatus(newSessionId, newPasscode);
   };
