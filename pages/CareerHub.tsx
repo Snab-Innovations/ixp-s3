@@ -722,9 +722,12 @@ const CareerHub: React.FC<{ isDarkTheme: boolean }> = ({ isDarkTheme }) => {
                                 <div>
                                     <h3 className="text-slate-900 dark:text-white font-bold text-lg mb-3">Skills</h3>
                                     <div className="flex flex-wrap gap-2">
-                                        {selectedJob.skills.split(',').map((q, i) => (
+                                        {(Array.isArray(selectedJob.skills) 
+                                            ? selectedJob.skills 
+                                            : (typeof selectedJob.skills === 'string' ? selectedJob.skills.split(',') : [])
+                                        ).map((q: any, i: number) => (
                                             <span key={i} className="px-3 py-1.5 bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-gray-300 rounded-lg text-sm border border-slate-200 dark:border-white/5">
-                                                {q.trim()}
+                                                {String(q).trim()}
                                             </span>
                                         ))}
                                     </div>

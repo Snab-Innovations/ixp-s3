@@ -2856,7 +2856,9 @@ const ResumeDump: React.FC = () => {
                           "Sales & Marketing", "Business Development", "Digital Marketing", "SEO", "Lead Generation",
                           "Quality Assurance", "AWS", "Docker", "Machine Learning", "Data Analysis", "Excel"
                         ].map(skill => {
-                          const currentSkills = editingCandidateForm.skills.split(',').map(s => s.trim()).filter(Boolean);
+                          const currentSkills = Array.isArray(editingCandidateForm.skills)
+                            ? editingCandidateForm.skills.map((s: any) => String(s).trim())
+                            : (typeof editingCandidateForm.skills === 'string' ? editingCandidateForm.skills.split(',').map(s => s.trim()).filter(Boolean) : []);
                           const isChecked = currentSkills.some(s => s.toLowerCase() === skill.toLowerCase());
                           return (
                             <button

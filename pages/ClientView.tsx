@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { collection, query, onSnapshot, orderBy, doc, getDoc, where } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { resolveJobOrInterviewDocument } from '../services/jobResolutionService';
 import { InterviewSubmission } from '../types';
 import { useTheme } from '../context/ThemeContext';
 import DayNightToggle from '../components/DayNightToggle';
@@ -21,9 +22,9 @@ const ClientView: React.FC = () => {
     // Fetch Interview details to get Job Title
     const fetchInterviewDetails = async () => {
       try {
-        const interviewDoc = await getDoc(doc(db, 'interviews', interviewId));
-        if (interviewDoc.exists()) {
-          setJobTitle(interviewDoc.data().title || 'Shortlisted Candidates');
+        const resolved = await resolveJobOrInterviewDocument(interviewId);
+        if (resolved && resolved.data) {
+          setJobTitle(resolved.data.title || 'Shortlisted Candidates');
         }
       } catch (err) {
         console.error("Error fetching interview details:", err);

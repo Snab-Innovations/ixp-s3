@@ -3,12 +3,13 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { Link, useParams } from 'react-router-dom';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
+import { subscribeToJobOrInterview } from '../services/jobResolutionService';
 import { Interview } from '../types';
 import { InterviewOverviewSkeleton } from '../components/ui/interview-loading-skeleton';
 
 const InterviewVoiceInterview: React.FC = () => {
   const { interviewId } = useParams<{ interviewId: string }>();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [interview, setInterview] = useState<Interview | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -18,23 +19,23 @@ const InterviewVoiceInterview: React.FC = () => {
       return;
     }
 
-    const unsubscribe = onSnapshot(
-      doc(db, 'interviews', interviewId),
-      (snapshot) => {
-        if (!snapshot.exists()) {
+    const unsubscribe = subscribeToJobOrInterview(
+      interviewId,
+      (data) => {
+        if (!data) {
           setInterview(null);
           setLoading(false);
           return;
         }
 
-        const data = { id: snapshot.id, ...snapshot.data() } as Interview;
-        if ((data as any).recruiterUID !== user.uid) {
+        const isOwner = data.recruiterUID === user.uid || (userProfile && (userProfile.teamId === data.teamId || userProfile.role === 'admin'));
+        if (!isOwner) {
           setInterview(null);
           setLoading(false);
           return;
         }
 
-        setInterview(data);
+        setInterview(data as Interview);
         setLoading(false);
       },
       (error) => {

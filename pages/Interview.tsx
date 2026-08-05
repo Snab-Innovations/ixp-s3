@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { doc, getDoc, collection, serverTimestamp, updateDoc, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { uploadToCloudinary, generateInterviewQuestions, requestTranscription, fetchTranscriptText, generateFeedback } from '../services/api';
+import { resolveJobOrInterviewDocument } from '../services/jobResolutionService';
 import { speak, unlockTTSAudio } from '../lib/tts';
 import { Interview, InterviewState } from '../types';
 import { createPortal } from 'react-dom';
@@ -2049,30 +2050,30 @@ const CandidateInterviewFlow: React.FC = () => {
         return;
       }
       try {
-        const interviewDocRef = doc(db, 'interviews', interviewId);
-        const interviewDoc = await getDoc(interviewDocRef);
+        const resolved = await resolveJobOrInterviewDocument(interviewId);
 
-        if (!interviewDoc.exists()) {
+        if (!resolved || !resolved.data) {
           throw new Error("This interview does not exist or has been closed.");
         }
         
-         const interviewData = { id: interviewDoc.id, ...interviewDoc.data() } as any;
+        const interviewData = resolved.data as any;
 
-         const rateLimitStatus = await loadCompanyRateLimitStatus();
-         if (isRateLimitReached(rateLimitStatus, 'interviews')) {
-           throw new Error(getCandidateRateLimitReachedMessage('interviews'));
-         }
+        const rateLimitStatus = await loadCompanyRateLimitStatus();
+        if (isRateLimitReached(rateLimitStatus, 'interviews')) {
+          throw new Error(getCandidateRateLimitReachedMessage('interviews'));
+        }
 
-
-
-        // If we reach here, access is granted. Now load the interview data.
-        const jobDocRef = doc(db, 'jobs', interviewId);
-        const jobDoc = await getDoc(jobDocRef);
-        const jobData = jobDoc.exists() ? jobDoc.data() : {};
-        const combinedData = { ...interviewData, isMock: jobData.isMock || false };
+        const combinedData = { ...interviewData, isMock: interviewData.isMock || false };
 
         setInterview(combinedData as Interview);
-        setInterviewState(prev => ({ ...prev, jobTitle: combinedData.title, jobDescription: combinedData.description, isMock: combinedData.isMock, strictness: combinedData.strictness || 'Medium' }));
+        setInterviewState(prev => ({
+          ...prev,
+          jobId: resolved.id,
+          jobTitle: combinedData.title || 'Job Interview',
+          jobDescription: combinedData.description || '',
+          isMock: combinedData.isMock,
+          strictness: combinedData.strictness || 'Medium'
+        }));
         setStep('welcome');
 
       } catch (err: any) { 

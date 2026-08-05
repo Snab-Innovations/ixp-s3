@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Sparkles, Check, UserPlus, ExternalLink, X, Search } from 'lucide-react';
 import { db } from '../services/firebase';
+import { subscribeToJobOrInterview } from '../services/jobResolutionService';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { sendInterviewInvitations } from '../services/brevoService';
@@ -143,7 +144,11 @@ const InterviewCandidates: React.FC = () => {
         return scoreCandidateForRole(candidate, {
           title: interview.title || '',
           description: interview.description || '',
-          requiredSkills: requiredSkills.length > 0 ? requiredSkills : (interview.skills ? interview.skills.split(',').map(s => s.trim()) : []),
+          requiredSkills: requiredSkills.length > 0 
+            ? requiredSkills 
+            : (Array.isArray(interview.skills) 
+                ? interview.skills 
+                : (typeof interview.skills === 'string' ? interview.skills.split(',').map(s => s.trim()) : [])),
           minExperience: (interview as any).minExperience || 0,
           maxExperience: (interview as any).maxExperience || 0,
         });
@@ -191,26 +196,27 @@ const InterviewCandidates: React.FC = () => {
       return;
     }
 
-    const unsubscribeInterview = onSnapshot(
-      doc(db, 'interviews', interviewId),
-      (snapshot) => {
-        if (!snapshot.exists()) {
+    const unsubscribeInterview = subscribeToJobOrInterview(
+      interviewId,
+      (data) => {
+        if (!data) {
           setInterview(null);
           setLoading(false);
           return;
         }
 
-        const data = { id: snapshot.id, ...snapshot.data() } as Interview;
-        const currentTeamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
-        const interviewTeamId = (data as any).teamId || (data as any).recruiterUID;
-        const isTeamMember = interviewTeamId === currentTeamId || (data as any).recruiterUID === user.uid || userProfile?.role === 'admin';
+        const currentTeamId = userProfile?.teamId || userProfile?.parentRecruiterId || userProfile?.primaryRecruiterUID || user.uid;
+        const interviewTeamId = data.teamId || data.recruiterUID;
+        const roleLower = (userProfile?.role || '').toLowerCase();
+        const isRecruiterRole = roleLower === 'recruiter' || roleLower === 'primary' || roleLower === 'subrecruiter' || roleLower === 'admin' || roleLower === 'owner';
+        const isTeamMember = isRecruiterRole || interviewTeamId === currentTeamId || data.recruiterUID === user.uid || (userProfile?.primaryRecruiterUID && data.recruiterUID === userProfile.primaryRecruiterUID);
 
         if (!isTeamMember) {
           setInterview(null);
           setLoading(false);
           return;
         }
-        setInterview(data);
+        setInterview(data as Interview);
         setLoading(false);
       },
       (error) => {

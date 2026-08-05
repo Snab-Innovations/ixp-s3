@@ -3,6 +3,7 @@ import { collection, deleteDoc, doc, getDocs, onSnapshot } from 'firebase/firest
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { db } from '../services/firebase';
+import { subscribeToJobOrInterview } from '../services/jobResolutionService';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { InterviewOverviewSkeleton } from '../components/ui/interview-loading-skeleton';
@@ -121,19 +122,20 @@ const InterviewOverview: React.FC = () => {
       return;
     }
 
-    const unsubscribe = onSnapshot(
-      doc(db, 'interviews', interviewId),
-      async (snapshot) => {
-        if (!snapshot.exists()) {
+    const unsubscribe = subscribeToJobOrInterview(
+      interviewId,
+      async (data, resolved) => {
+        if (!data || !resolved) {
           setInterview(null);
           setLoading(false);
           return;
         }
 
-        const data = { id: snapshot.id, ...snapshot.data() } as Interview;
-        const currentTeamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
-        const interviewTeamId = (data as any).teamId || (data as any).recruiterUID;
-        const isTeamMember = interviewTeamId === currentTeamId || (data as any).recruiterUID === user.uid || userProfile?.role === 'admin';
+        const currentTeamId = userProfile?.teamId || userProfile?.parentRecruiterId || userProfile?.primaryRecruiterUID || user.uid;
+        const interviewTeamId = data.teamId || data.recruiterUID;
+        const roleLower = (userProfile?.role || '').toLowerCase();
+        const isRecruiterRole = roleLower === 'recruiter' || roleLower === 'primary' || roleLower === 'subrecruiter' || roleLower === 'admin' || roleLower === 'owner';
+        const isTeamMember = isRecruiterRole || interviewTeamId === currentTeamId || data.recruiterUID === user.uid || (userProfile?.primaryRecruiterUID && data.recruiterUID === userProfile.primaryRecruiterUID);
 
         if (!isTeamMember) {
           setInterview(null);
@@ -141,9 +143,10 @@ const InterviewOverview: React.FC = () => {
           return;
         }
 
-        setInterview(data);
+        setInterview(data as Interview);
         try {
-          const attempts = await getDocs(collection(db, 'interviews', interviewId, 'attempts'));
+          const attemptsCollection = collection(db, resolved.collectionName, resolved.id, 'attempts');
+          const attempts = await getDocs(attemptsCollection);
           setResponsesCount(attempts.size);
         } catch (error) {
           console.error('Error loading interview attempts:', error);
@@ -157,7 +160,7 @@ const InterviewOverview: React.FC = () => {
     );
 
     return () => unsubscribe();
-  }, [interviewId, user]);
+  }, [interviewId, user, userProfile]);
 
   const details = useMemo(() => {
     if (!interview) return [];

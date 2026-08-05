@@ -8,6 +8,7 @@ import { SKILL_OPTIONS, JOB_CATEGORIES } from './Profile';
 import { parseJobDescriptionText, ParsedJdResult, compileCompanyProfile } from '../services/geminiService';
 import { resolveStrictListedCity } from '../data/maharashtraCities';
 import * as pdfjsLib from 'pdfjs-dist';
+import { resolveJobOrInterviewDocument } from '../services/jobResolutionService';
 
 interface EditJobModalProps {
   jobId: string;
@@ -224,34 +225,35 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     }
   };
 
+  const [targetDocId, setTargetDocId] = useState<string>(jobId);
+  const [targetCollection, setTargetCollection] = useState<'jobs' | 'interviews'>('jobs');
+
   useEffect(() => {
     const fetchJob = async () => {
       try {
         if (!jobId || !user) return;
 
-        const jobDocRef = doc(db, 'jobs', jobId);
-        const interviewDocRef = doc(db, 'interviews', jobId);
+        const resolved = await resolveJobOrInterviewDocument(jobId);
 
-        const [jobDocSnap, interviewDocSnap] = await Promise.all([
-          getDoc(jobDocRef),
-          getDoc(interviewDocRef)
-        ]);
+        if (resolved && resolved.data) {
+          const sourceData = resolved.data;
+          setTargetDocId(resolved.id);
+          setTargetCollection(resolved.collectionName);
 
-        if (jobDocSnap.exists() || interviewDocSnap.exists()) {
-          const jobData = jobDocSnap.data() || {};
-          const interviewData = interviewDocSnap.data() || {};
-          const sourceData = jobDocSnap.exists() ? jobData : interviewData;
-
-          if (sourceData.recruiterUID !== user.uid) {
+          const userTeamId = userProfile?.teamId || userProfile?.parentRecruiterId || userProfile?.primaryRecruiterUID;
+          const roleLower = (userProfile?.role || '').toLowerCase();
+          const isRecruiterRole = roleLower === 'recruiter' || roleLower === 'primary' || roleLower === 'subrecruiter' || roleLower === 'admin' || roleLower === 'owner';
+          const isOwner = isRecruiterRole || sourceData.recruiterUID === user.uid || (userProfile && (userTeamId === sourceData.teamId || sourceData.recruiterUID === userTeamId));
+          if (!isOwner) {
             alert("You do not have permission to edit this item.");
             onClose();
             return;
           }
 
-          setAccessCode(sourceData.accessCode || interviewData.accessCode || jobData.accessCode || '');
+          setAccessCode(sourceData.accessCode || '');
 
           let deadlineStr = '';
-          const deadlineSource = jobData.applyDeadline || interviewData.deadline || jobData.deadline;
+          const deadlineSource = sourceData.applyDeadline || sourceData.deadline;
           if (deadlineSource) {
             if (deadlineSource.toDate) {
               deadlineStr = deadlineSource.toDate().toISOString().split('T')[0];
@@ -261,51 +263,46 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
           }
 
           const loadedCategory = 
-            jobData.category || 
-            jobData.department || 
-            jobData.roleCategory || 
-            jobData.jobCategory || 
-            jobData.industry || 
-            interviewData.category || 
-            interviewData.department || 
-            interviewData.roleCategory || 
-            interviewData.jobCategory || 
-            interviewData.industry || 
+            sourceData.category || 
+            sourceData.department || 
+            sourceData.roleCategory || 
+            sourceData.jobCategory || 
+            sourceData.industry || 
             '';
 
           setFormData({
-            title: jobData.title || interviewData.title?.replace(' Interview', '') || '',
-            companyName: jobData.companyName || interviewData.companyName || 'N/A',
-            qualifications: jobData.qualifications || interviewData.education || interviewData.qualification || '',
+            title: sourceData.title?.replace(' Interview', '') || '',
+            companyName: sourceData.companyName || sourceData.company || 'N/A',
+            qualifications: sourceData.qualifications || sourceData.education || sourceData.qualification || '',
             deadline: deadlineStr,
-            description: jobData.description || interviewData.description || '',
-            permission: jobData.interviewPermission || jobData.permission || interviewData.permission || 'anyone',
-            skills: jobData.skills || interviewData.skills || '',
+            description: sourceData.description || '',
+            permission: sourceData.interviewPermission || sourceData.permission || 'anyone',
+            skills: Array.isArray(sourceData.skills) ? sourceData.skills.join(', ') : (sourceData.skills || ''),
             category: loadedCategory,
-            numQuestions: jobData.numQuestions || interviewData.numQuestions || 5,
-            employmentType: jobData.employmentType || interviewData.employmentType || 'Full-time',
-            minExperience: jobData.minExperience ?? interviewData.minExperience ?? jobData.experience ?? interviewData.experience ?? 0,
-            maxExperience: jobData.maxExperience ?? interviewData.maxExperience ?? jobData.experience ?? interviewData.experience ?? 0,
-            experience: jobData.experience ?? interviewData.experience ?? 0,
-            difficulty: jobData.difficulty || interviewData.difficulty || 'Easy',
-            location: jobData.location || interviewData.location || '',
-            salaryRange: jobData.salaryRange || jobData.salary || interviewData.salaryRange || interviewData.salary || '',
-            genderRequirement: jobData.genderRequirement || jobData.gender || interviewData.genderRequirement || interviewData.gender || 'Any',
-            strictGenderMatch: jobData.strictGenderMatch ?? interviewData.strictGenderMatch ?? false,
-            strictLocationMatch: jobData.strictLocationMatch ?? interviewData.strictLocationMatch ?? false,
-            strictEducationMatch: jobData.strictEducationMatch ?? interviewData.strictEducationMatch ?? false,
-            strictExperienceMatch: jobData.strictExperienceMatch ?? interviewData.strictExperienceMatch ?? false,
-            strictness: jobData.strictness || interviewData.strictness || 'Low',
+            numQuestions: sourceData.numQuestions || 5,
+            employmentType: sourceData.employmentType || 'Full-time',
+            minExperience: sourceData.minExperience ?? sourceData.experience ?? 0,
+            maxExperience: sourceData.maxExperience ?? sourceData.experience ?? 0,
+            experience: sourceData.experience ?? 0,
+            difficulty: sourceData.difficulty || 'Easy',
+            location: sourceData.location || sourceData.city || '',
+            salaryRange: sourceData.salaryRange || sourceData.salary || '',
+            genderRequirement: sourceData.genderRequirement || sourceData.gender || 'Any',
+            strictGenderMatch: sourceData.strictGenderMatch ?? false,
+            strictLocationMatch: sourceData.strictLocationMatch ?? false,
+            strictEducationMatch: sourceData.strictEducationMatch ?? false,
+            strictExperienceMatch: sourceData.strictExperienceMatch ?? false,
+            strictness: sourceData.strictness || 'Low',
           });
 
-          setCustomFields(jobData.customFields || interviewData.customFields || []);
-          setManualQuestions(interviewData.manualQuestions || jobData.manualQuestions || []);
+          setCustomFields(sourceData.customFields || []);
+          setManualQuestions(sourceData.manualQuestions || []);
 
           // Parse candidates
-          const emails = interviewData.candidateEmails || jobData.candidateEmails || [];
+          const emails = sourceData.candidateEmails || [];
           setCandidateEmails(emails);
 
-          const candDataRaw = interviewData.candidateData || interviewData.candidateDataList || jobData.candidateData || jobData.candidateDataList || [];
+          const candDataRaw = sourceData.candidateData || sourceData.candidateDataList || [];
           if (Array.isArray(candDataRaw) && candDataRaw.length > 0) {
             setCandidateDataList(candDataRaw);
           } else if (emails.length > 0) {
@@ -407,9 +404,9 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     const trimmed = skillName.trim();
     if (!trimmed) return;
 
-    const currentSkills = formData.skills 
-      ? formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0) 
-      : [];
+    const currentSkills = Array.isArray(formData.skills)
+      ? (formData.skills as string[]).map(s => String(s).trim()).filter(Boolean)
+      : (typeof formData.skills === 'string' ? formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0) : []);
     
     let newSkills: string[];
     if (currentSkills.includes(trimmed)) {
@@ -421,9 +418,9 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
   };
 
   const removeSkill = (skillName: string) => {
-    const currentSkills = formData.skills 
-      ? formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0) 
-      : [];
+    const currentSkills = Array.isArray(formData.skills)
+      ? (formData.skills as string[]).map(s => String(s).trim()).filter(Boolean)
+      : (typeof formData.skills === 'string' ? formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0) : []);
     const newSkills = currentSkills.filter(s => s !== skillName.trim());
     setFormData({ ...formData, skills: newSkills.join(', ') });
   };
@@ -455,8 +452,8 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
 
     try {
       const deadlineDate = formData.deadline ? new Date(formData.deadline) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      const jobDocRef = doc(db, 'jobs', jobId);
-      const interviewDocRef = doc(db, 'interviews', jobId);
+      const jobDocRef = doc(db, 'jobs', targetDocId);
+      const interviewDocRef = doc(db, 'interviews', targetDocId);
 
       const allEmails = Array.from(new Set([
         ...candidateEmails,
@@ -551,9 +548,9 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     }
   };
 
-  const selectedSkillsList = formData.skills
-    ? formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0)
-    : [];
+  const selectedSkillsList = Array.isArray(formData.skills)
+    ? (formData.skills as string[]).map(s => String(s).trim()).filter(Boolean)
+    : (typeof formData.skills === 'string' ? formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0) : []);
 
   const inputClass = isDark
     ? "w-full px-3.5 py-2.5 bg-[#0d0d0d] text-white border border-white/[0.14] focus:border-indigo-500 rounded-[6px] text-xs font-medium outline-none transition-colors placeholder-slate-500"

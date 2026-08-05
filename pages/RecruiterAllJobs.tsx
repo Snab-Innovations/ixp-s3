@@ -87,6 +87,8 @@ export interface AllJobItem {
   recruiterName?: string;
   recruiterEmail?: string;
   recruiterUID?: string;
+  jobNo?: string;
+  candidateData?: any[];
   hasJobDoc?: boolean;
   hasInterviewDoc?: boolean;
 }
@@ -607,27 +609,47 @@ const RecruiterAllJobs: React.FC = () => {
       ? query(collection(db, 'jobs'), where('teamId', '==', teamId))
       : query(collection(db, 'jobs'), where('recruiterUID', '==', user.uid));
 
+    const userJobsQuery = (teamId && teamId !== user.uid)
+      ? query(collection(db, 'jobs'), where('recruiterUID', '==', user.uid))
+      : null;
+
     const interviewsQuery = teamId
       ? query(collection(db, 'interviews'), where('teamId', '==', teamId))
       : query(collection(db, 'interviews'), where('recruiterUID', '==', user.uid));
 
-    let fetchedJobs: any[] = [];
-    let fetchedInterviews: any[] = [];
+    const userInterviewsQuery = (teamId && teamId !== user.uid)
+      ? query(collection(db, 'interviews'), where('recruiterUID', '==', user.uid))
+      : null;
 
-    const mergeAndSetJobs = (jobsList: any[], interviewsList: any[]) => {
+    let fetchedTeamJobs: any[] = [];
+    let fetchedUserJobs: any[] = [];
+    let fetchedTeamInterviews: any[] = [];
+    let fetchedUserInterviews: any[] = [];
+
+    const mergeAndSetJobs = () => {
       const jobMap = new Map<string, AllJobItem>();
+
+      const rawJobsMap = new Map<string, any>();
+      fetchedTeamJobs.forEach((d) => rawJobsMap.set(d.id, d));
+      fetchedUserJobs.forEach((d) => rawJobsMap.set(d.id, d));
+      const jobsList = Array.from(rawJobsMap.values());
+
+      const rawInterviewsMap = new Map<string, any>();
+      fetchedTeamInterviews.forEach((d) => rawInterviewsMap.set(d.id, d));
+      fetchedUserInterviews.forEach((d) => rawInterviewsMap.set(d.id, d));
+      const interviewsList = Array.from(rawInterviewsMap.values());
 
       jobsList.forEach((j) => {
         jobMap.set(j.id, {
           id: j.id,
           title: j.title || 'Untitled Role',
-          companyName: j.companyName || userProfile?.company || 'Company',
-          location: j.location || 'Remote',
+          companyName: j.companyName || j.company || userProfile?.company || 'Company',
+          location: j.location || j.city || 'Remote',
           category: j.category || j.department || 'General',
           department: j.department || j.category,
           employmentType: j.employmentType || 'Full-time',
           description: j.description || '',
-          skills: j.skills || [],
+          skills: Array.isArray(j.skills) ? j.skills : (typeof j.skills === 'string' ? j.skills.split(',').map((s: string) => s.trim()) : []),
           qualifications: j.qualifications || j.education || '',
           education: j.education || j.qualifications || '',
           minExperience: j.minExperience ?? j.experience ?? 0,
@@ -635,7 +657,8 @@ const RecruiterAllJobs: React.FC = () => {
           experience: j.experience ?? 0,
           salary: j.salary || j.salaryRange || '',
           salaryRange: j.salaryRange || j.salary || '',
-          accessCode: j.accessCode || '',
+          accessCode: j.accessCode || (j.jobNo ? String(j.jobNo) : ''),
+          jobNo: j.jobNo ? String(j.jobNo) : '',
           interviewLink: j.interviewLink || `${window.location.origin}/#/interview/${j.id}`,
           candidateEmails: j.candidateEmails || [],
           candidateData: j.candidateData || [],
@@ -662,21 +685,22 @@ const RecruiterAllJobs: React.FC = () => {
         jobMap.set(i.id, {
           id: i.id,
           title: title || existing?.title || 'Untitled Role',
-          companyName: existing?.companyName || userProfile?.company || 'Company',
-          location: i.location || existing?.location || 'Remote',
+          companyName: existing?.companyName || i.company || i.companyName || userProfile?.company || 'Company',
+          location: i.location || i.city || existing?.location || 'Remote',
           category: i.department || existing?.category || 'General',
           department: i.department || existing?.department,
           employmentType: i.employmentType || existing?.employmentType || 'Full-time',
           description: i.description || existing?.description || '',
           skills: i.skills || existing?.skills || [],
-          qualifications: i.qualifications || i.education || existing?.qualifications || '',
-          education: i.education || i.qualification || existing?.education || '',
-          minExperience: i.minExperience ?? i.experience ?? existing?.minExperience ?? 0,
-          maxExperience: i.maxExperience ?? i.experience ?? existing?.maxExperience ?? 0,
+          qualifications: i.education || existing?.qualifications || '',
+          education: i.education || existing?.education || '',
+          minExperience: i.minExperience ?? existing?.minExperience ?? 0,
+          maxExperience: i.maxExperience ?? existing?.maxExperience ?? 0,
           experience: i.experience ?? existing?.experience ?? 0,
-          salary: i.salary || i.salaryRange || existing?.salary || '',
+          salary: i.salaryRange || i.salary || existing?.salary || '',
           salaryRange: i.salaryRange || i.salary || existing?.salaryRange || '',
-          accessCode: i.accessCode || existing?.accessCode || '',
+          accessCode: i.accessCode || existing?.accessCode || (i.jobNo ? String(i.jobNo) : ''),
+          jobNo: i.jobNo ? String(i.jobNo) : (existing?.jobNo || ''),
           interviewLink: i.interviewLink || existing?.interviewLink || `${window.location.origin}/#/interview/${i.id}`,
           candidateEmails: i.candidateEmails || existing?.candidateEmails || [],
           candidateData: i.candidateData || existing?.candidateData || [],
@@ -709,26 +733,40 @@ const RecruiterAllJobs: React.FC = () => {
     };
 
     const unsubJobs = onSnapshot(jobsQuery, (snap) => {
-      fetchedJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      mergeAndSetJobs(fetchedJobs, fetchedInterviews);
+      fetchedTeamJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      mergeAndSetJobs();
     }, (err) => {
       console.error("Error fetching jobs", err);
       setLoading(false);
     });
 
+    const unsubUserJobs = userJobsQuery ? onSnapshot(userJobsQuery, (snap) => {
+      fetchedUserJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      mergeAndSetJobs();
+    }) : null;
+
     const unsubInterviews = onSnapshot(interviewsQuery, (snap) => {
-      fetchedInterviews = snap.docs
+      fetchedTeamInterviews = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter((d: any) => d.isMock !== true);
-      mergeAndSetJobs(fetchedJobs, fetchedInterviews);
+      mergeAndSetJobs();
     }, (err) => {
       console.error("Error fetching interviews", err);
       setLoading(false);
     });
 
+    const unsubUserInterviews = userInterviewsQuery ? onSnapshot(userInterviewsQuery, (snap) => {
+      fetchedUserInterviews = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((d: any) => d.isMock !== true);
+      mergeAndSetJobs();
+    }) : null;
+
     return () => {
       unsubJobs();
+      if (unsubUserJobs) unsubUserJobs();
       unsubInterviews();
+      if (unsubUserInterviews) unsubUserInterviews();
     };
   }, [user, userProfile]);
 

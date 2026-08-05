@@ -10,6 +10,8 @@ import { ChevronDown } from 'lucide-react';
 import { getRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus } from '../services/rateLimitService';
 import { stageCandidateConsent } from '../services/candidateConsent';
 
+import { resolveJobOrInterviewDocument } from '../services/jobResolutionService';
+
 const InterviewAccess: React.FC = () => {
   const { interviewId } = useParams<{ interviewId: string }>();
   const navigate = useNavigate();
@@ -32,11 +34,11 @@ const InterviewAccess: React.FC = () => {
       if (!interviewId || hasFetchedInterview.current) return;
       hasFetchedInterview.current = true;
       try {
-        const interviewDoc = await getDoc(doc(db, 'interviews', interviewId));
-        if (interviewDoc.exists()) {
-           const interviewData = interviewDoc.data() as Interview;
+        const resolved = await resolveJobOrInterviewDocument(interviewId);
+        if (resolved && resolved.data) {
+           const interviewData = resolved.data as Interview;
            setInterview(interviewData);
-           setInterviewTitle(interviewData.title);
+           setInterviewTitle(interviewData.title || 'Job Interview');
            const rateLimitStatus = await loadCompanyRateLimitStatus();
            if (isRateLimitReached(rateLimitStatus, 'interviews')) {
              setIsRateLimited(true);

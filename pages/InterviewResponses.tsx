@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { collection, query, onSnapshot, orderBy, doc, getDoc, runTransaction, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { resolveJobOrInterviewDocument } from '../services/jobResolutionService';
 import { InterviewSubmission } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
@@ -33,10 +34,10 @@ const InterviewResponses: React.FC = () => {
 
   useEffect(() => {
     if (!interviewId) return;
-    getDoc(doc(db, 'interviews', interviewId)).then(snap => {
-      if (snap.exists()) {
-        setGlobalExpiry(snap.data().clientAccessExpiresAt || null);
-        setInterviewTitle(snap.data().title || 'Interview Responses');
+    resolveJobOrInterviewDocument(interviewId).then(resolved => {
+      if (resolved && resolved.data) {
+        setGlobalExpiry(resolved.data.clientAccessExpiresAt || null);
+        setInterviewTitle(resolved.data.title || 'Interview Responses');
       }
     }).catch(err => console.error("Error loading interview details:", err));
   }, [interviewId]);
