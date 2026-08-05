@@ -1,4 +1,4 @@
-import React, { useState, useId } from 'react';
+import React, { useState } from 'react';
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
 
 interface LocationCityInputProps {
@@ -14,7 +14,6 @@ export const LocationCityInput: React.FC<LocationCityInputProps> = ({
   placeholder = "Select or search city (e.g. Nashik, Pune, Mumbai...)",
   className = "w-full h-9 rounded-[6px] border border-white/[0.11] bg-[#111] px-3 text-white outline-none focus:border-white/30 text-xs"
 }) => {
-  const listId = useId();
   const [isOpen, setIsOpen] = useState(false);
 
   const filteredCities = value.trim()
@@ -28,7 +27,6 @@ export const LocationCityInput: React.FC<LocationCityInputProps> = ({
       <div className="relative flex items-center">
         <input
           type="text"
-          list={listId}
           value={value}
           onChange={(e) => {
             onChange(e.target.value);
@@ -50,12 +48,6 @@ export const LocationCityInput: React.FC<LocationCityInputProps> = ({
           <i className={`fas fa-chevron-down text-xs transition-transform ${isOpen ? 'rotate-180' : ''}`}></i>
         </button>
       </div>
-
-      <datalist id={listId}>
-        {MAHARASHTRA_CITIES.map(city => (
-          <option key={city} value={city} />
-        ))}
-      </datalist>
 
       {/* Floating suggestion dropdown list (shows all cities on focus/click even if value is empty) */}
       {isOpen && filteredCities.length > 0 && (
