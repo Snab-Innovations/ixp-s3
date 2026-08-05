@@ -729,30 +729,39 @@ export const saveResumeDumpCandidate = async ({
 }) => {
   if (!recruiterUID) throw new Error('Recruiter ownership is required to save a resume.');
 
+  const rawLocation = (profile.location || (profile as any).city || '').trim();
+  const isErroneousLocation = rawLocation.toLowerCase().endsWith('.pdf') || 
+                              rawLocation.toLowerCase().endsWith('.docx') || 
+                              rawLocation.toLowerCase().endsWith('.doc') || 
+                              rawLocation.toLowerCase().includes('private limited') || 
+                              rawLocation.toLowerCase().includes('pvt ltd') || 
+                              rawLocation.toLowerCase().includes('limited');
+
+  const cleanLocationStr = isErroneousLocation ? '' : rawLocation;
+
   const normalizedProfile: ParsedResumeProfile = {
     ...profile,
     email: normalizeResumeEmail(profile.email),
     phone: formatExtractedPhone(profile.phone),
+    location: cleanLocationStr || profile.location || '',
   };
 
-  // Candidates are unauthenticated and cannot query/read the dump, so use a stable
-  // identity id and upsert. Recruiters can resolve legacy duplicates and clean them up.
-  let candidateId: string;
-  let duplicateIds: string[] = [];
-  let existingCreatedAt: unknown;
+  // Lookup existing candidate doc by email/phone so updates (e.g. city/location entered in interview) auto-overwrite existing record
+  const resolved = await resolveResumeDumpCandidateId(recruiterUID, normalizedProfile, fileName).catch(() => ({
+    candidateId: `${safeDocumentKey(recruiterUID)}_${buildResumeDumpIdentityKey(normalizedProfile, fileName)}`,
+    alreadyExists: false,
+    duplicateIds: [] as string[],
+    createdAt: undefined,
+  }));
 
-  if (source === 'candidate_interview') {
-    candidateId = `${safeDocumentKey(recruiterUID)}_${buildResumeDumpIdentityKey(normalizedProfile, fileName)}`;
-  } else {
-    const resolved = await resolveResumeDumpCandidateId(recruiterUID, normalizedProfile, fileName);
-    candidateId = resolved.candidateId;
-    duplicateIds = resolved.duplicateIds;
-    existingCreatedAt = resolved.createdAt;
-  }
+  const candidateId = resolved.candidateId;
+  const duplicateIds = resolved.duplicateIds;
+  const existingCreatedAt = resolved.createdAt;
 
   const candidateRef = doc(db, 'resumeDumpCandidates', candidateId);
+  const dumpRef = doc(db, 'resumeDump', candidateId);
 
-  await setDoc(candidateRef, {
+  const payload = {
     ...normalizedProfile,
     recruiterUID,
     teamId: teamId || recruiterUID,
@@ -768,7 +777,10 @@ export const saveResumeDumpCandidate = async ({
     sourceJobTitle,
     ...(existingCreatedAt ? { createdAt: existingCreatedAt } : { createdAt: serverTimestamp() }),
     updatedAt: serverTimestamp(),
-  }, { merge: true });
+  };
+
+  await setDoc(candidateRef, payload, { merge: true });
+  await setDoc(dumpRef, payload, { merge: true }).catch(() => null);
 
   if (duplicateIds.length > 0) {
     await Promise.all(duplicateIds.map(async (duplicateId) => {

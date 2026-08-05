@@ -904,16 +904,16 @@ const InterviewReport: React.FC = () => {
             
             <div className={`space-y-6 flex-1 w-full ${isCompareMode ? 'xl:w-1/2' : ''}`}>
                 {/* Header & Candidate Info */}
-                <div className="bg-white dark:bg-white/5 rounded-2xl p-6 border border-gray-200 dark:border-white/10 shadow-sm flex flex-col md:flex-row gap-6 justify-between items-center">
+                <div className={`bg-white dark:bg-white/5 rounded-2xl p-5 md:p-6 border border-gray-200 dark:border-white/10 shadow-sm flex flex-col ${isCompareMode ? 'gap-4' : 'lg:flex-row gap-6'} justify-between items-start ${isCompareMode ? 'items-start' : 'lg:items-center'}`}>
                 <div>
-                    <h1 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-2">
+                    <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white mb-2">
                         {submission.candidateInfo?.name || 'Candidate'}'s Report
                     </h1>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                        <div className="flex items-center gap-2"><i className="fas fa-envelope"></i> {submission.candidateInfo?.email || 'N/A'}</div>
-                        <div className="flex items-center gap-2"><i className="fas fa-calendar-alt"></i> {submission.submittedAt?.toDate ? submission.submittedAt.toDate().toLocaleString('en-GB') : 'N/A'}</div>
+                    <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                        <div className="flex items-center gap-2"><i className="fas fa-envelope text-gray-400"></i> {submission.candidateInfo?.email || 'N/A'}</div>
+                        <div className="flex items-center gap-2"><i className="fas fa-calendar-alt text-gray-400"></i> {submission.submittedAt?.toDate ? submission.submittedAt.toDate().toLocaleString('en-GB') : 'N/A'}</div>
                         {submission.candidateResumeURL && !submission.candidateResumeURL.startsWith('data:text/plain') && (
-                            <div className="flex items-center gap-2 max-w-xs sm:max-w-sm">
+                            <div className="flex items-center gap-1.5 max-w-xs sm:max-w-sm">
                                 <i className="fas fa-eye text-blue-500"></i> 
                                 <button onClick={() => setIsResumeModalOpen(true)} className="text-blue-500 hover:underline truncate font-medium text-left" title="View Resume Inline">
                                     View Resume {isDocxFile(submission.candidateResumeURL) ? '(Word)' : '(PDF)'}
@@ -921,14 +921,15 @@ const InterviewReport: React.FC = () => {
                             </div>
                         )}
                         {submission.candidateResumeURL?.startsWith('data:text/plain') && (
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                                 <FileText size={14} className="text-blue-500" />
                                 <span className="text-blue-500">Generated Resume Text</span>
                             </div>
                         )}
                     </div>
                 </div>
-                <div className="flex flex-wrap gap-3 items-center justify-end">
+
+                <div className="flex flex-wrap gap-2 sm:gap-2.5 items-center justify-start w-full lg:w-auto lg:justify-end">
                     {isStaff && (
                         <div 
                             onClick={(e) => {
@@ -937,14 +938,14 @@ const InterviewReport: React.FC = () => {
                                     try { input.showPicker(); } catch (err) {}
                                 }
                             }}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-xl shadow-sm text-sm font-semibold transition-all duration-300 border cursor-pointer ${
+                            className={`flex flex-wrap sm:flex-nowrap items-center gap-1.5 px-3 py-1.5 rounded-xl shadow-sm text-xs font-semibold transition-all duration-300 border cursor-pointer ${
                                 submission.clientAccessExpiresAt 
                                     ? 'bg-primary/5 border-primary/30 text-primary focus-within:border-primary/50' 
                                     : 'bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 border-gray-200 dark:border-white/10 focus-within:border-gray-400 dark:focus-within:border-white/30'
                             }`}
                         >
-                            <span className="text-xs font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1.5 whitespace-nowrap">
-                                <Calendar size={14} className={submission.clientAccessExpiresAt ? "text-primary animate-pulse" : "text-gray-400 dark:text-gray-500"} /> Client Access Expires:
+                            <span className="text-xs font-bold text-gray-500 dark:text-gray-400 flex items-center gap-1 whitespace-nowrap">
+                                <Calendar size={13} className={submission.clientAccessExpiresAt ? "text-primary animate-pulse" : "text-gray-400 dark:text-gray-500"} /> Access Expires:
                             </span>
                             <input
                                 type="datetime-local"
@@ -952,7 +953,7 @@ const InterviewReport: React.FC = () => {
                                 onChange={handleSetExpiration}
                                 className="bg-transparent border-none text-xs font-extrabold text-gray-800 dark:text-gray-200 focus:outline-none cursor-pointer focus:ring-0 p-0 text-center hover:opacity-85 transition-opacity"
                                 style={{ 
-                                    minWidth: '160px',
+                                    minWidth: '150px',
                                     colorScheme: isDark ? 'dark' : 'light'
                                 }}
                             />
@@ -962,7 +963,7 @@ const InterviewReport: React.FC = () => {
                                         e.stopPropagation();
                                         handleClearExpiration();
                                     }}
-                                    className="text-[11px] text-red-500 hover:text-red-600 font-bold ml-1.5 hover:underline cursor-pointer border-l border-primary/20 dark:border-white/15 pl-2"
+                                    className="text-[11px] text-red-500 hover:text-red-600 font-bold ml-1 hover:underline cursor-pointer border-l border-primary/20 dark:border-white/15 pl-1.5"
                                     title="Remove expiration limit"
                                 >
                                     Clear
@@ -971,15 +972,26 @@ const InterviewReport: React.FC = () => {
                         </div>
                     )}
                     {submission.candidateResumeURL && !submission.candidateResumeURL.startsWith('data:text/plain') && (
-                        <button onClick={() => setIsCompareMode(!isCompareMode)} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${isCompareMode ? 'bg-primary/10 text-primary border-primary/30' : 'bg-white dark:bg-white/5 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10'}`}>
-                            <FileText size={16} /> {isCompareMode ? 'Exit Compare Mode' : 'Compare Resume'}
+                        <button 
+                            onClick={() => setIsCompareMode(!isCompareMode)} 
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all border shrink-0 ${
+                                isCompareMode 
+                                    ? 'bg-primary/10 text-primary border-primary/30 shadow-sm' 
+                                    : 'bg-white dark:bg-white/5 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10'
+                            }`}
+                        >
+                            <FileText size={15} /> 
+                            <span>{isCompareMode ? 'Exit Compare Mode' : 'Compare Resume'}</span>
                         </button>
                     )}
-                    <button onClick={() => setIsResumeModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">
-                        <User size={16} /> View Profile Data
+                    <button 
+                        onClick={() => setIsResumeModalOpen(true)} 
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-200 rounded-xl text-xs sm:text-sm font-semibold hover:bg-gray-200 dark:hover:bg-white/20 transition-all border border-transparent dark:border-white/10 shrink-0"
+                    >
+                        <User size={15} /> 
+                        <span>View Profile Data</span>
                     </button>
                 </div>
-
             </div>
 
             <div className={`grid grid-cols-1 gap-6 ${isCompareMode ? '' : 'lg:grid-cols-3'}`}>
@@ -1369,14 +1381,24 @@ const InterviewReport: React.FC = () => {
             {/* Sticky Compare Mode Resume Panel (Right Side) */}
             {isCompareMode && submission.candidateResumeURL && !submission.candidateResumeURL.startsWith('data:text/plain') && (
                 <div className="w-full xl:w-1/2 xl:sticky xl:top-24 h-[80vh] xl:h-[calc(100vh-8rem)] rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm bg-white dark:bg-[#111] overflow-hidden flex flex-col">
-                    <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-white/10 bg-gray-50/50 dark:bg-white/5">
+                    <div className="flex flex-wrap justify-between items-center p-3.5 px-4 border-b border-gray-200 dark:border-white/10 bg-gray-50/50 dark:bg-white/5 gap-2">
                         <h3 className="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-2">
                             <FileText size={16} className="text-primary"/> Original Resume {isDocxFile(submission.candidateResumeURL) ? '(Word)' : '(PDF)'}
                         </h3>
-                        <a href={submission.candidateResumeURL} target="_blank" rel="noopener noreferrer" className="text-xs flex items-center gap-1.5 text-primary hover:underline font-medium px-3 py-1 bg-primary/10 rounded-lg ml-auto mr-3">
-                            <i className="fas fa-external-link-alt"></i> Open Full
-                        </a>
-                        <button onClick={() => setIsCompareMode(false)} className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-200 dark:bg-white/10 text-gray-500 hover:text-gray-800 dark:hover:text-white transition-colors">&times;</button>
+                        <div className="flex items-center gap-2 ml-auto">
+                            <button
+                                onClick={() => setIsResumeModalOpen(true)}
+                                className="text-xs font-semibold text-gray-700 dark:text-gray-300 hover:text-primary flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-200/60 dark:bg-white/10 transition-all border border-gray-300/50 dark:border-white/10"
+                            >
+                                <User size={13} /> View Profile Data
+                            </button>
+                            <a href={submission.candidateResumeURL} target="_blank" rel="noopener noreferrer" className="text-xs flex items-center gap-1.5 text-primary hover:underline font-medium px-2.5 py-1 bg-primary/10 rounded-lg border border-primary/20">
+                                <i className="fas fa-external-link-alt"></i> Open Full
+                            </a>
+                            <button onClick={() => setIsCompareMode(false)} className="px-2.5 py-1 flex items-center gap-1 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 text-xs font-bold transition-all border border-red-200 dark:border-red-800" title="Exit Compare Mode">
+                                <i className="fas fa-times"></i> Exit
+                            </button>
+                        </div>
                     </div>
                     <div className="flex-1 w-full bg-gray-100 dark:bg-[#0a0a0a] relative">
                          <div className="absolute inset-0 flex flex-col items-center justify-center z-0 text-gray-400 dark:text-gray-500">
@@ -1399,45 +1421,77 @@ const InterviewReport: React.FC = () => {
                       <button onClick={() => setIsResumeModalOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-white/10 text-gray-500 hover:text-gray-800 dark:hover:text-white transition-colors">&times;</button>
                   </div>
                   <div className="p-6 overflow-y-auto bg-white dark:bg-transparent">
-                      {profileTextData ? (() => {
-                          const nameMatch = profileTextData.match(/Name:\s*(.+)/);
-                          const emailMatch = profileTextData.match(/Email:\s*(.+)/);
-                          const expMatch = profileTextData.match(/Experience:\s*(.+)/);
-                          const skillsMatch = profileTextData.match(/Skills:\s*(.+)/);
-                          
-                          const pName = nameMatch ? nameMatch[1] : 'Unknown';
-                          const pEmail = emailMatch ? emailMatch[1] : 'Unknown';
-                          const pExp = expMatch ? expMatch[1] : '0 Years';
+                      {(() => {
+                          const info = submission.candidateInfo || {};
+                          const nameMatch = profileTextData?.match(/Name:\s*(.+)/);
+                          const emailMatch = profileTextData?.match(/Email:\s*(.+)/);
+                          const expMatch = profileTextData?.match(/Experience:\s*(.+)/);
+                          const skillsMatch = profileTextData?.match(/Skills:\s*(.+)/);
+
+                          // ALWAYS PREFER Candidate Report Info over parsed text
+                          const pName = info.name || (nameMatch ? nameMatch[1] : 'Candidate');
+                          const pEmail = info.email || (emailMatch ? emailMatch[1] : 'N/A');
+                          const pPhone = info.phone || 'N/A';
+                          const pGender = info.gender || 'N/A';
+                          const pCity = info.currentCity || info.nativePlace || 'N/A';
+                          const pExp = info.isFresher
+                              ? 'Fresher (0 Years)'
+                              : (info.totalExperienceYears !== undefined && info.totalExperienceYears !== ''
+                                  ? `${info.totalExperienceYears} Year(s) ${info.totalExperienceMonths || 0} Month(s)`
+                                  : (expMatch ? expMatch[1] : '0 Years'));
+                          const pDesignation = info.designation || 'N/A';
+                          const pCompany = info.currentCompanyName || 'N/A';
+                          const pQualification = info.qualificationBasic || 'N/A';
                           const pSkills = skillsMatch ? skillsMatch[1].split(',').map(s => s.trim()).filter(Boolean) : [];
 
                           return (
                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10 p-6 rounded-2xl border border-blue-100/50 dark:border-blue-800/30 mb-4 shadow-inner relative overflow-hidden">
                                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 dark:bg-blue-400/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-                               <div className="relative z-10 flex items-center justify-between mb-6">
+                               <div className="relative z-10 flex items-center justify-between mb-4">
                                    <p className="text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 flex items-center gap-2 bg-blue-100/50 dark:bg-blue-900/30 py-1.5 px-3 rounded-full w-max">
-                                       <i className="fas fa-magic"></i> Auto-Generated AI Profile
+                                       <i className="fas fa-user-check"></i> Candidate Report Profile (Preferred Data)
                                    </p>
                                </div>
                                
-                               <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center gap-6 mb-8">
-                                   <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white text-3xl font-bold shadow-lg shadow-blue-500/30">
+                               <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center gap-6 mb-6">
+                                   <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white text-3xl font-bold shadow-lg shadow-blue-500/30 shrink-0">
                                        {pName.charAt(0).toUpperCase()}
                                    </div>
                                    <div>
                                        <h4 className="text-2xl font-black text-gray-900 dark:text-white mb-1">{pName}</h4>
-                                       <p className="text-gray-500 dark:text-gray-400 flex items-center gap-2 text-sm"><i className="fas fa-envelope text-blue-500"></i> {pEmail}</p>
+                                       <div className="flex flex-wrap gap-4 text-xs text-gray-600 dark:text-gray-300 font-medium">
+                                          <span><i className="fas fa-envelope text-blue-500 mr-1"></i> {pEmail}</span>
+                                          {pPhone !== 'N/A' && <span><i className="fas fa-phone text-blue-500 mr-1"></i> {pPhone}</span>}
+                                          {pCity !== 'N/A' && <span><i className="fas fa-map-marker-alt text-blue-500 mr-1"></i> {pCity}</span>}
+                                          {pGender !== 'N/A' && <span><i className="fas fa-venus-mars text-blue-500 mr-1"></i> {pGender}</span>}
+                                       </div>
                                    </div>
                                </div>
 
-                               <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-6 bg-white/60 dark:bg-[#111]/60 backdrop-blur-md p-5 rounded-xl border border-white/40 dark:border-white/5">
+                               <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 bg-white/70 dark:bg-[#111]/70 backdrop-blur-md p-5 rounded-xl border border-white/40 dark:border-white/5 text-xs">
                                    <div>
-                                       <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total Experience</p>
-                                       <p className="font-semibold text-gray-800 dark:text-gray-200 text-lg flex items-center gap-2">
+                                       <p className="font-bold text-gray-400 uppercase tracking-wider mb-1">Experience</p>
+                                       <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm flex items-center gap-2">
                                            <i className="fas fa-briefcase text-indigo-500"></i> {pExp}
                                        </p>
                                    </div>
                                    <div>
-                                       <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Top Skills</p>
+                                       <p className="font-bold text-gray-400 uppercase tracking-wider mb-1">Designation & Company</p>
+                                       <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm flex items-center gap-2 truncate">
+                                           <i className="fas fa-building text-blue-500"></i> {pDesignation !== 'N/A' ? pDesignation : 'N/A'} {pCompany !== 'N/A' ? `at ${pCompany}` : ''}
+                                       </p>
+                                   </div>
+                                   <div>
+                                       <p className="font-bold text-gray-400 uppercase tracking-wider mb-1">Qualification</p>
+                                       <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm flex items-center gap-2 truncate">
+                                           <i className="fas fa-graduation-cap text-purple-500"></i> {pQualification}
+                                       </p>
+                                   </div>
+                               </div>
+
+                               {pSkills.length > 0 && (
+                                   <div className="relative z-10 mt-4 bg-white/60 dark:bg-[#111]/60 p-4 rounded-xl border border-white/40 dark:border-white/5">
+                                       <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Skills</p>
                                        <div className="flex flex-wrap gap-2">
                                            {pSkills.map((skill, i) => (
                                                <span key={i} className="px-3 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-bold rounded-lg shadow-sm">
@@ -1446,11 +1500,13 @@ const InterviewReport: React.FC = () => {
                                            ))}
                                        </div>
                                    </div>
-                               </div>
+                               )}
                            </div>
                           );
-                      })() : submission.candidateResumeURL ? (
-                          <div className="flex flex-col gap-3">
+                      })()}
+
+                      {submission.candidateResumeURL && (
+                          <div className="flex flex-col gap-3 mt-4">
                               <div className="flex justify-between items-center px-1">
                                   <h4 className="font-bold text-gray-900 dark:text-white text-sm flex items-center gap-2"><FileText size={16} className="text-primary"/> Original Resume Document</h4>
                                   <a href={submission.candidateResumeURL} target="_blank" rel="noopener noreferrer" className="text-xs flex items-center gap-1.5 text-primary hover:underline font-medium px-3 py-1.5 bg-primary/10 rounded-lg">
@@ -1468,11 +1524,6 @@ const InterviewReport: React.FC = () => {
                                       className="w-full h-full border-none absolute inset-0 z-10 bg-white"
                                   />
                               </div>
-                          </div>
-                      ) : (
-                          <div className="bg-gray-50 dark:bg-white/5 rounded-xl p-6 border border-gray-200 dark:border-white/10">
-                            <h4 className="font-bold text-gray-900 dark:text-white mb-4">Extracted Resume Text</h4>
-                            <pre className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300 font-sans custom-scrollbar overflow-y-auto max-h-[50vh]">{submission.candidateInfo?.resumeText || 'No resume data available.'}</pre>
                           </div>
                       )}
                   </div>
