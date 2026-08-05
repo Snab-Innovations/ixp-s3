@@ -185,7 +185,7 @@ const RecruiterTests: React.FC = () => {
   }, [tests, submissionsMap]);
 
   return (
-    <div className="-mx-4 -my-8 flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-hidden bg-[#000] text-white sm:-mx-6 lg:-mx-8">
+    <div className="flex h-[calc(100vh-3.5rem)] min-h-0 flex-col overflow-y-hidden bg-[#000] text-white">
       <section className="shrink-0 border-b border-white/[0.11] bg-[#000]">
         <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-7 xl:flex-row xl:items-start xl:justify-between">
           <div>
@@ -257,13 +257,13 @@ const RecruiterTests: React.FC = () => {
               ))}
             </div>
             {(searchQuery || typeFilter !== 'All') && (
-                  <button
-                    type="button"
-                    onClick={() => { setSearchQuery(''); setTypeFilter('All'); }}
-                    className="geist-caption inline-flex h-8 items-center justify-center rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-3 font-medium text-[#ff8f8f] transition-colors hover:bg-[#260b0b]"
-                  >
-                    Clear
-                  </button>
+              <button
+                type="button"
+                onClick={() => { setSearchQuery(''); setTypeFilter('All'); }}
+                className="geist-caption inline-flex h-8 items-center justify-center rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-3 font-medium text-[#ff8f8f] transition-colors hover:bg-[#260b0b]"
+              >
+                Clear
+              </button>
             )}
           </div>
         </div>
