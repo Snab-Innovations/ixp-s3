@@ -500,6 +500,7 @@ const ResumeDump: React.FC = () => {
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
+  const [copiedUploadPortalLink, setCopiedUploadPortalLink] = useState(false);
   const [inviteModalEducation, setInviteModalEducation] = useState<string>('B.Tech / B.E. (Bachelor of Engineering / Technology)');
 
   // Add candidate with optional text modal state
@@ -1359,29 +1360,44 @@ const ResumeDump: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[240px] flex-1 sm:flex-initial">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <div className="relative w-full sm:w-[220px] lg:w-[260px]">
               <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[#8f8f8f]" strokeWidth={1.8} />
               <input
                 type="text"
-                placeholder="Search by name, email, skill, or degree..."
+                placeholder="Search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-[#050505] pl-9 pr-3 text-white outline-none placeholder:text-[#6b7280] focus:border-white/[0.24]"
               />
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedUploadFiles([]);
-                setUploadModalExtraInfo('');
-                setIsUploadModalOpen(true);
-              }}
-              className="geist-caption inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-[6px] border border-white bg-white px-3.5 font-semibold text-black transition-colors hover:bg-[#eaeaea]"
-            >
-              <UploadCloud size={14} strokeWidth={1.8} />
-              Upload resumes
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/#/upload-resume`);
+                  setCopiedUploadPortalLink(true);
+                  setTimeout(() => setCopiedUploadPortalLink(false), 2500);
+                }}
+                className="geist-caption inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-[6px] border border-white/[0.16] bg-white/[0.04] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.08] hover:text-white"
+                title="Copy the public candidate upload link"
+              >
+                <Copy size={14} strokeWidth={1.8} />
+                {copiedUploadPortalLink ? 'Copied!' : 'Candidate Upload Link'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedUploadFiles([]);
+                  setUploadModalExtraInfo('');
+                  setIsUploadModalOpen(true);
+                }}
+                className="geist-caption inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-[6px] border border-white bg-white px-3.5 font-semibold text-black transition-colors hover:bg-[#eaeaea]"
+              >
+                <UploadCloud size={14} strokeWidth={1.8} />
+                Upload resumes
+              </button>
+            </div>
           </div>
         </div>
       </section>

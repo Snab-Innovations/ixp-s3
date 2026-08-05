@@ -6,7 +6,6 @@ import {
   Archive,
   Users,
   Video,
-  Upload,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -45,13 +44,6 @@ const recruiterNavGroups: NavGroupData[] = [
           path === '/recruiter/interviews' ||
           path.startsWith('/recruiter/interview/responses') ||
           (path.startsWith('/recruiter/interview/') && !path.startsWith('/recruiter/interview/create')),
-      },
-      {
-        id: 'upload-candidate-cv',
-        title: 'Upload Candidate CV',
-        icon: Upload,
-        href: '/upload-resume',
-        match: (path) => path === '/upload-resume',
       },
       {
         id: 'resume-dump',
