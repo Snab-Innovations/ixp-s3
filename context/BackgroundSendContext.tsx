@@ -151,7 +151,7 @@ export const BackgroundSendProvider: React.FC<{ children: React.ReactNode }> = (
           opts.interviewLink,
           opts.accessCode,
           !!opts.isReminder,
-          opts.options
+          opts.options as any
         );
 
         emailSent = true;

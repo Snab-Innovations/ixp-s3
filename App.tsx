@@ -5,6 +5,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { BackgroundSendProvider } from './context/BackgroundSendContext';
 import { MessageBoxProvider } from './components/MessageBox';
 import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
 import AuthPage from './pages/Auth';
 import RecruiterDashboard, { RecruiterDashboardSkeleton } from './pages/RecruiterDashboard';
 import InterviewWizard from './pages/Interview';
@@ -52,6 +53,7 @@ import ClientView from './pages/ClientView';
 import ActiveJobsPage from './pages/ActiveJobs';
 import RecruiterAllJobs from './pages/RecruiterAllJobs';
 import PublicJobSeekerUpload from './pages/PublicJobSeekerUpload';
+import RecruiterTemplatesPage from './pages/RecruiterTemplates';
 
 const DefaultRouteLoader = () => (
   <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
@@ -113,7 +115,8 @@ const App: React.FC = () => {
         <AuthProvider>
           <BackgroundSendProvider>
             <HashRouter>
-            <Routes>
+              <ErrorBoundary>
+                <Routes>
             {/* Public Routes (No Layout) */}
             <Route path="/" element={<HomeRoute />} />
             <Route path="auth" element={<AuthPage />} />
@@ -254,9 +257,9 @@ const App: React.FC = () => {
                 <Routes>
                   {/* Recruiter Routes */}
                   <Route path="recruiter/jobs" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterDashboardSkeleton />}><RecruiterDashboard /></ProtectedRoute>} />
-                  <Route path="recruiter/all-jobs" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterDashboardSkeleton />}><RecruiterAllJobs /></ProtectedRoute>} />
-                  <Route path="recruiter/interviews" element={<Navigate to="/recruiter/all-jobs" replace />} />
-
+                  <Route path="recruiter/all-jobs" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><RecruiterAllJobs /></ProtectedRoute>} />
+                  <Route path="recruiter/interviews" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><RecruiterInterviews /></ProtectedRoute>} />
+                  <Route path="recruiter/job/:jobId/edit" element={<ProtectedRoute role="recruiter"><EditJob /></ProtectedRoute>} />
                   <Route path="recruiter/invites" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><InvitedCandidates /></ProtectedRoute>} />
                   <Route path="recruiter/resume-dump" element={<ProtectedRoute role="recruiter" loadingFallback={<ResumeDumpSkeleton />}><ResumeDump /></ProtectedRoute>} />
                   <Route path="recruiter/interview/:interviewId" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewOverviewSkeleton />}><InterviewOverview /></ProtectedRoute>} />
@@ -269,6 +272,7 @@ const App: React.FC = () => {
                   <Route path="recruiter/tests" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><RecruiterTests /></ProtectedRoute>} />
                   <Route path="recruiter/tests/create" element={<ProtectedRoute role="recruiter" loadingFallback={<CreateInterviewSkeleton />}><CreateTest /></ProtectedRoute>} />
                   <Route path="recruiter/tests/:testId/results" element={<ProtectedRoute role="recruiter" loadingFallback={<InterviewResponsesSkeleton />}><TestResults /></ProtectedRoute>} />
+                  <Route path="recruiter/templates" element={<ProtectedRoute role="recruiter"><RecruiterTemplatesPage /></ProtectedRoute>} />
                   
                   {/* Shared Routes */}
                   <Route path="profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
@@ -279,6 +283,7 @@ const App: React.FC = () => {
               </Layout>
             } />
             </Routes>
+            </ErrorBoundary>
           </HashRouter>
         </BackgroundSendProvider>
         </AuthProvider>

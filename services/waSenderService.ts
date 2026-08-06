@@ -2,6 +2,7 @@
 // Uses WhatsApp Task Manager REST API (https://whatsapp-task-manager-ai4d.onrender.com/api/v1/send-message)
 
 import { formatExperienceDisplay } from './sesService';
+import { renderTemplateText, getRecruiterTemplates, WhatsAppTemplateConfig, DEFAULT_JOB_DETAILS_FIELDS, DEFAULT_JOB_DETAILS_ITEMS } from './templateService';
 
 const WHATSAPP_API_URL = import.meta.env.VITE_WHATSAPP_API_URL;
 
@@ -76,6 +77,8 @@ export interface WhatsAppInviteOptions {
   recruiterPhone?: string;
   whatsappSessionId?: string;
   whatsappSessionPasscode?: string;
+  recruiterUid?: string;
+  customTemplate?: WhatsAppTemplateConfig;
 }
 
 /**
@@ -207,56 +210,89 @@ export function buildWhatsAppInviteText(params: {
 }): string {
   const { candidateName = 'Candidate', jobTitle, interviewLink, accessCode, isReminder = false, options } = params;
 
-  const genderStr = options?.gender ? `, ${options.gender}` : '';
-  const postDisplay = `*${jobTitle}${genderStr}*`;
-  const locationDisplay = options?.location || 'As specified in Job Description';
-  const qualificationDisplay = options?.qualification || options?.education || 'As per Job Description';
-  const expDisplay = formatExperienceDisplay(options);
-  const salaryDisplay = options?.salary || options?.salaryRange || 'Competitive / As per Job Description';
-  const empTypeLine = options?.employmentType ? `\n• 💼 *Employment:* ${options.employmentType}` : '';
-  const customLines = options?.customFields && options.customFields.length > 0
-    ? '\n' + options.customFields.map(cf => `• 🔹 *${cf.key}:* ${cf.value}`).join('\n')
-    : '';
+  const context: Record<string, string> = {
+    candidate_name: candidateName,
+    job_title: jobTitle,
+    company_name: 'Dsource',
+    interview_link: interviewLink,
+    access_code: accessCode,
+    location: options?.location || 'As specified in Job Description',
+    qualification: options?.qualification || options?.education || 'As per Job Description',
+    experience: formatExperienceDisplay(options),
+    salary: options?.salary || options?.salaryRange || 'Competitive / As per Job Description',
+    employment_type: options?.employmentType || 'Full Time',
+    recruiter_name: options?.recruiterName || 'HR Recruiting Team',
+    recruiter_phone: options?.recruiterPhone || '9762588623 / 8484888632',
+    recruiter_email: 'noreply@interviewxpert.in',
+    support_phone: '9762588623 / 8484888632'
+  };
+
+  const custom = options?.customTemplate;
+
+  const headline = custom?.headline
+    ? renderTemplateText(custom.headline, context)
+    : (isReminder ? `⏳ *PENDING INTERVIEW REMINDER*` : `💼 *OFFICIAL INTERVIEW INVITATION*`);
+
+  const body = custom?.body
+    ? renderTemplateText(custom.body, context)
+    : (isReminder
+        ? `Dear *${candidateName}*,\n\nThis is a polite reminder to complete your AI video interview assessment for the post of *${jobTitle}* at *Dsource*.`
+        : `Dear *${candidateName}*,\n\nWe are pleased to invite you to complete an AI video interview assessment for the post of *${jobTitle}* at *Dsource*.`);
+
+  const showJobDetails = custom ? custom.showJobDetails !== false : true;
+  const showCredentials = custom ? custom.showCredentials !== false : true;
+  const showRecruiterContact = custom ? custom.showRecruiterContact !== false : true;
+
+  const items = custom?.jobDetailItems && custom.jobDetailItems.length > 0
+    ? custom.jobDetailItems
+    : DEFAULT_JOB_DETAILS_ITEMS;
+
+  const jobDetailsLines: string[] = items
+    .filter(item => item.enabled !== false)
+    .map(item => {
+      let val = renderTemplateText(item.value, context);
+      if (item.id === 'customFields') {
+        if (options?.customFields && options.customFields.length > 0) {
+          return options.customFields.map(cf => `• 🔹 *${cf.key}:* ${cf.value}`).join('\n');
+        }
+        return '';
+      }
+      if (!val) return '';
+      return `• ${item.icon || '🔹'} *${item.label}:* ${val}`;
+    })
+    .filter(Boolean);
+
+  const jobDetailsSection = showJobDetails && jobDetailsLines.length > 0 ? `\n\n📌 *JOB REQUIREMENT DETAILS:*\n${jobDetailsLines.join('\n')}` : '';
+
+  const credentialsSection = showCredentials ? `\n\n🔐 *YOUR ACCESS CREDENTIALS:*
+• 🔑 *Access Code:* *${accessCode}*
+• 🌐 *Interview Link:* ${interviewLink}` : '';
 
   const recruiterName = options?.recruiterName || 'Recruiting Team';
   const recruiterPhone = options?.recruiterPhone || '9762588623 / 8484888632';
 
-  const headline = isReminder
-    ? `⏳ *PENDING INTERVIEW REMINDER*`
-    : `💼 *OFFICIAL INTERVIEW INVITATION*`;
+  const recruiterSection = showRecruiterContact ? `\n\n👤 *RECRUITER / CONTACT PERSON:*
+• 👤 *Contact Person:* *${recruiterName}*
+• 📞 *Mobile / Contact:* *${recruiterPhone}*` : '';
 
+  const instructionsText = custom?.instructions
+    ? renderTemplateText(custom.instructions, context)
+    : `1. Ensure a working camera & microphone on your phone or laptop.\n2. Use a stable internet connection in a quiet environment.`;
 
-  const intro = isReminder
-    ? `Dear *${candidateName}*,\n\nThis is a polite reminder to complete your AI video interview assessment for the post of *${jobTitle}* at *Dsource*.`
-    : `Dear *${candidateName}*,\n\nWe are pleased to invite you to complete an AI video interview assessment for the post of *${jobTitle}* at *Dsource*.`;
+  const signoffText = custom?.signoff
+    ? renderTemplateText(custom.signoff, context)
+    : `Best regards,\n*Dsource Recruitment System*`;
 
   return `${headline}
 
-${intro}
-
-📌 *JOB REQUIREMENT DETAILS:*
-• 📌 *Post:* ${postDisplay}${empTypeLine}
-• 📍 *Location:* ${locationDisplay}
-• 🎓 *Qualification:* ${qualificationDisplay}
-• 💼 *Experience:* ${expDisplay}
-• 💰 *Salary:* ${salaryDisplay}${customLines}
-
-🔐 *YOUR ACCESS CREDENTIALS:*
-• 🔑 *Access Code:* *${accessCode}*
-• 🌐 *Interview Link:* ${interviewLink}
-
-👤 *RECRUITER / CONTACT PERSON:*
-• 👤 *Contact Person:* *${recruiterName}*
-• 📞 *Mobile / Contact:* *${recruiterPhone}*
+${body}${jobDetailsSection}${credentialsSection}${recruiterSection}
 
 ⚠️ *Instructions:*
-1. Ensure a working camera & microphone on your phone or laptop.
-2. Use a stable internet connection in a quiet environment.
+${instructionsText}
 
 Need Technical Help? Call Dsource Support: 9762588623 / 8484888632
 
-Best regards,
-*Dsource Recruitment System*`;
+${signoffText}`;
 }
 
 /**
@@ -271,7 +307,23 @@ export async function sendInterviewWhatsAppInvite(params: {
   isReminder?: boolean;
   options?: WhatsAppInviteOptions;
 }): Promise<SendWhatsAppResponse> {
-  const messageText = buildWhatsAppInviteText(params);
+  let activeTemplate = params.options?.customTemplate;
+  if (!activeTemplate && params.options?.recruiterUid) {
+    try {
+      const templates = await getRecruiterTemplates(params.options.recruiterUid);
+      activeTemplate = params.isReminder ? templates.whatsappReminder : templates.whatsappInvite;
+    } catch (e) {}
+  }
+
+  const updatedParams = {
+    ...params,
+    options: {
+      ...params.options,
+      customTemplate: activeTemplate
+    }
+  };
+
+  const messageText = buildWhatsAppInviteText(updatedParams);
   return await sendWhatsAppMessage(params.phone, messageText, {
     sessionId: params.options?.whatsappSessionId,
     passcode: params.options?.whatsappSessionPasscode

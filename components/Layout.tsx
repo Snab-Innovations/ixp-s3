@@ -214,6 +214,11 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       <Link to="/profile" className="flex items-center gap-3 w-full px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 hover:text-black dark:hover:text-white transition-colors">
                         <i className="fas fa-user-circle w-5 text-center text-gray-500"></i> View Profile
                       </Link>
+                      {(userProfile?.role === 'recruiter' || userProfile?.role === 'admin') && (
+                        <Link to="/recruiter/templates" className="flex items-center gap-3 w-full px-3 py-2.5 text-sm text-emerald-600 dark:text-emerald-400 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-300 font-medium transition-colors">
+                          <i className="fas fa-sliders w-5 text-center text-emerald-500"></i> Communication Templates
+                        </Link>
+                      )}
                       <button onClick={handleLogout} className="flex items-center gap-3 w-full text-left px-3 py-2.5 text-sm text-red-500 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300 transition-colors">
                         <i className="fa-solid fa-right-from-bracket w-5 text-center"></i> Sign Out
                       </button>
@@ -379,6 +384,12 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{userProfile?.email}</div>
                     </div>
                   </Link>
+
+                  {(userProfile?.role === 'recruiter' || userProfile?.role === 'admin') && (
+                    <Link to="/recruiter/templates" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-3 p-2 rounded-xl text-sm font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors">
+                      <i className="fas fa-sliders w-5 text-center text-emerald-500"></i> Communication Templates
+                    </Link>
+                  )}
 
                   {/* Theme */}
                   <div className="bg-muted p-1 rounded-xl flex">

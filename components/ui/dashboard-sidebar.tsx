@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   BriefcaseBusiness,
   ClipboardList,
@@ -6,6 +5,7 @@ import {
   Archive,
   Users,
   Video,
+  MessageSquare,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 

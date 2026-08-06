@@ -67,6 +67,7 @@ export interface Interview {
     designation?: string;
     whatsappSessionId?: string;
     whatsappSessionPasscode?: string;
+    customTemplates?: any;
   }
 
   export interface AuditLog {
