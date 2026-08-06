@@ -63,7 +63,7 @@ const InterviewVoiceInterview: React.FC = () => {
   }
 
   return (
-    <div className="-mx-4 -my-8 min-h-[calc(100vh-3.5rem)] bg-[#000] text-white sm:-mx-6 lg:-mx-8">
+    <div className="w-full min-h-[calc(100vh-3.5rem)] bg-[#000] text-white">
       <section className="sticky top-14 z-20 border-b border-white/[0.11] bg-[#000]">
         <div className="px-4 py-5 sm:px-6 lg:px-7">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -92,26 +92,42 @@ const InterviewVoiceInterview: React.FC = () => {
         </div>
       </section>
 
-      <main className="px-4 py-6 sm:px-6 lg:px-7">
-        <section className="overflow-hidden border border-white/[0.11] bg-[#030303]">
-          <div className="border-b border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
-            <p className="geist-label uppercase text-[#6b7280]">Voice Interview</p>
-            <h2 className="geist-section-title mt-1 text-white">Voice interview workspace</h2>
-            <p className="geist-small mt-1 text-[#8f8f8f]">This feature is temporarily paused.</p>
-          </div>
-          <div className="flex min-h-[360px] items-center justify-center px-4 py-12 text-center sm:px-6 lg:px-7">
-            <div className="max-w-md">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/[0.11] bg-white/[0.04] text-[#d4d4d4]">
-                <i className="fas fa-microphone text-lg"></i>
-              </div>
-              <h3 className="geist-section-title mt-5 text-white">Under development</h3>
-              <p className="geist-caption mt-2 leading-6 text-[#8f8f8f]">
-                Voice Interview is not available yet. We will enable this workspace when the feature is ready to ship.
-              </p>
+      <div className="border-b border-white/[0.11]">
+        <div className="grid grid-cols-1 divide-y divide-white/[0.11] sm:grid-cols-2 xl:grid-cols-2 xl:divide-x xl:divide-y-0">
+          <div className="min-h-[76px] px-4 py-4 sm:px-6 lg:px-7">
+            <p className="geist-label uppercase text-[#6b7280]">Status</p>
+            <div className="mt-2 flex items-baseline gap-2.5">
+              <span className="geist-metric tabular-nums text-[#f5c76b]">Paused</span>
             </div>
           </div>
-        </section>
-      </main>
+          <div className="min-h-[76px] px-4 py-4 sm:px-6 lg:px-7">
+            <p className="geist-label uppercase text-[#6b7280]">Duration</p>
+            <div className="mt-2 flex items-baseline gap-2.5">
+              <span className="geist-metric tabular-nums text-white">
+                {interview.duration ? `${interview.duration} min` : 'N/A'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section className="overflow-hidden border-b border-white/[0.11] bg-[#030303]">
+        <div className="border-b border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
+          <h2 className="geist-section-title text-white">Voice interview workspace</h2>
+          <p className="geist-small mt-0.5 text-[#8f8f8f]">This feature is temporarily paused.</p>
+        </div>
+        <div className="flex min-h-[360px] items-center justify-center px-4 py-12 text-center sm:px-6 lg:px-7">
+          <div className="max-w-md">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/[0.11] bg-white/[0.04] text-[#d4d4d4]">
+              <i className="fas fa-microphone text-lg"></i>
+            </div>
+            <h3 className="geist-section-title mt-5 text-white">Under development</h3>
+            <p className="geist-caption mt-2 leading-6 text-[#8f8f8f]">
+              Voice Interview is not available yet. We will enable this workspace when the feature is ready to ship.
+            </p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 };
