@@ -9,24 +9,12 @@ import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import { Interview } from '../types';
-import {
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  LineChart,
-  Line,
-} from 'recharts';
 import { ArrowRight, ClipboardList, ListChecks, Video } from 'lucide-react';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { getRateLimitReachedMessage, isRateLimitReached, RateLimitResource } from '../services/rateLimitService';
 import { useMessageBox } from '../components/MessageBox';
-import {
-  ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '../components/ui/line-chart';
 import { RecruiterTeamPanel } from '../components/RecruiterTeamPanel';
+import { StackedTileChart } from '../components/StackedTileChart';
 
 type TimestampLike =
   | {
@@ -129,21 +117,6 @@ const getLocalDayKey = (date: Date) => {
   const day = `${date.getDate()}`.padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
-
-const activityChartConfig = {
-  roles: {
-    label: 'Roles',
-    color: '#7c9cff',
-  },
-  assessments: {
-    label: 'Assessments',
-    color: '#71c38d',
-  },
-  responses: {
-    label: 'Responses',
-    color: '#f4b94f',
-  },
-} satisfies ChartConfig;
 
 const SkeletonBlock = ({
   className = '',
@@ -250,6 +223,7 @@ const RecruiterDashboard: React.FC = () => {
   const [loadingInterviews, setLoadingInterviews] = useState(true);
   const [loadingTests, setLoadingTests] = useState(true);
   const [loadingAttempts, setLoadingAttempts] = useState(true);
+  const [tileTimeRange, setTileTimeRange] = useState<'weekly' | 'monthly' | 'yearly'>('weekly');
 
   useEffect(() => {
     if (!user) {
@@ -526,6 +500,154 @@ const RecruiterDashboard: React.FC = () => {
     (bucket) => bucket.roles > 0 || bucket.assessments > 0 || bucket.responses > 0
   );
 
+  // Tile chart data computation
+  const tileChartData = useMemo(() => {
+    const now = new Date();
+
+    const getDayKey = (date: Date) => {
+      const year = date.getFullYear();
+      const month = `${date.getMonth() + 1}`.padStart(2, '0');
+      const day = `${date.getDate()}`.padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const getMonthKey = (date: Date) => date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+
+    const getYearKey = (date: Date) => `${date.getFullYear()}`;
+
+    const grouped: Record<string, { jobs: number; interviews: number; responses: number }> = {};
+
+    if (tileTimeRange === 'weekly') {
+      const buckets: string[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const day = new Date(now);
+        day.setDate(now.getDate() - i);
+        day.setHours(0, 0, 0, 0);
+        const dayKey = getDayKey(day);
+        if (!buckets.includes(dayKey)) {
+          buckets.push(dayKey);
+          grouped[dayKey] = { jobs: 0, interviews: 0, responses: 0 };
+        }
+      }
+
+      dashboardRoles.forEach((role) => {
+        const millis = toMillis(role.createdAt);
+        if (!millis) return;
+        const date = new Date(millis);
+        date.setHours(0, 0, 0, 0);
+        const dayKey = getDayKey(date);
+        if (grouped[dayKey]) grouped[dayKey].jobs += 1;
+      });
+
+      interviews.forEach((interview) => {
+        const millis = toMillis(interview.createdAt);
+        if (!millis) return;
+        const date = new Date(millis);
+        date.setHours(0, 0, 0, 0);
+        const dayKey = getDayKey(date);
+        if (grouped[dayKey]) grouped[dayKey].interviews += 1;
+      });
+
+      attempts.forEach((attempt) => {
+        const millis = toMillis(attempt.submittedAt);
+        if (!millis) return;
+        const date = new Date(millis);
+        date.setHours(0, 0, 0, 0);
+        const dayKey = getDayKey(date);
+        if (grouped[dayKey]) grouped[dayKey].responses += 1;
+      });
+
+      return buckets.map((b) => ({
+        label: new Date(b + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        jobs: grouped[b]?.jobs || 0,
+        interviews: grouped[b]?.interviews || 0,
+        responses: grouped[b]?.responses || 0,
+      }));
+    }
+
+    if (tileTimeRange === 'monthly') {
+      const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      months.forEach((m) => {
+        grouped[m] = { jobs: 0, interviews: 0, responses: 0 };
+      });
+
+      const currentYear = now.getFullYear();
+
+      dashboardRoles.forEach((role) => {
+        const millis = toMillis(role.createdAt);
+        if (!millis) return;
+        const date = new Date(millis);
+        if (date.getFullYear() !== currentYear) return;
+        const monthKey = getMonthKey(date);
+        if (grouped[monthKey]) grouped[monthKey].jobs += 1;
+      });
+
+      interviews.forEach((interview) => {
+        const millis = toMillis(interview.createdAt);
+        if (!millis) return;
+        const date = new Date(millis);
+        if (date.getFullYear() !== currentYear) return;
+        const monthKey = getMonthKey(date);
+        if (grouped[monthKey]) grouped[monthKey].interviews += 1;
+      });
+
+      attempts.forEach((attempt) => {
+        const millis = toMillis(attempt.submittedAt);
+        if (!millis) return;
+        const date = new Date(millis);
+        if (date.getFullYear() !== currentYear) return;
+        const monthKey = getMonthKey(date);
+        if (grouped[monthKey]) grouped[monthKey].responses += 1;
+      });
+
+      return months.map((m) => ({
+        label: m,
+        jobs: grouped[m]?.jobs || 0,
+        interviews: grouped[m]?.interviews || 0,
+        responses: grouped[m]?.responses || 0,
+      }));
+    }
+
+    // Yearly
+    const years: string[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const year = now.getFullYear() - i;
+      years.push(String(year));
+      grouped[String(year)] = { jobs: 0, interviews: 0, responses: 0 };
+    }
+
+    dashboardRoles.forEach((role) => {
+      const millis = toMillis(role.createdAt);
+      if (!millis) return;
+      const date = new Date(millis);
+      const yearKey = getYearKey(date);
+      if (grouped[yearKey]) grouped[yearKey].jobs += 1;
+    });
+
+    interviews.forEach((interview) => {
+      const millis = toMillis(interview.createdAt);
+      if (!millis) return;
+      const date = new Date(millis);
+      const yearKey = getYearKey(date);
+      if (grouped[yearKey]) grouped[yearKey].interviews += 1;
+    });
+
+    attempts.forEach((attempt) => {
+      const millis = toMillis(attempt.submittedAt);
+      if (!millis) return;
+      const date = new Date(millis);
+      const yearKey = getYearKey(date);
+      if (grouped[yearKey]) grouped[yearKey].responses += 1;
+    });
+
+    return years.map((y) => ({
+      label: y,
+      jobs: grouped[y]?.jobs || 0,
+      interviews: grouped[y]?.interviews || 0,
+      responses: grouped[y]?.responses || 0,
+    }));
+  }, [attempts, dashboardRoles, interviews, tileTimeRange]);
+
   const loading = loadingJobs || loadingInterviews || loadingTests || loadingAttempts;
 
   const getRoleStatus = (role: DashboardRoleEntry) => {
@@ -642,83 +764,13 @@ const RecruiterDashboard: React.FC = () => {
       <section className="grid grid-cols-1 border-b border-white/[0.11] lg:grid-cols-[minmax(0,2fr)_1px_minmax(260px,0.84fr)]">
         <div className="px-4 py-5 sm:px-6 lg:pl-7 lg:pr-8">
           <div className="flex h-full min-h-[276px] flex-col">
-            <div className="mb-3 text-left">
-              <h3 className="geist-section-title text-white">Recruitment Activity</h3>
-              <p className="geist-small mt-0.5 text-[#8f8f8f]">
-                Live graph tracking roles created over time.
-              </p>
-            </div>
             <div className="min-h-[210px] flex-1 w-full">
               {hasActivity ? (
-                <div className="flex h-full min-h-[210px] flex-col">
-                  <ChartContainer config={activityChartConfig} className="h-[174px] w-full flex-none aspect-auto">
-                  <LineChart data={activityData} margin={{ left: -18, right: 10, top: 8, bottom: 0 }}>
-                    <CartesianGrid
-                      vertical={false}
-                      strokeDasharray="4 8"
-                    />
-                    <XAxis
-                      dataKey="date"
-                      tickMargin={8}
-                      tick={{ fill: '#8f8f8f', fontSize: 12, fontFamily: 'var(--font-geist-mono, var(--font-mono))' }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      width={30}
-                      tick={{ fill: '#8f8f8f', fontSize: 12, fontFamily: 'var(--font-geist-mono, var(--font-mono))' }}
-                      tickLine={false}
-                      axisLine={false}
-                      allowDecimals={false}
-                    />
-                    <ChartTooltip
-                      cursor={false}
-                      content={<ChartTooltipContent hideLabel />}
-                    />
-                    <Line
-                      isAnimationActive={false}
-                      type="monotone"
-                      dataKey="roles"
-                      stroke="var(--color-roles)"
-                      strokeWidth={2}
-                      strokeDasharray="4 4"
-                      dot={false}
-                      activeDot={{ r: 3, strokeWidth: 0 }}
-                    />
-                    <Line
-                      isAnimationActive={false}
-                      type="monotone"
-                      dataKey="assessments"
-                      stroke="var(--color-assessments)"
-                      strokeWidth={2}
-                      strokeDasharray="4 4"
-                      dot={false}
-                      activeDot={{ r: 3, strokeWidth: 0 }}
-                    />
-                    <Line
-                      isAnimationActive={false}
-                      type="monotone"
-                      dataKey="responses"
-                      stroke="var(--color-responses)"
-                      strokeWidth={2}
-                      strokeDasharray="4 4"
-                      dot={false}
-                      activeDot={{ r: 3, strokeWidth: 0 }}
-                    />
-                  </LineChart>
-                  </ChartContainer>
-                  <div className="geist-small mt-3 flex flex-wrap items-center gap-4 text-[#8f8f8f]">
-                    {Object.entries(activityChartConfig).map(([key, item]) => (
-                      <span key={key} className="inline-flex items-center gap-1.5">
-                        <span
-                          className="h-2 w-2 rounded-[2px]"
-                          style={{ backgroundColor: item.color }}
-                        />
-                        {item.label}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                <StackedTileChart
+                  data={tileChartData}
+                  timeRange={tileTimeRange}
+                  onTimeRangeChange={setTileTimeRange}
+                />
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center px-6">
                   <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] text-[#9ca3af]">
