@@ -221,7 +221,7 @@ const InterviewOverview: React.FC = () => {
         }
 
         messageBox.showSuccess(`Job "${title}" deleted successfully.`);
-        navigate('/recruiter/interviews');
+        navigate('/recruiter/all-jobs');
       } catch (error) {
         console.error('Error deleting interview:', error);
         messageBox.showError('Error deleting interview');
@@ -237,8 +237,8 @@ const InterviewOverview: React.FC = () => {
     return (
       <div className="mx-auto max-w-3xl p-8 text-center">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Interview not found</h1>
-        <Link to="/recruiter/interviews" className="mt-4 inline-flex text-sm font-bold text-primary hover:underline">
-          Back to interviews
+        <Link to="/recruiter/all-jobs" className="mt-4 inline-flex text-sm font-bold text-primary hover:underline">
+          Back to jobs
         </Link>
       </div>
     );

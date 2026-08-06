@@ -403,11 +403,11 @@ const InterviewResponses: React.FC = () => {
           <div className="min-w-0">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <Link
-                to="/recruiter/interviews"
+                to="/recruiter/all-jobs"
                 className="geist-caption inline-flex h-8 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
               >
                 <i className="fas fa-arrow-left text-[11px]"></i>
-                Back to interviews
+                Back to jobs
               </Link>
               <span className="geist-label uppercase text-[#9ca3af]">Responses</span>
             </div>

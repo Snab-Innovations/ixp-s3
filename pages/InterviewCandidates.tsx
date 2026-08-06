@@ -976,8 +976,8 @@ const InterviewCandidates: React.FC = () => {
     return (
       <div className="-mx-4 -my-8 flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center bg-[#000] p-8 text-center text-white sm:-mx-6 lg:-mx-8">
         <h1 className="geist-section-title text-white">Interview not found</h1>
-        <Link to="/recruiter/interviews" className="geist-caption mt-4 inline-flex h-8 items-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white">
-          Back to interviews
+        <Link to="/recruiter/all-jobs" className="geist-caption mt-4 inline-flex h-8 items-center rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white">
+          Back to jobs
         </Link>
       </div>
     );
