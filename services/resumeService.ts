@@ -44,6 +44,14 @@ export interface ParsedResumeProfile {
   linkedinUrl: string;
   portfolioUrl: string;
   additionalText?: string;
+  currentSalary?: string;
+  expectedSalary?: string;
+  employmentStatus?: string;
+  isWorking?: boolean;
+  noticePeriod?: string;
+  noticePeriodDays?: string;
+  noticePeriodVal?: string;
+  noticePeriodUnit?: string;
   parsingMethod: 'deterministic' | 'hybrid';
   parserVersion: number;
 }

@@ -155,6 +155,12 @@ export interface InterviewSubmission {
     currentCompanyName?: string;
     designation?: string;
     currentSalary?: string;
+    expectedSalary?: string;
+    employmentStatus?: string;
+    isWorking?: boolean;
+    noticePeriod?: string;
+    noticePeriodVal?: string;
+    noticePeriodUnit?: string;
     noticePeriodDays?: string;
     reasonForJobChange?: string;
     resumeUpdated?: string;

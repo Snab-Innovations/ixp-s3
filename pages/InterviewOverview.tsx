@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, deleteDoc, doc, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { db } from '../services/firebase';
@@ -184,29 +184,43 @@ const InterviewOverview: React.FC = () => {
   }, [interview, responsesCount]);
 
   const canDelete = useMemo(() => {
-    if (!user || !userProfile || !interview) return false;
-    if (
-      userProfile.role === 'subrecruiter' ||
-      userProfile.role === 'team_member' ||
-      Boolean(userProfile.parentRecruiterId) ||
-      Boolean(userProfile.primaryRecruiterUID)
-    ) {
-      return false;
-    }
-    const role = (userProfile.role || '').toLowerCase();
-    return role === 'primary' || role === 'owner' || role === 'admin' || role === 'recruiter';
+    if (!user || !interview) return false;
+    const role = (userProfile?.role || '').toLowerCase();
+    if (role === 'guest') return false;
+    return true;
   }, [user, userProfile, interview]);
 
   const handleDelete = () => {
     if (!interview) return;
     if (!canDelete) {
-      messageBox.showError('Only the main primary recruiter can delete jobs.');
+      messageBox.showError('You do not have permission to delete this job.');
       return;
     }
-    messageBox.showConfirm('Are you sure you want to delete this interview?', async () => {
+    const title = interview.title || 'this interview';
+    messageBox.showConfirm(`Are you sure you want to delete "${title}"?`, async () => {
       try {
-        await deleteDoc(doc(db, 'interviews', interview.id));
-        messageBox.showSuccess('Interview deleted.');
+        await Promise.all([
+          deleteDoc(doc(db, 'interviews', interview.id)).catch(() => {}),
+          deleteDoc(doc(db, 'jobs', interview.id)).catch(() => {})
+        ]);
+
+        const code = interview.accessCode || (interview as any).jobNo || '';
+        if (code) {
+          try {
+            const [jobsSnap, interviewsSnap] = await Promise.all([
+              getDocs(query(collection(db, 'jobs'), where('jobNo', '==', code))),
+              getDocs(query(collection(db, 'interviews'), where('accessCode', '==', code)))
+            ]);
+            await Promise.all([
+              ...jobsSnap.docs.map(d => deleteDoc(doc(db, 'jobs', d.id)).catch(() => {})),
+              ...interviewsSnap.docs.map(d => deleteDoc(doc(db, 'interviews', d.id)).catch(() => {}))
+            ]);
+          } catch (e) {
+            console.warn("Secondary cleanup by code warning:", e);
+          }
+        }
+
+        messageBox.showSuccess(`Job "${title}" deleted successfully.`);
         navigate('/recruiter/interviews');
       } catch (error) {
         console.error('Error deleting interview:', error);

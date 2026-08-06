@@ -172,6 +172,94 @@ app.post('/api/jobs/receive', authenticateApiKey, async (req, res) => {
 });
 
 /**
+ * ── DELETE JOB BY ID OR JOB NO ──
+ * Endpoints: DELETE /api/jobs/:id or POST /api/jobs/delete
+ * Description: Deletes a job/interview from Firestore by ID, jobNo, or accessCode.
+ */
+app.delete('/api/jobs/:id', authenticateApiKey, async (req, res) => {
+  const jobId = req.params.id;
+  if (!jobId) {
+    return res.status(400).json({ success: false, error: "Missing job ID parameter." });
+  }
+
+  try {
+    if (!db) {
+      return res.status(200).json({ success: true, message: "Job deleted (MOCK MODE)." });
+    }
+
+    await Promise.all([
+      db.collection('jobs').doc(jobId).delete().catch(() => {}),
+      db.collection('interviews').doc(jobId).delete().catch(() => {})
+    ]);
+
+    const [jobsByCode, interviewsByCode] = await Promise.all([
+      db.collection('jobs').where('jobNo', '==', jobId).get().catch(() => ({ docs: [] })),
+      db.collection('interviews').where('accessCode', '==', jobId).get().catch(() => ({ docs: [] }))
+    ]);
+
+    const deletePromises = [];
+    jobsByCode.docs.forEach(docSnap => deletePromises.push(docSnap.ref.delete()));
+    interviewsByCode.docs.forEach(docSnap => deletePromises.push(docSnap.ref.delete()));
+    await Promise.all(deletePromises);
+
+    console.log(`[REST API] Job deleted successfully: ${jobId}`);
+    return res.status(200).json({
+      success: true,
+      message: `Job '${jobId}' deleted successfully from Firestore.`
+    });
+  } catch (error) {
+    console.error("Error deleting job via API:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Internal server error deleting job.",
+      details: error.message
+    });
+  }
+});
+
+app.post('/api/jobs/delete', authenticateApiKey, async (req, res) => {
+  const { id, jobId, jobNo, accessCode } = req.body;
+  const targetId = id || jobId || jobNo || accessCode;
+  if (!targetId) {
+    return res.status(400).json({ success: false, error: "Missing 'id', 'jobId', or 'jobNo' in request body." });
+  }
+
+  try {
+    if (!db) {
+      return res.status(200).json({ success: true, message: "Job deleted (MOCK MODE)." });
+    }
+
+    await Promise.all([
+      db.collection('jobs').doc(targetId).delete().catch(() => {}),
+      db.collection('interviews').doc(targetId).delete().catch(() => {})
+    ]);
+
+    const [jobsByCode, interviewsByCode] = await Promise.all([
+      db.collection('jobs').where('jobNo', '==', targetId).get().catch(() => ({ docs: [] })),
+      db.collection('interviews').where('accessCode', '==', targetId).get().catch(() => ({ docs: [] }))
+    ]);
+
+    const deletePromises = [];
+    jobsByCode.docs.forEach(docSnap => deletePromises.push(docSnap.ref.delete()));
+    interviewsByCode.docs.forEach(docSnap => deletePromises.push(docSnap.ref.delete()));
+    await Promise.all(deletePromises);
+
+    console.log(`[REST API] Job deleted successfully via POST /api/jobs/delete: ${targetId}`);
+    return res.status(200).json({
+      success: true,
+      message: `Job '${targetId}' deleted successfully from Firestore.`
+    });
+  } catch (error) {
+    console.error("Error deleting job via API:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Internal server error deleting job.",
+      details: error.message
+    });
+  }
+});
+
+/**
  * ── 2. SEND COMPLETED REPORT TO OTHER DATABASE ──
  * Endpoint: POST /api/reports/dispatch
  * Description: Internally triggered (or externally requested) to send a candidate's evaluation report

@@ -503,10 +503,33 @@ const RecruiterInterviews: React.FC = () => {
   }, [user]);
 
   const handleDelete = (interviewId: string) => {
-    messageBox.showConfirm("Are you sure you want to delete this interview?", async () => {
+    const interviewToDelete = interviews.find(i => i.id === interviewId);
+    const title = interviewToDelete?.title || 'this interview';
+    messageBox.showConfirm(`Are you sure you want to delete "${title}"?`, async () => {
       try {
-        await deleteDoc(doc(db, 'interviews', interviewId));
+        await Promise.all([
+          deleteDoc(doc(db, 'interviews', interviewId)).catch(() => {}),
+          deleteDoc(doc(db, 'jobs', interviewId)).catch(() => {})
+        ]);
+
+        const code = interviewToDelete?.accessCode || (interviewToDelete as any)?.jobNo || '';
+        if (code) {
+          try {
+            const [jobsSnap, interviewsSnap] = await Promise.all([
+              getDocs(query(collection(db, 'jobs'), where('jobNo', '==', code))),
+              getDocs(query(collection(db, 'interviews'), where('accessCode', '==', code)))
+            ]);
+            await Promise.all([
+              ...jobsSnap.docs.map(d => deleteDoc(doc(db, 'jobs', d.id)).catch(() => {})),
+              ...interviewsSnap.docs.map(d => deleteDoc(doc(db, 'interviews', d.id)).catch(() => {}))
+            ]);
+          } catch (e) {
+            console.warn("Secondary cleanup by code warning:", e);
+          }
+        }
+        messageBox.showSuccess(`Interview "${title}" deleted successfully.`);
       } catch (err) {
+        console.error("Error deleting interview:", err);
         messageBox.showError("Error deleting interview");
       }
     });

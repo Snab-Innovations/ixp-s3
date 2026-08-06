@@ -1146,12 +1146,20 @@ const InterviewReport: React.FC = () => {
                                         <span className="text-sm font-bold text-gray-800 dark:text-gray-200 truncate" title={submission.candidateInfo.designation || 'N/A'}>{submission.candidateInfo.designation || 'N/A'}</span>
                                     </div>
                                     <div className="flex flex-col p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
+                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Working Status</span>
+                                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{(submission.candidateInfo as any).employmentStatus || ((submission.candidateInfo as any).isWorking ? 'Currently Working' : 'N/A')}</span>
+                                    </div>
+                                    <div className="flex flex-col p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
                                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Current Salary</span>
                                         <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{submission.candidateInfo.currentSalary || 'N/A'}</span>
                                     </div>
                                     <div className="flex flex-col p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
+                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Expected Salary</span>
+                                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{(submission.candidateInfo as any).expectedSalary || 'N/A'}</span>
+                                    </div>
+                                    <div className="flex flex-col p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
                                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Notice Period</span>
-                                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{submission.candidateInfo.noticePeriodDays ? `${submission.candidateInfo.noticePeriodDays} Days` : 'N/A'}</span>
+                                        <span className="text-sm font-bold text-gray-800 dark:text-gray-200">{(submission.candidateInfo as any).noticePeriod || (submission.candidateInfo.noticePeriodDays ? `${submission.candidateInfo.noticePeriodDays} Days` : 'N/A')}</span>
                                     </div>
                                     <div className="flex flex-col p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
                                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Reason for job change</span>

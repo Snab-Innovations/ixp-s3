@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, CheckCircle2, Upload, FileText, User, Mail, Phone, MapPin, Briefcase, GraduationCap, ArrowRight, RefreshCw, Plus, X, Tag } from 'lucide-react';
+import { Sparkles, CheckCircle2, Upload, FileText, User, Mail, Phone, MapPin, Briefcase, GraduationCap, ArrowRight, RefreshCw, Plus, X, Tag, IndianRupee, Clock, UserCheck, DollarSign } from 'lucide-react';
 import { LocationCityInput } from '../components/LocationCityInput';
 import { EducationInput } from '../components/EducationInput';
 import { parseResumeFileLocally, saveResumeDumpCandidate } from '../services/resumeService';
@@ -127,6 +127,11 @@ export default function PublicJobSeekerUpload() {
   const [candidateLocation, setCandidateLocation] = useState('');
   const [candidateExp, setCandidateExp] = useState('');
   const [candidateEducation, setCandidateEducation] = useState('');
+  const [candidateEmploymentStatus, setCandidateEmploymentStatus] = useState('Working'); // 'Working' | 'Not Working' | 'Serving Notice'
+  const [candidateNoticePeriodVal, setCandidateNoticePeriodVal] = useState('');
+  const [candidateNoticePeriodUnit, setCandidateNoticePeriodUnit] = useState<'Days' | 'Months'>('Days');
+  const [candidateCurrentSalary, setCandidateCurrentSalary] = useState('');
+  const [candidateExpectedSalary, setCandidateExpectedSalary] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [extraBioText, setExtraBioText] = useState('');
 
@@ -226,6 +231,22 @@ export default function PublicJobSeekerUpload() {
       messageBox.showError("Please select or type your Highest Education Qualification.");
       return;
     }
+    if (!candidateEmploymentStatus.trim()) {
+      messageBox.showError("Please select your Current Working / Employment Status.");
+      return;
+    }
+    if (!candidateNoticePeriodVal.trim()) {
+      messageBox.showError("Please enter your Notice Period (in days or months).");
+      return;
+    }
+    if (!candidateCurrentSalary.trim()) {
+      messageBox.showError("Please enter your Current Salary.");
+      return;
+    }
+    if (!candidateExpectedSalary.trim()) {
+      messageBox.showError("Please enter your Expected Salary.");
+      return;
+    }
 
     if (!selectedFile) {
       messageBox.showError("Please attach your Resume file (PDF, DOCX, TXT).");
@@ -256,6 +277,18 @@ export default function PublicJobSeekerUpload() {
 
       const expNum = parseFloat(candidateExp) || 0;
       finalProfile.experienceYears = expNum;
+
+      // Salary & Notice Period & Employment Status fields
+      finalProfile.employmentStatus = candidateEmploymentStatus;
+      finalProfile.isWorking = candidateEmploymentStatus === 'Working' || candidateEmploymentStatus === 'Currently Working';
+      finalProfile.noticePeriodVal = candidateNoticePeriodVal.trim();
+      finalProfile.noticePeriodUnit = candidateNoticePeriodUnit;
+      finalProfile.noticePeriod = `${candidateNoticePeriodVal.trim()} ${candidateNoticePeriodUnit}`;
+      finalProfile.noticePeriodDays = candidateNoticePeriodUnit === 'Months'
+        ? String(Math.round((parseFloat(candidateNoticePeriodVal) || 0) * 30))
+        : candidateNoticePeriodVal.trim();
+      finalProfile.currentSalary = candidateCurrentSalary.trim();
+      finalProfile.expectedSalary = candidateExpectedSalary.trim();
 
       if (!finalProfile.workExperience || finalProfile.workExperience.length === 0) {
         finalProfile.workExperience = [
@@ -297,6 +330,8 @@ export default function PublicJobSeekerUpload() {
         source: 'public_job_seeker_upload'
       });
 
+      const formattedStatus = candidateEmploymentStatus === 'Working' ? 'Currently Working' : candidateEmploymentStatus;
+
       setSubmittedCandidateData({
         name: candidateName.trim(),
         email: candidateEmail.trim().toLowerCase(),
@@ -304,6 +339,10 @@ export default function PublicJobSeekerUpload() {
         location: candidateLocation.trim(),
         experience: expNum,
         education: selectedDegree,
+        employmentStatus: formattedStatus,
+        noticePeriod: `${candidateNoticePeriodVal.trim()} ${candidateNoticePeriodUnit}`,
+        currentSalary: candidateCurrentSalary.trim(),
+        expectedSalary: candidateExpectedSalary.trim(),
         fileName: selectedFile.name,
         skills: extractedSkills
       });
@@ -325,6 +364,11 @@ export default function PublicJobSeekerUpload() {
     setCandidateLocation('');
     setCandidateExp('');
     setCandidateEducation('');
+    setCandidateEmploymentStatus('Working');
+    setCandidateNoticePeriodVal('');
+    setCandidateNoticePeriodUnit('Days');
+    setCandidateCurrentSalary('');
+    setCandidateExpectedSalary('');
     setSelectedFile(null);
     setExtraBioText('');
     setExtractedSkills([]);
@@ -631,6 +675,129 @@ export default function PublicJobSeekerUpload() {
                 </div>
               </div>
 
+              {/* Working Status & Notice Period Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Current Working / Not Working */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5 flex items-center justify-between">
+                    <span>Working Status <span className="text-red-500">*</span></span>
+                    <span className="text-[11px] text-slate-400 font-normal">Currently employed?</span>
+                  </label>
+                  <div className="relative">
+                    <UserCheck className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                    <select
+                      required
+                      value={candidateEmploymentStatus}
+                      onChange={(e) => setCandidateEmploymentStatus(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all font-semibold"
+                    >
+                      <option value="Working">Currently Working (Employed)</option>
+                      <option value="Not Working">Not Working (Unemployed)</option>
+                      <option value="Serving Notice">Serving Notice Period</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Notice Period in Days / Month */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5 flex items-center justify-between">
+                    <span>Notice Period <span className="text-red-500">*</span></span>
+                    <span className="text-[11px] text-slate-400 font-normal">In Days or Months</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Clock className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                      <input
+                        type="number"
+                        min="0"
+                        max="365"
+                        required
+                        value={candidateNoticePeriodVal}
+                        onChange={(e) => setCandidateNoticePeriodVal(e.target.value)}
+                        placeholder="e.g. 30 or 1"
+                        className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
+                      />
+                    </div>
+                    <select
+                      value={candidateNoticePeriodUnit}
+                      onChange={(e) => setCandidateNoticePeriodUnit(e.target.value as 'Days' | 'Months')}
+                      className="px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 font-bold outline-none focus:border-emerald-500 focus:bg-white shrink-0 cursor-pointer"
+                    >
+                      <option value="Days">Days</option>
+                      <option value="Months">Months</option>
+                    </select>
+                  </div>
+                  {/* Quick Select Presets */}
+                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                    <span className="text-[10px] font-semibold text-slate-400">Quick select:</span>
+                    {[
+                      { label: 'Immediate (0d)', val: '0', unit: 'Days' },
+                      { label: '15 Days', val: '15', unit: 'Days' },
+                      { label: '30 Days (1 Mo)', val: '30', unit: 'Days' },
+                      { label: '60 Days (2 Mo)', val: '60', unit: 'Days' },
+                      { label: '90 Days (3 Mo)', val: '90', unit: 'Days' }
+                    ].map((p) => (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => {
+                          setCandidateNoticePeriodVal(p.val);
+                          setCandidateNoticePeriodUnit(p.unit as 'Days' | 'Months');
+                        }}
+                        className={`text-[10px] px-2 py-0.5 rounded-md border font-medium transition-all ${
+                          candidateNoticePeriodVal === p.val && candidateNoticePeriodUnit === p.unit
+                            ? 'bg-emerald-100 border-emerald-400 text-emerald-800 font-bold'
+                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Salary Fields Row: Current Salary & Expected Salary */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Current Salary */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5 flex items-center justify-between">
+                    <span>Current Salary <span className="text-red-500">*</span></span>
+                    <span className="text-[11px] text-slate-400 font-normal">CTC per Annum / Month</span>
+                  </label>
+                  <div className="relative">
+                    <IndianRupee className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      required
+                      value={candidateCurrentSalary}
+                      onChange={(e) => setCandidateCurrentSalary(e.target.value)}
+                      placeholder="e.g. 4.5 LPA or 35,000 / month (0 if fresher)"
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                </div>
+
+                {/* Expected Salary */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5 flex items-center justify-between">
+                    <span>Expected Salary <span className="text-red-500">*</span></span>
+                    <span className="text-[11px] text-slate-400 font-normal">Desired CTC</span>
+                  </label>
+                  <div className="relative">
+                    <IndianRupee className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      required
+                      value={candidateExpectedSalary}
+                      onChange={(e) => setCandidateExpectedSalary(e.target.value)}
+                      placeholder="e.g. 6.5 LPA or 50,000 / month"
+                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Extra Bio / Notes */}
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
@@ -693,6 +860,10 @@ export default function PublicJobSeekerUpload() {
                 <div><strong>Phone:</strong> {submittedCandidateData?.phone}</div>
                 <div><strong>Location:</strong> {submittedCandidateData?.location}</div>
                 <div><strong>Experience:</strong> {submittedCandidateData?.experience} Years</div>
+                <div><strong>Working Status:</strong> {submittedCandidateData?.employmentStatus}</div>
+                <div><strong>Notice Period:</strong> {submittedCandidateData?.noticePeriod}</div>
+                <div><strong>Current Salary:</strong> {submittedCandidateData?.currentSalary}</div>
+                <div><strong>Expected Salary:</strong> {submittedCandidateData?.expectedSalary}</div>
                 <div className="col-span-2"><strong>Highest Education:</strong> {submittedCandidateData?.education}</div>
               </div>
 

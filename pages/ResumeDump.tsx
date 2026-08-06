@@ -13,6 +13,8 @@ import { EducationInput } from '../components/EducationInput';
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
 import { SKILL_OPTIONS } from './Profile';
 import { analyzeResumeText, ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
+import { sendBulkWhatsAppInvites } from '../services/waSenderService';
+import { sendInterviewInvitations } from '../services/sesService';
 import { logTeamActivity } from '../services/auditService';
 import { dedupeCandidatesByIdentity } from '../services/candidateIdentity';
 import { deleteFileFromS3ByUrl } from '../services/s3Service';
@@ -63,6 +65,14 @@ interface ResumeDumpCandidate {
   parsingMethod?: string;
   isHired?: boolean;
   doNotSuggest?: boolean;
+  employmentStatus?: string;
+  isWorking?: boolean;
+  noticePeriod?: string;
+  noticePeriodDays?: string;
+  noticePeriodVal?: string;
+  noticePeriodUnit?: string;
+  currentSalary?: string;
+  expectedSalary?: string;
   createdAt?: TimestampLike;
   updatedAt?: TimestampLike;
 }
@@ -502,6 +512,9 @@ const ResumeDump: React.FC = () => {
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
   const [copiedUploadPortalLink, setCopiedUploadPortalLink] = useState(false);
   const [inviteModalEducation, setInviteModalEducation] = useState<string>('B.Tech / B.E. (Bachelor of Engineering / Technology)');
+  const [inviteDeliveryMode, setInviteDeliveryMode] = useState<'both' | 'whatsapp_api' | 'whatsapp_web' | 'email'>('both');
+  const [isSendingInvites, setIsSendingInvites] = useState(false);
+  const [sendingProgressMsg, setSendingProgressMsg] = useState('');
 
   // Add candidate with optional text modal state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -513,6 +526,9 @@ const ResumeDump: React.FC = () => {
   });
   const [addCandidateFile, setAddCandidateFile] = useState<File | null>(null);
   const [isSavingCandidate, setIsSavingCandidate] = useState(false);
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [editingNotesText, setEditingNotesText] = useState('');
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
 
   // Edit Candidate Info State
   const [editingCandidate, setEditingCandidate] = useState<ResumeDumpCandidate | null>(null);
@@ -526,7 +542,11 @@ const ResumeDump: React.FC = () => {
     skills: '',
     education: '',
     summary: '',
-    additionalText: ''
+    additionalText: '',
+    employmentStatus: 'Working',
+    noticePeriod: '',
+    currentSalary: '',
+    expectedSalary: ''
   });
   const [isSavingCandidateEdit, setIsSavingCandidateEdit] = useState(false);
 
@@ -542,7 +562,11 @@ const ResumeDump: React.FC = () => {
       skills: (candidate.skills || []).join(', '),
       education: (candidate.education || []).map(e => [e.degree, e.institution, e.year].filter(Boolean).join(' - ')).join('; ') || '',
       summary: candidate.summary || '',
-      additionalText: candidate.additionalText || ''
+      additionalText: candidate.additionalText || '',
+      employmentStatus: candidate.employmentStatus || 'Working',
+      noticePeriod: candidate.noticePeriod || (candidate.noticePeriodDays ? `${candidate.noticePeriodDays} Days` : ''),
+      currentSalary: candidate.currentSalary || '',
+      expectedSalary: candidate.expectedSalary || ''
     });
   };
 
@@ -578,6 +602,10 @@ const ResumeDump: React.FC = () => {
         education: eduArray,
         summary: editingCandidateForm.summary.trim(),
         additionalText: editingCandidateForm.additionalText.trim(),
+        employmentStatus: editingCandidateForm.employmentStatus,
+        noticePeriod: editingCandidateForm.noticePeriod.trim(),
+        currentSalary: editingCandidateForm.currentSalary.trim(),
+        expectedSalary: editingCandidateForm.expectedSalary.trim(),
         updatedAt: serverTimestamp(),
       };
 
@@ -1371,7 +1399,7 @@ const ResumeDump: React.FC = () => {
                 className="geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-[#050505] pl-9 pr-3 text-white outline-none placeholder:text-[#6b7280] focus:border-white/[0.24]"
               />
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1.5 rounded-[6px] border border-white/[0.16] bg-white/[0.04] p-0.5">
               <button
                 type="button"
                 onClick={() => {
@@ -1379,12 +1407,26 @@ const ResumeDump: React.FC = () => {
                   setCopiedUploadPortalLink(true);
                   setTimeout(() => setCopiedUploadPortalLink(false), 2500);
                 }}
-                className="geist-caption inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-[6px] border border-white/[0.16] bg-white/[0.04] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.08] hover:text-white"
-                title="Copy the public candidate upload link"
+                className="geist-caption inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-[4px] px-2.5 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.08] hover:text-white"
+                title="Copy public candidate upload link to clipboard"
               >
-                <Copy size={14} strokeWidth={1.8} />
-                {copiedUploadPortalLink ? 'Copied!' : 'Candidate Upload Link'}
+                {copiedUploadPortalLink ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} strokeWidth={1.8} />}
+                <span>{copiedUploadPortalLink ? 'Link Copied!' : 'Copy Upload Link'}</span>
               </button>
+
+              <div className="h-4 w-[1px] bg-white/[0.16]" />
+
+              <a
+                href={`${window.location.origin}/#/upload-resume`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="geist-caption inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-[4px] px-2.5 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.08] hover:text-white"
+                title="Open public candidate upload page in a new tab"
+              >
+                <ExternalLink size={14} strokeWidth={1.8} />
+                <span>Open Link</span>
+              </a>
+            </div>
               <button
                 type="button"
                 onClick={() => {
@@ -1399,8 +1441,7 @@ const ResumeDump: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
       {/* Interactive Naukri-Style Filter Bar */}
       <section className="border-b border-white/[0.11] bg-[#050505] px-4 py-3 sm:px-6 lg:px-7 space-y-3">
@@ -2253,6 +2294,27 @@ const ResumeDump: React.FC = () => {
                   </div>
                 </div>
 
+                {(skillsPanelCandidate.currentSalary || skillsPanelCandidate.expectedSalary || skillsPanelCandidate.noticePeriod || skillsPanelCandidate.noticePeriodDays || skillsPanelCandidate.employmentStatus) && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs p-3 rounded-[8px] bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Status</span>
+                      <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">{skillsPanelCandidate.employmentStatus || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Notice Period</span>
+                      <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">{skillsPanelCandidate.noticePeriod || (skillsPanelCandidate.noticePeriodDays ? `${skillsPanelCandidate.noticePeriodDays} Days` : 'N/A')}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Current Salary</span>
+                      <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">{skillsPanelCandidate.currentSalary || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Expected Salary</span>
+                      <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">{skillsPanelCandidate.expectedSalary || 'N/A'}</span>
+                    </div>
+                  </div>
+                )}
+
                 {skillsPanelCandidate.summary && (
                   <div className="min-w-0">
                     <p className="geist-label uppercase text-gray-500 dark:text-[#6b7280]">Professional Summary</p>
@@ -2376,7 +2438,7 @@ const ResumeDump: React.FC = () => {
       {/* Send Interview Invitations Modal Popup */}
       {isInviteModalOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md" onClick={() => setIsInviteModalOpen(false)}>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md" onClick={() => !isSendingInvites && setIsInviteModalOpen(false)}>
             <div
               className="w-full max-w-lg overflow-hidden rounded-[14px] border border-gray-200 dark:border-white/[0.15] bg-white dark:bg-[#090909] text-slate-900 dark:text-white shadow-2xl animate-in fade-in zoom-in duration-150"
               onClick={(e) => e.stopPropagation()}
@@ -2396,8 +2458,9 @@ const ResumeDump: React.FC = () => {
                 </div>
                 <button
                   type="button"
+                  disabled={isSendingInvites}
                   onClick={() => setIsInviteModalOpen(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.03] text-gray-500 dark:text-[#8f8f8f] transition-colors hover:bg-gray-200 dark:hover:bg-white/[0.06] hover:text-black dark:hover:text-white"
+                  className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-100 dark:bg-white/[0.03] text-gray-500 dark:text-[#8f8f8f] transition-colors hover:bg-gray-200 dark:hover:bg-white/[0.06] hover:text-black dark:hover:text-white disabled:opacity-40"
                 >
                   <span className="text-xl leading-none">&times;</span>
                 </button>
@@ -2436,12 +2499,85 @@ const ResumeDump: React.FC = () => {
                   </select>
                 </div>
 
-                {/* 2. Candidate Selection Summary */}
+                {/* 2. Invite Delivery Method Selector */}
+                <div>
+                  <label className="block geist-label uppercase text-gray-600 dark:text-[#6b7280] mb-1.5 font-medium flex items-center justify-between">
+                    <span>Invite Delivery Method</span>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold uppercase">API + Web Options</span>
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInviteDeliveryMode('both')}
+                      className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                        inviteDeliveryMode === 'both'
+                          ? 'bg-emerald-500/10 border-emerald-500 text-emerald-700 dark:text-emerald-300 font-bold shadow-sm'
+                          : 'bg-white dark:bg-white/[0.03] border-gray-200 dark:border-white/[0.1] text-slate-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/20'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1 text-xs font-bold mb-0.5">
+                        <Sparkles size={12} className="text-emerald-500 shrink-0" />
+                        <span>Both</span>
+                      </div>
+                      <p className="text-[10px] opacity-75 leading-tight">Email + WA API</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setInviteDeliveryMode('whatsapp_api')}
+                      className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                        inviteDeliveryMode === 'whatsapp_api'
+                          ? 'bg-emerald-500/10 border-emerald-500 text-emerald-700 dark:text-emerald-300 font-bold shadow-sm'
+                          : 'bg-white dark:bg-white/[0.03] border-gray-200 dark:border-white/[0.1] text-slate-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/20'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1 text-xs font-bold mb-0.5">
+                        <MessageSquare size={12} className="text-emerald-500 shrink-0" />
+                        <span>WhatsApp API</span>
+                      </div>
+                      <p className="text-[10px] opacity-75 leading-tight">Automated API</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setInviteDeliveryMode('email')}
+                      className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                        inviteDeliveryMode === 'email'
+                          ? 'bg-blue-500/10 border-blue-500 text-blue-700 dark:text-blue-300 font-bold shadow-sm'
+                          : 'bg-white dark:bg-white/[0.03] border-gray-200 dark:border-white/[0.1] text-slate-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/20'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1 text-xs font-bold mb-0.5">
+                        <Mail size={12} className="text-blue-500 shrink-0" />
+                        <span>Email Only</span>
+                      </div>
+                      <p className="text-[10px] opacity-75 leading-tight">SES / Resend</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setInviteDeliveryMode('whatsapp_web')}
+                      className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                        inviteDeliveryMode === 'whatsapp_web'
+                          ? 'bg-amber-500/10 border-amber-500 text-amber-700 dark:text-amber-300 font-bold shadow-sm'
+                          : 'bg-white dark:bg-white/[0.03] border-gray-200 dark:border-white/[0.1] text-slate-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-white/20'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1 text-xs font-bold mb-0.5">
+                        <ExternalLink size={12} className="text-amber-500 shrink-0" />
+                        <span>WhatsApp Web</span>
+                      </div>
+                      <p className="text-[10px] opacity-75 leading-tight">Open Web App</p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Candidate Selection Summary */}
                 <div>
                   <label className="block geist-label uppercase text-gray-600 dark:text-[#6b7280] mb-1.5 font-medium">
                     Selected Candidates ({selectedCandidateIds.length > 0 ? selectedCandidateIds.length : filteredCandidates.length})
                   </label>
-                  <div className="max-h-32 overflow-y-auto rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-50/50 dark:bg-white/[0.025] p-2.5 space-y-1.5">
+                  <div className="max-h-28 overflow-y-auto rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-gray-50/50 dark:bg-white/[0.025] p-2.5 space-y-1.5">
                     {(selectedCandidateIds.length > 0
                       ? candidates.filter(c => selectedCandidateIds.includes(c.id))
                       : filteredCandidates
@@ -2454,7 +2590,15 @@ const ResumeDump: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 3. Generated Invite Details */}
+                {/* Live Progress Banner */}
+                {isSendingInvites && (
+                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 text-xs text-emerald-800 dark:text-emerald-200 font-semibold flex items-center gap-2.5 animate-pulse">
+                    <RotateCcw className="w-4 h-4 animate-spin text-emerald-600 shrink-0" />
+                    <span>{sendingProgressMsg}</span>
+                  </div>
+                )}
+
+                {/* 4. Generated Invite Details */}
                 {activeSelectedJob ? (
                   <div className="p-3.5 rounded-[8px] border border-gray-200 dark:border-white/[0.11] bg-gray-50/50 dark:bg-white/[0.025] space-y-2.5">
                     <div className="flex items-center justify-between geist-caption">
@@ -2498,65 +2642,270 @@ const ResumeDump: React.FC = () => {
               <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 bg-gray-50 dark:bg-[#0d0d0d] border-t border-gray-200 dark:border-white/[0.11]">
                 <button
                   type="button"
+                  disabled={isSendingInvites}
                   onClick={() => setIsInviteModalOpen(false)}
-                  className="geist-caption h-9 px-4 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] hover:bg-gray-100 dark:hover:bg-white/[0.06] font-semibold text-xs text-slate-700 dark:text-[#d4d4d4] transition-colors"
+                  className="geist-caption h-9 px-4 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.03] hover:bg-gray-100 dark:hover:bg-white/[0.06] font-semibold text-xs text-slate-700 dark:text-[#d4d4d4] transition-colors disabled:opacity-40"
                 >
                   Cancel
                 </button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {activeSelectedJob && (
-                    <a
-                      href={`https://wa.me/?text=${encodeURIComponent(
-                        `Hello! You have been invited for an AI Interview for the position of *${activeSelectedJob.title || activeSelectedJob.jobRole}*.\n\n` +
-                        `📌 Access Code: *${activeSelectedJob.accessCode || 'N/A'}*\n` +
-                        `🔗 Interview Link: ${window.location.origin}/#/interview/${activeSelectedJob.id}${activeSelectedJob.accessCode ? `?code=${activeSelectedJob.accessCode}` : ''}\n\n` +
-                        `Please open the link to start your interview!`
-                      )}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border border-emerald-600/40 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-semibold text-xs px-3 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
+                    <button
+                      type="button"
+                      disabled={isSendingInvites}
+                      onClick={() => {
+                        const jobTitle = activeSelectedJob.title || activeSelectedJob.jobRole || 'AI Interview';
+                        const accessCode = activeSelectedJob.accessCode || '';
+                        const interviewLink = `${window.location.origin}/#/interview/${activeSelectedJob.id}${accessCode ? `?code=${accessCode}` : ''}`;
+                        const messageText = `Hello! You have been invited for an AI Interview for the position of *${jobTitle}*.\n\n` +
+                          `📌 Access Code: *${accessCode || 'N/A'}*\n` +
+                          `🔗 Interview Link: ${interviewLink}\n\n` +
+                          `Please open the link to start your interview!`;
+                        window.open(`https://wa.me/?text=${encodeURIComponent(messageText)}`, '_blank');
+                      }}
+                      className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border border-amber-600/40 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 font-semibold text-xs px-3 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors disabled:opacity-50 cursor-pointer"
+                      title="Open pre-filled invitation in WhatsApp Web app"
+                    >
+                      <ExternalLink size={13} />
+                      WhatsApp Web
+                    </button>
+                  )}
+
+                  {activeSelectedJob && (
+                    <button
+                      type="button"
+                      disabled={isSendingInvites}
+                      onClick={async () => {
+                        const targetCandidates = selectedCandidateIds.length > 0
+                          ? candidates.filter(c => selectedCandidateIds.includes(c.id))
+                          : filteredCandidates;
+                        const candidatesWithPhones = targetCandidates
+                          .map(c => ({
+                            phone: (c.phone || (c as any).mobile || (c as any).whatsapp || (c as any).profile?.phone || '').trim(),
+                            name: c.name || c.email?.split('@')[0] || 'Candidate',
+                            email: c.email
+                          }))
+                          .filter(c => !!c.phone);
+
+                        if (candidatesWithPhones.length === 0) {
+                          messageBox.showError("No candidate phone numbers found for WhatsApp API invitation.");
+                          return;
+                        }
+
+                        const jobTitle = activeSelectedJob.title || activeSelectedJob.jobRole || 'AI Interview';
+                        const accessCode = activeSelectedJob.accessCode || '';
+                        const interviewLink = `${window.location.origin}/#/interview/${activeSelectedJob.id}${accessCode ? `?code=${accessCode}` : ''}`;
+
+                        const waOptions = {
+                          recruiterName: userProfile?.name || (user as any)?.displayName || (user as any)?.email || 'Recruiting Team',
+                          recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || '',
+                          whatsappSessionId: (userProfile as any)?.whatsappSessionId || localStorage.getItem('wa_session_id') || '',
+                          whatsappSessionPasscode: (userProfile as any)?.whatsappSessionPasscode || localStorage.getItem('wa_session_passcode') || ''
+                        };
+
+                        setIsSendingInvites(true);
+                        setSendingProgressMsg(`Sending WhatsApp API invites to ${candidatesWithPhones.length} candidate(s)...`);
+                        try {
+                          const waResult = await sendBulkWhatsAppInvites(
+                            candidatesWithPhones,
+                            jobTitle,
+                            interviewLink,
+                            accessCode,
+                            false,
+                            (sentCount, totalCount, currentCand, isWait) => {
+                              if (isWait) {
+                                setSendingProgressMsg(`⏳ Sent WhatsApp to ${currentCand} (${sentCount}/${totalCount}). Delaying 15s anti-spam...`);
+                              } else {
+                                setSendingProgressMsg(`📱 Sending WhatsApp API invite ${sentCount}/${totalCount} to ${currentCand}...`);
+                              }
+                            },
+                            waOptions
+                          );
+
+                          if (waResult.totalSent > 0) {
+                            messageBox.showSuccess(`✅ WhatsApp API invitations sent to ${waResult.totalSent} candidate(s)!`);
+                            setIsInviteModalOpen(false);
+                            setSelectedCandidateIds([]);
+                          } else {
+                            const errReason = waResult.errors.length > 0 ? waResult.errors[0] : 'WhatsApp API session is disconnected or offline.';
+                            messageBox.showError(`WhatsApp API Dispatch Failed (${errReason}). Opening WhatsApp Web fallback...`);
+                            
+                            // Fallback to WhatsApp Web
+                            const firstPhone = candidatesWithPhones[0]?.phone || '';
+                            const msgText = `Hello! You have been invited for an AI Interview for the position of *${jobTitle}*.\n\n` +
+                              `📌 Access Code: *${accessCode || 'N/A'}*\n` +
+                              `🔗 Interview Link: ${interviewLink}\n\n` +
+                              `Please open the link to start your interview!`;
+                            window.open(`https://web.whatsapp.com/send?phone=${firstPhone.replace(/[^0-9]/g, '')}&text=${encodeURIComponent(msgText)}`, '_blank');
+                          }
+                        } catch (err: any) {
+                          messageBox.showError(err?.message || "Failed to send WhatsApp API invites.");
+                        } finally {
+                          setIsSendingInvites(false);
+                          setSendingProgressMsg('');
+                        }
+                      }}
+                      className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border border-emerald-600/40 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-semibold text-xs px-3 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors disabled:opacity-50 cursor-pointer"
+                      title="Send automated WhatsApp invitations via REST API"
                     >
                       <MessageSquare size={13} />
-                      WhatsApp Invite
-                    </a>
+                      WhatsApp API
+                    </button>
                   )}
 
                   <button
                     type="button"
+                    disabled={!activeSelectedJob || isSendingInvites}
                     onClick={async () => {
-                      if (inviteModalEducation.trim()) {
-                        const targetCandidates = selectedCandidateIds.length > 0
-                          ? candidates.filter(c => selectedCandidateIds.includes(c.id))
-                          : filteredCandidates;
+                      const targetCandidates = selectedCandidateIds.length > 0
+                        ? candidates.filter(c => selectedCandidateIds.includes(c.id))
+                        : filteredCandidates;
 
-                        await Promise.all(targetCandidates.map(async (cand) => {
-                          const selectedDegree = inviteModalEducation.trim();
-                          const existingEdu = cand.education || [];
-                          const updatedEdu = [
-                            { degree: selectedDegree, institution: 'Verified Qualification', year: '' },
-                            ...existingEdu.filter(e => e.degree.toLowerCase() !== selectedDegree.toLowerCase())
-                          ];
-                          try {
-                            await updateDoc(doc(db, 'resumeDumpCandidates', cand.id), {
-                              education: updatedEdu,
-                              updatedAt: serverTimestamp(),
-                            });
-                          } catch (err) {
-                            console.error('Failed to update candidate education on invite:', err);
-                          }
-                        }));
+                      if (targetCandidates.length === 0) {
+                        messageBox.showError("No candidates selected to invite.");
+                        return;
                       }
 
-                      messageBox.showSuccess(`✅ Interview invitations generated & copied successfully for ${selectedCandidateIds.length || filteredCandidates.length} candidate(s)!`);
-                      setIsInviteModalOpen(false);
-                      setSelectedCandidateIds([]);
+                      setIsSendingInvites(true);
+                      setSendingProgressMsg("Sending invitations via Both Email & WhatsApp API...");
+
+                      try {
+                        if (inviteModalEducation.trim()) {
+                          await Promise.all(targetCandidates.map(async (cand) => {
+                            const selectedDegree = inviteModalEducation.trim();
+                            const existingEdu = cand.education || [];
+                            const updatedEdu = [
+                              { degree: selectedDegree, institution: 'Verified Qualification', year: '' },
+                              ...existingEdu.filter(e => e.degree.toLowerCase() !== selectedDegree.toLowerCase())
+                            ];
+                            try {
+                              await updateDoc(doc(db, 'resumeDumpCandidates', cand.id), {
+                                education: updatedEdu,
+                                updatedAt: serverTimestamp(),
+                              });
+                            } catch (err) {
+                              console.error('Failed to update candidate education on invite:', err);
+                            }
+                          }));
+                        }
+
+                        const jobTitle = activeSelectedJob.title || activeSelectedJob.jobRole || 'AI Interview';
+                        const accessCode = activeSelectedJob.accessCode || '';
+                        const interviewLink = `${window.location.origin}/#/interview/${activeSelectedJob.id}${accessCode ? `?code=${accessCode}` : ''}`;
+
+                        let waSentCount = 0;
+                        let emailSentCount = 0;
+                        let waErrorMsg = '';
+
+                        if (inviteDeliveryMode === 'whatsapp_web') {
+                          const messageText = `Hello! You have been invited for an AI Interview for the position of *${jobTitle}*.\n\n` +
+                            `📌 Access Code: *${accessCode || 'N/A'}*\n` +
+                            `🔗 Interview Link: ${interviewLink}\n\n` +
+                            `Please open the link to start your interview!`;
+                          window.open(`https://wa.me/?text=${encodeURIComponent(messageText)}`, '_blank');
+                          messageBox.showSuccess('WhatsApp Web app opened with pre-filled message!');
+                          setIsInviteModalOpen(false);
+                          setSelectedCandidateIds([]);
+                          return;
+                        }
+
+                        if (inviteDeliveryMode === 'whatsapp_api' || inviteDeliveryMode === 'both') {
+                          const candidatesWithPhones = targetCandidates
+                            .map(c => ({
+                              phone: (c.phone || (c as any).mobile || (c as any).whatsapp || (c as any).profile?.phone || '').trim(),
+                              name: c.name || c.email?.split('@')[0] || 'Candidate',
+                              email: c.email
+                            }))
+                            .filter(c => !!c.phone);
+
+                          if (candidatesWithPhones.length > 0) {
+                            setSendingProgressMsg(`Sending WhatsApp API invites to ${candidatesWithPhones.length} candidate(s)...`);
+                            const waRes = await sendBulkWhatsAppInvites(
+                              candidatesWithPhones,
+                              jobTitle,
+                              interviewLink,
+                              accessCode,
+                              false,
+                              (sentCount, totalCount, currentCand, isWait) => {
+                                if (isWait) {
+                                  setSendingProgressMsg(`⏳ Sent WhatsApp to ${currentCand} (${sentCount}/${totalCount}). Delaying 15s anti-spam...`);
+                                } else {
+                                  setSendingProgressMsg(`📱 Sending WhatsApp API invite ${sentCount}/${totalCount} to ${currentCand}...`);
+                                }
+                              },
+                              {
+                                recruiterName: userProfile?.name || (user as any)?.displayName || (user as any)?.email || 'Recruiting Team',
+                                recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || '',
+                                whatsappSessionId: (userProfile as any)?.whatsappSessionId || localStorage.getItem('wa_session_id') || '',
+                                whatsappSessionPasscode: (userProfile as any)?.whatsappSessionPasscode || localStorage.getItem('wa_session_passcode') || ''
+                              }
+                            );
+                            waSentCount = waRes.totalSent;
+                            if (waRes.totalSent === 0 && waRes.errors.length > 0) {
+                              waErrorMsg = waRes.errors[0];
+                            }
+                          }
+                        }
+
+                        if (inviteDeliveryMode === 'email' || inviteDeliveryMode === 'both') {
+                          const candidateEmails = targetCandidates
+                            .map(c => c.email)
+                            .filter((e): e is string => !!e && e.includes('@') && !e.endsWith('@whatsapp.local'));
+
+                          if (candidateEmails.length > 0) {
+                            setSendingProgressMsg(`Sending Email invites to ${candidateEmails.length} candidate(s)...`);
+                            const emailRes = await sendInterviewInvitations(
+                              candidateEmails,
+                              jobTitle,
+                              interviewLink,
+                              accessCode,
+                              false,
+                              {
+                                recruiterName: userProfile?.name || (user as any)?.displayName || 'Recruiter'
+                              }
+                            );
+                            if (emailRes.success) {
+                              emailSentCount = emailRes.totalEmails;
+                            }
+                          }
+                        }
+
+                        const sentParts: string[] = [];
+                        if (waSentCount > 0) sentParts.push(`${waSentCount} via WhatsApp API`);
+                        if (emailSentCount > 0) sentParts.push(`${emailSentCount} via Email`);
+
+                        if (sentParts.length > 0) {
+                          messageBox.showSuccess(`✅ Invitations sent successfully: ${sentParts.join(' & ')}!`);
+                        } else if (waErrorMsg) {
+                          messageBox.showError(`WhatsApp API sending issue: ${waErrorMsg}. Use WhatsApp Web button to dispatch manually.`);
+                        } else {
+                          messageBox.showSuccess(`✅ Interview invitations generated & copied for ${targetCandidates.length} candidate(s)!`);
+                        }
+
+                        setIsInviteModalOpen(false);
+                        setSelectedCandidateIds([]);
+                      } catch (err: any) {
+                        console.error('Failed to send invites:', err);
+                        messageBox.showError(err?.message || 'Failed to send invitations.');
+                      } finally {
+                        setIsSendingInvites(false);
+                        setSendingProgressMsg('');
+                      }
                     }}
-                    disabled={!activeSelectedJob}
-                    className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] bg-slate-900 dark:bg-white text-white dark:text-black hover:bg-slate-800 dark:hover:bg-neutral-200 font-semibold text-xs px-4 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] bg-slate-900 dark:bg-white text-white dark:text-black hover:bg-slate-800 dark:hover:bg-neutral-200 font-semibold text-xs px-4 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   >
-                    <Mail size={13} />
-                    Send Invites
+                    {isSendingInvites ? (
+                      <>
+                        <RotateCcw size={13} className="animate-spin" />
+                        <span>Sending Invites...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={13} />
+                        <span>Send Invites ({inviteDeliveryMode === 'both' ? 'Both (Email + WA API)' : inviteDeliveryMode === 'whatsapp_api' ? 'WhatsApp API' : inviteDeliveryMode === 'whatsapp_web' ? 'WhatsApp Web' : 'Email Only'})</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -2913,6 +3262,55 @@ const ResumeDump: React.FC = () => {
                       onChange={(val) => setEditingCandidateForm(prev => ({ ...prev, education: val }))}
                       placeholder="Type or select qualification (e.g. B.Tech CSE, Diploma Civil, B.Com)..."
                     />
+                  </div>
+
+                  {/* Salary, Working Status & Notice Period */}
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Working Status</label>
+                      <select
+                        value={editingCandidateForm.employmentStatus}
+                        onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, employmentStatus: e.target.value }))}
+                        className="w-full rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] p-2 text-slate-900 dark:text-white outline-none text-xs font-semibold"
+                      >
+                        <option value="Working">Currently Working (Employed)</option>
+                        <option value="Not Working">Not Working (Unemployed)</option>
+                        <option value="Serving Notice">Serving Notice Period</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Notice Period</label>
+                      <input
+                        type="text"
+                        value={editingCandidateForm.noticePeriod}
+                        onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, noticePeriod: e.target.value }))}
+                        placeholder="e.g. 30 Days or 1 Month"
+                        className="w-full rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] p-2 text-slate-900 dark:text-white outline-none text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Current Salary (CTC)</label>
+                      <input
+                        type="text"
+                        value={editingCandidateForm.currentSalary}
+                        onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, currentSalary: e.target.value }))}
+                        placeholder="e.g. 4.5 LPA or 35,000 / month"
+                        className="w-full rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] p-2 text-slate-900 dark:text-white outline-none text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Expected Salary (CTC)</label>
+                      <input
+                        type="text"
+                        value={editingCandidateForm.expectedSalary}
+                        onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, expectedSalary: e.target.value }))}
+                        placeholder="e.g. 6.5 LPA or 50,000 / month"
+                        className="w-full rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] p-2 text-slate-900 dark:text-white outline-none text-xs"
+                      />
+                    </div>
                   </div>
                 </div>
 

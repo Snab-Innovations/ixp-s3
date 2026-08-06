@@ -818,31 +818,45 @@ const RecruiterAllJobs: React.FC = () => {
   }, [jobs, searchQuery, selectedCategory, selectedEmploymentType, statusFilter]);
 
   const canUserDeleteJob = (): boolean => {
-    if (!user || !userProfile) return false;
-    if (
-      userProfile.role === 'subrecruiter' ||
-      userProfile.role === 'team_member' ||
-      Boolean(userProfile.parentRecruiterId) ||
-      Boolean(userProfile.primaryRecruiterUID)
-    ) {
-      return false;
-    }
-    const role = (userProfile.role || '').toLowerCase();
-    return role === 'primary' || role === 'owner' || role === 'admin' || role === 'recruiter';
+    if (!user) return false;
+    const role = (userProfile?.role || '').toLowerCase();
+    if (role === 'guest') return false;
+    return true;
   };
 
   const handleDeleteJob = (jobId: string, title: string) => {
     if (!canUserDeleteJob()) {
-      messageBox.showError("Only the main primary recruiter can delete jobs.");
+      messageBox.showError("You do not have permission to delete jobs.");
       return;
     }
 
     messageBox.showConfirm(`Are you sure you want to delete "${title}"?`, async () => {
       try {
+        const targetJob = jobs.find(j => j.id === jobId);
+        const codeToDelete = targetJob?.accessCode || targetJob?.jobNo || '';
+
+        // 1. Delete by doc ID from both 'jobs' and 'interviews'
         await Promise.all([
           deleteDoc(doc(db, 'jobs', jobId)).catch(() => {}),
           deleteDoc(doc(db, 'interviews', jobId)).catch(() => {})
         ]);
+
+        // 2. Cleanup matching docs by jobNo / accessCode across 'jobs' and 'interviews'
+        if (codeToDelete) {
+          try {
+            const [jobsSnap, interviewsSnap] = await Promise.all([
+              getDocs(query(collection(db, 'jobs'), where('jobNo', '==', codeToDelete))),
+              getDocs(query(collection(db, 'interviews'), where('accessCode', '==', codeToDelete)))
+            ]);
+            await Promise.all([
+              ...jobsSnap.docs.map(d => deleteDoc(doc(db, 'jobs', d.id)).catch(() => {})),
+              ...interviewsSnap.docs.map(d => deleteDoc(doc(db, 'interviews', d.id)).catch(() => {}))
+            ]);
+          } catch (e) {
+            console.warn("Secondary cleanup by code warning:", e);
+          }
+        }
+
         messageBox.showSuccess(`Job "${title}" deleted successfully.`);
       } catch (err) {
         console.error("Failed to delete job", err);
