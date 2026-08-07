@@ -85,6 +85,8 @@ export const DYNAMIC_VARIABLES = [
   { tag: '{{company_name}}', label: 'Company / Client Name', example: 'Dsource' },
   { tag: '{{interview_link}}', label: 'Assessment Link', example: 'https://dsource.in/#/interview/inv-12345' },
   { tag: '{{access_code}}', label: 'Access Code', example: 'DX-8921' },
+  { tag: '{{interview_code}}', label: 'Interview Code (Alias)', example: 'DX-8921' },
+  { tag: '{{interview_deadline}}', label: 'Interview Deadline', example: 'Within 48 Hours' },
   { tag: '{{location}}', label: 'Job Location', example: 'Mumbai / Hybrid' },
   { tag: '{{qualification}}', label: 'Qualification', example: 'B.Tech / B.E. / MCA' },
   { tag: '{{experience}}', label: 'Experience Required', example: '3 - 5 Years' },
@@ -97,10 +99,10 @@ export const DYNAMIC_VARIABLES = [
 ];
 
 export const DEFAULT_EMAIL_INVITE: EmailTemplateConfig = {
-  subject: 'Official Interview Invitation — {{job_title}} | {{company_name}}',
-  badgeText: 'OFFICIAL INVITATION',
+  subject: '🎉 Congratulations {{candidate_name}}! You’ve Been Shortlisted for {{job_title}}',
+  badgeText: '🏆 YOU’VE BEEN SHORTLISTED',
   headline: 'Dear {{candidate_name}},',
-  body: 'We are pleased to invite you to complete an AI video interview assessment for the <strong>{{job_title}}</strong> position at <strong>{{company_name}}</strong>. Please complete this at your earliest convenience.',
+  body: 'Congratulations!<br/><br/>Your profile has been shortlisted for the <strong>{{job_title}}</strong> position, and you have been invited to complete the next stage of the hiring process.<br/><br/>Instead of scheduling an initial HR call, you can complete a 15–20 minute AI Video Interview at your convenience using your mobile or laptop.',
   showJobDetails: true,
   jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
   jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
@@ -108,54 +110,57 @@ export const DEFAULT_EMAIL_INVITE: EmailTemplateConfig = {
   ctaButtonText: 'Start Interview Now →',
   accentColor: '#0284c7',
   instructions: [
-    'Ensure a working camera & microphone for the AI voice/video assessment.',
-    'Use a stable internet connection in a quiet environment.',
-    'Do not refresh or exit the browser tab once the assessment starts.'
+    'Use a working camera and microphone.',
+    'Use a stable internet connection.',
+    'Complete the interview in a quiet environment.',
+    'The interview takes approximately 15–20 minutes.'
   ],
-  customFooter: 'Need Technical Assistance? Call Dsource Support: {{support_phone}}'
+  customFooter: 'Need assistance? Call support: {{support_phone}}'
 };
 
 export const DEFAULT_EMAIL_REMINDER: EmailTemplateConfig = {
-  subject: 'Urgent Reminder: Pending Interview Assessment — {{job_title}}',
-  badgeText: 'ACTION REQUIRED - REMINDER',
+  subject: '⏰ Reminder: Complete Your Pending {{job_title}} Interview',
+  badgeText: '⏳ INTERVIEW REMINDER',
   headline: 'Dear {{candidate_name}},',
-  body: 'This is a friendly reminder that your AI video interview assessment for the <strong>{{job_title}}</strong> position at <strong>{{company_name}}</strong> is still pending. Kindly complete your assessment using the access credentials below.',
+  body: 'This is a friendly reminder that your AI Video Interview for the <strong>{{job_title}}</strong> position is still pending.<br/><br/>Your application is still under consideration. To continue in the hiring process, please complete your interview before the deadline.',
   showJobDetails: true,
   jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
   jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
   showCredentialsBox: true,
-  ctaButtonText: 'Resume Assessment Now →',
+  ctaButtonText: 'Resume Interview Now →',
   accentColor: '#e11d48',
   instructions: [
-    'Ensure a working camera & microphone for the AI voice/video assessment.',
-    'Use a stable internet connection in a quiet environment.',
-    'Do not refresh or exit the browser tab once the assessment starts.'
+    'Interview duration: 15–20 minutes.',
+    'Use a working camera and microphone.',
+    'Keep a stable internet connection.',
+    'Complete the interview in a quiet environment.',
+    'If you have already completed your interview, please ignore this email.'
   ],
-  customFooter: 'Need Technical Assistance? Call Dsource Support: {{support_phone}}'
+  customFooter: 'Need assistance? Call support: {{support_phone}}'
 };
 
 export const DEFAULT_WHATSAPP_INVITE: WhatsAppTemplateConfig = {
-  headline: '💼 *OFFICIAL INTERVIEW INVITATION*',
-  body: 'Dear *{{candidate_name}}*,\n\nWe are pleased to invite you to complete an AI video interview assessment for the post of *{{job_title}}* at *{{company_name}}*.',
+  headline: '🎉 *YOU’VE BEEN SHORTLISTED*',
+  body: 'Dear *{{candidate_name}}* 👋\n\nCongratulations!\n\nYour profile has been shortlisted for the *{{job_title}}* position.\n\nAs the next step, please complete a 15–20 minute AI Video Interview at your convenience.\n\n✅ No HR scheduling required\n✅ Complete anytime before the deadline\n✅ Mobile & Laptop supported',
   showJobDetails: true,
   jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
   jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
   showCredentials: true,
   showRecruiterContact: true,
-  instructions: '1. Ensure a working camera & microphone on your phone or laptop.\n2. Use a stable internet connection in a quiet environment.',
-  signoff: 'Best regards,\n*{{company_name}} Recruitment Team*'
+  instructions: '📌 Before starting:\n\n• Allow camera & microphone access.\n• Use a stable internet connection.\n• The interview takes only 15–20 minutes.',
+  signoff: 'Best of luck!\n\n*Recruitment Team*'
 };
 
 export const DEFAULT_WHATSAPP_REMINDER: WhatsAppTemplateConfig = {
-  headline: '⏳ *PENDING INTERVIEW REMINDER*',
-  body: 'Dear *{{candidate_name}}*,\n\nThis is a polite reminder to complete your pending AI video interview assessment for the post of *{{job_title}}* at *{{company_name}}*.',
+  headline: '⏳ *INTERVIEW PENDING*',
+  body: 'Dear *{{candidate_name}}* 👋\n\nThis is a friendly reminder that your AI Video Interview for the *{{job_title}}* position is still pending.\n\nYour application is still active. To continue in the hiring process, please complete your interview before the deadline.',
   showJobDetails: true,
   jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
   jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
   showCredentials: true,
   showRecruiterContact: true,
-  instructions: '1. Complete your assessment before the access expires.\n2. Ensure strong internet connection in a quiet location.',
-  signoff: 'Warm regards,\n*{{company_name}} HR Operations*'
+  instructions: '⏱️ Interview Duration: 15–20 minutes\n\nIf you have already completed your interview, please ignore this message.',
+  signoff: 'Thank you.\n\n*Recruitment Team*'
 };
 
 export const DEFAULT_RECRUITER_TEMPLATES: RecruiterTemplates = {
@@ -187,7 +192,9 @@ export function renderTemplateText(templateText: string, context: Record<string,
     .replace(/\{\{job_title\}\}/gi, context.job_title || 'Position')
     .replace(/\{\{company_name\}\}/gi, context.company_name || 'Dsource')
     .replace(/\{\{interview_link\}\}/gi, context.interview_link || '#')
-    .replace(/\{\{access_code\}\}/gi, context.access_code || '------')
+    .replace(/\{\{access_code\}\}/gi, context.access_code || context.interview_code || 'DX-8921')
+    .replace(/\{\{interview_code\}\}/gi, context.interview_code || context.access_code || 'DX-8921')
+    .replace(/\{\{interview_deadline\}\}/gi, context.interview_deadline || 'Within 48 Hours')
     .replace(/\{\{location\}\}/gi, context.location || 'As specified')
     .replace(/\{\{qualification\}\}/gi, context.qualification || 'As per requirement')
     .replace(/\{\{experience\}\}/gi, context.experience || 'As per requirement')
@@ -210,7 +217,7 @@ export async function getRecruiterTemplates(uid?: string): Promise<RecruiterTemp
   
   // Try loading from localStorage first for instant speed
   try {
-    const cached = localStorage.getItem(localKey);
+    const cached = localStorage.getItem(localKey) || localStorage.getItem('recruiter_templates_default');
     if (cached) {
       const parsed = JSON.parse(cached);
       return mergeWithDefaults(parsed);
@@ -224,6 +231,7 @@ export async function getRecruiterTemplates(uid?: string): Promise<RecruiterTemp
       if (snap.exists() && snap.data()?.customTemplates) {
         const templates = mergeWithDefaults(snap.data().customTemplates);
         localStorage.setItem(localKey, JSON.stringify(templates));
+        localStorage.setItem('recruiter_templates_default', JSON.stringify(templates));
         return templates;
       }
     } catch (e) {
@@ -238,16 +246,22 @@ export async function getRecruiterTemplates(uid?: string): Promise<RecruiterTemp
  * Saves recruiter custom templates to Firestore & localStorage.
  */
 export async function saveRecruiterTemplates(uid: string, templates: RecruiterTemplates): Promise<boolean> {
-  const localKey = `recruiter_templates_${uid}`;
+  const localKey = uid ? `recruiter_templates_${uid}` : 'recruiter_templates_default';
   try {
-    localStorage.setItem(localKey, JSON.stringify(templates));
-    const userRef = doc(db, 'profiles', uid);
-    const mainUserRef = doc(db, 'users', uid);
+    const merged = mergeWithDefaults(templates);
+    const jsonStr = JSON.stringify(merged);
+    localStorage.setItem(localKey, jsonStr);
+    localStorage.setItem('recruiter_templates_default', jsonStr);
     
-    await Promise.all([
-      setDoc(userRef, { customTemplates: templates, updatedAt: new Date().toISOString() }, { merge: true }),
-      setDoc(mainUserRef, { customTemplates: templates, updatedAt: new Date().toISOString() }, { merge: true })
-    ]);
+    if (uid) {
+      const userRef = doc(db, 'profiles', uid);
+      const mainUserRef = doc(db, 'users', uid);
+      
+      await Promise.all([
+        setDoc(userRef, { customTemplates: merged, updatedAt: new Date().toISOString() }, { merge: true }),
+        setDoc(mainUserRef, { customTemplates: merged, updatedAt: new Date().toISOString() }, { merge: true })
+      ]);
+    }
     return true;
   } catch (err) {
     console.error('Error saving recruiter templates:', err);

@@ -308,9 +308,9 @@ export async function sendInterviewWhatsAppInvite(params: {
   options?: WhatsAppInviteOptions;
 }): Promise<SendWhatsAppResponse> {
   let activeTemplate = params.options?.customTemplate;
-  if (!activeTemplate && params.options?.recruiterUid) {
+  if (!activeTemplate) {
     try {
-      const templates = await getRecruiterTemplates(params.options.recruiterUid);
+      const templates = await getRecruiterTemplates(params.options?.recruiterUid);
       activeTemplate = params.isReminder ? templates.whatsappReminder : templates.whatsappInvite;
     } catch (e) {}
   }

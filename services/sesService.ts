@@ -417,9 +417,9 @@ export async function sendInterviewInvitations(
 
   // Load custom template for recruiter if available
   let activeTemplate = options?.customTemplate;
-  if (!activeTemplate && options?.recruiterUid) {
+  if (!activeTemplate) {
     try {
-      const recruiterTemplates = await getRecruiterTemplates(options.recruiterUid);
+      const recruiterTemplates = await getRecruiterTemplates(options?.recruiterUid);
       activeTemplate = isReminder ? recruiterTemplates.emailReminder : recruiterTemplates.emailInvite;
     } catch (e) {}
   }
