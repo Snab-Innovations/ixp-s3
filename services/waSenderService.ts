@@ -307,12 +307,16 @@ export async function sendInterviewWhatsAppInvite(params: {
   isReminder?: boolean;
   options?: WhatsAppInviteOptions;
 }): Promise<SendWhatsAppResponse> {
-  let activeTemplate = params.options?.customTemplate;
-  if (!activeTemplate) {
-    try {
-      const templates = await getRecruiterTemplates(params.options?.recruiterUid);
-      activeTemplate = params.isReminder ? templates.whatsappReminder : templates.whatsappInvite;
-    } catch (e) {}
+  let activeTemplate: WhatsAppTemplateConfig | undefined;
+  try {
+    const templates = await getRecruiterTemplates(params.options?.recruiterUid);
+    if (params.isReminder) {
+      activeTemplate = params.options?.customTemplate || templates.whatsappReminder;
+    } else {
+      activeTemplate = params.options?.customTemplate || templates.whatsappInvite;
+    }
+  } catch (e) {
+    activeTemplate = params.options?.customTemplate;
   }
 
   const updatedParams = {

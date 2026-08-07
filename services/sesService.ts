@@ -416,12 +416,16 @@ export async function sendInterviewInvitations(
   let lastError = '';
 
   // Load custom template for recruiter if available
-  let activeTemplate = options?.customTemplate;
-  if (!activeTemplate) {
-    try {
-      const recruiterTemplates = await getRecruiterTemplates(options?.recruiterUid);
-      activeTemplate = isReminder ? recruiterTemplates.emailReminder : recruiterTemplates.emailInvite;
-    } catch (e) {}
+  let activeTemplate: EmailTemplateConfig | undefined;
+  try {
+    const recruiterTemplates = await getRecruiterTemplates(options?.recruiterUid);
+    if (isReminder) {
+      activeTemplate = options?.customTemplate || recruiterTemplates.emailReminder;
+    } else {
+      activeTemplate = options?.customTemplate || recruiterTemplates.emailInvite;
+    }
+  } catch (e) {
+    activeTemplate = options?.customTemplate;
   }
 
   const mergedOptions: JobDetailsOptions = {

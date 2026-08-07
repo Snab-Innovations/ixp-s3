@@ -1,5 +1,5 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 
 export interface JobDetailItem {
   id: string;
@@ -213,20 +213,21 @@ export function renderTemplateText(templateText: string, context: Record<string,
  * Returns system default if no custom templates exist.
  */
 export async function getRecruiterTemplates(uid?: string): Promise<RecruiterTemplates> {
-  const localKey = uid ? `recruiter_templates_${uid}` : 'recruiter_templates_default';
+  const effectiveUid = uid || auth.currentUser?.uid || '';
+  const localKey = effectiveUid ? `recruiter_templates_${effectiveUid}` : 'recruiter_templates_default';
   
   // Try loading from localStorage first for instant speed
   try {
-    const cached = localStorage.getItem(localKey) || localStorage.getItem('recruiter_templates_default');
+    const cached = localStorage.getItem(localKey) || (effectiveUid ? localStorage.getItem(`recruiter_templates_${effectiveUid}`) : null) || localStorage.getItem('recruiter_templates_default');
     if (cached) {
       const parsed = JSON.parse(cached);
       return mergeWithDefaults(parsed);
     }
   } catch (e) {}
 
-  if (uid) {
+  if (effectiveUid) {
     try {
-      const docRef = doc(db, 'profiles', uid);
+      const docRef = doc(db, 'profiles', effectiveUid);
       const snap = await getDoc(docRef);
       if (snap.exists() && snap.data()?.customTemplates) {
         const templates = mergeWithDefaults(snap.data().customTemplates);
