@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom';
 import { jsPDF } from 'jspdf';
 import DayNightToggle from '../components/DayNightToggle';
 import { useMessageBox } from '../components/MessageBox';
-import { ArrowLeft, Download, Share2, User, FileText, MessageSquare, Brain, Shield, Video, VideoOff, Eye, EyeOff, CheckCircle, XCircle, Briefcase, MapPin, GraduationCap, DollarSign, Calendar, Award, Link as LinkIcon } from 'lucide-react';
+import { ArrowLeft, Download, Share2, User, FileText, MessageSquare, Brain, Shield, Video, VideoOff, Eye, EyeOff, CheckCircle, XCircle, Briefcase, MapPin, GraduationCap, DollarSign, Calendar, Award, Link as LinkIcon, Maximize2, Minimize2 } from 'lucide-react';
 
 // New component for radial score display
 const ScoreCircle: React.FC<{ score: number; denom: number; color: 'green' | 'yellow' | 'red'; label: string }> = ({ score, denom, color, label }) => {
@@ -113,6 +113,7 @@ const InterviewReport: React.FC = () => {
   const [profileTextData, setProfileTextData] = useState<string>('');
   const [activeVideoIndex, setActiveVideoIndex] = useState<number | null>(null);
   const [showResumeInVideo, setShowResumeInVideo] = useState<boolean>(false);
+  const [isTheaterMode, setIsTheaterMode] = useState<boolean>(false);
   const [isCompareMode, setIsCompareMode] = useState(false);
 
   const isStaff = userProfile?.role === 'recruiter' || userProfile?.role === 'admin';
@@ -1316,31 +1317,34 @@ const InterviewReport: React.FC = () => {
 
                                 {/* Video side */}
                                 {showVideoSection && (
-                                    <div className={`w-full lg:w-80 flex-shrink-0 flex flex-col justify-between relative ${isStaff && isQuestionHidden ? 'opacity-65' : ''}`}>
+                                    <div className={`w-full lg:w-[420px] flex-shrink-0 flex flex-col justify-between relative ${isStaff && isQuestionHidden ? 'opacity-65' : ''}`}>
                                         <p className="font-bold text-gray-900 dark:text-white mb-3 flex items-start gap-2 pr-32 lg:pr-0">
-                                            <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded-md">Q{index + 1}</span> 
-                                            <span>{q}</span>
+                                            <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded-md font-bold">Q{index + 1}</span> 
+                                            <span className="text-base">{q}</span>
                                         </p>
                                         
                                         {submission.videoURLs?.[index] ? (
                                             <div 
-                                                className="relative group aspect-video bg-gray-900 rounded-xl overflow-hidden cursor-pointer shadow-md hover:shadow-lg transition-all duration-300 border border-gray-800/20 dark:border-white/5"
+                                                className="relative group aspect-video bg-gray-900 rounded-2xl overflow-hidden cursor-pointer shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-800/40 dark:border-white/10"
                                                 onClick={() => setActiveVideoIndex(index)}
                                             >
-                                                <video src={submission.videoURLs[index]} className="w-full h-full object-cover opacity-75 group-hover:opacity-60 transition-opacity" />
-                                                <div className="absolute inset-0 flex items-center justify-center">
-                                                    <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white group-hover:scale-110 transition-transform shadow-lg border border-white/30">
-                                                        <i className="fas fa-play ml-1 text-lg"></i>
+                                                <video src={submission.videoURLs[index]} className="w-full h-full object-cover opacity-80 group-hover:opacity-60 transition-opacity" />
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/30 backdrop-blur-[2px] group-hover:bg-black/50 transition-all">
+                                                    <div className="w-14 h-14 bg-emerald-500/90 group-hover:bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-xl group-hover:scale-110 transition-all border border-emerald-300/40">
+                                                        <i className="fas fa-play ml-1 text-xl"></i>
                                                     </div>
+                                                    <span className="mt-3 text-xs font-bold text-white bg-black/70 px-3 py-1 rounded-full border border-white/20 shadow-md">
+                                                        🔍 Click to Watch Full Screen Video
+                                                    </span>
                                                 </div>
-                                                <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider">
-                                                    Play Recording
+                                                <div className="absolute bottom-2.5 right-2.5 bg-black/80 backdrop-blur-md text-white text-[10px] px-2.5 py-1 rounded-md font-bold uppercase tracking-wider border border-white/10">
+                                                    Candidate Answer Video
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="aspect-video bg-gray-200 dark:bg-white/5 rounded-xl flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-700">
-                                                <Video size={24} className="mb-2 opacity-50" />
-                                                <p className="text-sm font-medium">No Recording</p>
+                                            <div className="aspect-video bg-gray-200 dark:bg-white/5 rounded-2xl flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-700">
+                                                <Video size={28} className="mb-2 opacity-50 text-gray-400" />
+                                                <p className="text-sm font-semibold">No Video Recording Available</p>
                                             </div>
                                         )}
                                     </div>
@@ -1541,22 +1545,28 @@ const InterviewReport: React.FC = () => {
         )}
 
         {activeVideoIndex !== null && createPortal(
-            <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[100] p-4 md:p-8" onClick={() => setActiveVideoIndex(null)}>
+            <div className="fixed inset-0 bg-black/95 backdrop-blur-md flex items-center justify-center z-[100] p-2 md:p-6" onClick={() => setActiveVideoIndex(null)}>
                 <div 
-                    className={`bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ${showResumeInVideo ? 'w-full max-w-[95vw] h-[90vh]' : 'w-full max-w-5xl max-h-[90vh]'}`} 
+                    className={`bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ${
+                        isTheaterMode 
+                          ? 'w-full h-full max-w-[100vw] max-h-[100vh] rounded-none' 
+                          : showResumeInVideo 
+                            ? 'w-full max-w-[98vw] h-[94vh]' 
+                            : 'w-full max-w-[95vw] xl:max-w-[1600px] h-[92vh]'
+                    }`} 
                     onClick={e => e.stopPropagation()}
                 >
                     {/* Header */}
-                    <div className="flex justify-between items-center bg-white/5 p-4 border-b border-white/10 shrink-0">
+                    <div className="flex justify-between items-center bg-white/5 px-5 py-3.5 border-b border-white/10 shrink-0">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-white font-semibold flex items-center gap-2">
-                                <Video size={18} className="text-primary"/> 
-                                Question {activeVideoIndex + 1} of {submission.questions?.length || 0}
+                            <h3 className="text-white font-bold text-base md:text-lg flex items-center gap-2">
+                                <Video size={20} className="text-emerald-400 animate-pulse"/> 
+                                Candidate Video — Question {activeVideoIndex + 1} of {submission.questions?.length || 0}
                             </h3>
                             {submission.candidateResumeURL && (
                                 <button 
                                     onClick={() => setShowResumeInVideo(!showResumeInVideo)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border flex items-center gap-2 ${showResumeInVideo ? 'bg-primary/20 text-primary border-primary/30' : 'bg-white/10 text-gray-300 border-white/10 hover:bg-white/20'}`}
+                                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors border flex items-center gap-2 ${showResumeInVideo ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-white/10 text-gray-300 border-white/10 hover:bg-white/20'}`}
                                 >
                                     <FileText size={14} /> {showResumeInVideo ? 'Hide Resume' : 'View Resume'}
                                 </button>
@@ -1564,23 +1574,35 @@ const InterviewReport: React.FC = () => {
                         </div>
                         
                         <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-2 mr-4 border-r border-white/10 pr-4">
+                            {/* Theater Mode Toggle */}
+                            <button 
+                                onClick={() => setIsTheaterMode(!isTheaterMode)}
+                                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors border flex items-center gap-2 ${
+                                    isTheaterMode ? 'bg-indigo-500/30 text-indigo-300 border-indigo-400/40' : 'bg-white/10 text-gray-300 border-white/10 hover:bg-white/20'
+                                }`}
+                                title={isTheaterMode ? "Exit Theater Mode" : "Expand Video Theater Mode"}
+                            >
+                                {isTheaterMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                                <span className="hidden sm:inline">{isTheaterMode ? 'Standard View' : 'Theater Mode'}</span>
+                            </button>
+
+                            <div className="flex items-center gap-2 border-l border-r border-white/10 px-3">
                                 <button 
                                     disabled={!hasPrevVisibleVideo()}
                                     onClick={handlePrevVideo}
-                                    className="px-3 py-1.5 bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-1"
+                                    className="px-3.5 py-1.5 bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
                                 >
-                                    <ArrowLeft size={14} /> Prev
+                                    <ArrowLeft size={14} /> Prev Question
                                 </button>
                                 <button 
                                     disabled={!hasNextVisibleVideo()}
                                     onClick={handleNextVideo}
-                                    className="px-3 py-1.5 bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-1"
+                                    className="px-3.5 py-1.5 bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/20 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5"
                                 >
-                                    Next <ArrowLeft size={14} className="rotate-180" />
+                                    Next Question <ArrowLeft size={14} className="rotate-180" />
                                 </button>
                             </div>
-                            <button onClick={() => setActiveVideoIndex(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 text-white/70 hover:bg-red-500/20 hover:text-red-400 transition-colors">&times;</button>
+                            <button onClick={() => setActiveVideoIndex(null)} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white/70 hover:bg-red-500/20 hover:text-red-400 text-xl transition-colors">&times;</button>
                         </div>
                     </div>
                     
@@ -1603,43 +1625,54 @@ const InterviewReport: React.FC = () => {
                         {/* Video & Q&A Panel (Right) */}
                         <div className={`${showResumeInVideo ? 'w-1/2' : 'w-full'} flex flex-col bg-black overflow-hidden`}>
                             {/* Question (On Top) */}
-                            <div className="p-4 md:p-6 border-b border-white/10 shrink-0 bg-[#0f0f0f]">
-                                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                                    <Brain size={14} /> Question Asked
-                                </h4>
-                                <p className="text-lg font-semibold text-gray-200">
-                                    {submission.questions?.[activeVideoIndex] || 'Unknown Question'}
-                                </p>
+                            <div className="p-4 md:px-6 md:py-4 border-b border-white/10 shrink-0 bg-[#0f0f0f] flex items-center justify-between">
+                                <div className="flex-1 pr-4">
+                                    <h4 className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider mb-1 flex items-center gap-2">
+                                        <Brain size={14} /> Question Asked
+                                    </h4>
+                                    <p className="text-base md:text-lg font-bold text-white leading-snug">
+                                        {submission.questions?.[activeVideoIndex] || 'Unknown Question'}
+                                    </p>
+                                </div>
                             </div>
 
                             {/* Content Area (Video + Transcript) */}
-                            <div className={`flex flex-1 overflow-hidden ${showResumeInVideo ? 'flex-col' : 'flex-col md:flex-row'}`}>
-                                {/* Video Player */}
-                                <div className={`relative flex items-center justify-center bg-black shrink-0 ${showResumeInVideo ? 'w-full aspect-video border-b border-white/10' : 'w-full md:w-[55%] border-b md:border-b-0 md:border-r border-white/10'}`}>
+                            <div className={`flex flex-1 overflow-hidden ${showResumeInVideo ? 'flex-col' : (isTheaterMode ? 'flex-col' : 'flex-col lg:flex-row')}`}>
+                                {/* Large Video Player Container */}
+                                <div className={`relative flex items-center justify-center bg-black shrink-0 ${
+                                    showResumeInVideo 
+                                      ? 'w-full aspect-video border-b border-white/10' 
+                                      : isTheaterMode 
+                                        ? 'w-full flex-1 border-b border-white/10' 
+                                        : 'w-full lg:w-[72%] border-b lg:border-b-0 lg:border-r border-white/10 min-h-[420px] lg:min-h-0'
+                                }`}>
                                     {submission.videoURLs?.[activeVideoIndex] ? (
                                         <video
                                             key={submission.videoURLs[activeVideoIndex]} // Force re-render on source change
                                             controls
                                             autoPlay
+                                            playsInline
                                             src={submission.videoURLs[activeVideoIndex]}
-                                            className="absolute inset-0 w-full h-full object-contain"
+                                            className="w-full h-full object-contain max-h-[80vh]"
                                         />
                                     ) : (
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 p-4">
-                                            <Video size={48} className="mb-4 opacity-50" />
-                                            <p className="text-lg font-medium text-gray-400 text-center">No Recording Available</p>
-                                            <p className="text-sm mt-2 text-center">The candidate did not record a video for this question.</p>
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 p-4 bg-[#050505]">
+                                            <Video size={56} className="mb-4 opacity-40 text-emerald-500" />
+                                            <p className="text-xl font-bold text-gray-300 text-center">No Candidate Video Recording</p>
+                                            <p className="text-sm mt-2 text-gray-500 text-center">The candidate did not record a video answer for this question.</p>
                                         </div>
                                     )}
                                 </div>
                                 
-                                {/* AI Transcript */}
-                                <div className="flex-1 p-4 md:p-6 overflow-y-auto custom-scrollbar bg-[#0a0a0a]">
+                                {/* AI Transcript Panel */}
+                                <div className={`p-4 md:p-6 overflow-y-auto custom-scrollbar bg-[#0a0a0a] ${
+                                    showResumeInVideo || isTheaterMode ? 'h-48 shrink-0 border-t border-white/10' : 'flex-1'
+                                }`}>
                                     <div className="bg-white/5 rounded-xl p-5 border border-white/10 min-h-full">
-                                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                                            <FileText size={14} /> AI Transcript / Answer
+                                        <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                            <FileText size={14} className="text-primary"/> AI Audio Transcript & Text Answer
                                         </h4>
-                                        <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">
+                                        <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed font-sans">
                                             {submission.transcriptTexts?.[activeVideoIndex] || 'Transcript not available for this question.'}
                                         </p>
                                     </div>
