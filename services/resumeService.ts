@@ -5,6 +5,8 @@ import { db } from './firebase';
 import { uploadToCloudinary } from './api';
 import { grokGenerateJson } from './grokService';
 import { geminiGenerateJson } from './geminiService';
+import { isEducationMatching } from '../utils/educationMatcher';
+
 
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -856,8 +858,8 @@ export function detectCandidateGender(candidate: any): 'male' | 'female' | 'unkn
   if (!candidate) return 'unknown';
 
   const candGenderRaw = (candidate.gender || candidate.genderRequirement || '').toString().trim().toLowerCase();
-  if (candGenderRaw === 'female' || candGenderRaw === 'f' || candGenderRaw === 'woman') return 'female';
-  if (candGenderRaw === 'male' || candGenderRaw === 'm' || candGenderRaw === 'man') return 'male';
+  if (candGenderRaw.includes('female') || candGenderRaw === 'f' || candGenderRaw.includes('woman')) return 'female';
+  if (candGenderRaw.includes('male') || candGenderRaw === 'm' || candGenderRaw.includes('man')) return 'male';
 
   const rawName = (candidate.name || '').toString().trim().toLowerCase();
   const rawEmail = (candidate.email || '').toString().trim().toLowerCase();
@@ -977,20 +979,17 @@ export function checkMandatoryCriteriaMatch(
   }
 
   // 3. Education Check
-  const reqEdu = (job.education || job.qualification || job.qualifications || '').toString().trim().toLowerCase();
+  const reqEdu = (job.education || job.qualification || job.qualifications || '').toString().trim();
   const isStrictEdu = Boolean(job.strictEducationMatch);
 
   if (isStrictEdu && reqEdu) {
     const candEduList = Array.isArray(candidate.education)
-      ? candidate.education.map((e: any) => (typeof e === 'string' ? e : `${e.degree || ''} ${e.institution || ''}`)).join(' ').toLowerCase()
+      ? candidate.education.map((e: any) => (typeof e === 'string' ? e : `${e.degree || ''} ${e.institution || ''}`)).join(' ')
       : '';
-    const candEduField = (candidate.educationLevel || candidate.highestEducation || candidate.education || candidate.qualification || '').toString().toLowerCase();
-    const combinedEduText = `${candEduField} ${candEduList} ${candidate.summary || ''} ${candidate.resumeText || ''}`.toLowerCase();
+    const candEduField = (candidate.educationLevel || candidate.highestEducation || candidate.education || candidate.qualification || '').toString();
+    const combinedEduText = `${candEduField} ${candEduList} ${candidate.summary || ''} ${candidate.resumeText || ''}`.trim();
 
-    const eduTokens = reqEdu.split(/[\s,/()\-]+/).filter((t) => t.length > 1);
-    const matchesEdu = eduTokens.length === 0 || eduTokens.some((tok) => combinedEduText.includes(tok));
-
-    if (!matchesEdu) {
+    if (!isEducationMatching(combinedEduText, reqEdu)) {
       failReasons.push(`Education Mismatch: Job requires ${job.education || job.qualification}.`);
     }
   }

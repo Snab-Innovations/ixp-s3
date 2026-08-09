@@ -71,6 +71,7 @@ export interface WhatsAppInviteOptions {
   maxExperience?: number | string;
   salary?: string;
   salaryRange?: string;
+  deadline?: string;
   employmentType?: string;
   customFields?: Array<{ key: string; value: string }>;
   recruiterName?: string;
@@ -209,6 +210,7 @@ export function buildWhatsAppInviteText(params: {
   options?: WhatsAppInviteOptions;
 }): string {
   const { candidateName = 'Candidate', jobTitle, interviewLink, accessCode, isReminder = false, options } = params;
+  const deadline = options?.deadline || 'Within 48 Hours';
 
   const context: Record<string, string> = {
     candidate_name: candidateName,
@@ -216,6 +218,8 @@ export function buildWhatsAppInviteText(params: {
     company_name: 'Dsource',
     interview_link: interviewLink,
     access_code: accessCode,
+    interview_deadline: deadline,
+    deadline: deadline,
     location: options?.location || 'As specified in Job Description',
     qualification: options?.qualification || options?.education || 'As per Job Description',
     experience: formatExperienceDisplay(options),
@@ -231,13 +235,13 @@ export function buildWhatsAppInviteText(params: {
 
   const headline = custom?.headline
     ? renderTemplateText(custom.headline, context)
-    : (isReminder ? `⏳ *PENDING INTERVIEW REMINDER*` : `💼 *OFFICIAL INTERVIEW INVITATION*`);
+    : (isReminder ? `*DEADLINE REMINDER*` : `*CONGRATULATIONS! YOU ARE SHORTLISTED*`);
 
   const body = custom?.body
     ? renderTemplateText(custom.body, context)
     : (isReminder
-        ? `Dear *${candidateName}*,\n\nThis is a polite reminder to complete your AI video interview assessment for the post of *${jobTitle}* at *Dsource*.`
-        : `Dear *${candidateName}*,\n\nWe are pleased to invite you to complete an AI video interview assessment for the post of *${jobTitle}* at *Dsource*.`);
+        ? `Dear *${candidateName}*,\n\nFriendly reminder: You have been *shortlisted for ${jobTitle}* at *Dsource*, but your AI Video Interview is still pending!\n\n*Completion Deadline:* *${deadline}*\n\nPlease complete your interview before the deadline to keep your application active.`
+        : `Dear *${candidateName}*,\n\nGreat news! Your profile has been *shortlisted for this interview round* for the *${jobTitle}* role at *Dsource*.\n\nPlease complete your 15-minute AI Video Interview from your phone or laptop at your convenience.\n\n*Completion Deadline:* *${deadline}*\n- No HR scheduling needed\n- Complete anytime, anywhere`);
 
   const showJobDetails = custom ? custom.showJobDetails !== false : true;
   const showCredentials = custom ? custom.showCredentials !== false : true;
@@ -253,27 +257,27 @@ export function buildWhatsAppInviteText(params: {
       let val = renderTemplateText(item.value, context);
       if (item.id === 'customFields') {
         if (options?.customFields && options.customFields.length > 0) {
-          return options.customFields.map(cf => `• 🔹 *${cf.key}:* ${cf.value}`).join('\n');
+          return options.customFields.map(cf => `• *${cf.key}:* ${cf.value}`).join('\n');
         }
         return '';
       }
       if (!val) return '';
-      return `• ${item.icon || '🔹'} *${item.label}:* ${val}`;
+      return `• *${item.label}:* ${val}`;
     })
     .filter(Boolean);
 
-  const jobDetailsSection = showJobDetails && jobDetailsLines.length > 0 ? `\n\n📌 *JOB REQUIREMENT DETAILS:*\n${jobDetailsLines.join('\n')}` : '';
+  const jobDetailsSection = showJobDetails && jobDetailsLines.length > 0 ? `\n\n*JOB REQUIREMENT DETAILS:*\n${jobDetailsLines.join('\n')}` : '';
 
-  const credentialsSection = showCredentials ? `\n\n🔐 *YOUR ACCESS CREDENTIALS:*
-• 🔑 *Access Code:* *${accessCode}*
-• 🌐 *Interview Link:* ${interviewLink}` : '';
+  const credentialsSection = showCredentials ? `\n\n*YOUR ACCESS CREDENTIALS:*
+• *Access Code:* *${accessCode}*
+• *Interview Link:* ${interviewLink}` : '';
 
   const recruiterName = options?.recruiterName || 'Recruiting Team';
   const recruiterPhone = options?.recruiterPhone || '9762588623 / 8484888632';
 
-  const recruiterSection = showRecruiterContact ? `\n\n👤 *RECRUITER / CONTACT PERSON:*
-• 👤 *Contact Person:* *${recruiterName}*
-• 📞 *Mobile / Contact:* *${recruiterPhone}*` : '';
+  const recruiterSection = showRecruiterContact ? `\n\n*RECRUITER / CONTACT PERSON:*
+• *Contact Person:* *${recruiterName}*
+• *Mobile / Contact:* *${recruiterPhone}*` : '';
 
   const instructionsText = custom?.instructions
     ? renderTemplateText(custom.instructions, context)
@@ -287,7 +291,7 @@ export function buildWhatsAppInviteText(params: {
 
 ${body}${jobDetailsSection}${credentialsSection}${recruiterSection}
 
-⚠️ *Instructions:*
+*Instructions:*
 ${instructionsText}
 
 Need Technical Help? Call Dsource Support: 9762588623 / 8484888632

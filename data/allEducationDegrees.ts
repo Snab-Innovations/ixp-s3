@@ -139,3 +139,6 @@ export const CATEGORIZED_EDUCATION_DEGREES: EducationCategory[] = [
 ];
 
 export const ALL_EDUCATION_DEGREES: string[] = CATEGORIZED_EDUCATION_DEGREES.flatMap(c => c.degrees);
+
+export { isEducationMatching } from '../utils/educationMatcher';
+

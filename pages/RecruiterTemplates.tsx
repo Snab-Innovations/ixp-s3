@@ -13,6 +13,7 @@ import {
   JobDetailItem,
   DEFAULT_JOB_DETAILS_ITEMS,
   DYNAMIC_VARIABLES,
+  TEMPLATE_PRESETS,
   RecruiterTemplates as RecruiterTemplatesType,
   EmailTemplateConfig,
   WhatsAppTemplateConfig,
@@ -426,6 +427,7 @@ const RecruiterTemplatesPage: React.FC = () => {
           experience: SAMPLE_CONTEXT.experience,
           salary: SAMPLE_CONTEXT.salary,
           employmentType: SAMPLE_CONTEXT.employment_type,
+          deadline: SAMPLE_CONTEXT.interview_deadline,
           recruiterName: userProfile?.displayName || userProfile?.name || SAMPLE_CONTEXT.recruiter_name,
           recruiterPhone: userProfile?.phoneNumber || userProfile?.phone || SAMPLE_CONTEXT.recruiter_phone,
           recruiterEmail: userProfile?.email || SAMPLE_CONTEXT.recruiter_email,
@@ -463,6 +465,7 @@ const RecruiterTemplatesPage: React.FC = () => {
           experience: SAMPLE_CONTEXT.experience,
           salary: SAMPLE_CONTEXT.salary,
           employmentType: SAMPLE_CONTEXT.employment_type,
+          deadline: SAMPLE_CONTEXT.interview_deadline,
           recruiterName: userProfile?.displayName || userProfile?.name || SAMPLE_CONTEXT.recruiter_name,
           recruiterPhone: userProfile?.phoneNumber || userProfile?.phone || SAMPLE_CONTEXT.recruiter_phone,
           whatsappSessionId: userProfile?.whatsappSessionId,
@@ -504,6 +507,7 @@ const RecruiterTemplatesPage: React.FC = () => {
         experience: SAMPLE_CONTEXT.experience,
         salary: SAMPLE_CONTEXT.salary,
         employmentType: SAMPLE_CONTEXT.employment_type,
+        deadline: SAMPLE_CONTEXT.interview_deadline,
         recruiterName: userProfile?.displayName || userProfile?.name || SAMPLE_CONTEXT.recruiter_name,
         recruiterPhone: userProfile?.phoneNumber || userProfile?.phone || SAMPLE_CONTEXT.recruiter_phone,
         customTemplate: config
@@ -754,20 +758,62 @@ const RecruiterTemplatesPage: React.FC = () => {
           <div className={`lg:col-span-7 flex flex-col gap-5 rounded-xl border p-5 shadow-xl transition-colors ${
             isDark ? 'border-[#2e2e2e] bg-[#0d0d0d] text-white' : 'border-slate-200 bg-white text-slate-900 shadow-sm'
           }`}>
-            <div className={`flex items-center justify-between border-b pb-3 ${
+            <div className={`flex flex-col gap-3 border-b pb-3 ${
               isDark ? 'border-[#2e2e2e]' : 'border-slate-200'
             }`}>
-              <h2 className={`text-base font-semibold flex items-center gap-2 ${
-                isDark ? 'text-white' : 'text-slate-900 font-extrabold'
+              <div className="flex items-center justify-between">
+                <h2 className={`text-base font-semibold flex items-center gap-2 ${
+                  isDark ? 'text-white' : 'text-slate-900 font-extrabold'
+                }`}>
+                  <Sliders className="h-4 w-4 text-emerald-500" />
+                  <span>
+                    {activeTab === 'emailInvite' && '📧 Email Invitation Configuration'}
+                    {activeTab === 'emailReminder' && '⏰ Email Reminder Configuration'}
+                    {activeTab === 'whatsappInvite' && '💬 WhatsApp Invitation Configuration'}
+                    {activeTab === 'whatsappReminder' && '⌛ WhatsApp Reminder Configuration'}
+                  </span>
+                </h2>
+              </div>
+
+              {/* Quick Preset Selector */}
+              <div className={`p-3 rounded-xl border flex flex-wrap items-center gap-2 transition-all ${
+                isDark ? 'border-emerald-500/30 bg-[#06140e]' : 'border-emerald-200 bg-emerald-50/60'
               }`}>
-                <Sliders className="h-4 w-4 text-emerald-500" />
-                <span>
-                  {activeTab === 'emailInvite' && '📧 Email Invitation Configuration'}
-                  {activeTab === 'emailReminder' && '⏰ Email Reminder Configuration'}
-                  {activeTab === 'whatsappInvite' && '💬 WhatsApp Invitation Configuration'}
-                  {activeTab === 'whatsappReminder' && '⌛ WhatsApp Reminder Configuration'}
+                <span className={`text-xs font-extrabold flex items-center gap-1.5 uppercase tracking-wider ${
+                  isDark ? 'text-emerald-400' : 'text-emerald-900'
+                }`}>
+                  <Sparkles className="w-4 h-4 text-emerald-500 animate-pulse" /> Load Preset Template:
                 </span>
-              </h2>
+                {TEMPLATE_PRESETS.map((preset) => {
+                  const isShortlisted = preset.id === 'shortlisted';
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        if (isEmailTab) {
+                          setTemplates(prev => ({ ...prev, [activeTab]: { ...preset.email } }));
+                        } else {
+                          setTemplates(prev => ({ ...prev, [activeTab]: { ...preset.whatsapp } }));
+                        }
+                        messageBox.showSuccess(`Loaded "${preset.label}" preset!`);
+                      }}
+                      title={preset.description}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                        isShortlisted
+                          ? (isDark 
+                              ? 'border-emerald-400 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-950/60 hover:from-emerald-500 hover:to-teal-500 scale-[1.02]' 
+                              : 'border-emerald-500 bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm hover:from-emerald-700 hover:to-teal-700 scale-[1.02]')
+                          : (isDark
+                              ? 'border-[#333] bg-[#111] text-[#ddd] hover:border-emerald-500 hover:text-white hover:bg-emerald-950/60'
+                              : 'border-slate-300 bg-white text-slate-700 hover:border-emerald-500 hover:text-emerald-800 hover:bg-emerald-50 shadow-2xs')
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* EMAIL TEMPLATE FORM */}
@@ -1278,8 +1324,28 @@ const RecruiterTemplatesPage: React.FC = () => {
               <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${
                 isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-300 text-emerald-800'
               }`}>
-                Sample Candidate Data
+                Sample Candidate Data Active
               </span>
+            </div>
+
+            {/* Simple Basic Sample Candidate Data Section */}
+            <div className={`p-3 rounded-lg border text-xs ${
+              isDark ? 'bg-[#121212] border-[#242424] text-gray-300' : 'bg-slate-50 border-slate-200 text-slate-700'
+            }`}>
+              <div className="font-bold text-[11px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-2 flex items-center justify-between">
+                <span>Sample Candidate Data Used in Preview</span>
+                <span className="text-[10px] text-gray-400 font-normal">Auto-Replaced in Template</span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
+                <div><span className="font-semibold text-gray-500 dark:text-gray-400">Candidate:</span> {SAMPLE_CONTEXT.candidate_name}</div>
+                <div><span className="font-semibold text-gray-500 dark:text-gray-400">Job Title:</span> {SAMPLE_CONTEXT.job_title}</div>
+                <div><span className="font-semibold text-gray-500 dark:text-gray-400">Deadline:</span> {SAMPLE_CONTEXT.interview_deadline}</div>
+                <div><span className="font-semibold text-gray-500 dark:text-gray-400">Access Code:</span> {SAMPLE_CONTEXT.access_code}</div>
+                <div><span className="font-semibold text-gray-500 dark:text-gray-400">Location:</span> {SAMPLE_CONTEXT.location}</div>
+                <div><span className="font-semibold text-gray-500 dark:text-gray-400">Qualification:</span> {SAMPLE_CONTEXT.qualification}</div>
+                <div><span className="font-semibold text-gray-500 dark:text-gray-400">Experience:</span> {SAMPLE_CONTEXT.experience}</div>
+                <div><span className="font-semibold text-gray-500 dark:text-gray-400">Salary:</span> {SAMPLE_CONTEXT.salary}</div>
+              </div>
             </div>
 
             {/* Render Preview according to Tab */}
@@ -1301,6 +1367,7 @@ const RecruiterTemplatesPage: React.FC = () => {
                         experience: SAMPLE_CONTEXT.experience,
                         salary: SAMPLE_CONTEXT.salary,
                         employmentType: SAMPLE_CONTEXT.employment_type,
+                        deadline: SAMPLE_CONTEXT.interview_deadline,
                         recruiterName: userProfile?.displayName || userProfile?.name || SAMPLE_CONTEXT.recruiter_name,
                         recruiterPhone: userProfile?.phoneNumber || userProfile?.phone || SAMPLE_CONTEXT.recruiter_phone,
                         customTemplate: emailConfig

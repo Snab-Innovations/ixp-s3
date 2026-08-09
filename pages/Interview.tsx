@@ -4,7 +4,7 @@ import { doc, getDoc, collection, serverTimestamp, updateDoc, query, where, getD
 import { db } from '../services/firebase';
 import { uploadToCloudinary, generateInterviewQuestions, requestTranscription, fetchTranscriptText, generateFeedback } from '../services/api';
 import { resolveJobOrInterviewDocument } from '../services/jobResolutionService';
-import { speak, unlockTTSAudio } from '../lib/tts';
+import { speak, unlockTTSAudio, setMuteTTS, getMuteTTS } from '../lib/tts';
 import { Interview, InterviewState } from '../types';
 import { createPortal } from 'react-dom';
 import { LanguageSelector } from './LanguageSelector';
@@ -18,6 +18,8 @@ import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { saveCandidateConsent } from '../services/candidateConsent';
 import { LocationCityInput } from '../components/LocationCityInput';
 import { EducationInput } from '../components/EducationInput';
+import { isEducationMatching } from '../utils/educationMatcher';
+
 
 // Setup PDF.js worker to enable PDF parsing
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -307,7 +309,12 @@ const CandidateInfoForm: React.FC<{
           // Autofill fields from saved resume dump record if current state is empty
           if (record.name && !name) setName(record.name);
           if (record.phone && !phone) setPhone(record.phone);
-          if (record.gender && !gender) setGender(record.gender);
+          if (record.gender && !gender) {
+            const rawG = record.gender.toString().trim().toLowerCase();
+            if (rawG.includes('female') || rawG === 'f') setGender('Female');
+            else if (rawG.includes('male') || rawG === 'm') setGender('Male');
+            else if (rawG.includes('other')) setGender('Other');
+          }
           if ((record.location || record.city) && !currentCity) setCurrentCity(record.location || record.city);
           if ((record.totalExperienceYears !== undefined || record.experienceYears !== undefined || record.experience !== undefined) && !totalExperienceYears) {
             const expVal = record.totalExperienceYears ?? record.experienceYears ?? record.experience;
@@ -349,14 +356,23 @@ const CandidateInfoForm: React.FC<{
     if (!interviewData) return [];
     const mismatches: string[] = [];
 
-    // 1. Gender Mismatch (ONLY if candidate filled gender)
-    const reqGender = (interviewData.genderRequirement || (interviewData as any).gender || '').toString().toLowerCase();
-    if (reqGender && !reqGender.includes('any') && !reqGender.includes('both') && !reqGender.includes('all')) {
-      const candidateG = (gender || '').trim().toLowerCase();
-      if (candidateG && !candidateG.includes('any') && !candidateG.includes('other')) {
-        if (reqGender.includes('female') && !candidateG.includes('female')) {
+    // 1. Gender Mismatch (ONLY if candidate filled gender & requirement is specific)
+    const rawReqG = (interviewData.genderRequirement || (interviewData as any).gender || '').toString().trim().toLowerCase();
+    const isReqFemale = rawReqG.includes('female');
+    const isReqMale = !isReqFemale && (rawReqG.includes('male') || rawReqG === 'm' || rawReqG.includes('man'));
+    const isReqAny = !rawReqG || ['any', 'both', 'all', 'open', 'no preference', 'nopreference', 'none'].some(k => rawReqG.includes(k));
+
+    if (!isReqAny && (isReqFemale || isReqMale)) {
+      const rawCandG = (gender || '').trim().toLowerCase();
+      const isCandFilled = rawCandG && !['unspecified', 'unknown', 'not specified', 'select', 'any', 'other', 'none', ''].includes(rawCandG);
+
+      if (isCandFilled) {
+        const isCandFemale = rawCandG.includes('female') || rawCandG === 'f' || rawCandG.includes('woman');
+        const isCandMale = !isCandFemale && (rawCandG.includes('male') || rawCandG === 'm' || rawCandG.includes('man'));
+
+        if (isReqFemale && !isCandFemale) {
           mismatches.push(`Gender Mismatch: Role prefers Female candidates (Your selection: ${gender})`);
-        } else if (reqGender.includes('male') && !reqGender.includes('fe') && !candidateG.includes('male')) {
+        } else if (isReqMale && !isCandMale) {
           mismatches.push(`Gender Mismatch: Role prefers Male candidates (Your selection: ${gender})`);
         }
       }
@@ -387,9 +403,7 @@ const CandidateInfoForm: React.FC<{
     // 4. Education Mismatch (ONLY if candidate filled qualificationBasic)
     const reqEdu = ((interviewData as any).education || (interviewData as any).qualification || '').toString().trim();
     if (reqEdu && qualificationBasic.trim()) {
-      const candEduNorm = qualificationBasic.toLowerCase();
-      const reqEduNorm = reqEdu.toLowerCase();
-      if (!candEduNorm.includes(reqEduNorm) && !reqEduNorm.includes(candEduNorm)) {
+      if (!isEducationMatching(qualificationBasic, reqEdu)) {
         mismatches.push(`Education Mismatch: Preferred qualification is ${reqEdu} (Your qualification: ${qualificationBasic})`);
       }
     }
@@ -416,7 +430,8 @@ const CandidateInfoForm: React.FC<{
         setErrorMsg("Please enter a valid 10-digit mobile number or format like +91 9545556045.");
         return;
       }
-      if (!gender || !gender.trim()) {
+      const candGNorm = (gender || '').trim().toLowerCase();
+      if (!candGNorm || ['unspecified', 'unknown', 'select', 'not specified'].includes(candGNorm)) {
         setErrorMsg("Please select your Gender.");
         return;
       }
@@ -1561,21 +1576,6 @@ const InterviewReadinessOnboarding: React.FC<{
                   <div key={point} className="readiness-summary-item">{point}</div>
                 ))}
               </div>
-
-              {/* YouTube video guide */}
-              <div className="mt-6 w-full flex flex-col items-center justify-center">
-                <div className="relative w-full max-w-xl aspect-video rounded-2xl overflow-hidden shadow-lg border border-gray-200 dark:border-white/10 bg-black">
-                  <iframe 
-                    className="absolute top-0 left-0 w-full h-full"
-                    src="https://www.youtube.com/embed/9UhI3l23OLg?si=t-y4dcjI0sO0ADpC&autoplay=1&mute=1" 
-                    title="YouTube video player" 
-                    frameBorder="0" 
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
-                    referrerPolicy="strict-origin-when-cross-origin" 
-                    allowFullScreen
-                  />
-                </div>
-              </div>
             </div>
           </div>
         )}
@@ -1611,8 +1611,20 @@ const InterviewWelcomeScreen: React.FC<{
   onProceed: () => void;
 }> = ({ interview, onProceed }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isVoiceMuted, setIsVoiceMuted] = useState(() => getMuteTTS());
+
+  const toggleMuteVoice = () => {
+    const next = !isVoiceMuted;
+    setIsVoiceMuted(next);
+    setMuteTTS(next);
+    if (next) {
+      speak.stop();
+      setIsSpeaking(false);
+    }
+  };
 
   const playWelcomeVoice = () => {
+    if (getMuteTTS()) return;
     unlockTTSAudio();
     speak.stop();
     setIsSpeaking(true);
@@ -1724,14 +1736,29 @@ const InterviewWelcomeScreen: React.FC<{
             <span className={`w-1.5 h-1.5 rounded-full ${isSpeaking ? 'bg-blue-400 animate-ping' : 'bg-emerald-400'}`}></span>
             {isSpeaking ? 'AI Recruiter speaking' : 'AI Recruiter (Standby)'}
           </span>
-          <button
-            type="button"
-            onClick={playWelcomeVoice}
-            className="mt-2.5 px-4 py-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer z-20"
-          >
-            <i className="fas fa-volume-up"></i>
-            <span>Listen to Voice Greeting</span>
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-2 mt-2.5 z-20">
+            <button
+              type="button"
+              onClick={playWelcomeVoice}
+              className="px-4 py-1.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+            >
+              <i className="fas fa-volume-up"></i>
+              <span>Listen to Voice Greeting</span>
+            </button>
+            <button
+              type="button"
+              onClick={toggleMuteVoice}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer border ${
+                isVoiceMuted
+                  ? 'bg-red-500/20 text-red-400 border-red-500/40 hover:bg-red-500/30'
+                  : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+              }`}
+              title={isVoiceMuted ? "Unmute AI Voice" : "Mute AI Voice"}
+            >
+              <i className={`fas ${isVoiceMuted ? 'fa-volume-mute text-red-400' : 'fa-volume-up text-blue-400'}`}></i>
+              <span>{isVoiceMuted ? 'Voice Muted' : 'Mute AI Voice'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2650,6 +2677,18 @@ const ActiveInterviewSession: React.FC<{
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isVoiceMuted, setIsVoiceMuted] = useState(() => getMuteTTS());
+
+  const toggleMuteVoice = () => {
+    const next = !isVoiceMuted;
+    setIsVoiceMuted(next);
+    setMuteTTS(next);
+    if (next) {
+      speak.stop();
+      setIsSpeaking(false);
+    }
+  };
+
   const currentQ = state.questions[state.currentQuestionIndex];
 
   const [tabWarning, setTabWarning] = useState<string | null>(null);
@@ -3204,26 +3243,42 @@ const ActiveInterviewSession: React.FC<{
                 <span className={`w-1.5 h-1.5 rounded-full ${isSpeaking ? 'bg-blue-400 animate-ping' : 'bg-emerald-400'}`}></span>
                 {isSpeaking ? 'AI Speaking' : 'Listening...'}
               </span>
-              <button
-                type="button"
-                onClick={() => {
-                  unlockTTSAudio();
-                  speak.stop();
-                  setIsSpeaking(true);
-                  const langMap: Record<string, string> = { en: 'en', hi: 'hi-IN', mr: 'mr-IN' };
-                  const ttsLang = langMap[state.language] || 'en';
-                  speak(currentQ, {
-                    lang: ttsLang,
-                    onEnd: () => setIsSpeaking(false),
-                    onError: () => setIsSpeaking(false),
-                  });
-                }}
-                className="mt-2 px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-extrabold shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer z-20"
-                title="Click to replay question voice"
-              >
-                <i className="fas fa-volume-up"></i>
-                <span>Replay Voice</span>
-              </button>
+              <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2 z-20">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (getMuteTTS()) return;
+                    unlockTTSAudio();
+                    speak.stop();
+                    setIsSpeaking(true);
+                    const langMap: Record<string, string> = { en: 'en', hi: 'hi-IN', mr: 'mr-IN' };
+                    const ttsLang = langMap[state.language] || 'en';
+                    speak(currentQ, {
+                      lang: ttsLang,
+                      onEnd: () => setIsSpeaking(false),
+                      onError: () => setIsSpeaking(false),
+                    });
+                  }}
+                  className="px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-extrabold shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                  title="Click to replay question voice"
+                >
+                  <i className="fas fa-volume-up"></i>
+                  <span>Replay Voice</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleMuteVoice}
+                  className={`px-3 py-1 rounded-full text-[11px] font-extrabold shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer border ${
+                    isVoiceMuted
+                      ? 'bg-red-500/20 text-red-400 border-red-500/40 hover:bg-red-500/30'
+                      : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+                  }`}
+                  title={isVoiceMuted ? "Unmute AI Voice" : "Mute AI Voice"}
+                >
+                  <i className={`fas ${isVoiceMuted ? 'fa-volume-mute text-red-400' : 'fa-volume-up text-blue-400'}`}></i>
+                  <span>{isVoiceMuted ? 'Voice Muted' : 'Mute AI Voice'}</span>
+                </button>
+              </div>
               <p className="text-[10px] md:text-xs text-slate-400 mt-1 font-bold uppercase tracking-widest">AI Recruiter</p>
             </div>
           </div>
@@ -3317,26 +3372,42 @@ const ActiveInterviewSession: React.FC<{
 
             {/* Action Buttons */}
             <div className="interview-room-question-actions flex items-center justify-between gap-2 md:gap-3 px-3 md:px-6 py-2.5 md:py-4 border-t border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  unlockTTSAudio();
-                  speak.stop();
-                  setIsSpeaking(true);
-                  const langMap: Record<string, string> = { en: 'en', hi: 'hi-IN', mr: 'mr-IN' };
-                  const ttsLang = langMap[state.language] || 'en';
-                  speak(currentQ, {
-                    lang: ttsLang,
-                    onEnd: () => setIsSpeaking(false),
-                    onError: () => setIsSpeaking(false),
-                  });
-                }}
-                className="px-3.5 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                title="Replay Voice Aloud"
-              >
-                <i className="fas fa-volume-up text-indigo-600 dark:text-indigo-400"></i>
-                <span>Replay Voice</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (getMuteTTS()) return;
+                    unlockTTSAudio();
+                    speak.stop();
+                    setIsSpeaking(true);
+                    const langMap: Record<string, string> = { en: 'en', hi: 'hi-IN', mr: 'mr-IN' };
+                    const ttsLang = langMap[state.language] || 'en';
+                    speak(currentQ, {
+                      lang: ttsLang,
+                      onEnd: () => setIsSpeaking(false),
+                      onError: () => setIsSpeaking(false),
+                    });
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  title="Replay Voice Aloud"
+                >
+                  <i className="fas fa-volume-up text-indigo-600 dark:text-indigo-400"></i>
+                  <span>Replay Voice</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleMuteVoice}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm border ${
+                    isVoiceMuted
+                      ? 'bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800/80 hover:bg-red-100'
+                      : 'bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:bg-gray-200'
+                  }`}
+                  title={isVoiceMuted ? "Unmute AI Voice" : "Mute AI Voice"}
+                >
+                  <i className={`fas ${isVoiceMuted ? 'fa-volume-mute text-red-500' : 'fa-volume-xmark text-gray-500'}`}></i>
+                  <span>{isVoiceMuted ? 'Voice Muted' : 'Mute Voice'}</span>
+                </button>
+              </div>
 
               {/* Next / Stop Button */}
               {isRecording ? (

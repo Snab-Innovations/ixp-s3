@@ -247,6 +247,7 @@ const InvitedCandidates: React.FC = () => {
                     : ((selectedInterview as any).experience || (selectedInterview as any).experienceRequired),
                   minExperience: (selectedInterview as any).minExperience,
                   maxExperience: (selectedInterview as any).maxExperience,
+                  deadline: (selectedInterview as any).deadline || (selectedInterview as any).interviewDeadline || '',
                   recruiterName: userProfile?.name || userProfile?.fullname || userProfile?.displayName || user?.displayName || (selectedInterview as any).createdBy?.name || 'Recruiting Team',
                   recruiterPhone: userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || user?.phoneNumber || '9762588623 / 8484888632',
                   recruiterEmail: userProfile?.email || user?.email || ''
@@ -260,7 +261,10 @@ const InvitedCandidates: React.FC = () => {
                     candidates: [{ email, phone, name: candidateData?.name || email }],
                     jobTitle: selectedInterview.title,
                     interviewLink: selectedInterview.interviewLink || '',
-                    accessCode: selectedInterview.accessCode
+                    accessCode: selectedInterview.accessCode,
+                    options: {
+                        deadline: (selectedInterview as any).deadline || (selectedInterview as any).interviewDeadline || ''
+                    }
                 });
                 if (waRes.success) waSent = true;
             }

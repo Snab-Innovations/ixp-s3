@@ -11,16 +11,17 @@ export interface JobDetailItem {
 }
 
 export const DEFAULT_JOB_DETAILS_ITEMS: JobDetailItem[] = [
-  { id: 'post', label: 'Job Post', icon: '📌', value: '{{job_title}}', enabled: true },
-  { id: 'employmentType', label: 'Employment Type', icon: '💼', value: '{{employment_type}}', enabled: true },
-  { id: 'location', label: 'Location', icon: '📍', value: '{{location}}', enabled: true },
-  { id: 'qualification', label: 'Qualification', icon: '🎓', value: '{{qualification}}', enabled: true },
-  { id: 'experience', label: 'Experience Required', icon: '💼', value: '{{experience}}', enabled: true },
-  { id: 'salary', label: 'Salary Offered', icon: '💰', value: '{{salary}}', enabled: true },
-  { id: 'department', label: 'Department / Category', icon: '🏢', value: 'Engineering / Software', enabled: false },
-  { id: 'workShift', label: 'Shift / Working Hours', icon: '⏰', value: 'Day Shift (Standard)', enabled: false },
-  { id: 'requiredSkills', label: 'Required Skills', icon: '⚡', value: 'As specified in JD', enabled: false },
-  { id: 'customFields', label: 'Custom Job Fields', icon: '🔹', value: 'Custom Fields', enabled: true },
+  { id: 'post', label: 'Job Post', icon: '•', value: '{{job_title}}', enabled: true },
+  { id: 'deadline', label: 'Completion Deadline', icon: '•', value: '{{interview_deadline}}', enabled: true },
+  { id: 'employmentType', label: 'Employment Type', icon: '•', value: '{{employment_type}}', enabled: true },
+  { id: 'location', label: 'Location', icon: '•', value: '{{location}}', enabled: true },
+  { id: 'qualification', label: 'Qualification', icon: '•', value: '{{qualification}}', enabled: true },
+  { id: 'experience', label: 'Experience Required', icon: '•', value: '{{experience}}', enabled: true },
+  { id: 'salary', label: 'Salary Offered', icon: '•', value: '{{salary}}', enabled: true },
+  { id: 'department', label: 'Department / Category', icon: '•', value: 'Engineering / Software', enabled: false },
+  { id: 'workShift', label: 'Shift / Working Hours', icon: '•', value: 'Day Shift (Standard)', enabled: false },
+  { id: 'requiredSkills', label: 'Required Skills', icon: '•', value: 'As specified in JD', enabled: false },
+  { id: 'customFields', label: 'Custom Job Fields', icon: '•', value: 'Custom Fields', enabled: true },
 ];
 
 export interface JobDetailsFieldsConfig {
@@ -98,70 +99,183 @@ export const DYNAMIC_VARIABLES = [
   { tag: '{{support_phone}}', label: 'Support Contact Phone', example: '9762588623 / 8484888632' },
 ];
 
-export const DEFAULT_EMAIL_INVITE: EmailTemplateConfig = {
-  subject: '🎉 Congratulations {{candidate_name}}! You’ve Been Shortlisted for {{job_title}}',
-  badgeText: '🏆 YOU’VE BEEN SHORTLISTED',
-  headline: 'Dear {{candidate_name}},',
-  body: 'Congratulations!<br/><br/>Your profile has been shortlisted for the <strong>{{job_title}}</strong> position, and you have been invited to complete the next stage of the hiring process.<br/><br/>Instead of scheduling an initial HR call, you can complete a 15–20 minute AI Video Interview at your convenience using your mobile or laptop.',
-  showJobDetails: true,
-  jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
-  jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
-  showCredentialsBox: true,
-  ctaButtonText: 'Start Interview Now →',
-  accentColor: '#0284c7',
-  instructions: [
-    'Use a working camera and microphone.',
-    'Use a stable internet connection.',
-    'Complete the interview in a quiet environment.',
-    'The interview takes approximately 15–20 minutes.'
-  ],
-  customFooter: 'Need assistance? Call support: {{support_phone}}'
-};
+export const TEMPLATE_PRESETS = [
+  {
+    id: 'shortlisted',
+    label: 'Shortlisted Candidate Email',
+    description: 'Official congratulations email for shortlisted candidates',
+    email: {
+      subject: 'Congratulations {{candidate_name}}! You’ve Been Shortlisted for {{job_title}} | {{company_name}}',
+      badgeText: 'SHORTLISTED CANDIDATE',
+      headline: 'Dear {{candidate_name}},',
+      body: 'Congratulations! After reviewing your profile, you have been <strong>shortlisted for the {{job_title}} position at {{company_name}}</strong>. As the next step in our hiring process, we’d like to invite you to complete a 15–20 minute AI Video Interview at your convenience. Unlike a traditional HR screening call, you can complete this interview anytime before the deadline using your mobile or laptop.<br/><br/>- <strong>No need to schedule an HR call</strong><br/>- <strong>Available 24×7—complete it at your convenience</strong><br/>- <strong>Takes only 15–20 minutes</strong><br/>- <strong>Your responses are reviewed by our recruitment team</strong><br/>- <strong>Successful candidates will be contacted for the next hiring stage</strong>',
+      showJobDetails: true,
+      jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
+      jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
+      showCredentialsBox: true,
+      ctaButtonText: 'Start My Interview ->',
+      accentColor: '#0f172a',
+      instructions: [
+        'Use a laptop or mobile with a working camera and microphone.',
+        'Keep a stable internet connection.',
+        'Once the interview begins, avoid refreshing or closing the browser tab.'
+      ],
+      customFooter: 'Need Technical Assistance? Call Dsource Support: {{support_phone}}'
+    },
+    whatsapp: {
+      headline: '*CONGRATULATIONS! YOU ARE SHORTLISTED*',
+      body: 'Dear *{{candidate_name}}*,\n\nGreat news! After reviewing your profile, you have been *shortlisted for the {{job_title}} position at {{company_name}}*.\n\nPlease complete your 15–20 minute AI Video Interview from your phone or laptop at your convenience.\n\n*Completion Deadline:* *{{interview_deadline}}*\n- No need to schedule an HR call\n- Available 24×7—complete at your convenience\n- Takes only 15–20 minutes\n- Responses reviewed by recruitment team\n- Successful candidates move to next hiring stage',
+      showJobDetails: true,
+      jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
+      jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
+      showCredentials: true,
+      showRecruiterContact: true,
+      instructions: '*Instructions before starting:*\n• Use a laptop or mobile with camera & mic.\n• Keep a stable internet connection.\n• Complete before: *{{interview_deadline}}*',
+      signoff: 'Best of luck!\n\n*{{company_name}} Recruitment Team*'
+    }
+  },
+  {
+    id: 'technicalRound',
+    label: 'Technical Assessment Round',
+    description: 'Invitation for technical evaluation and skill testing',
+    email: {
+      subject: 'Technical Assessment Invitation: {{job_title}} | {{company_name}}',
+      badgeText: 'TECHNICAL EVALUATION ROUND',
+      headline: 'Dear {{candidate_name}},',
+      body: 'Thank you for your interest in the <strong>{{job_title}}</strong> position at <strong>{{company_name}}</strong>.<br/><br/>Based on your profile, you have been advanced to the <strong>Technical Assessment Round</strong>. This automated video evaluation will test your core technical and domain skills.',
+      showJobDetails: true,
+      jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
+      jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
+      showCredentialsBox: true,
+      ctaButtonText: 'Begin Technical Round ->',
+      accentColor: '#8b5cf6',
+      instructions: [
+        'Ensure a quiet environment without background distractions.',
+        'Camera and microphone must remain on during the session.',
+        'Attempt all questions within the given time limits.',
+        'Deadline: {{interview_deadline}}.'
+      ],
+      customFooter: 'Questions? Reach out to Recruiter: {{recruiter_name}} ({{recruiter_phone}})'
+    },
+    whatsapp: {
+      headline: '*TECHNICAL ROUND INVITATION*',
+      body: 'Dear *{{candidate_name}}*,\n\nYou have been selected for the *Technical Assessment Round* for the *{{job_title}}* role at *{{company_name}}*.\n\nPlease attempt your evaluation before *{{interview_deadline}}* using the credentials below.',
+      showJobDetails: true,
+      jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
+      jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
+      showCredentials: true,
+      showRecruiterContact: true,
+      instructions: '*Technical Round Guidelines:*\n• Stable internet connection required\n• Working webcam and mic mandatory',
+      signoff: 'All the best!\n\n*{{recruiter_name}}* (Recruitment Lead)'
+    }
+  },
+  {
+    id: 'actionRequiredReminder',
+    label: 'Action Required Reminder (High Response)',
+    description: 'High-converting reminder email emphasizing candidate selection and pending completion',
+    email: {
+      subject: 'Action Required: Complete Your Interview for {{job_title}} | {{company_name}}',
+      badgeText: 'ACTION REQUIRED - INTERVIEW PENDING',
+      headline: 'Dear {{candidate_name}},',
+      body: 'Your profile has been shortlisted for <strong>{{job_title}}</strong> at <strong>{{company_name}}</strong>, but we have not yet received your video interview submission.<br/><br/>This 15-minute evaluation is a required step to advance your candidacy to the hiring manager round. Your access link is active until <strong>{{interview_deadline}}</strong>.<br/><br/>- <strong>Time Required:</strong> ~15 Minutes<br/>- <strong>Device:</strong> Mobile or Laptop with Camera & Mic<br/>- <strong>Availability:</strong> Complete anytime before deadline',
+      showJobDetails: true,
+      jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
+      jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
+      showCredentialsBox: true,
+      ctaButtonText: 'Complete Interview Now ->',
+      accentColor: '#0f172a',
+      instructions: [
+        'Ensure a working camera & microphone on your device.',
+        'Use a stable internet connection.',
+        'If you have already completed your interview, please ignore this email.'
+      ],
+      customFooter: 'Need Technical Assistance? Call Dsource Support: {{support_phone}}'
+    },
+    whatsapp: {
+      headline: '*ACTION REQUIRED: INTERVIEW PENDING*',
+      body: 'Dear *{{candidate_name}}*,\n\nYour profile has been shortlisted for *{{job_title}}* at *{{company_name}}*, but your video interview is still pending.\n\nPlease complete this 15-minute evaluation before *{{interview_deadline}}* to keep your application active and proceed to the next hiring stage.\n\n- Time required: ~15 Minutes\n- Complete anytime before deadline\n- Phone or laptop compatible',
+      showJobDetails: true,
+      jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
+      jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
+      showCredentials: true,
+      showRecruiterContact: true,
+      instructions: '*Instructions:*\n• Use a phone or laptop with working camera & mic.\n• Complete before: *{{interview_deadline}}*',
+      signoff: 'Best regards,\n*{{company_name}} Recruitment Team*'
+    }
+  },
+  {
+    id: 'finalDeadlineReminder',
+    label: 'Final Deadline Reminder (Urgent)',
+    description: 'Urgent reminder before candidate access code and link expires',
+    email: {
+      subject: 'Final Reminder: Interview Slot Closing Soon for {{job_title}} | {{company_name}}',
+      badgeText: 'FINAL REMINDER - CLOSING SOON',
+      headline: 'Dear {{candidate_name}},',
+      body: 'This is our final reminder regarding your application for the <strong>{{job_title}}</strong> position at <strong>{{company_name}}</strong>.<br/><br/>Your interview access code will expire on <strong>{{interview_deadline}}</strong>. If you are interested in moving forward, please complete your assessment before the cutoff time.<br/><br/>- <strong>Completion Cutoff:</strong> {{interview_deadline}}<br/>- <strong>Status:</strong> Shortlisted Candidate',
+      showJobDetails: true,
+      jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
+      jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
+      showCredentialsBox: true,
+      ctaButtonText: 'Launch Final Assessment ->',
+      accentColor: '#0f172a',
+      instructions: [
+        'Complete assessment before the cutoff deadline.',
+        'Takes approximately 15 minutes.'
+      ],
+      customFooter: 'Need Technical Assistance? Call Dsource Support: {{support_phone}}'
+    },
+    whatsapp: {
+      headline: '*FINAL REMINDER: INTERVIEW CLOSING SOON*',
+      body: 'Dear *{{candidate_name}}*,\n\nFinal reminder regarding your application for *{{job_title}}* at *{{company_name}}*.\n\nYour online interview link will expire on *{{interview_deadline}}*. Please complete your assessment today to avoid missing out on this position.\n\n- Cutoff: *{{interview_deadline}}*\n- Duration: 15-20 minutes',
+      showJobDetails: true,
+      jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
+      jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
+      showCredentials: true,
+      showRecruiterContact: true,
+      instructions: '*Instructions:*\n• Complete before: *{{interview_deadline}}*',
+      signoff: 'Best regards,\n*{{company_name}} Recruitment Team*'
+    }
+  },
+  {
+    id: 'jobOffer',
+    label: 'Job Selection & Offer Letter',
+    description: 'Congratulations email for final selection and job offer',
+    email: {
+      subject: 'Congratulations! Job Selection Offer for {{job_title}} | {{company_name}}',
+      badgeText: 'SELECTION & JOB OFFER ANNOUNCEMENT',
+      headline: 'Dear {{candidate_name}},',
+      body: 'We are thrilled to inform you that you have been <strong>SELECTED</strong> for the <strong>{{job_title}}</strong> position at <strong>{{company_name}}</strong>!<br/><br/>Our hiring team was thoroughly impressed by your performance in the interview rounds and skill assessments. We believe your experience will be a valuable asset to our organization.',
+      showJobDetails: true,
+      jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
+      jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
+      showCredentialsBox: false,
+      ctaButtonText: 'View & Accept Offer Details ->',
+      accentColor: '#10b981',
+      instructions: [
+        'Please review the attached formal offer terms carefully.',
+        'Confirm your acceptance by replying to this email or calling HR.',
+        'Contact Recruiter {{recruiter_name}} ({{recruiter_phone}}) for onboarding steps.'
+      ],
+      customFooter: 'Welcome to the {{company_name}} Team!'
+    },
+    whatsapp: {
+      headline: '*CONGRATULATIONS ON YOUR SELECTION!*',
+      body: 'Dear *{{candidate_name}}*,\n\nWe are excited to share that you have been *SELECTED* for the *{{job_title}}* role at *{{company_name}}*!\n\nOur HR team will reach out to you shortly with the formal offer details and onboarding information.\n\nOffered Role: *{{job_title}}*\nLocation: *{{location}}*',
+      showJobDetails: true,
+      jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
+      jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
+      showCredentials: false,
+      showRecruiterContact: true,
+      instructions: 'Please contact Recruiter *{{recruiter_name}}* at *{{recruiter_phone}}* if you have any questions.',
+      signoff: 'Warm welcome!\n\n*{{company_name}} HR Management*'
+    }
+  }
+];
 
-export const DEFAULT_EMAIL_REMINDER: EmailTemplateConfig = {
-  subject: '⏰ Reminder: Complete Your Pending {{job_title}} Interview',
-  badgeText: '⏳ INTERVIEW REMINDER',
-  headline: 'Dear {{candidate_name}},',
-  body: 'This is a friendly reminder that your AI Video Interview for the <strong>{{job_title}}</strong> position is still pending.<br/><br/>Your application is still under consideration. To continue in the hiring process, please complete your interview before the deadline.',
-  showJobDetails: true,
-  jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
-  jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
-  showCredentialsBox: true,
-  ctaButtonText: 'Resume Interview Now →',
-  accentColor: '#e11d48',
-  instructions: [
-    'Interview duration: 15–20 minutes.',
-    'Use a working camera and microphone.',
-    'Keep a stable internet connection.',
-    'Complete the interview in a quiet environment.',
-    'If you have already completed your interview, please ignore this email.'
-  ],
-  customFooter: 'Need assistance? Call support: {{support_phone}}'
-};
-
-export const DEFAULT_WHATSAPP_INVITE: WhatsAppTemplateConfig = {
-  headline: '🎉 *YOU’VE BEEN SHORTLISTED*',
-  body: 'Dear *{{candidate_name}}* 👋\n\nCongratulations!\n\nYour profile has been shortlisted for the *{{job_title}}* position.\n\nAs the next step, please complete a 15–20 minute AI Video Interview at your convenience.\n\n✅ No HR scheduling required\n✅ Complete anytime before the deadline\n✅ Mobile & Laptop supported',
-  showJobDetails: true,
-  jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
-  jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
-  showCredentials: true,
-  showRecruiterContact: true,
-  instructions: '📌 Before starting:\n\n• Allow camera & microphone access.\n• Use a stable internet connection.\n• The interview takes only 15–20 minutes.',
-  signoff: 'Best of luck!\n\n*Recruitment Team*'
-};
-
-export const DEFAULT_WHATSAPP_REMINDER: WhatsAppTemplateConfig = {
-  headline: '⏳ *INTERVIEW PENDING*',
-  body: 'Dear *{{candidate_name}}* 👋\n\nThis is a friendly reminder that your AI Video Interview for the *{{job_title}}* position is still pending.\n\nYour application is still active. To continue in the hiring process, please complete your interview before the deadline.',
-  showJobDetails: true,
-  jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
-  jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
-  showCredentials: true,
-  showRecruiterContact: true,
-  instructions: '⏱️ Interview Duration: 15–20 minutes\n\nIf you have already completed your interview, please ignore this message.',
-  signoff: 'Thank you.\n\n*Recruitment Team*'
-};
+export const DEFAULT_EMAIL_INVITE: EmailTemplateConfig = TEMPLATE_PRESETS[0].email;
+export const DEFAULT_EMAIL_REMINDER: EmailTemplateConfig = TEMPLATE_PRESETS[2].email;
+export const DEFAULT_WHATSAPP_INVITE: WhatsAppTemplateConfig = TEMPLATE_PRESETS[0].whatsapp;
+export const DEFAULT_WHATSAPP_REMINDER: WhatsAppTemplateConfig = TEMPLATE_PRESETS[2].whatsapp;
 
 export const DEFAULT_RECRUITER_TEMPLATES: RecruiterTemplates = {
   emailInvite: DEFAULT_EMAIL_INVITE,

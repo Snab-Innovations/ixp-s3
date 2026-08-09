@@ -102,6 +102,16 @@ const pickVoice = (lang: string): SpeechSynthesisVoice | undefined => {
 
 let cancelGeneration = false;
 let currentAudio: HTMLAudioElement | null = null;
+let isMutedGlobal = false;
+
+export const setMuteTTS = (muted: boolean) => {
+  isMutedGlobal = muted;
+  if (muted) {
+    speak.stop();
+  }
+};
+
+export const getMuteTTS = (): boolean => isMutedGlobal;
 
 export const unlockTTSAudio = () => {
   if (typeof window === 'undefined') return;
@@ -166,6 +176,10 @@ const playAudioStreamTTS = (textToSpeak: string, langTag: string, options?: Spea
 async function speak(text: string, options?: SpeakOptions): Promise<void> {
   speak.stop();
   cancelGeneration = false;
+  if (isMutedGlobal) {
+    options?.onEnd?.();
+    return;
+  }
   unlockTTSAudio();
 
   const lang = detectLang(text, options?.lang);
@@ -275,6 +289,9 @@ speak.stop = (): void => {
     window.speechSynthesis.cancel();
   }
 };
+
+speak.isMuted = getMuteTTS;
+speak.setMuted = setMuteTTS;
 
 export { speak };
 

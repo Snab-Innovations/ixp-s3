@@ -24,6 +24,7 @@ export interface JobDetailsOptions {
   maxExperience?: number | string;
   salary?: string;
   salaryRange?: string;
+  deadline?: string;
   recruiterName?: string;
   recruiterPhone?: string;
   recruiterEmail?: string;
@@ -135,7 +136,7 @@ export function deriveNameFromEmail(email: string): string {
 }
 
 /**
- * Ultra-Professional White Theme Designer Email Template for Interview Invitations
+ * Ultra-Professional Designer Email Template for Interview Invitations
  */
 export function getDesignerEmailTemplate(
   candidateName: string,
@@ -145,12 +146,16 @@ export function getDesignerEmailTemplate(
   isReminder: boolean = false,
   options?: JobDetailsOptions
 ): string {
+  const deadline = options?.deadline || 'Within 48 Hours';
+
   const context: Record<string, string> = {
     candidate_name: candidateName,
     job_title: jobTitle,
     company_name: 'Dsource',
     interview_link: interviewLink,
     access_code: accessCode,
+    interview_deadline: deadline,
+    deadline: deadline,
     location: options?.location || 'As specified in Job Description',
     qualification: options?.qualification || options?.education || 'As per Job Description',
     experience: formatExperienceDisplay(options),
@@ -165,7 +170,7 @@ export function getDesignerEmailTemplate(
   const custom = options?.customTemplate;
   const badgeText = custom?.badgeText
     ? renderTemplateText(custom.badgeText, context)
-    : (isReminder ? "REMINDER" : "OFFICIAL INVITATION");
+    : (isReminder ? "INTERVIEW DEADLINE REMINDER" : "YOU ARE SHORTLISTED FOR THIS ROUND");
 
   const headline = custom?.headline
     ? renderTemplateText(custom.headline, context)
@@ -174,8 +179,8 @@ export function getDesignerEmailTemplate(
   const bodyText = custom?.body
     ? renderTemplateText(custom.body, context)
     : (isReminder
-        ? `This is a polite reminder that your AI video interview assessment for the <strong>${jobTitle}</strong> position is still pending.`
-        : `We are pleased to invite you to complete an AI video interview assessment for the <strong>${jobTitle}</strong> position at <strong>Dsource</strong>.`);
+        ? `This is a friendly reminder that you have been <strong>shortlisted for ${jobTitle}</strong> at <strong>Dsource</strong>, but your AI Video Interview is still pending.<br/><br/>Please complete your interview before the deadline: <strong>${deadline}</strong> to move forward in the selection process.`
+        : `Congratulations! 🎉<br/><br/>We are excited to inform you that your profile has been <strong>shortlisted for this interview round</strong> for the <strong>${jobTitle}</strong> role at <strong>Dsource</strong>.<br/><br/>You can complete your 15-minute AI Video Interview anytime from your phone or laptop before the deadline.`);
 
   const ctaText = custom?.ctaButtonText
     ? renderTemplateText(custom.ctaButtonText, context)
@@ -206,15 +211,12 @@ export function getDesignerEmailTemplate(
       let val = renderTemplateText(item.value, context);
       if (item.id === 'customFields') {
         if (options?.customFields && options.customFields.length > 0) {
-          return options.customFields.map(cf => `<tr><td style="padding:6px 0;font-size:14px;color:#475569;width:38%;font-weight:600;">🔹 ${cf.key}:</td><td style="padding:6px 0;font-size:14px;color:#0f172a;font-weight:600;">${cf.value}</td></tr>`).join('');
+          return options.customFields.map(cf => `<tr><td style="padding:6px 0;font-size:14px;color:#475569;width:38%;font-weight:600;">${cf.key}:</td><td style="padding:6px 0;font-size:14px;color:#0f172a;font-weight:600;">${cf.value}</td></tr>`).join('');
         }
         return '';
       }
       if (!val) return '';
-      const isSalary = item.id === 'salary';
-      const valueColor = isSalary ? '#166534' : '#0f172a';
-      const valueWeight = isSalary || item.id === 'post' ? '700' : '600';
-      return `<tr><td style="padding:6px 0;font-size:14px;color:#475569;width:38%;font-weight:600;">${item.icon || '🔹'} ${item.label}:</td><td style="padding:6px 0;font-size:14px;color:${valueColor};font-weight:${valueWeight};">${val}</td></tr>`;
+      return `<tr><td style="padding:6px 0;font-size:14px;color:#475569;width:38%;font-weight:600;">${item.icon || '🔹'} ${item.label}:</td><td style="padding:6px 0;font-size:14px;color:#0f172a;font-weight:600;">${val}</td></tr>`;
     })
     .filter(Boolean)
     .join('');
@@ -230,45 +232,42 @@ export function getDesignerEmailTemplate(
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${jobTitle}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.6;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f1f5f9;padding:30px 10px;">
+<body style="margin:0;padding:0;background-color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;line-height:1.6;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#ffffff;padding:20px 10px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 10px 25px -5px rgba(0,0,0,0.06);">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
           
-          <!-- Corporate Accent Header Bar -->
+          <!-- Minimalist Header Logo & Badge -->
           <tr>
-            <td style="background:${accentColor};height:6px;width:100%;"></td>
-          </tr>
-          
-          <!-- Header Logo & Badge -->
-          <tr>
-            <td style="padding:28px 36px;background-color:#ffffff;border-bottom:1px solid #f1f5f9;text-align:center;">
-              <img src="https://res.cloudinary.com/dvzxfbcsd/image/upload/v1776428916/vwjnuvbd0lpwfrcch7kw.png" alt="Dsource Logo" style="height:46px;width:auto;margin:0 auto 12px;display:block;" />
-              <div style="display:inline-block;padding:4px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:1px;color:${accentColor};text-transform:uppercase;">
-                ${badgeText}
+            <td style="padding:24px 32px;background-color:#ffffff;border-bottom:1px solid #e2e8f0;text-align:left;">
+              <div style="display:flex;align-items:center;justify-content:space-between;">
+                <img src="https://res.cloudinary.com/dvzxfbcsd/image/upload/v1776428916/vwjnuvbd0lpwfrcch7kw.png" alt="Dsource Logo" style="height:38px;width:auto;display:inline-block;vertical-align:middle;" />
+                <span style="display:inline-block;padding:4px 10px;background-color:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:0.5px;color:#334155;text-transform:uppercase;float:right;margin-top:6px;">
+                  ${badgeText}
+                </span>
               </div>
             </td>
           </tr>
 
           <!-- Main Email Content -->
           <tr>
-            <td style="padding:32px 36px;">
-              <h2 style="margin:0 0 8px 0;font-size:22px;font-weight:700;color:#0f172a;">${headline}</h2>
-              <p style="margin:0 0 24px 0;font-size:15px;color:#475569;line-height:1.6;">
+            <td style="padding:28px 32px;">
+              <h2 style="margin:0 0 12px 0;font-size:20px;font-weight:700;color:#0f172a;">${headline}</h2>
+              <div style="margin:0 0 24px 0;font-size:15px;color:#334155;line-height:1.6;">
                 ${bodyText}
-              </p>
+              </div>
 
               ${showJobDetails && renderedJobRows ? `
               <!-- Job Specifications Card -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:28px;overflow:hidden;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#ffffff;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:24px;overflow:hidden;">
                 <tr>
-                  <td style="background-color:#eff6ff;padding:12px 20px;border-bottom:1px solid #dbeafe;">
-                    <span style="font-size:12px;font-weight:800;letter-spacing:1px;color:#1e40af;text-transform:uppercase;">📌 Job Requirement Details</span>
+                  <td style="background-color:#f8fafc;padding:10px 18px;border-bottom:1px solid #e2e8f0;">
+                    <span style="font-size:12px;font-weight:700;letter-spacing:0.5px;color:#0f172a;text-transform:uppercase;">Job Requirement Details</span>
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding:18px 20px;">
+                  <td style="padding:14px 18px;">
                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                       ${renderedJobRows}
                     </table>
@@ -279,24 +278,24 @@ export function getDesignerEmailTemplate(
 
               ${showCredentialsBox ? `
               <!-- Access Code Credentials Box -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);border:1.5px solid ${accentColor};border-radius:12px;margin-bottom:28px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:24px;">
                 <tr>
-                  <td style="padding:22px;text-align:center;">
-                    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#0369a1;margin-bottom:6px;">Your Access Credentials</div>
-                    <div style="font-family:'Courier New',Courier,monospace;font-size:30px;font-weight:800;letter-spacing:6px;color:${accentColor};background:#ffffff;display:inline-block;padding:8px 24px;border-radius:8px;border:1px solid #bae6fd;box-shadow:0 2px 4px rgba(0,0,0,0.04);margin-bottom:8px;">
+                  <td style="padding:18px;text-align:center;">
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#475569;margin-bottom:6px;">Your Access Credentials</div>
+                    <div style="font-family:'Courier New',Courier,monospace;font-size:26px;font-weight:700;letter-spacing:5px;color:#0f172a;background-color:#ffffff;display:inline-block;padding:6px 20px;border-radius:6px;border:1px solid #cbd5e1;margin-bottom:6px;">
                       ${accessCode}
                     </div>
-                    <div style="font-size:12px;color:#0369a1;">Enter this code when launching your AI interview.</div>
+                    <div style="font-size:12px;color:#64748b;">Enter this code when launching your AI interview.</div>
                   </td>
                 </tr>
               </table>
               ` : ''}
 
-              <!-- Primary CTA Button -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:28px;">
+              <!-- Primary CTA Button (Single Clean Dark Tone) -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:24px;">
                 <tr>
                   <td align="center">
-                    <a href="${interviewLink}" target="_blank" style="display:inline-block;padding:16px 38px;background:${accentColor};color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;border-radius:10px;box-shadow:0 8px 16px -4px rgba(37,99,235,0.3);letter-spacing:0.3px;">
+                    <a href="${interviewLink}" target="_blank" style="display:inline-block;padding:14px 34px;background-color:#0f172a;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;letter-spacing:0.2px;">
                       ${ctaText}
                     </a>
                   </td>
@@ -304,25 +303,25 @@ export function getDesignerEmailTemplate(
               </table>
 
               <!-- Direct Link Fallback -->
-              <p style="margin:0 0 28px 0;font-size:12px;color:#64748b;word-break:break-all;text-align:center;">
-                Direct Link: <a href="${interviewLink}" style="color:${accentColor};text-decoration:underline;">${interviewLink}</a>
+              <p style="margin:0 0 24px 0;font-size:12px;color:#64748b;word-break:break-all;text-align:center;">
+                Direct Link: <a href="${interviewLink}" style="color:#0f172a;text-decoration:underline;">${interviewLink}</a>
               </p>
 
               <!-- Recruiter & Sender Contact Card -->
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:24px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#ffffff;border:1px solid #e2e8f0;border-radius:8px;margin-bottom:20px;">
                 <tr>
-                  <td style="padding:18px 20px;">
-                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#64748b;margin-bottom:8px;">Sender & Recruiter Contact Details</div>
-                    <div style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:4px;">👤 Sender Name: <span style="color:#0f172a;font-weight:700;">${recruiterName}</span></div>
-                    <div style="font-size:14px;color:#334155;">📞 Contact / Phone: <strong style="color:${accentColor};">${recruiterPhone}</strong></div>
+                  <td style="padding:14px 18px;">
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin-bottom:6px;">Sender & Recruiter Contact Details</div>
+                    <div style="font-size:14px;font-weight:600;color:#0f172a;margin-bottom:2px;">👤 Sender: ${recruiterName}</div>
+                    <div style="font-size:13px;color:#334155;">📞 Contact / Phone: ${recruiterPhone}</div>
                   </td>
                 </tr>
               </table>
 
               <!-- Pre-Interview Instructions -->
-              <div style="border-top:1px solid #e2e8f0;padding-top:18px;">
-                <div style="font-size:13px;font-weight:700;color:#334155;margin-bottom:6px;">Important Instructions before starting:</div>
-                <ul style="margin:0;padding-left:18px;font-size:13px;color:#64748b;line-height:1.7;">
+              <div style="border-top:1px solid #e2e8f0;padding-top:16px;">
+                <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:6px;">Important Instructions before starting:</div>
+                <ul style="margin:0;padding-left:18px;font-size:13px;color:#475569;line-height:1.6;">
                   ${instructionsList.map(inst => `<li>${inst}</li>`).join('')}
                 </ul>
               </div>
@@ -330,10 +329,10 @@ export function getDesignerEmailTemplate(
             </td>
           </tr>
 
-          <!-- Corporate White Footer -->
+          <!-- Simple Clean Footer -->
           <tr>
-            <td style="background-color:#f8fafc;padding:20px 36px;border-top:1px solid #e2e8f0;text-align:center;">
-              <p style="margin:0 0 6px 0;font-size:13px;color:#475569;">
+            <td style="background-color:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;text-align:center;">
+              <p style="margin:0 0 4px 0;font-size:12px;color:#475569;">
                 ${footerText}
               </p>
               <p style="margin:0;font-size:11px;color:#94a3b8;">

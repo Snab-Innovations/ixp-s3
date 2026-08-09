@@ -10,6 +10,8 @@ import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { LocationCityInput } from '../components/LocationCityInput';
 import { EducationInput } from '../components/EducationInput';
+import { isEducationMatching } from '../utils/educationMatcher';
+
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
 import { SKILL_OPTIONS } from './Profile';
 import { analyzeResumeText, ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
@@ -944,15 +946,15 @@ const ResumeDump: React.FC = () => {
 
       // 8. Education / Degree Filter (Single + Multi-select checkmark Rec Box)
       if (selectedEducation.length > 0) {
-        const candEduText = (candidate.education || []).map(e => `${e.degree || ''} ${e.institution || ''}`).join(' ').toLowerCase() + ' ' + (candidate.summary || '').toLowerCase();
+        const candEduText = (candidate.education || []).map(e => `${e.degree || ''} ${e.institution || ''}`).join(' ') + ' ' + (candidate.summary || '') + ' ' + (candidate.highestEducation || candidate.qualification || '');
         const hasSelectedEdu = selectedEducation.some(reqEdu =>
-          candEduText.includes(reqEdu.toLowerCase())
+          isEducationMatching(candEduText, reqEdu)
         );
         if (!hasSelectedEdu) return false;
       }
       if (educationFilter !== 'all') {
-        const candEdu = (candidate.education || []).map(e => `${e.degree || ''} ${e.institution || ''}`).join(' ').toLowerCase() + ' ' + (candidate.summary || '').toLowerCase();
-        if (!candEdu.includes(educationFilter.toLowerCase())) return false;
+        const candEduText = (candidate.education || []).map(e => `${e.degree || ''} ${e.institution || ''}`).join(' ') + ' ' + (candidate.summary || '') + ' ' + (candidate.highestEducation || candidate.qualification || '');
+        if (!isEducationMatching(candEduText, educationFilter)) return false;
       }
 
       // 9. Source Filter
@@ -2700,6 +2702,7 @@ const ResumeDump: React.FC = () => {
                         const waOptions = {
                           recruiterName: userProfile?.name || (user as any)?.displayName || (user as any)?.email || 'Recruiting Team',
                           recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || '',
+                          deadline: activeSelectedJob.deadline || activeSelectedJob.interviewDeadline || '',
                           whatsappSessionId: (userProfile as any)?.whatsappSessionId || localStorage.getItem('wa_session_id') || '',
                           whatsappSessionPasscode: (userProfile as any)?.whatsappSessionPasscode || localStorage.getItem('wa_session_passcode') || ''
                         };
@@ -2862,6 +2865,7 @@ const ResumeDump: React.FC = () => {
                               accessCode,
                               false,
                               {
+                                deadline: activeSelectedJob.deadline || activeSelectedJob.interviewDeadline || '',
                                 recruiterName: userProfile?.name || (user as any)?.displayName || 'Recruiter'
                               }
                             );
