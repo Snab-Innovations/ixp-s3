@@ -284,6 +284,45 @@ const InvitedCandidates: React.FC = () => {
         }
     };
 
+    const handleDeleteCandidateInvitationFromHub = async (candidateEmail: string, interviewId: string) => {
+        const candidateObj = globalCandidates.find(c => c.email.toLowerCase() === candidateEmail.toLowerCase() && c.interviewId === interviewId);
+        const displayName = candidateObj?.name || candidateEmail;
+
+        if (!window.confirm(`Are you sure you want to delete the invitation for "${displayName}"? This candidate will be permanently removed from the roster.`)) {
+            return;
+        }
+
+        try {
+            const targetInterview = interviews.find(i => i.id === interviewId);
+            if (!targetInterview) return;
+
+            const updatedCandidateEmails = (targetInterview.candidateEmails || []).filter(
+                (e) => e.toLowerCase() !== candidateEmail.toLowerCase()
+            );
+            const updatedCandidateData = ((targetInterview as any).candidateData || []).filter(
+                (c: any) => !c.email || c.email.toLowerCase() !== candidateEmail.toLowerCase()
+            );
+
+            const updatePayload = {
+                candidateEmails: updatedCandidateEmails,
+                candidateData: updatedCandidateData,
+                updatedAt: new Date()
+            };
+
+            await Promise.all([
+                updateDoc(doc(db, 'interviews', interviewId), updatePayload).catch(() => {}),
+                updateDoc(doc(db, 'jobs', interviewId), updatePayload).catch(() => {})
+            ]);
+
+            setGlobalCandidates(prev => prev.filter(c => !(c.email.toLowerCase() === candidateEmail.toLowerCase() && c.interviewId === interviewId)));
+
+            messageBox.showSuccess(`Deleted invitation for ${displayName}!`);
+        } catch (error) {
+            console.error('Error deleting candidate invitation from hub:', error);
+            messageBox.showError('Failed to delete candidate invitation.');
+        }
+    };
+
     useEffect(() => {
         if (!user) return;
 
@@ -1098,7 +1137,6 @@ const InvitedCandidates: React.FC = () => {
                                                              >
                                                                  <i className="fas fa-external-link-alt text-[11px]"></i>
                                                              </button>
-
                                                              {/* Resend Email Button */}
                                                              <button 
                                                                  onClick={() => handleResendFromHub(candidate.email, candidate.interviewId)}
@@ -1106,6 +1144,15 @@ const InvitedCandidates: React.FC = () => {
                                                                  title="Re-send Email Invitation"
                                                              >
                                                                  <i className="fas fa-redo-alt text-[11px]"></i>
+                                                             </button>
+
+                                                             {/* Delete Candidate Invitation */}
+                                                             <button 
+                                                                 onClick={() => handleDeleteCandidateInvitationFromHub(candidate.email, candidate.interviewId)}
+                                                                 className="flex h-8 w-8 items-center justify-center rounded-[6px] border border-red-500/30 bg-red-500/10 text-red-400 transition-colors hover:bg-red-500/20 hover:text-red-300 cursor-pointer" 
+                                                                 title="Delete Candidate Invitation"
+                                                             >
+                                                                 <i className="fas fa-trash-alt text-[11px]"></i>
                                                              </button>
                                                          </div>
                                                     )}

@@ -763,12 +763,47 @@ const ResumeDump: React.FC = () => {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [candidates]);
 
+  const getCandidateEduText = (cand: any): string => {
+    if (!cand) return '';
+    const eduParts: string[] = [];
+
+    if (Array.isArray(cand.education)) {
+      cand.education.forEach((e: any) => {
+        if (typeof e === 'string' && e.trim()) {
+          eduParts.push(e.trim());
+        } else if (e && typeof e === 'object') {
+          if (e.degree && typeof e.degree === 'string') eduParts.push(e.degree);
+          if (e.institution && typeof e.institution === 'string') eduParts.push(e.institution);
+          if (e.field || e.major) eduParts.push(e.field || e.major);
+        }
+      });
+    } else if (typeof cand.education === 'string' && cand.education.trim()) {
+      eduParts.push(cand.education.trim());
+    }
+
+    if (typeof cand.qualificationBasic === 'string' && cand.qualificationBasic.trim()) eduParts.push(cand.qualificationBasic.trim());
+    if (typeof cand.qualificationPG === 'string' && cand.qualificationPG.trim()) eduParts.push(cand.qualificationPG.trim());
+    if (typeof cand.qualification === 'string' && cand.qualification.trim()) eduParts.push(cand.qualification.trim());
+    if (typeof cand.highestEducation === 'string' && cand.highestEducation.trim()) eduParts.push(cand.highestEducation.trim());
+    if (typeof cand.degree === 'string' && cand.degree.trim()) eduParts.push(cand.degree.trim());
+
+    return eduParts.join(' ').trim();
+  };
+
   const uniqueEducationList = useMemo(() => {
     const set = new Set<string>();
     candidates.forEach(c => {
-      (c.education || []).forEach(e => {
-        if (e.degree && e.degree.trim()) set.add(e.degree.trim());
-      });
+      if (Array.isArray(c.education)) {
+        c.education.forEach((e: any) => {
+          if (typeof e === 'string' && e.trim()) set.add(e.trim());
+          else if (e?.degree && typeof e.degree === 'string' && e.degree.trim()) set.add(e.degree.trim());
+        });
+      } else if (typeof c.education === 'string' && c.education.trim()) {
+        set.add(c.education.trim());
+      }
+      if (c.qualificationBasic && typeof c.qualificationBasic === 'string' && c.qualificationBasic.trim()) set.add(c.qualificationBasic.trim());
+      if (c.qualificationPG && typeof c.qualificationPG === 'string' && c.qualificationPG.trim()) set.add(c.qualificationPG.trim());
+      if ((c as any).qualification && typeof (c as any).qualification === 'string' && (c as any).qualification.trim()) set.add((c as any).qualification.trim());
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [candidates]);
@@ -946,14 +981,14 @@ const ResumeDump: React.FC = () => {
 
       // 8. Education / Degree Filter (Single + Multi-select checkmark Rec Box)
       if (selectedEducation.length > 0) {
-        const candEduText = (candidate.education || []).map(e => `${e.degree || ''} ${e.institution || ''}`).join(' ') + ' ' + (candidate.summary || '') + ' ' + (candidate.highestEducation || candidate.qualification || '');
+        const candEduText = getCandidateEduText(candidate);
         const hasSelectedEdu = selectedEducation.some(reqEdu =>
           isEducationMatching(candEduText, reqEdu)
         );
         if (!hasSelectedEdu) return false;
       }
       if (educationFilter !== 'all') {
-        const candEduText = (candidate.education || []).map(e => `${e.degree || ''} ${e.institution || ''}`).join(' ') + ' ' + (candidate.summary || '') + ' ' + (candidate.highestEducation || candidate.qualification || '');
+        const candEduText = getCandidateEduText(candidate);
         if (!isEducationMatching(candEduText, educationFilter)) return false;
       }
 

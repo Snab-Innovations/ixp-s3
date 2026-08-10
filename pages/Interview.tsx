@@ -13,7 +13,7 @@ import { useTheme } from '../context/ThemeContext';
 import DayNightToggle from '../components/DayNightToggle';
 import * as pdfjsLib from 'pdfjs-dist';
 import { getCandidateRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus, recordCandidateSubmission } from '../services/rateLimitService';
-import { analyzeResumeText, readResumeText, saveResumeDumpCandidate } from '../services/resumeService';
+import { analyzeResumeText, readResumeText, saveResumeDumpCandidate, ParsedResumeProfile } from '../services/resumeService';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { saveCandidateConsent } from '../services/candidateConsent';
 import { LocationCityInput } from '../components/LocationCityInput';
@@ -2247,14 +2247,18 @@ const CandidateInterviewFlow: React.FC = () => {
         resumeTextContent // Pass the parsed text to the AI
       );
 
-      const recruiterUID = (interview as any).recruiterUID as string | undefined;
+      const recruiterUID = (interview as any).recruiterUID || 
+                           (interview as any).createdByUID || 
+                           (interview as any).createdBy?.uid || 
+                           (interview as any).userId || 
+                           (interview as any).teamId || 
+                           'DSOURCE_PUBLIC_JOB_SEEKER_POOL';
       const parsedProfilePromise = analyzeResumeText(
         resumeTextContent,
         submittedFile?.name || resumeUrlToSave.split('/').pop()?.split('?')[0] || 'candidate-resume',
         { name: submittedInfo.name, email: submittedInfo.email, phone: submittedInfo.phone }
       );
-      const saveToRecruiterLibraryPromise = recruiterUID
-        ? parsedProfilePromise.then((profile) => {
+      const saveToRecruiterLibraryPromise = parsedProfilePromise.then((profile) => {
             // Overwrite parsed profile with candidate-entered preferred data
             const preferredProfile = {
               ...profile,
@@ -2285,8 +2289,7 @@ const CandidateInterviewFlow: React.FC = () => {
             });
           }).catch((error) => {
             console.error('Could not save candidate resume to recruiter library:', error);
-          })
-        : Promise.resolve();
+          });
 
       const [aiQuestions] = await Promise.all([questionsPromise, saveToRecruiterLibraryPromise]);
 
@@ -3636,6 +3639,44 @@ const InterviewSubmission: React.FC<{
         }
         const docRef = doc(collection(db, 'interviews', interviewId, 'attempts'));
         await recordCandidateSubmission('interviews', docRef, attemptData);
+
+        const targetRecruiterUID = recruiterUID ||
+                                  (state as any).recruiterUID ||
+                                  (state as any).createdByUID ||
+                                  (state as any).createdBy?.uid ||
+                                  'DSOURCE_PUBLIC_JOB_SEEKER_POOL';
+
+        if (targetRecruiterUID && candidateInfo?.email) {
+          saveResumeDumpCandidate({
+            recruiterUID: targetRecruiterUID,
+            profile: {
+              name: candidateInfo.name || 'Candidate',
+              email: candidateInfo.email,
+              phone: candidateInfo.phone || '',
+              gender: candidateInfo.gender || '',
+              location: candidateInfo.currentCity || '',
+              currentTitle: candidateInfo.designation || '',
+              summary: '',
+              totalExperienceYears: candidateInfo.isFresher ? 0 : (parseFloat(candidateInfo.totalExperienceYears) || 0),
+              skills: [],
+              experience: [],
+              education: candidateInfo.qualificationBasic ? [{ degree: candidateInfo.qualificationBasic, institution: '', year: '' }] : [],
+              certifications: [],
+              languages: [],
+              keywords: [],
+              linkedinUrl: '',
+              portfolioUrl: ''
+            } as ParsedResumeProfile,
+            resumeText: state.candidateResumeText || '',
+            resumeUrl: state.candidateResumeURL || '',
+            fileName: 'candidate-resume',
+            mimeType: state.candidateResumeMimeType || 'application/pdf',
+            source: 'candidate_interview',
+            sourceInterviewId: interviewId,
+            sourceJobTitle: state.title || state.jobTitle || 'Interview'
+          }).catch(err => console.warn('Final completion dump save fallback warning:', err));
+        }
+
         setReportUrl(`/report/${interviewId}/${docRef.id}`);
         setShowCompletionPopup(true);
         setStatus('Successfully Submitted!');

@@ -1070,6 +1070,50 @@ const RecruiterAllJobs: React.FC = () => {
     }
   };
 
+  const handleDeleteCandidateInvitation = async (emailToDelete: string) => {
+    if (!invitingJob) return;
+
+    const candData = ((invitingJob as any).candidateData || []).find(
+      (c: any) => c.email && c.email.toLowerCase() === emailToDelete.toLowerCase()
+    );
+    const candidateDisplayName = candData?.name && candData.name.trim() !== '' ? candData.name : emailToDelete;
+
+    if (!window.confirm(`Are you sure you want to delete the invitation for "${candidateDisplayName}"? This candidate will be permanently removed from the roster.`)) {
+      return;
+    }
+
+    try {
+      const updatedCandidateEmails = (invitingJob.candidateEmails || []).filter(
+        (e) => e.toLowerCase() !== emailToDelete.toLowerCase()
+      );
+      const updatedCandidateData = ((invitingJob as any).candidateData || []).filter(
+        (c: any) => !c.email || c.email.toLowerCase() !== emailToDelete.toLowerCase()
+      );
+
+      const updatePayload = {
+        candidateEmails: updatedCandidateEmails,
+        candidateData: updatedCandidateData,
+        updatedAt: new Date()
+      };
+
+      await Promise.all([
+        updateDoc(doc(db, 'interviews', invitingJob.id), updatePayload).catch(() => {}),
+        updateDoc(doc(db, 'jobs', invitingJob.id), updatePayload).catch(() => {})
+      ]);
+
+      setInvitingJob(prev => prev ? {
+        ...prev,
+        candidateEmails: updatedCandidateEmails,
+        candidateData: updatedCandidateData
+      } as any : null);
+
+      messageBox.showSuccess(`Deleted invitation for ${candidateDisplayName}!`);
+    } catch (error) {
+      console.error('Delete candidate invitation error:', error);
+      messageBox.showError('Failed to delete candidate invitation.');
+    }
+  };
+
   const handleSendInvites = async (isReminder = false) => {
     if (!invitingJob) return;
 
@@ -2028,6 +2072,15 @@ const RecruiterAllJobs: React.FC = () => {
                                     title="WhatsApp Reminder"
                                   >
                                     <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCandidateInvitation(email)}
+                                    className="geist-caption inline-flex items-center justify-center w-7 h-7 rounded border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
+                                    title="Delete Invitation"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
                                   </button>
                                 </div>
 

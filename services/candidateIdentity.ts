@@ -21,10 +21,16 @@ export const getCandidateIdentityKeys = (candidate?: CandidateIdentity | null) =
   const email = normalizeEmail(candidate.email);
   const phone = normalizePhone(candidate.phone);
 
-  return [
-    email ? `email:${email}` : '',
-    phone ? `phone:${phone}` : '',
-  ].filter(Boolean);
+  if (email) {
+    return [`email:${email}`];
+  }
+  if (phone) {
+    return [`phone:${phone}`];
+  }
+  if (candidate.id) {
+    return [`id:${candidate.id}`];
+  }
+  return [];
 };
 
 export const isCandidateIdentityInSet = (

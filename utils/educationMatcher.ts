@@ -172,9 +172,11 @@ export function getDegreeGroups(text: string): string[] {
 
   for (const group of DEGREE_GROUPS) {
     for (const pat of group.patterns) {
-      const escaped = pat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const normalizedPat = normalizeEducationString(pat);
+      if (!normalizedPat) continue;
+      const escaped = normalizedPat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regex = new RegExp(`(?:^|\\b)${escaped}(?:\\b|$)`, 'i');
-      if (regex.test(norm) || norm.includes(pat)) {
+      if (regex.test(norm)) {
         if (!found.includes(group.name)) found.push(group.name);
         break;
       }
@@ -195,7 +197,9 @@ export function getBranchGroups(text: string): string[] {
 
   for (const group of BRANCH_GROUPS) {
     for (const kw of group.keywords) {
-      const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const normalizedKw = normalizeEducationString(kw);
+      if (!normalizedKw) continue;
+      const escaped = normalizedKw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regex = new RegExp(`(?:^|\\b)${escaped}(?:\\b|$)`, 'i');
       if (regex.test(norm)) {
         if (!found.includes(group.name)) found.push(group.name);
@@ -214,10 +218,11 @@ export function checkSingleRequirementMatch(candidateEdu: string, reqOption: str
   const candNorm = normalizeEducationString(candidateEdu);
   const reqNorm = normalizeEducationString(reqOption);
 
-  if (!candNorm || !reqNorm) return true;
+  if (!reqNorm) return true;
+  if (!candNorm) return false;
 
-  // 1. Direct or partial substring inclusion
-  if (candNorm.includes(reqNorm) || reqNorm.includes(candNorm)) {
+  // 1. Exact phrase match
+  if (candNorm === reqNorm) {
     return true;
   }
 
@@ -308,7 +313,7 @@ export function checkSingleRequirementMatch(candidateEdu: string, reqOption: str
  */
 export function isEducationMatching(candidateEdu: string, requiredEdu: string): boolean {
   if (!requiredEdu || !requiredEdu.trim()) return true;
-  if (!candidateEdu || !candidateEdu.trim()) return true;
+  if (!candidateEdu || !candidateEdu.trim()) return false;
 
   const reqTrim = requiredEdu.trim();
   const candTrim = candidateEdu.trim();

@@ -931,6 +931,50 @@ const RecruiterInterviews: React.FC = () => {
     }
   };
 
+  const handleDeleteCandidateInvitation = async (emailToDelete: string) => {
+    if (!selectedInterview) return;
+
+    const candData = ((selectedInterview as any).candidateData || []).find(
+      (c: any) => c.email && c.email.toLowerCase() === emailToDelete.toLowerCase()
+    );
+    const candidateDisplayName = candData?.name && candData.name.trim() !== '' ? candData.name : emailToDelete;
+
+    if (!window.confirm(`Are you sure you want to delete the invitation for "${candidateDisplayName}"? This candidate will be permanently removed from the roster.`)) {
+      return;
+    }
+
+    try {
+      const updatedCandidateEmails = (selectedInterview.candidateEmails || []).filter(
+        (e) => e.toLowerCase() !== emailToDelete.toLowerCase()
+      );
+      const updatedCandidateData = ((selectedInterview as any).candidateData || []).filter(
+        (c: any) => !c.email || c.email.toLowerCase() !== emailToDelete.toLowerCase()
+      );
+
+      const updatePayload = {
+        candidateEmails: updatedCandidateEmails,
+        candidateData: updatedCandidateData,
+        updatedAt: new Date()
+      };
+
+      await Promise.all([
+        updateDoc(doc(db, 'interviews', selectedInterview.id), updatePayload).catch(() => {}),
+        updateDoc(doc(db, 'jobs', selectedInterview.id), updatePayload).catch(() => {})
+      ]);
+
+      setSelectedInterview(prev => prev ? {
+        ...prev,
+        candidateEmails: updatedCandidateEmails,
+        candidateData: updatedCandidateData
+      } as any : null);
+
+      messageBox.showSuccess(`Deleted invitation for ${candidateDisplayName}!`);
+    } catch (error) {
+      console.error('Delete candidate invitation error:', error);
+      messageBox.showError('Failed to delete candidate invitation.');
+    }
+  };
+
   const handleSendInvites = async (isReminder = false) => {
     if (!selectedInterview) return;
 
@@ -1841,6 +1885,14 @@ const RecruiterInterviews: React.FC = () => {
                                                                 title="WhatsApp Reminder"
                                                             >
                                                                 <i className="fab fa-whatsapp text-xs"></i>
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDeleteCandidateInvitation(email)}
+                                                                disabled={resendingEmail !== null}
+                                                                className="w-7 h-7 rounded border border-red-500/30 bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors flex items-center justify-center" 
+                                                                title="Delete Invitation"
+                                                            >
+                                                                <i className="fas fa-trash-alt text-xs"></i>
                                                             </button>
                                                         </div>
 

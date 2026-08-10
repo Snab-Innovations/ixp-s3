@@ -811,6 +811,50 @@ const InterviewCandidates: React.FC = () => {
     }
   };
 
+  const handleDeleteCandidateInvitation = async (emailToDelete: string) => {
+    if (!interview) return;
+
+    const candData = ((interview as any).candidateData || []).find(
+      (c: any) => c.email && c.email.toLowerCase() === emailToDelete.toLowerCase()
+    );
+    const candidateDisplayName = candData?.name && candData.name.trim() !== '' ? candData.name : emailToDelete;
+
+    if (!window.confirm(`Are you sure you want to delete the invitation for "${candidateDisplayName}"? This candidate will be permanently removed from the roster.`)) {
+      return;
+    }
+
+    try {
+      const updatedCandidateEmails = (interview.candidateEmails || []).filter(
+        (e) => e.toLowerCase() !== emailToDelete.toLowerCase()
+      );
+      const updatedCandidateData = ((interview as any).candidateData || []).filter(
+        (c: any) => !c.email || c.email.toLowerCase() !== emailToDelete.toLowerCase()
+      );
+
+      const updatePayload = {
+        candidateEmails: updatedCandidateEmails,
+        candidateData: updatedCandidateData,
+        updatedAt: new Date()
+      };
+
+      await Promise.all([
+        updateDoc(doc(db, 'interviews', interview.id), updatePayload).catch(() => {}),
+        updateDoc(doc(db, 'jobs', interview.id), updatePayload).catch(() => {})
+      ]);
+
+      setInterview(prev => prev ? {
+        ...prev,
+        candidateEmails: updatedCandidateEmails,
+        candidateData: updatedCandidateData
+      } as any : null);
+
+      messageBox.showSuccess(`Deleted invitation for ${candidateDisplayName}!`);
+    } catch (error) {
+      console.error('Delete candidate invitation error:', error);
+      messageBox.showError('Failed to delete candidate invitation.');
+    }
+  };
+
   const handleAllowReattempt = async (attemptId: string, currentAllowValue: boolean) => {
     if (!interview) return;
     try {
@@ -1467,6 +1511,16 @@ const InterviewCandidates: React.FC = () => {
                                 Resend
                               </>
                             )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCandidateInvitation(candidate.email)}
+                            disabled={resendingEmail !== null}
+                            className="geist-caption inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-red-500/30 bg-red-500/10 px-3 font-semibold text-red-400 hover:bg-red-600 hover:text-white transition-colors cursor-pointer"
+                            title="Delete Invitation"
+                          >
+                            <i className="fas fa-trash-alt text-[10px]"></i>
+                            Delete
                           </button>
                         </>
                       )}
