@@ -285,6 +285,94 @@ const CandidateInfoForm: React.FC<{
   const existingResumeUrl = userProfile?.resumeURL || userProfile?.resumeUrl;
   const [foundDumpCandidate, setFoundDumpCandidate] = useState<any | null>(null);
   const [isSearchingResumeDump, setIsSearchingResumeDump] = useState(false);
+  const [isParsingResumeFirst, setIsParsingResumeFirst] = useState(false);
+  const [autofillNotice, setAutofillNotice] = useState<string | null>(null);
+
+  const handleResumeFirstFileChange = async (file: File) => {
+    if (!file) return;
+    setResumeFile(file);
+    setIsParsingResumeFirst(true);
+    setErrorMsg(null);
+    setAutofillNotice(null);
+
+    try {
+      const resumeText = await readResumeText(file, file.name);
+
+      if (resumeText) {
+        const profile = await analyzeResumeText(resumeText, file.name, {
+          name: name || undefined,
+          email: email || undefined,
+          phone: phone || undefined,
+        });
+
+        let filledCount = 0;
+
+        if (profile.name && profile.name !== 'Unknown Candidate') {
+          setName(profile.name);
+          filledCount++;
+        }
+        if (profile.email) {
+          setEmail(profile.email.toLowerCase());
+          filledCount++;
+        }
+        if (profile.phone) {
+          setPhone(profile.phone);
+          filledCount++;
+        }
+        if (profile.gender && profile.gender !== 'Unspecified') {
+          setGender(profile.gender);
+          filledCount++;
+        }
+        if (profile.location) {
+          setCurrentCity(profile.location);
+          filledCount++;
+        }
+        if (profile.currentTitle) {
+          setDesignation(profile.currentTitle);
+          filledCount++;
+        }
+        if ((profile as any).currentCompany) {
+          setCurrentCompanyName((profile as any).currentCompany);
+          filledCount++;
+        }
+        if (profile.totalExperienceYears !== undefined && profile.totalExperienceYears !== null) {
+          if (profile.totalExperienceYears === 0) {
+            setIsFresher(true);
+            setTotalExperienceYears('0');
+          } else {
+            setIsFresher(false);
+            setTotalExperienceYears(profile.totalExperienceYears.toString());
+          }
+          filledCount++;
+        }
+        if (profile.education && profile.education.length > 0) {
+          const topEdu = profile.education[0];
+          const eduStr = topEdu.degree || topEdu.institution || '';
+          if (eduStr) {
+            setQualificationBasic(eduStr);
+            filledCount++;
+          }
+        }
+        if (profile.skills && profile.skills.length > 0) {
+          setHighlightedSkillsForJob(profile.skills.slice(0, 10).join(', '));
+          filledCount++;
+        }
+
+        setAutofillNotice(`Resume parsed successfully! Auto-filled form details.`);
+      }
+
+      setIsUploadingResume(true);
+      uploadToCloudinary(file, 'auto')
+        .then((url) => setUploadedResumeUrl(url))
+        .catch((err) => console.warn('Background upload notice:', err))
+        .finally(() => setIsUploadingResume(false));
+    } catch (err: any) {
+      console.warn("Resume parsing error:", err);
+      setErrorMsg("Uploaded resume, but could not auto-extract text. Please verify your details below.");
+    } finally {
+      setIsParsingResumeFirst(false);
+    }
+  };
 
   // Auto-restore candidate info form draft state on refresh
   useEffect(() => {
@@ -454,6 +542,10 @@ const CandidateInfoForm: React.FC<{
 
   const handleNext = () => {
     if (formStep === 1) {
+      if (!resumeFile && !uploadedResumeUrl && !existingResumeUrl && !foundDumpCandidate?.resumeUrl && !foundDumpCandidate?.resumeURL) {
+        setErrorMsg("Please upload your resume to continue.");
+        return;
+      }
       if (!name || !name.trim()) {
         setErrorMsg("Please enter your Full Name.");
         return;
@@ -466,9 +558,16 @@ const CandidateInfoForm: React.FC<{
         setErrorMsg("Please enter your Contact Number.");
         return;
       }
-      const digits = phone.replace(/\D/g, '');
-      if (digits.length < 10 || digits.length > 15) {
-        setErrorMsg("Please enter a valid 10-digit mobile number or format like +91 9545556045.");
+      const rawDigits = phone.replace(/\D/g, '');
+      let core10Digit = rawDigits;
+      if (rawDigits.length === 12 && rawDigits.startsWith('91')) {
+        core10Digit = rawDigits.slice(2);
+      } else if (rawDigits.length === 11 && rawDigits.startsWith('0')) {
+        core10Digit = rawDigits.slice(1);
+      }
+
+      if (core10Digit.length !== 10) {
+        setErrorMsg("Please enter a valid 10-digit mobile number (e.g. 9876543210 or +91 9876543210).");
         return;
       }
       const candGNorm = (gender || '').trim().toLowerCase();
@@ -661,6 +760,49 @@ const CandidateInfoForm: React.FC<{
 
           {formStep === 1 && (
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+              {/* Mandatory Resume Upload First Banner */}
+              <div className="candidate-resume-first-card p-5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white rounded-2xl shadow-md border border-blue-400/30 relative overflow-hidden">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center font-black text-xl flex-shrink-0">
+                      <i className="fas fa-file-invoice text-xl"></i>
+                    </div>
+                    <div>
+                      <h3 className="text-sm sm:text-base font-extrabold text-white mb-0.5">
+                        Step 1: Upload Resume <span className="text-red-300 font-bold">*</span> (Mandatory)
+                      </h3>
+                      <p className="text-xs text-blue-100 font-medium leading-tight">Upload your resume (PDF, DOCX, TXT) to instantly auto-fill form details.</p>
+                    </div>
+                  </div>
+
+                  <label
+                    htmlFor="resume-first-upload-input"
+                    className={`px-4 py-2.5 rounded-xl bg-white text-blue-700 font-extrabold hover:bg-blue-50 transition-all shadow-md text-xs cursor-pointer flex items-center gap-2 whitespace-nowrap active:scale-95 ${isParsingResumeFirst ? 'opacity-80 cursor-not-allowed' : ''}`}
+                  >
+                    <i className={isParsingResumeFirst ? "fas fa-spinner fa-spin text-blue-600" : (resumeFile || uploadedResumeUrl || existingResumeUrl || (foundDumpCandidate && (foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL))) ? "fas fa-check-circle text-emerald-600" : "fas fa-cloud-upload-alt text-blue-600"}></i>
+                    <span>{isParsingResumeFirst ? 'Parsing & Auto-filling...' : resumeFile ? resumeFile.name : (existingResumeUrl || (foundDumpCandidate && (foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL))) ? 'Saved Resume Loaded' : 'Upload Resume File *'}</span>
+                  </label>
+                  <input
+                    id="resume-first-upload-input"
+                    type="file"
+                    accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    className="hidden"
+                    disabled={isParsingResumeFirst}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleResumeFirstFileChange(e.target.files[0]);
+                      }
+                    }}
+                  />
+                </div>
+
+                {autofillNotice && (
+                  <div className="mt-3 pt-2.5 border-t border-white/20 text-xs font-semibold text-emerald-200 flex items-center gap-2">
+                    <i className="fas fa-magic text-emerald-300"></i>
+                    <span>{autofillNotice}</span>
+                  </div>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -943,55 +1085,6 @@ const CandidateInfoForm: React.FC<{
                 </div>
               </div>
               
-              <div className="candidate-resume-section bg-gray-50 dark:bg-gray-900/30 p-4 rounded-xl border border-gray-100 dark:border-gray-700 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Resume File <span className="text-red-500">*</span></label>
-                    {(uploadedResumeUrl || existingResumeUrl || (foundDumpCandidate && (foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL))) && (
-                      <button
-                        type="button"
-                        onClick={() => setPreviewModalUrl(uploadedResumeUrl || existingResumeUrl || (foundDumpCandidate?.resumeUrl || foundDumpCandidate?.resumeURL))}
-                        className="text-xs font-extrabold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/30 px-3 py-1 rounded-lg border border-blue-200 dark:border-blue-800 cursor-pointer"
-                      >
-                        <i className="fas fa-eye text-blue-500"></i>
-                        <span>View Current Saved Resume</span>
-                      </button>
-                    )}
-                  </div>
-
-                  <label
-                    htmlFor="resume-upload-input"
-                    className={`candidate-upload-trigger w-full font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 border cursor-pointer ${isUploadingResume ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-600 border-yellow-200' : uploadedResumeUrl ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800' : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-200 dark:hover:bg-blue-800/60'} ${isUploadingResume ? 'opacity-70 cursor-not-allowed' : ''}`}
-                  >
-                    <i className={isUploadingResume ? "fas fa-spinner fa-spin" : uploadedResumeUrl ? "fas fa-check-circle" : "fas fa-cloud-upload-alt"}></i>
-                    <span>{isUploadingResume ? 'Uploading to Cloudinary...' : uploadedResumeUrl ? 'Resume Uploaded (Click to Replace)' : resumeFile ? resumeFile.name : (existingResumeUrl || (foundDumpCandidate && (foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL))) ? 'Using saved resume from database (Click to Upload & Replace)' : 'Browse/Upload Resume (PDF, DOCX, or TXT)'}</span>
-                  </label>
-                  <input
-                    id="resume-upload-input"
-                    type="file"
-                    accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-                    className="hidden"
-                    disabled={isUploadingResume}
-                    onChange={async (e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        const file = e.target.files[0];
-                        setResumeFile(file);
-                        setIsUploadingResume(true);
-                        setErrorMsg(null);
-                        try {
-                          const url = await uploadToCloudinary(file, 'auto');
-                          setUploadedResumeUrl(url);
-                          setErrorMsg(null);
-                        } catch (err) {
-                          console.warn("Background upload notice:", err);
-                          setErrorMsg(null);
-                        } finally {
-                          setIsUploadingResume(false);
-                        }
-                      }
-                    }}
-                  />
-                  </div>
-
               {/* The label is now inside the LanguageSelector component */}
               <LanguageSelector selectedLanguage={language} onLanguageChange={setLanguage} className="pt-2" />
             </div>
@@ -2393,7 +2486,16 @@ const CandidateInterviewFlow: React.FC = () => {
         resumeMimeType,
         submittedInfo.language,
         (interview as any).numQuestions || 5,
-        resumeTextContent // Pass the parsed text to the AI
+        resumeTextContent, // Pass the parsed text to the AI
+        {
+          name: submittedInfo.name,
+          designation: submittedInfo.designation,
+          currentCompany: submittedInfo.currentCompanyName,
+          qualification: submittedInfo.qualificationBasic,
+          totalExperienceYears: submittedInfo.totalExperienceYears,
+          totalExperienceMonths: submittedInfo.totalExperienceMonths,
+          isFresher: submittedInfo.isFresher,
+        }
       );
 
       const recruiterUID = (interview as any).recruiterUID || 

@@ -54,6 +54,17 @@ export const DEFAULT_WORK_EXPERIENCE_QUESTION_EN = "Please tell us about your wo
 export const DEFAULT_WORK_EXPERIENCE_QUESTION_HI = "कृपया अपने कार्य अनुभव के बारे में बताएं। प्रत्येक कंपनी के लिए, अपना पद (Job Title), प्रतिदिन किया जाने वाला कार्य और अपनी मुख्य जिम्मेदारियां बताएं।";
 export const DEFAULT_WORK_EXPERIENCE_QUESTION_MR = "कृपया आपल्या कामाच्या अनुभवाबद्दल सांगा. प्रत्येक कंपनीसाठी, तुमचे पद (Job Title), तुम्ही रोज काय काम करायचे आणि तुमच्या मुख्य जबाबदाऱ्या सांगा.";
 
+export interface CandidateProfileForQuestions {
+  name?: string;
+  designation?: string;
+  currentCompany?: string;
+  qualification?: string;
+  totalExperienceYears?: string;
+  totalExperienceMonths?: string;
+  isFresher?: boolean;
+  skills?: string[];
+}
+
 export const generateInterviewQuestions = async (
   jobTitle: string,
   jobDescription: string,
@@ -62,18 +73,16 @@ export const generateInterviewQuestions = async (
   mimeType: string,
   languageCode: string = 'en',
   numQuestions: number = 5,
-  resumeTextContent?: string
+  resumeTextContent?: string,
+  candidateProfile?: CandidateProfileForQuestions
 ) => {
   // Language-specific instructions for easy, natural language
   let langInstruction = '';
-  let fixedFirstQuestion = DEFAULT_WORK_EXPERIENCE_QUESTION_EN;
 
   if (languageCode === 'mr') {
-    fixedFirstQuestion = DEFAULT_WORK_EXPERIENCE_QUESTION_MR;
     langInstruction = `Language: Marathi (Devanagari script).
 IMPORTANT: Use simple, everyday Marathi that common people speak. Do NOT use heavy/literary Marathi words. If any word is difficult or technical (like "quality management", "KPI", "compliance", "production planning" etc.), keep that word in English and write the rest in easy Marathi. The question should feel natural like a normal conversation, not like a textbook.`;
   } else if (languageCode === 'hi') {
-    fixedFirstQuestion = DEFAULT_WORK_EXPERIENCE_QUESTION_HI;
     langInstruction = `Language: Hindi (Devanagari script).
 IMPORTANT: Use simple, everyday Hindi that common people speak. Do NOT use heavy/Shudh Hindi words. If any word is difficult or technical (like "quality management", "KPI", "compliance", "production planning" etc.), keep that word in English and write the rest in easy Hindi. The question should feel natural like a normal conversation, not like a textbook.`;
   } else {
@@ -84,30 +93,58 @@ IMPORTANT: Use simple, everyday Hindi that common people speak. Do NOT use heavy
   const jd  = truncate(jobDescription, JD_MAX_CHARS);
   const exp = truncate(candidateExp, 150);
 
-  const sys = `You are a polite, professional HR interviewer. Your tone is gentle, respectful, and conversational.
+  // Build structured candidate profile summary
+  const candName = candidateProfile?.name?.trim() || '';
+  const candDesignation = candidateProfile?.designation?.trim() || '';
+  const candCompany = candidateProfile?.currentCompany?.trim() || '';
+  const candQual = candidateProfile?.qualification?.trim() || '';
+  const candExpStr = candidateProfile?.isFresher
+    ? 'Fresher (0 years experience)'
+    : (exp || `${candidateProfile?.totalExperienceYears || '0'} years ${candidateProfile?.totalExperienceMonths || '0'} months`);
+
+  const profileSummaryLines = [
+    candName ? `Candidate Name: ${candName}` : null,
+    candDesignation ? `Current/Recent Role: ${candDesignation}` : null,
+    candCompany ? `Company: ${candCompany}` : null,
+    candQual ? `Education: ${candQual}` : null,
+    `Experience: ${candExpStr}`,
+  ].filter(Boolean).join('\n');
+
+  // Combine candidate profile summary with parsed resume text
+  const combinedResumeText = resumeTextContent?.trim()
+    ? `[Candidate Profile Summary]\n${profileSummaryLines}\n\n[Full Resume Text]\n${resumeTextContent.trim()}`
+    : `[Candidate Profile Summary]\n${profileSummaryLines}`;
+
+  const sys = `You are an expert HR interviewer. Your tone is warm, professional, respectful, and conversational.
 Rules:
-- Ask short, clear, straight-to-the-point questions.
-- No difficult or fancy language.
-- Output ONLY a valid JSON object, nothing else. Example: {"questions":["Question 1", "Question 2"]}`;
+- Generate questions that are 100% personalized to THIS candidate based on BOTH the Job Description (JD) and their Resume/profile.
+- Output ONLY a valid JSON object: {"questions":["Question 1", "Question 2", ...]}`;
 
   const prompt =
-`Role: "${jobTitle}"
-JD: ${jd}
-Experience: ${exp}
+`Target Job Title: "${jobTitle}"
+Job Description (JD):
+${jd}
+
+Candidate Profile & Experience:
+${profileSummaryLines}
+
 ${langInstruction}
 
-Generate ${Math.max(1, numQuestions - 1)} verification questions. (Note: Question 1 is already fixed as work experience introduction, generate remaining questions starting from question 2). Your goal is to VERIFY whether this candidate genuinely has the skills, experience, and project knowledge they claim on their resume.
+Generate exactly ${Math.max(1, numQuestions)} personalized interview questions.
 
-How to generate questions:
-1. Read the candidate's resume carefully — look at their skills, projects, past roles, tools, and achievements.
-2. Cross-check these claims against the JD requirements.
-3. Ask practical, real-world questions that only someone who has actually done that work would be able to answer confidently. For example:
-   - If resume says "managed quality audits" → ask "Walk me through how you conducted a quality audit at your last company. What was the outcome?"
-   - If resume says "React.js" → ask "In your project [X], how did you handle state management and why did you choose that approach?"
-   - If resume says "3 years experience in production planning" → ask "Tell me about a time when your production plan failed. What went wrong and how did you fix it?"
-4. Do NOT ask generic textbook questions. Every question must reference something specific from the resume or JD.
-5. Mix questions across: skills verification, project deep-dives, situational/behavioral, and JD-specific requirements.
-6. The candidate should feel like you have actually read their resume.`;
+CRITICAL INSTRUCTIONS FOR PERSONALIZED QUESTIONS:
+1. QUESTION 1 (Personalized Introduction & Background):
+   - Personalize Question 1 specifically for ${candName || 'this candidate'}.
+   - Greet the candidate by name (if provided) and ask them to introduce themselves and walk through their work experience or background (mentioning their role as ${candDesignation || 'their past role'} at ${candCompany || 'their past company'} or degree in ${candQual || 'their field'} if known) and how it prepares them for this "${jobTitle}" position.
+
+2. QUESTIONS 2 to ${Math.max(1, numQuestions)} (Resume + JD Deep-Dive Verification):
+   - EVERY question MUST be deeply customized to THIS candidate by cross-referencing specific details from their resume/profile (past roles, specific companies, projects, tools, frameworks, degrees, or claimed achievements) against the core requirements in the JD.
+   - For example:
+     * "On your resume at ${candCompany || '[Company]'}, you mentioned using [Tool/Tech]. In our JD, we need [JD Requirement]. How did you apply [Tool/Tech] in your past project and how will you apply it here?"
+     * "You listed [Skill/Project] on your resume. Walk me through a challenging situation you faced with [Skill/Project] and how you resolved it."
+   - DO NOT ask generic candidate-agnostic textbook questions (e.g. "What is React?", "Tell me about a time you had a conflict").
+   - Every candidate applying for this job MUST receive completely distinct questions tailored strictly to THEIR individual resume.
+   - Keep questions clear, practical, conversational, and direct.`;
 
   try {
     const parsed = await grokGenerateWithResumeJson<{ questions?: string[] }>(
@@ -115,25 +152,31 @@ How to generate questions:
       prompt,
       base64Resume,
       mimeType,
-      0.5,
+      0.6,
       BUDGET.QUESTIONS,
-      resumeTextContent,
-      'questions' // MiniMax M2.1
+      combinedResumeText,
+      'questions' // Bedrock model
     );
     const parsedQuestions = Array.isArray(parsed.questions) ? parsed.questions : [];
-    
-    // Combine fixed Question 1 + generated AI questions
-    const allQuestions = [fixedFirstQuestion, ...parsedQuestions];
 
     // Deduplicate while preserving order and limit to total requested numQuestions
     const uniqueQuestions: string[] = [];
     const seen = new Set<string>();
-    for (const q of allQuestions) {
-      const key = q.trim().toLowerCase();
+    for (const q of parsedQuestions) {
+      if (!q || typeof q !== 'string') continue;
+      const trimmed = q.trim();
+      const key = trimmed.toLowerCase();
       if (!seen.has(key)) {
         seen.add(key);
-        uniqueQuestions.push(q.trim());
+        uniqueQuestions.push(trimmed);
       }
+    }
+
+    if (uniqueQuestions.length === 0) {
+      const fallbackIntro = candName
+        ? `Hello ${candName}, welcome! Please tell us about your work experience as ${candDesignation || 'a professional'} at ${candCompany || 'your previous company'} and why you are interested in the ${jobTitle} role.`
+        : DEFAULT_WORK_EXPERIENCE_QUESTION_EN;
+      uniqueQuestions.push(fallbackIntro);
     }
 
     return uniqueQuestions.slice(0, numQuestions);

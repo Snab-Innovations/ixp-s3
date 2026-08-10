@@ -98,7 +98,7 @@ const EMAIL_REGEX = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i;
 const PHONE_REGEX = /(?:\+?\d{1,4}[\s.-]?)?(?:[6-9]\d{4}[\s.-]?\d{5}|(?:\(?\d{2,4}\)?[\s.-]?)?\d{3,5}[\s.-]?\d{4,5})/;
 const URL_REGEX = /https?:\/\/[^\s)]+/gi;
 const DATE_RANGE_REGEX = /(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|\d{1,2})?[\s/'-]*(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:present|current|now|(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|\d{1,2})?[\s/'-]*(?:19|20)\d{2})/i;
-const SECTION_HEADING_REGEX = /^(summary|profile|objective|about|skills?|technical skills?|core competencies|competencies|technologies|tools|work experience|professional experience|employment|experience|projects?|education|academic background|certifications?|courses?|achievements?|languages?|interests?|personal details)\s*:?[\s]*$/i;
+const SECTION_HEADING_REGEX = /^(?:professional\s+|career\s+|executive\s+|key\s+|technical\s+|core\s+|academic\s+|personal\s+)?(summary|profile|objective|about|skills?|competencies|technologies|tools|work experience|experience|employment|projects?|education|background|qualifications?|certifications?|courses?|achievements?|languages?|interests?|details)\s*:?[\s]*$/i;
 
 export function extractPhoneFromText(text: string): string {
   if (!text) return '';
@@ -318,7 +318,7 @@ export const extractSkillSignals = (text: string) => {
   }
 
   const lines = text.split(/\r?\n/);
-  const skillHeadingIndex = lines.findIndex((line) => /^(skills?|technical skills?|core competencies|technologies|tools)\s*:?\s*$/i.test(line.trim()));
+  const skillHeadingIndex = lines.findIndex((line) => /^(?:technical\s+|key\s+|core\s+|professional\s+|primary\s+|domain\s+)?(skills?|competencies|technologies|tools(?:\s*&\s*technologies)?|expertise|proficiencies|stack)\s*:?\s*$/i.test(line.trim()));
   if (skillHeadingIndex >= 0) {
     for (let index = skillHeadingIndex + 1; index < Math.min(lines.length, skillHeadingIndex + 12); index++) {
       const line = lines[index].trim();
@@ -401,7 +401,7 @@ const deterministicParse = (text: string, fallbackFileName: string): ParsedResum
   const cleanText = normalizeWhitespace(text.replace(/[•·▪●]/g, '\n• '));
   const name = extractName(cleanText, fallbackFileName);
   const urls = cleanText.match(URL_REGEX) || [];
-  const summary = extractSection(cleanText, /^(summary|profile|objective|about)\s*:?$/i).replace(/\n/g, ' ').slice(0, 1000);
+  const summary = extractSection(cleanText, /^(?:professional\s+|career\s+|executive\s+|profile\s+|personal\s+)?(summary|profile|objective|about(?:\s+me)?|overview|background)(?:\s+of\s+experience|\s+statement)?\s*:?$/i).replace(/\n/g, ' ').slice(0, 1000);
   const topLines = cleanText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 18);
   const location = topLines.find((line) => /\b(?:india|maharashtra|pune|mumbai|delhi|bengaluru|bangalore|hyderabad|chennai|kolkata|noida|gurugram|gurgaon|nashik|nagpur|remote)\b/i.test(line)
     && !EMAIL_REGEX.test(line) && !PHONE_REGEX.test(line) && line.length <= 100) || '';
@@ -779,8 +779,14 @@ export const saveResumeDumpCandidate = async ({
   const candidateRef = doc(db, 'resumeDumpCandidates', candidateId);
   const dumpRef = doc(db, 'resumeDump', candidateId);
 
+  const summaryText = (normalizedProfile.summary || (normalizedProfile as any).professionalSummary || '').trim();
+  const skillsArray = Array.isArray(normalizedProfile.skills) ? normalizedProfile.skills : [];
+
   const payload = {
     ...normalizedProfile,
+    summary: summaryText,
+    professionalSummary: summaryText,
+    skills: skillsArray,
     recruiterUID,
     teamId: teamId || recruiterUID,
     ...(createdBy ? { createdBy } : {}),
