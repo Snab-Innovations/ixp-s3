@@ -23,6 +23,19 @@ import { deleteFileFromS3ByUrl } from '../services/s3Service';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
+// Domain Skill Synonyms Dictionary for Resume Dump Skill Filtering
+const DOMAIN_SKILL_SYNONYMS: Record<string, string[]> = {
+  store: ['warehouse', 'inventory', 'stock', 'dispatch', 'godown', 'materials', 'logistics', 'store keeper', 'storekeeper', 'incharge', 'shipping', 'store management'],
+  dispatch: ['shipping', 'logistics', 'chalan', 'loading', 'unloading', 'billing', 'goods', 'transportation', 'dispatch handling', 'dispatch incharge'],
+  inventory: ['stock', 'tally', 'excel', 'materials', 'material management', 'audit', 'godown', 'inventory management', 'stock management'],
+  mechanical: ['autocad', 'solidworks', 'catia', 'cnc', 'vmc', 'production', 'tooling', 'maintenance', 'assembly', 'be mechanical', 'diploma mechanical'],
+  accounts: ['tally', 'gst', 'tds', 'excel', 'billing', 'finance', 'bookkeeping', 'taxation', 'tally prime'],
+  sales: ['marketing', 'business development', 'bd', 'lead generation', 'client acquisition', 'telecalling', 'sales executive'],
+  react: ['javascript', 'frontend', 'typescript', 'nextjs', 'web development'],
+  python: ['django', 'flask', 'fastapi', 'data analysis', 'pandas', 'machine learning'],
+  node: ['express', 'backend', 'javascript', 'typescript', 'api'],
+};
+
 type TimestampLike =
   | {
       toDate?: () => Date;
@@ -934,16 +947,41 @@ const ResumeDump: React.FC = () => {
       if (statusFilter === 'hired' && !(candidate.isHired || candidate.doNotSuggest)) return false;
       if (statusFilter === 'available' && (candidate.isHired || candidate.doNotSuggest)) return false;
 
-      // 3. Skill filter (Single + Multi-select checkmark Rec Box)
+      // 3. Skill filter (Recommended Domain Skills & Multi-Select Checkmark Box)
       if (selectedSkills.length > 0) {
-        const candidateSkillsLower = (candidate.skills || []).map(s => s.toLowerCase());
-        const hasSelectedSkill = selectedSkills.some(reqSkill =>
-          candidateSkillsLower.some(cs => cs.includes(reqSkill.toLowerCase()))
-        );
+        const candSkillsList = (candidate.skills || []).map(s => s.toLowerCase());
+        const candFullText = `${(candidate.skills || []).join(' ')} ${candidate.resumeText || ''} ${candidate.additionalText || ''} ${candidate.currentTitle || ''} ${candidate.sourceJobTitle || ''}`.toLowerCase();
+
+        const hasSelectedSkill = selectedSkills.some(reqSkill => {
+          const reqLower = reqSkill.toLowerCase().trim();
+          if (!reqLower) return true;
+
+          // 1. Direct candidate skill array match
+          if (candSkillsList.some(cs => cs.includes(reqLower) || reqLower.includes(cs))) return true;
+
+          // 2. Full text / resume text match
+          if (candFullText.includes(reqLower)) return true;
+
+          // 3. Domain synonyms check
+          for (const [key, synonyms] of Object.entries(DOMAIN_SKILL_SYNONYMS)) {
+            if (reqLower.includes(key) || key.includes(reqLower)) {
+              if (synonyms.some(syn => candSkillsList.some(cs => cs.includes(syn)) || candFullText.includes(syn))) {
+                return true;
+              }
+            }
+          }
+
+          return false;
+        });
+
         if (!hasSelectedSkill) return false;
       }
       if (skillFilter !== 'all') {
-        const hasSkill = (candidate.skills || []).some(s => s.toLowerCase() === skillFilter.toLowerCase());
+        const reqLower = skillFilter.toLowerCase().trim();
+        const candSkillsList = (candidate.skills || []).map(s => s.toLowerCase());
+        const candFullText = `${(candidate.skills || []).join(' ')} ${candidate.resumeText || ''} ${candidate.additionalText || ''} ${candidate.currentTitle || ''} ${candidate.sourceJobTitle || ''}`.toLowerCase();
+
+        const hasSkill = candSkillsList.some(s => s.includes(reqLower) || reqLower.includes(s)) || candFullText.includes(reqLower);
         if (!hasSkill) return false;
       }
 
@@ -1023,7 +1061,7 @@ const ResumeDump: React.FC = () => {
     }
 
     return result;
-  }, [candidatesWithScores, searchTerm, statusFilter, skillFilter, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, sourceFilter, dateFilter, selectedJobId]);
+  }, [candidatesWithScores, searchTerm, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, selectedEducation, sourceFilter, dateFilter, selectedJobId]);
 
   const isSearchOrFilterActive = useMemo(() => {
     return Boolean(
