@@ -519,6 +519,12 @@ const ResumeDump: React.FC = () => {
   const [skillsPanelCandidate, setSkillsPanelCandidate] = useState<ResumeDumpCandidate | null>(null);
   const [previewResumeCandidate, setPreviewResumeCandidate] = useState<ResumeDumpCandidate | null>(null);
 
+  // Strict Mandatory AI Criteria Checkmarks
+  const [strictGender, setStrictGender] = useState(false);
+  const [strictLocation, setStrictLocation] = useState(false);
+  const [strictEducation, setStrictEducation] = useState(false);
+  const [strictExperience, setStrictExperience] = useState(false);
+
   // Job selection, scoring, candidate checkbox selection, and invite modal states
   const [jobs, setJobs] = useState<any[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string>('all');
@@ -835,8 +841,12 @@ const ResumeDump: React.FC = () => {
     if (selectedEducation.length > 0) count++;
     if (sourceFilter !== 'all') count++;
     if (dateFilter !== 'all') count++;
+    if (strictGender) count++;
+    if (strictLocation) count++;
+    if (strictEducation) count++;
+    if (strictExperience) count++;
     return count;
-  }, [selectedJobId, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, selectedEducation, sourceFilter, dateFilter, searchTerm]);
+  }, [selectedJobId, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, selectedEducation, sourceFilter, dateFilter, searchTerm, strictGender, strictLocation, strictEducation, strictExperience]);
 
   const handleClearAllFilters = () => {
     setSelectedJobId('all');
@@ -853,14 +863,86 @@ const ResumeDump: React.FC = () => {
     setDateFilter('all');
     setSearchTerm('');
     setSelectedCandidateIds([]);
+    setStrictGender(false);
+    setStrictLocation(false);
+    setStrictEducation(false);
+    setStrictExperience(false);
   };
-
-
 
   // Selected Job Object
   const activeSelectedJob = useMemo(() => {
     return jobs.find(j => j.id === selectedJobId) || null;
   }, [jobs, selectedJobId]);
+
+  // Sync & Auto-Check strict states when activeSelectedJob changes
+  useEffect(() => {
+    if (activeSelectedJob) {
+      // 1. Strict Gender
+      const hasSpecificGender = Boolean(
+        activeSelectedJob.strictGenderMatch ||
+        activeSelectedJob.strictGender ||
+        (activeSelectedJob.genderRequirement && activeSelectedJob.genderRequirement !== 'Any' && activeSelectedJob.genderRequirement !== 'all')
+      );
+      setStrictGender(hasSpecificGender);
+
+      // 2. Strict Location
+      const jobCity = activeSelectedJob.city || activeSelectedJob.location || '';
+      const hasLocation = Boolean(
+        activeSelectedJob.strictLocationMatch ||
+        activeSelectedJob.strictLocation ||
+        activeSelectedJob.isLocationStrict ||
+        jobCity.trim().length > 0
+      );
+      setStrictLocation(hasLocation);
+      if (jobCity) {
+        const matchedCity = MAHARASHTRA_CITIES.find(m => m.toLowerCase() === jobCity.toLowerCase() || jobCity.toLowerCase().includes(m.toLowerCase()));
+        if (matchedCity) setLocationFilter(matchedCity);
+        else setLocationFilter(jobCity);
+      }
+
+      // 3. Strict Education
+      const jobEdu = activeSelectedJob.education || activeSelectedJob.qualification || '';
+      const hasEducation = Boolean(
+        activeSelectedJob.strictEducationMatch ||
+        activeSelectedJob.strictEducation ||
+        activeSelectedJob.isEducationStrict ||
+        (typeof jobEdu === 'string' ? jobEdu.trim().length > 0 : (Array.isArray(jobEdu) && jobEdu.length > 0))
+      );
+      setStrictEducation(hasEducation);
+      if (jobEdu) {
+        if (typeof jobEdu === 'string' && jobEdu.trim()) {
+          setSelectedEducation(jobEdu.split(',').map((s: string) => s.trim()).filter(Boolean));
+        } else if (Array.isArray(jobEdu)) {
+          setSelectedEducation(jobEdu.map((s: any) => String(s).trim()).filter(Boolean));
+        }
+      }
+
+      // 4. Strict Experience
+      const minExp = activeSelectedJob.minExperience ?? activeSelectedJob.experienceYears ?? 0;
+      const maxExp = activeSelectedJob.maxExperience ?? 0;
+      const hasExp = Boolean(
+        activeSelectedJob.strictExperienceMatch ||
+        activeSelectedJob.strictExperience ||
+        activeSelectedJob.isExperienceStrict ||
+        minExp > 0 ||
+        maxExp > 0
+      );
+      setStrictExperience(hasExp);
+      if (minExp > 0 || maxExp > 0) {
+        if (minExp >= 6 && (maxExp <= 8 || maxExp === 0)) setExpFilter('5-10');
+        else if (minExp >= 1 && minExp < 3) setExpFilter('1-3');
+        else if (minExp >= 3 && minExp < 5) setExpFilter('3-5');
+        else if (minExp >= 5 && minExp < 10) setExpFilter('5-10');
+        else if (minExp >= 10) setExpFilter('10+');
+        else if (minExp === 0 && maxExp <= 1) setExpFilter('0-1');
+      }
+    } else {
+      setStrictGender(false);
+      setStrictLocation(false);
+      setStrictEducation(false);
+      setStrictExperience(false);
+    }
+  }, [activeSelectedJob]);
 
   // Compute Match Score for each candidate against activeSelectedJob
   const candidatesWithScores = useMemo(() => {
@@ -1052,6 +1134,65 @@ const ResumeDump: React.FC = () => {
         }
       }
 
+      // --- STRICT MANDATORY AI CRITERIA EVALUATION ---
+      // 1. Strict Gender Filter
+      if (strictGender) {
+        let reqGender = (activeSelectedJob?.genderRequirement || (activeSelectedJob as any)?.gender || 'Any').toLowerCase().trim();
+        if (reqGender !== 'any' && reqGender !== 'all') {
+          const candGender = (candidate.gender || (candidate as any).genderRequirement || '').toLowerCase().trim();
+          if (candGender && candGender !== reqGender && !candGender.includes(reqGender) && !reqGender.includes(candGender)) {
+            return false;
+          }
+        }
+      }
+
+      // 2. Strict Location Filter
+      if (strictLocation) {
+        const targetCity = (locationFilter !== 'all' ? locationFilter : (activeSelectedJob?.city || activeSelectedJob?.location || '')).toLowerCase().trim();
+        if (targetCity && targetCity !== 'all') {
+          const candLoc = (candidate.location || '').toLowerCase().trim();
+          if (!candLoc || (!candLoc.includes(targetCity) && !targetCity.includes(candLoc))) {
+            return false;
+          }
+        }
+      }
+
+      // 3. Strict Education Filter
+      if (strictEducation) {
+        const activeEduList = selectedEducation.length > 0
+          ? selectedEducation
+          : (educationFilter !== 'all'
+              ? [educationFilter]
+              : (activeSelectedJob?.education ? (typeof activeSelectedJob.education === 'string' ? activeSelectedJob.education.split(',') : activeSelectedJob.education) : []));
+
+        if (activeEduList.length > 0) {
+          const candEduText = getCandidateEduText(candidate);
+          const matchesAnyStrictEdu = activeEduList.some(reqEdu => isEducationMatching(candEduText, String(reqEdu).trim()));
+          if (!matchesAnyStrictEdu) return false;
+        }
+      }
+
+      // 4. Strict Experience Filter
+      if (strictExperience) {
+        const expYears = candidate.totalExperienceYears !== undefined && candidate.totalExperienceYears !== null
+          ? candidate.totalExperienceYears
+          : (parseFloat((candidate as any).experienceYears || '0') || 0);
+
+        if (activeSelectedJob) {
+          const minExp = activeSelectedJob.minExperience ?? (activeSelectedJob as any).experienceYears ?? 0;
+          const maxExp = activeSelectedJob.maxExperience ?? (minExp > 0 ? minExp + 3 : 0);
+          if (minExp > 0 || maxExp > 0) {
+            if (expYears < minExp || (maxExp > 0 && expYears > maxExp)) return false;
+          }
+        } else if (expFilter !== 'all') {
+          if (expFilter === '0-1' && (expYears < 0 || expYears > 1)) return false;
+          if (expFilter === '1-3' && (expYears < 1 || expYears > 3)) return false;
+          if (expFilter === '3-5' && (expYears < 3 || expYears > 5)) return false;
+          if (expFilter === '5-10' && (expYears < 5 || expYears > 10)) return false;
+          if (expFilter === '10+' && expYears < 10) return false;
+        }
+      }
+
       return true;
     });
 
@@ -1061,7 +1202,7 @@ const ResumeDump: React.FC = () => {
     }
 
     return result;
-  }, [candidatesWithScores, searchTerm, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, selectedEducation, sourceFilter, dateFilter, selectedJobId]);
+  }, [candidatesWithScores, searchTerm, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, selectedEducation, sourceFilter, dateFilter, selectedJobId, strictGender, strictLocation, strictEducation, strictExperience]);
 
   const isSearchOrFilterActive = useMemo(() => {
     return Boolean(
@@ -1760,6 +1901,119 @@ const ResumeDump: React.FC = () => {
                 <span>Reset All</span>
               </button>
             )}
+          </div>
+        </div>
+
+        {/* Strict Mandatory AI Candidate Matching Criteria Checkmarks Panel */}
+        <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 dark:bg-amber-950/20 p-3 space-y-2.5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0 animate-pulse" />
+              <span className="geist-label text-xs uppercase font-bold text-amber-800 dark:text-amber-300 tracking-wider">
+                Strict Mandatory AI Criteria Checkmarks
+              </span>
+            </div>
+            <span className="text-[11px] text-amber-700 dark:text-amber-400/80 font-mono">
+              Checked criteria strictly filter out non-matching candidates.
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {/* Strict Gender Checkmark */}
+            <div
+              onClick={() => setStrictGender(prev => !prev)}
+              className={`flex items-center gap-2.5 p-2 rounded-md border text-xs cursor-pointer transition-all select-none ${
+                strictGender
+                  ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 text-amber-900 dark:text-amber-200 font-bold shadow-sm'
+                  : 'bg-white dark:bg-black/40 border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:border-amber-300 dark:hover:border-white/20'
+              }`}
+            >
+              <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                strictGender ? 'bg-amber-500 border-amber-500 text-black' : 'border-gray-400 dark:border-gray-500 bg-transparent'
+              }`}>
+                {strictGender && <Check size={11} strokeWidth={3} />}
+              </div>
+              <div className="min-w-0">
+                <span className="block truncate font-semibold">Strict Gender</span>
+                <span className="block text-[10px] text-amber-700 dark:text-amber-400/70 truncate">
+                  {activeSelectedJob?.genderRequirement && activeSelectedJob.genderRequirement !== 'Any'
+                    ? `Must be ${activeSelectedJob.genderRequirement}`
+                    : 'Any -> All genders'}
+                </span>
+              </div>
+            </div>
+
+            {/* Strict Location Checkmark */}
+            <div
+              onClick={() => setStrictLocation(prev => !prev)}
+              className={`flex items-center gap-2.5 p-2 rounded-md border text-xs cursor-pointer transition-all select-none ${
+                strictLocation
+                  ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 text-amber-900 dark:text-amber-200 font-bold shadow-sm'
+                  : 'bg-white dark:bg-black/40 border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:border-amber-300 dark:hover:border-white/20'
+              }`}
+            >
+              <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                strictLocation ? 'bg-amber-500 border-amber-500 text-black' : 'border-gray-400 dark:border-gray-500 bg-transparent'
+              }`}>
+                {strictLocation && <Check size={11} strokeWidth={3} />}
+              </div>
+              <div className="min-w-0">
+                <span className="block truncate font-semibold">Strict Location</span>
+                <span className="block text-[10px] text-amber-700 dark:text-amber-400/70 truncate">
+                  {locationFilter !== 'all'
+                    ? `Must match ${locationFilter}`
+                    : (activeSelectedJob?.city || activeSelectedJob?.location ? `Must match ${activeSelectedJob.city || activeSelectedJob.location}` : 'Must match Location')}
+                </span>
+              </div>
+            </div>
+
+            {/* Strict Education Checkmark */}
+            <div
+              onClick={() => setStrictEducation(prev => !prev)}
+              className={`flex items-center gap-2.5 p-2 rounded-md border text-xs cursor-pointer transition-all select-none ${
+                strictEducation
+                  ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 text-amber-900 dark:text-amber-200 font-bold shadow-sm'
+                  : 'bg-white dark:bg-black/40 border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:border-amber-300 dark:hover:border-white/20'
+              }`}
+            >
+              <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                strictEducation ? 'bg-amber-500 border-amber-500 text-black' : 'border-gray-400 dark:border-gray-500 bg-transparent'
+              }`}>
+                {strictEducation && <Check size={11} strokeWidth={3} />}
+              </div>
+              <div className="min-w-0">
+                <span className="block truncate font-semibold">Strict Education</span>
+                <span className="block text-[10px] text-amber-700 dark:text-amber-400/70 truncate">
+                  {selectedEducation.length > 0
+                    ? `Must match ${selectedEducation.join(', ')}`
+                    : (activeSelectedJob?.education ? `Must match ${activeSelectedJob.education}` : 'Must match Qualification')}
+                </span>
+              </div>
+            </div>
+
+            {/* Strict Experience Checkmark */}
+            <div
+              onClick={() => setStrictExperience(prev => !prev)}
+              className={`flex items-center gap-2.5 p-2 rounded-md border text-xs cursor-pointer transition-all select-none ${
+                strictExperience
+                  ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 text-amber-900 dark:text-amber-200 font-bold shadow-sm'
+                  : 'bg-white dark:bg-black/40 border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:border-amber-300 dark:hover:border-white/20'
+              }`}
+            >
+              <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                strictExperience ? 'bg-amber-500 border-amber-500 text-black' : 'border-gray-400 dark:border-gray-500 bg-transparent'
+              }`}>
+                {strictExperience && <Check size={11} strokeWidth={3} />}
+              </div>
+              <div className="min-w-0">
+                <span className="block truncate font-semibold">Strict Experience</span>
+                <span className="block text-[10px] text-amber-700 dark:text-amber-400/70 truncate">
+                  {activeSelectedJob?.minExperience || activeSelectedJob?.maxExperience
+                    ? `${activeSelectedJob.minExperience || 0}-${activeSelectedJob.maxExperience || '8'} Yrs`
+                    : (expFilter !== 'all' ? `Must match ${expFilter} Yrs` : 'Must fit Yrs range')}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 

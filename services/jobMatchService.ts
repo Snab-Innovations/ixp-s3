@@ -315,9 +315,17 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
   // STRICT DISQUALIFICATION & SKILL CAPPING:
   // 1. If candidate experience is below minExp -> score = 0 (Not Recommended)
   // 2. If job specifies a gender restriction (e.g. Female Only) and candidate gender does NOT match -> score = 0 (Not Recommended & hidden)
-  // 3. If job requires skills (totalReqSkills > 0) and candidate matched 0 skills -> CAP SCORE AT 38% MAX!
-  // 4. If job requires skills (totalReqSkills > 0) and candidate matched < 35% skills -> CAP SCORE AT 55% MAX!
-  if (!expMatch || !genResult.isMatch) {
+  // 3. If job strict location / education / experience match is enabled and fails -> score = 0 (Not Recommended & hidden)
+  // 4. If job requires skills (totalReqSkills > 0) and candidate matched 0 skills -> CAP SCORE AT 38% MAX!
+  // 5. If job requires skills (totalReqSkills > 0) and candidate matched < 35% skills -> CAP SCORE AT 55% MAX!
+  if (
+    !expMatch ||
+    !genResult.isMatch ||
+    (job.strictLocationMatch && !locResult.isMatch) ||
+    (job.strictEducationMatch && !eduMatch) ||
+    (job.strictGenderMatch && !genResult.isMatch) ||
+    (job.strictExperienceMatch && !expMatch)
+  ) {
     compositeScore = 0;
   } else if (totalReqSkills > 0 && matchedSkills.length === 0) {
     compositeScore = Math.min(38, compositeScore);
