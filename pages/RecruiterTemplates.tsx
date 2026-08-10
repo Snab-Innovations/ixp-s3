@@ -282,7 +282,7 @@ const SAMPLE_CONTEXT = {
   interview_link: 'https://dsource.in/#/interview/inv-89210',
   access_code: 'DX-8921',
   interview_code: 'DX-8921',
-  interview_deadline: 'Within 48 Hours',
+  interview_deadline: '14/08/2026',
   location: 'Mumbai / Hybrid',
   qualification: 'B.Tech / MCA',
   experience: '3 - 5 Years',

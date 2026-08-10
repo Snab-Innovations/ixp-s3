@@ -260,6 +260,7 @@ const RecruiterAllJobs: React.FC = () => {
 
   // Edit Candidate State inside Invite Modal
   const [editingCandidateEmail, setEditingCandidateEmail] = useState<string | null>(null);
+  const [editedNameValue, setEditedNameValue] = useState('');
   const [editedEmailValue, setEditedEmailValue] = useState('');
   const [editedPhoneValue, setEditedPhoneValue] = useState('');
   const [savingCandidateEdit, setSavingCandidateEdit] = useState(false);
@@ -287,10 +288,11 @@ const RecruiterAllJobs: React.FC = () => {
   const [rosterWaTarget, setRosterWaTarget] = useState<'whatsapp' | 'both'>('whatsapp');
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
 
-  const handleEditCandidate = async (oldEmail: string, newEmail: string, newPhone: string) => {
+  const handleEditCandidate = async (oldEmail: string, newEmail: string, newPhone: string, newName?: string) => {
     if (!invitingJob || !user) return;
     const targetEmail = (newEmail || oldEmail).trim().toLowerCase();
     const targetPhone = (newPhone || '').trim();
+    const targetName = (newName !== undefined ? newName : '').trim();
 
     if (!targetEmail) {
       messageBox.showError("Candidate email address cannot be empty.");
@@ -314,13 +316,14 @@ const RecruiterAllJobs: React.FC = () => {
         updatedCandData[index] = {
           ...updatedCandData[index],
           email: targetEmail,
+          name: targetName || updatedCandData[index].name || targetEmail.split('@')[0] || 'Candidate',
           phone: targetPhone || 'N/A'
         };
       } else {
         updatedCandData.push({
           email: targetEmail,
           phone: targetPhone || 'N/A',
-          name: targetEmail.split('@')[0] || 'Candidate'
+          name: targetName || targetEmail.split('@')[0] || 'Candidate'
         });
       }
 
@@ -360,8 +363,10 @@ const RecruiterAllJobs: React.FC = () => {
     
     setRemindingCandidateEmail(candidateEmail);
     try {
+      const candData = (invitingJob as any).candidateData || [];
+      const match = candData.find((c: any) => c.email && c.email.toLowerCase() === candidateEmail.toLowerCase());
       const res = await sendInterviewInvitations(
-        [candidateEmail],
+        [{ email: candidateEmail, name: match?.name || '' }],
         invitingJob.title,
         targetLink,
         invitingJob.accessCode || '',
@@ -377,6 +382,7 @@ const RecruiterAllJobs: React.FC = () => {
           gender: (invitingJob as any).gender || (invitingJob as any).genderRequirement,
           salary: invitingJob.salary || invitingJob.salaryRange,
           salaryRange: invitingJob.salaryRange || invitingJob.salary,
+          deadline: invitingJob.deadline || (invitingJob as any).interviewDeadline || (invitingJob as any).applyDeadline || (invitingJob as any).endDate || (invitingJob as any).interviewDates || '',
           employmentType: (invitingJob as any).employmentType,
           customFields: (invitingJob as any).customFields,
           recruiterName: userProfile?.name || userProfile?.fullname || userProfile?.displayName || (user as any)?.displayName || 'Hiring Team',
@@ -420,8 +426,10 @@ const RecruiterAllJobs: React.FC = () => {
       whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
     };
 
+    const targetCandidateName = candData?.name && candData.name.trim() !== '' ? candData.name.trim() : (candidateEmail.split('@')[0] || 'Candidate');
+
     const messageText = buildWhatsAppInviteText({
-      candidateName: candidateEmail.split('@')[0] || 'Candidate',
+      candidateName: targetCandidateName,
       jobTitle: invitingJob.title,
       interviewLink: invitingJob.interviewLink || `${window.location.origin}/#/interview/${invitingJob.id}`,
       accessCode: invitingJob.accessCode || '',
@@ -438,7 +446,7 @@ const RecruiterAllJobs: React.FC = () => {
     try {
       const res = await sendInterviewWhatsAppInvite({
         phone: formattedPhone,
-        candidateName: candidateEmail.split('@')[0] || 'Candidate',
+        candidateName: targetCandidateName,
         jobTitle: invitingJob.title,
         interviewLink: invitingJob.interviewLink || `${window.location.origin}/#/interview/${invitingJob.id}`,
         accessCode: invitingJob.accessCode || '',
@@ -484,6 +492,7 @@ const RecruiterAllJobs: React.FC = () => {
         gender: (invitingJob as any).gender || (invitingJob as any).genderRequirement,
         salary: invitingJob.salary || invitingJob.salaryRange,
         salaryRange: invitingJob.salaryRange || invitingJob.salary,
+        deadline: invitingJob.deadline || (invitingJob as any).interviewDeadline || (invitingJob as any).applyDeadline || (invitingJob as any).endDate || (invitingJob as any).interviewDates || '',
         recruiterName: userProfile?.name || userProfile?.fullname || userProfile?.displayName || (user as any)?.displayName || 'Hiring Team',
         recruiterPhone: userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || (user as any)?.phoneNumber || ''
       }
@@ -524,6 +533,7 @@ const RecruiterAllJobs: React.FC = () => {
         qualification: invitingJob.qualifications || invitingJob.education,
         experience: invitingJob.experience,
         salary: invitingJob.salary || invitingJob.salaryRange,
+        deadline: invitingJob.deadline || (invitingJob as any).interviewDeadline || (invitingJob as any).applyDeadline || (invitingJob as any).endDate || (invitingJob as any).interviewDates || '',
         recruiterName: userProfile?.name || userProfile?.displayName || userProfile?.fullName || 'Recruiter',
         recruiterPhone: userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || '',
         whatsappSessionId: userProfile?.whatsappSessionId,
@@ -560,6 +570,7 @@ const RecruiterAllJobs: React.FC = () => {
         qualification: invitingJob.qualifications || invitingJob.education,
         experience: invitingJob.experience,
         salary: invitingJob.salary || invitingJob.salaryRange,
+        deadline: invitingJob.deadline || (invitingJob as any).interviewDeadline || (invitingJob as any).applyDeadline || (invitingJob as any).endDate || (invitingJob as any).interviewDates || '',
         recruiterName: userProfile?.name || userProfile?.displayName || userProfile?.fullName || 'Recruiter',
         recruiterPhone: userProfile?.phone || userProfile?.phoneNumber || userProfile?.contactNumber || '',
         whatsappSessionId: userProfile?.whatsappSessionId,
@@ -1073,46 +1084,70 @@ const RecruiterAllJobs: React.FC = () => {
 
     const finalEmails = Array.from(new Set([...inviteEmailsList, ...extraInputEmails]));
 
-    if (finalEmails.length === 0) {
-      messageBox.showError("Please enter or upload at least one candidate email.");
-      return;
-    }
-
     setSendingInvites(true);
     setSendingProgressMsg(`Preparing candidate ${isReminder ? 'reminders' : 'invitations'}...`);
 
     try {
-      const existingCandidateEmails = invitingJob.candidateEmails || [];
-      const updatedCandidateEmails = Array.from(new Set([...existingCandidateEmails, ...finalEmails]));
+      if (finalEmails.length > 0) {
+        const existingCandidateEmails = invitingJob.candidateEmails || [];
+        const updatedCandidateEmails = Array.from(new Set([...existingCandidateEmails, ...finalEmails]));
 
-      const candidateDataToAdd = finalEmails.map(email => {
+        const candidateDataToAdd = finalEmails.map(email => {
+          const parsed = parsedCandidates.find(c => c.email.toLowerCase() === email.toLowerCase());
+          return {
+            email: email.toLowerCase(),
+            name: parsed?.name || email.split('@')[0] || 'Candidate',
+            phone: parsed?.phone || 'N/A',
+            experience: parsed?.experience || 'N/A'
+          };
+        });
+
+        const updatePayload = {
+          candidateEmails: updatedCandidateEmails,
+          candidateData: arrayUnion(...candidateDataToAdd),
+          updatedAt: new Date()
+        };
+
+        await Promise.all([
+          updateDoc(doc(db, 'interviews', invitingJob.id), updatePayload).catch(() => {}),
+          updateDoc(doc(db, 'jobs', invitingJob.id), updatePayload).catch(() => {})
+        ]);
+      }
+
+      const targetLink = invitingJob.interviewLink || `${window.location.origin}/#/interview/${invitingJob.id}`;
+
+      let candidatesPayload = finalEmails.map(email => {
         const parsed = parsedCandidates.find(c => c.email.toLowerCase() === email.toLowerCase());
         return {
           email: email.toLowerCase(),
           name: parsed?.name || email.split('@')[0] || 'Candidate',
-          phone: parsed?.phone || 'N/A',
-          experience: parsed?.experience || 'N/A'
+          phone: parsed?.phone || 'N/A'
         };
       });
 
-      const updatePayload = {
-        candidateEmails: updatedCandidateEmails,
-        candidateData: arrayUnion(...candidateDataToAdd),
-        updatedAt: new Date()
-      };
+      // Failsafe: If no new emails were typed, send to existing candidates in roster
+      if (candidatesPayload.length === 0) {
+        const existingCandData = (invitingJob as any).candidateData || [];
+        const existingEmails = invitingJob.candidateEmails || [];
+        if (existingCandData.length > 0) {
+          candidatesPayload = existingCandData.map((c: any) => ({
+            email: c.email,
+            phone: c.phone,
+            name: c.name || c.email?.split('@')[0] || 'Candidate'
+          }));
+        } else if (existingEmails.length > 0) {
+          candidatesPayload = existingEmails.map((e: string) => ({
+            email: e,
+            phone: 'N/A',
+            name: e.split('@')[0] || 'Candidate'
+          }));
+        }
+      }
 
-      await Promise.all([
-        updateDoc(doc(db, 'interviews', invitingJob.id), updatePayload).catch(() => {}),
-        updateDoc(doc(db, 'jobs', invitingJob.id), updatePayload).catch(() => {})
-      ]);
-
-      const targetLink = invitingJob.interviewLink || `${window.location.origin}/#/interview/${invitingJob.id}`;
-
-      const candidatesPayload = candidateDataToAdd.map(c => ({
-        email: c.email,
-        phone: c.phone,
-        name: c.name
-      }));
+      if (candidatesPayload.length === 0) {
+        messageBox.showError("No candidate emails found. Please enter or upload at least one candidate email.");
+        return;
+      }
 
       startBackgroundSend({
         candidates: candidatesPayload,
@@ -1133,6 +1168,7 @@ const RecruiterAllJobs: React.FC = () => {
           gender: (invitingJob as any).gender || (invitingJob as any).genderRequirement,
           salary: invitingJob.salary || invitingJob.salaryRange,
           salaryRange: invitingJob.salaryRange || invitingJob.salary,
+          deadline: invitingJob.deadline || (invitingJob as any).interviewDeadline || (invitingJob as any).applyDeadline || (invitingJob as any).endDate || (invitingJob as any).interviewDates || '',
           employmentType: (invitingJob as any).employmentType,
           customFields: (invitingJob as any).customFields,
           recruiterName: userProfile?.name || userProfile?.fullname || userProfile?.displayName || user?.displayName || 'Hiring Team',
@@ -1891,6 +1927,14 @@ const RecruiterAllJobs: React.FC = () => {
                                 <div className="text-xs text-[#83d0a3] font-semibold">Editing Candidate Details:</div>
                                 <div className="flex flex-col sm:flex-row gap-2">
                                   <input
+                                    type="text"
+                                    value={editedNameValue}
+                                    onChange={(e) => setEditedNameValue(e.target.value)}
+                                    placeholder="Candidate Full Name"
+                                    className="geist-caption w-full sm:w-1/3 h-8 rounded-[4px] border border-white/[0.11] bg-black px-2.5 text-xs text-white outline-none focus:border-white/30"
+                                    autoFocus
+                                  />
+                                  <input
                                     type="email"
                                     value={editedEmailValue}
                                     onChange={(e) => setEditedEmailValue(e.target.value)}
@@ -1902,7 +1946,7 @@ const RecruiterAllJobs: React.FC = () => {
                                     value={editedPhoneValue}
                                     onChange={(e) => setEditedPhoneValue(e.target.value)}
                                     placeholder="WhatsApp Phone (+91...)"
-                                    className="geist-caption w-full sm:w-2/5 h-8 rounded-[4px] border border-white/[0.11] bg-black px-2.5 text-xs text-white outline-none focus:border-white/30"
+                                    className="geist-caption w-full sm:w-1/3 h-8 rounded-[4px] border border-white/[0.11] bg-black px-2.5 text-xs text-white outline-none focus:border-white/30"
                                   />
                                 </div>
                                 <div className="flex items-center justify-end gap-2">
@@ -1910,6 +1954,7 @@ const RecruiterAllJobs: React.FC = () => {
                                     type="button"
                                     onClick={() => {
                                       setEditingCandidateEmail(null);
+                                      setEditedNameValue('');
                                       setEditedEmailValue('');
                                       setEditedPhoneValue('');
                                     }}
@@ -1920,7 +1965,7 @@ const RecruiterAllJobs: React.FC = () => {
                                   </button>
                                   <button
                                     type="button"
-                                    onClick={() => handleEditCandidate(email, editedEmailValue, editedPhoneValue)}
+                                    onClick={() => handleEditCandidate(email, editedEmailValue, editedPhoneValue, editedNameValue)}
                                     disabled={savingCandidateEdit}
                                     className="geist-caption h-7 px-3 rounded bg-white text-black font-semibold text-xs hover:bg-[#eaeaea]"
                                   >
@@ -1931,7 +1976,14 @@ const RecruiterAllJobs: React.FC = () => {
                             ) : (
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                 <div className="flex flex-col min-w-0">
-                                  <span className="font-semibold text-white truncate text-xs" title={email}>{email}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-semibold text-white truncate text-xs" title={candData?.name || email}>
+                                      {candData?.name && candData.name.trim() !== '' ? candData.name : email}
+                                    </span>
+                                    {candData?.name && candData.name.trim() !== '' && (
+                                      <span className="text-[11px] text-[#8f8f8f] truncate">({email})</span>
+                                    )}
+                                  </div>
                                   {candPhone ? (
                                     <span className="text-[11px] text-emerald-400 font-mono flex items-center gap-1 mt-0.5">
                                       <Phone className="w-2.5 h-2.5" />
@@ -1947,6 +1999,7 @@ const RecruiterAllJobs: React.FC = () => {
                                     type="button"
                                     onClick={() => {
                                       setEditingCandidateEmail(email);
+                                      setEditedNameValue(candData?.name || email.split('@')[0] || '');
                                       setEditedEmailValue(email);
                                       setEditedPhoneValue(candPhone);
                                     }}

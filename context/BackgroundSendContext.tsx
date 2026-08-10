@@ -135,18 +135,17 @@ export const BackgroundSendProvider: React.FC<{ children: React.ReactNode }> = (
         return !lower || !completedEmailsSet.has(lower);
       });
 
-      const validEmails = pendingCandidates
-        .map(c => c.email)
-        .filter(e => !!e && !e.endsWith('@whatsapp.local'));
+      const validCandidates = pendingCandidates
+        .filter(c => !!c.email && c.email.includes('@') && !c.email.endsWith('@whatsapp.local'));
 
       // 1. Send Email Invitations/Reminders if not already sent before reload
-      if (opts.sendEmailChannel && validEmails.length > 0 && !emailSent) {
+      if (opts.sendEmailChannel && validCandidates.length > 0 && !emailSent) {
         updateTaskState({
-          statusMessage: `Sending ${validEmails.length} email ${opts.isReminder ? 'reminder' : 'invitation'}(s)...`
+          statusMessage: `Sending ${validCandidates.length} email ${opts.isReminder ? 'reminder' : 'invitation'}(s)...`
         });
 
         const emailRes = await sendInterviewInvitations(
-          validEmails,
+          validCandidates,
           opts.jobTitle,
           opts.interviewLink,
           opts.accessCode,
@@ -173,7 +172,9 @@ export const BackgroundSendProvider: React.FC<{ children: React.ReactNode }> = (
 
         for (let i = initialIndex; i < candidatesWithPhones.length; i++) {
           const candidate = candidatesWithPhones[i];
-          const candidateDisplayName = candidate.name || candidate.email?.split('@')[0] || candidate.phone;
+          const candidateDisplayName = (candidate.name && candidate.name.trim() !== '' && candidate.name.toLowerCase() !== candidate.email?.toLowerCase())
+            ? candidate.name.trim()
+            : (candidate.email ? candidate.email.split('@')[0] : (candidate.phone || 'Candidate'));
 
           updateTaskState({
             sentCount: i + 1,

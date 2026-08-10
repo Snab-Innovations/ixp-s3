@@ -2852,14 +2852,13 @@ const ResumeDump: React.FC = () => {
                         }
 
                         if (inviteDeliveryMode === 'email' || inviteDeliveryMode === 'both') {
-                          const candidateEmails = targetCandidates
-                            .map(c => c.email)
-                            .filter((e): e is string => !!e && e.includes('@') && !e.endsWith('@whatsapp.local'));
+                          const candidatePayload = targetCandidates
+                            .filter(c => !!c.email && c.email.includes('@') && !c.email.endsWith('@whatsapp.local'));
 
-                          if (candidateEmails.length > 0) {
-                            setSendingProgressMsg(`Sending Email invites to ${candidateEmails.length} candidate(s)...`);
+                          if (candidatePayload.length > 0) {
+                            setSendingProgressMsg(`Sending Email invites to ${candidatePayload.length} candidate(s)...`);
                             const emailRes = await sendInterviewInvitations(
-                              candidateEmails,
+                              candidatePayload,
                               jobTitle,
                               interviewLink,
                               accessCode,

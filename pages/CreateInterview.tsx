@@ -860,8 +860,9 @@ const CreateInterview: React.FC = () => {
       if (candidateEmails.length > 0) {
         setSendingEmails(true);
         try {
+          const candidatePayload = candidateDataList.length > 0 ? candidateDataList : candidateEmails;
           const result = await sendInterviewInvitations(
-            candidateEmails,
+            candidatePayload,
             formData.title,
             newInterviewLink,
             newAccessCode,

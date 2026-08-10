@@ -232,7 +232,7 @@ const InvitedCandidates: React.FC = () => {
 
         try {
             const result = await sendInterviewInvitations(
-                [email],
+                [{ email, name: candidateData?.name || '' }],
                 selectedInterview.title,
                 selectedInterview.interviewLink || '',
                 selectedInterview.accessCode,
@@ -497,8 +497,9 @@ const InvitedCandidates: React.FC = () => {
             
             let emailCount = 0;
             if (validEmails.length > 0) {
+                const candidatePayload = newCandidates.length > 0 ? newCandidates : validEmails;
                 const result = await sendInterviewInvitations(
-                    validEmails,
+                    candidatePayload,
                     selectedInterview.title,
                     selectedInterview.interviewLink || '',
                     selectedInterview.accessCode,

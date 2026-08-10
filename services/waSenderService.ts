@@ -2,7 +2,7 @@
 // Uses WhatsApp Task Manager REST API (https://whatsapp-task-manager-ai4d.onrender.com/api/v1/send-message)
 
 import { formatExperienceDisplay } from './sesService';
-import { renderTemplateText, getRecruiterTemplates, WhatsAppTemplateConfig, DEFAULT_JOB_DETAILS_FIELDS, DEFAULT_JOB_DETAILS_ITEMS } from './templateService';
+import { renderTemplateText, getRecruiterTemplates, WhatsAppTemplateConfig, DEFAULT_JOB_DETAILS_FIELDS, DEFAULT_JOB_DETAILS_ITEMS, formatDeadlineDisplay } from './templateService';
 
 const WHATSAPP_API_URL = import.meta.env.VITE_WHATSAPP_API_URL;
 
@@ -210,7 +210,7 @@ export function buildWhatsAppInviteText(params: {
   options?: WhatsAppInviteOptions;
 }): string {
   const { candidateName = 'Candidate', jobTitle, interviewLink, accessCode, isReminder = false, options } = params;
-  const deadline = options?.deadline || 'Within 48 Hours';
+  const deadline = formatDeadlineDisplay(options?.deadline || (options as any)?.interviewDeadline);
 
   const context: Record<string, string> = {
     candidate_name: candidateName,

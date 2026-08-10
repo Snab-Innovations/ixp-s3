@@ -287,37 +287,109 @@ export const DEFAULT_RECRUITER_TEMPLATES: RecruiterTemplates = {
 /**
  * Replaces dynamic placeholders like {{candidate_name}} with actual context values.
  */
+export function formatDeadlineDisplay(deadlineInput?: any): string {
+  if (!deadlineInput) {
+    const d = new Date();
+    d.setDate(d.getDate() + 5);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  const str = String(deadlineInput).trim();
+
+  // If already in DD/MM/YYYY format
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
+    return str;
+  }
+
+  // If in YYYY-MM-DD format
+  const ymdMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymdMatch) {
+    const [, y, m, d] = ymdMatch;
+    return `${d}/${m}/${y}`;
+  }
+
+  // Try parsing Date / Timestamp / Milliseconds
+  let millis = 0;
+  if (deadlineInput instanceof Date) {
+    millis = deadlineInput.getTime();
+  } else if (typeof deadlineInput === 'object' && typeof deadlineInput.toMillis === 'function') {
+    millis = deadlineInput.toMillis();
+  } else if (typeof deadlineInput === 'object' && typeof deadlineInput.toDate === 'function') {
+    millis = deadlineInput.toDate().getTime();
+  } else if (typeof deadlineInput === 'object' && typeof deadlineInput.seconds === 'number') {
+    millis = deadlineInput.seconds * 1000;
+  } else {
+    const parsed = Date.parse(str);
+    if (!isNaN(parsed)) millis = parsed;
+  }
+
+  if (millis > 0) {
+    const d = new Date(millis);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+  // If input string is custom non-empty text, return it
+  if (str && !str.toLowerCase().includes('48 hours')) {
+    return str;
+  }
+
+  // Default +5 days cutoff date
+  const d = new Date();
+  d.setDate(d.getDate() + 5);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
 export function renderTemplateText(templateText: string, context: Record<string, string>): string {
   if (!templateText) return '';
   let result = templateText;
+
+  const rawDeadline = context.interview_deadline || context.deadline;
+  const formattedDeadline = formatDeadlineDisplay(rawDeadline);
+  
+  const cleanContext: Record<string, string> = {
+    ...context,
+    interview_deadline: formattedDeadline,
+    deadline: formattedDeadline
+  };
   
   // Replace standard placeholders
-  Object.keys(context).forEach((key) => {
-    const value = context[key] !== undefined && context[key] !== null ? String(context[key]) : '';
+  Object.keys(cleanContext).forEach((key) => {
+    const value = cleanContext[key] !== undefined && cleanContext[key] !== null ? String(cleanContext[key]) : '';
     const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
     result = result.replace(pattern, value);
   });
 
-  // Provide sensible fallbacks for un-replaced placeholders
+  // Provide sensible fallbacks for un-replaced placeholders & replace legacy hardcoded text
   result = result
-    .replace(/\{\{candidate_name\}\}/gi, context.candidate_name || 'Candidate')
-    .replace(/\{\{candidate_email\}\}/gi, context.candidate_email || '')
-    .replace(/\{\{candidate_phone\}\}/gi, context.candidate_phone || '')
-    .replace(/\{\{job_title\}\}/gi, context.job_title || 'Position')
-    .replace(/\{\{company_name\}\}/gi, context.company_name || 'Dsource')
-    .replace(/\{\{interview_link\}\}/gi, context.interview_link || '#')
-    .replace(/\{\{access_code\}\}/gi, context.access_code || context.interview_code || 'DX-8921')
-    .replace(/\{\{interview_code\}\}/gi, context.interview_code || context.access_code || 'DX-8921')
-    .replace(/\{\{interview_deadline\}\}/gi, context.interview_deadline || 'Within 48 Hours')
-    .replace(/\{\{location\}\}/gi, context.location || 'As specified')
-    .replace(/\{\{qualification\}\}/gi, context.qualification || 'As per requirement')
-    .replace(/\{\{experience\}\}/gi, context.experience || 'As per requirement')
-    .replace(/\{\{salary\}\}/gi, context.salary || 'Best in Industry')
-    .replace(/\{\{employment_type\}\}/gi, context.employment_type || 'Full Time')
-    .replace(/\{\{recruiter_name\}\}/gi, context.recruiter_name || 'HR Recruiting Team')
-    .replace(/\{\{recruiter_phone\}\}/gi, context.recruiter_phone || '9762588623')
-    .replace(/\{\{recruiter_email\}\}/gi, context.recruiter_email || 'noreply@interviewxpert.in')
-    .replace(/\{\{support_phone\}\}/gi, context.support_phone || '9762588623 / 8484888632');
+    .replace(/\{\{candidate_name\}\}/gi, cleanContext.candidate_name || 'Candidate')
+    .replace(/\{\{candidate_email\}\}/gi, cleanContext.candidate_email || '')
+    .replace(/\{\{candidate_phone\}\}/gi, cleanContext.candidate_phone || '')
+    .replace(/\{\{job_title\}\}/gi, cleanContext.job_title || 'Position')
+    .replace(/\{\{company_name\}\}/gi, cleanContext.company_name || 'Dsource')
+    .replace(/\{\{interview_link\}\}/gi, cleanContext.interview_link || '#')
+    .replace(/\{\{access_code\}\}/gi, cleanContext.access_code || cleanContext.interview_code || 'DX-8921')
+    .replace(/\{\{interview_code\}\}/gi, cleanContext.interview_code || cleanContext.access_code || 'DX-8921')
+    .replace(/\{\{interview_deadline\}\}/gi, formattedDeadline)
+    .replace(/\{\{deadline\}\}/gi, formattedDeadline)
+    .replace(/Within 48 Hours/gi, formattedDeadline)
+    .replace(/\{\{location\}\}/gi, cleanContext.location || 'As specified')
+    .replace(/\{\{qualification\}\}/gi, cleanContext.qualification || 'As per requirement')
+    .replace(/\{\{experience\}\}/gi, cleanContext.experience || 'As per requirement')
+    .replace(/\{\{salary\}\}/gi, cleanContext.salary || 'Best in Industry')
+    .replace(/\{\{employment_type\}\}/gi, cleanContext.employment_type || 'Full Time')
+    .replace(/\{\{recruiter_name\}\}/gi, cleanContext.recruiter_name || 'HR Recruiting Team')
+    .replace(/\{\{recruiter_phone\}\}/gi, cleanContext.recruiter_phone || '9762588623')
+    .replace(/\{\{recruiter_email\}\}/gi, cleanContext.recruiter_email || 'noreply@interviewxpert.in')
+    .replace(/\{\{support_phone\}\}/gi, cleanContext.support_phone || '9762588623 / 8484888632');
 
   return result;
 }

@@ -12,7 +12,7 @@ const SENDER_NAME = import.meta.env.VITE_SES_SENDER_NAME || 'Dsource';
 const ACCESS_KEY_ID = (import.meta.env.VITE_AWS_ACCESS_KEY_ID || import.meta.env.VITE_AWS_S3_ACCESS_KEY_ID || '').replace(/['"]/g, '').trim();
 const SECRET_ACCESS_KEY = (import.meta.env.VITE_AWS_SECRET_ACCESS_KEY || import.meta.env.VITE_AWS_S3_SECRET_ACCESS_KEY || '').replace(/['"]/g, '').trim();
 
-import { renderTemplateText, getRecruiterTemplates, EmailTemplateConfig, DEFAULT_JOB_DETAILS_FIELDS, DEFAULT_JOB_DETAILS_ITEMS } from './templateService';
+import { renderTemplateText, getRecruiterTemplates, EmailTemplateConfig, DEFAULT_JOB_DETAILS_FIELDS, DEFAULT_JOB_DETAILS_ITEMS, formatDeadlineDisplay } from './templateService';
 
 export interface JobDetailsOptions {
   gender?: string;
@@ -400,7 +400,7 @@ export async function sendSingleEmail(
  * Bulk email sender using Amazon SESv2 and designer template
  */
 export async function sendInterviewInvitations(
-  candidateEmails: string[],
+  candidateEmails: (string | { email: string; name?: string; phone?: string })[],
   jobTitle: string,
   interviewLink: string,
   accessCode: string,
@@ -432,10 +432,36 @@ export async function sendInterviewInvitations(
     customTemplate: activeTemplate
   };
 
-  for (const email of candidateEmails) {
+  for (const item of candidateEmails) {
+    if (!item) continue;
+
+    let email = '';
+    let rawName = '';
+
+    if (typeof item === 'string') {
+      email = item.trim();
+    } else if (typeof item === 'object' && item !== null) {
+      email = (item.email || '').trim();
+      rawName = (item.name || (item as any).candidateName || (item as any).fullName || (item as any).displayName || (item as any).candName || '').trim();
+    }
+
     if (!email || !email.includes('@') || email.endsWith('@whatsapp.local')) continue;
 
-    const candidateName = deriveNameFromEmail(email);
+    // Failsafe lookup from options.candidateData or options.candidates if rawName wasn't attached
+    if (!rawName && (options as any)?.candidateData && Array.isArray((options as any).candidateData)) {
+      const match = (options as any).candidateData.find((c: any) => c.email && c.email.toLowerCase() === email.toLowerCase());
+      if (match?.name) rawName = String(match.name).trim();
+    }
+    if (!rawName && (options as any)?.candidates && Array.isArray((options as any).candidates)) {
+      const match = (options as any).candidates.find((c: any) => c.email && c.email.toLowerCase() === email.toLowerCase());
+      if (match?.name) rawName = String(match.name).trim();
+    }
+
+    // Prioritize candidate's actual full name over email username
+    const candidateName = (rawName && rawName.trim() !== '' && rawName.toLowerCase() !== email.toLowerCase())
+      ? rawName.trim()
+      : deriveNameFromEmail(email);
+
     const htmlContent = getDesignerEmailTemplate(candidateName, jobTitle, interviewLink, accessCode, isReminder, mergedOptions);
 
     const context = {

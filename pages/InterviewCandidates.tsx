@@ -62,6 +62,7 @@ const InterviewCandidates: React.FC = () => {
   const [parsingResumes, setParsingResumes] = useState(false);
   const [sendingEmails, setSendingEmails] = useState(false);
   const [editingCandidateEmail, setEditingCandidateEmail] = useState<string | null>(null);
+  const [editedNameValue, setEditedNameValue] = useState('');
   const [editedEmailValue, setEditedEmailValue] = useState('');
   const [editedPhoneValue, setEditedPhoneValue] = useState('');
   const [resendingEmail, setResendingEmail] = useState<string | null>(null);
@@ -480,8 +481,9 @@ const InterviewCandidates: React.FC = () => {
       let emailCount = 0;
       if (validEmails.length > 0) {
         setSendingProgressMsg(`Sending ${validEmails.length} invitation email(s)...`);
+        const candidatePayload = parsedCandidates.length > 0 ? parsedCandidates : validEmails;
         const result = await sendInterviewInvitations(
-          validEmails,
+          candidatePayload,
           interview.title,
           interview.interviewLink || '',
           interview.accessCode,
@@ -498,6 +500,7 @@ const InterviewCandidates: React.FC = () => {
             maxExperience: (interview as any).maxExperience,
             salary: (interview as any).salary || (interview as any).salaryRange,
             salaryRange: (interview as any).salaryRange || (interview as any).salary,
+            deadline: (interview as any).deadline || (interview as any).interviewDeadline || (interview as any).applyDeadline || (interview as any).endDate || '',
             employmentType: (interview as any).employmentType,
             customFields: (interview as any).customFields,
             recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiting Team',
@@ -537,6 +540,7 @@ const InterviewCandidates: React.FC = () => {
             maxExperience: (interview as any).maxExperience,
             salary: (interview as any).salary || (interview as any).salaryRange,
             salaryRange: (interview as any).salaryRange || (interview as any).salary,
+            deadline: (interview as any).deadline || (interview as any).interviewDeadline || (interview as any).applyDeadline || (interview as any).endDate || '',
             employmentType: (interview as any).employmentType,
             customFields: (interview as any).customFields,
             recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiting Team',
@@ -696,9 +700,14 @@ const InterviewCandidates: React.FC = () => {
       let emailSent = false;
       let waSent = false;
 
+      const candData = (interview as any).candidateData || [];
+      const match = candData.find((c: any) => c.email && c.email.toLowerCase() === email.toLowerCase());
+      const candName = match?.name || parsedCandidates.find((p) => p.email.toLowerCase() === email.toLowerCase())?.name || '';
+      const phone = match?.phone || parsedCandidates.find((p) => p.email.toLowerCase() === email.toLowerCase())?.phone;
+
       if (email && email.includes('@')) {
         const result = await sendInterviewInvitations(
-          [email],
+          [{ email, name: candName }],
           interview.title,
           interview.interviewLink || '',
           interview.accessCode,
@@ -712,6 +721,7 @@ const InterviewCandidates: React.FC = () => {
             minExperience: (interview as any).minExperience,
             maxExperience: (interview as any).maxExperience,
             salary: (interview as any).salary || (interview as any).salaryRange,
+            deadline: (interview as any).deadline || (interview as any).interviewDeadline || (interview as any).applyDeadline || (interview as any).endDate || '',
             recruiterName: userProfile?.name || (user as any)?.displayName || (interview as any).createdBy?.name || 'Recruiter',
             recruiterPhone: (userProfile as any)?.phone || (userProfile as any)?.phoneNumber || (userProfile as any)?.contactNumber || (user as any)?.phoneNumber || ''
           }
@@ -719,18 +729,15 @@ const InterviewCandidates: React.FC = () => {
         if (result.success) emailSent = true;
       }
 
-      const candData = (interview as any).candidateData || [];
-      const match = candData.find((c: any) => c.email && c.email.toLowerCase() === email.toLowerCase());
-      const phone = match?.phone || parsedCandidates.find((p) => p.email.toLowerCase() === email.toLowerCase())?.phone;
-
       if (phone && phone !== 'N/A') {
         const waRes = await sendInterviewWhatsAppInvite({
           phone: phone,
-          candidateName: email && email.includes('@') ? email.split('@')[0] : 'Candidate',
+          candidateName: candName || (email && email.includes('@') ? email.split('@')[0] : 'Candidate'),
           jobTitle: interview.title,
           interviewLink: interview.interviewLink || '',
           accessCode: interview.accessCode,
           options: {
+            deadline: (interview as any).deadline || (interview as any).interviewDeadline || (interview as any).applyDeadline || (interview as any).endDate || '',
             whatsappSessionId: userProfile?.whatsappSessionId || '',
             whatsappSessionPasscode: userProfile?.whatsappSessionPasscode || ''
           }
@@ -755,7 +762,7 @@ const InterviewCandidates: React.FC = () => {
     }
   };
 
-  const handleEditAndResend = async (oldEmail: string, updatedEmail: string, updatedPhone?: string) => {
+  const handleEditAndResend = async (oldEmail: string, updatedEmail: string, updatedPhone?: string, updatedName?: string) => {
     if (!interview || !updatedEmail) {
       setEditingCandidateEmail(null);
       return;
@@ -776,13 +783,14 @@ const InterviewCandidates: React.FC = () => {
         updatedCandData[idx] = {
           ...updatedCandData[idx],
           email: updatedEmail.toLowerCase(),
+          name: updatedName && updatedName.trim() ? updatedName.trim() : (updatedCandData[idx].name || updatedEmail.split('@')[0] || 'Candidate'),
           phone: updatedPhone && updatedPhone.trim() ? updatedPhone.trim() : (updatedCandData[idx].phone || 'N/A')
         };
       } else {
         updatedCandData.push({
           email: updatedEmail.toLowerCase(),
-          phone: updatedPhone && updatedPhone.trim() ? updatedPhone.trim() : 'N/A',
-          name: 'Candidate'
+          name: updatedName && updatedName.trim() ? updatedName.trim() : (updatedEmail.split('@')[0] || 'Candidate'),
+          phone: updatedPhone && updatedPhone.trim() ? updatedPhone.trim() : 'N/A'
         });
       }
 
@@ -818,13 +826,16 @@ const InterviewCandidates: React.FC = () => {
     if (!interview) return;
     const phone = candidatePhone && candidatePhone !== 'N/A' ? candidatePhone.trim() : '';
 
+    const candidateDataMatch = (interview as any).candidateData?.find((c: any) => c.email && c.email.toLowerCase() === candidateEmail.toLowerCase());
+    const candidateName = candidateDataMatch?.name && candidateDataMatch.name.trim() !== '' ? candidateDataMatch.name.trim() : (candidateEmail.split('@')[0] || 'Candidate');
+
     if (!phone) {
       setWhatsappModal({
         isOpen: true,
         email: candidateEmail,
         phone: '',
         message: buildWhatsAppInviteText({
-          candidateName: candidateEmail.split('@')[0],
+          candidateName: candidateName,
           jobTitle: interview.title,
           interviewLink: interview.interviewLink || `${window.location.origin}/#/interview/${interview.id}`,
           accessCode: interview.accessCode,
@@ -850,7 +861,7 @@ const InterviewCandidates: React.FC = () => {
     try {
       const res = await sendInterviewWhatsAppInvite({
         phone: phone,
-        candidateName: candidateEmail.split('@')[0],
+        candidateName: candidateName,
         jobTitle: interview.title,
         interviewLink: interview.interviewLink || `${window.location.origin}/#/interview/${interview.id}`,
         accessCode: interview.accessCode,
@@ -1326,23 +1337,30 @@ const InterviewCandidates: React.FC = () => {
                   <article key={`${candidate.email}-${candidate.attemptId || 'pending'}`} className="grid gap-3 border-b border-white/[0.08] px-4 py-3 transition-colors hover:bg-white/[0.025] sm:px-6 lg:grid-cols-[minmax(0,1fr)_120px_150px_minmax(280px,auto)] lg:items-center lg:gap-4 lg:px-7">
                     <div className="min-w-0">
                       {isEditing ? (
-                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
+                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
+                          <input
+                            type="text"
+                            value={editedNameValue}
+                            onChange={(e) => setEditedNameValue(e.target.value)}
+                            className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-white outline-none focus:border-white/[0.28]"
+                            placeholder="Candidate Name"
+                            autoFocus
+                          />
                           <input
                             type="email"
                             value={editedEmailValue}
                             onChange={(e) => setEditedEmailValue(e.target.value)}
                             className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-white outline-none focus:border-white/[0.28]"
                             placeholder="Candidate Email"
-                            autoFocus
                           />
                           <input
                             type="tel"
                             value={editedPhoneValue}
                             onChange={(e) => setEditedPhoneValue(e.target.value)}
                             className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-white outline-none focus:border-white/[0.28]"
-                            placeholder="Phone (e.g. 9823188483)"
+                            placeholder="Phone (e.g. +91...)"
                           />
-                          <button onClick={() => handleEditAndResend(candidate.email, editedEmailValue, editedPhoneValue)} disabled={resendingEmail !== null} className={primaryButtonClass}>
+                          <button onClick={() => handleEditAndResend(candidate.email, editedEmailValue, editedPhoneValue, editedNameValue)} disabled={resendingEmail !== null} className={primaryButtonClass}>
                             {isResending ? (
                               <ButtonBusySkeleton className="w-12 bg-black/[0.18]" />
                             ) : (
@@ -1352,12 +1370,19 @@ const InterviewCandidates: React.FC = () => {
                               </>
                             )}
                           </button>
-                          <button onClick={() => setEditingCandidateEmail(null)} disabled={resendingEmail !== null} className={actionButtonClass}>Cancel</button>
+                          <button onClick={() => { setEditingCandidateEmail(null); setEditedNameValue(''); setEditedEmailValue(''); setEditedPhoneValue(''); }} disabled={resendingEmail !== null} className={actionButtonClass}>Cancel</button>
                         </div>
                       ) : (
                         <div className="flex items-center justify-between gap-2">
                           <div>
-                            <p className="geist-caption truncate font-semibold text-white">{candidate.email}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="geist-caption truncate font-semibold text-white">
+                                {candidateData?.name && candidateData.name.trim() !== '' ? candidateData.name : candidate.email}
+                              </p>
+                              {candidateData?.name && candidateData.name.trim() !== '' && (
+                                <span className="geist-small text-[#8f8f8f]">({candidate.email})</span>
+                              )}
+                            </div>
                             <p className="geist-small mt-1 truncate text-[#8bbde8]">
                               {candidateData?.phone && candidateData.phone !== 'N/A' ? (
                                 <span><i className="fas fa-phone-alt mr-1 text-[10px] opacity-70"></i>{candidateData.phone}</span>
@@ -1369,6 +1394,7 @@ const InterviewCandidates: React.FC = () => {
                           <button
                             onClick={() => {
                               setEditingCandidateEmail(candidate.email);
+                              setEditedNameValue(candidateData?.name || candidate.email.split('@')[0] || '');
                               setEditedEmailValue(candidate.email);
                               setEditedPhoneValue(candidateData?.phone && candidateData.phone !== 'N/A' ? candidateData.phone : '');
                             }}
