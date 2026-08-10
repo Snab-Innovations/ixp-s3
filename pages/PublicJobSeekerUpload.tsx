@@ -113,6 +113,84 @@ export default function PublicJobSeekerUpload() {
   const [applyPhone, setApplyPhone] = useState('');
   const [isSubmittingApplication, setIsSubmittingApplication] = useState(false);
 
+  // Auto-Restore Draft Form State & Submitted Match Results on Page Refresh
+  useEffect(() => {
+    try {
+      const savedDraft = sessionStorage.getItem('dsource_candidate_draft_form');
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        if (parsed.name) setCandidateName(parsed.name);
+        if (parsed.email) setCandidateEmail(parsed.email);
+        if (parsed.phone) setCandidatePhone(parsed.phone);
+        if (parsed.gender) setCandidateGender(parsed.gender);
+        if (parsed.location) setCandidateLocation(parsed.location);
+        if (parsed.exp) setCandidateExp(parsed.exp);
+        if (parsed.education) setCandidateEducation(parsed.education);
+        if (parsed.status) setCandidateEmploymentStatus(parsed.status);
+        if (parsed.noticeVal) setCandidateNoticePeriodVal(parsed.noticeVal);
+        if (parsed.noticeUnit) setCandidateNoticePeriodUnit(parsed.noticeUnit);
+        if (parsed.currentSalary) setCandidateCurrentSalary(parsed.currentSalary);
+        if (parsed.expectedSalary) setCandidateExpectedSalary(parsed.expectedSalary);
+        if (Array.isArray(parsed.skills) && parsed.skills.length > 0) setExtractedSkills(parsed.skills);
+        if (parsed.extraBioText) setExtraBioText(parsed.extraBioText);
+      }
+
+      const savedSubmitted = sessionStorage.getItem('dsource_candidate_submitted_data');
+      if (savedSubmitted) {
+        const parsedSubmitted = JSON.parse(savedSubmitted);
+        if (parsedSubmitted && (parsedSubmitted.email || parsedSubmitted.name)) {
+          setSubmittedCandidateData(parsedSubmitted);
+          setOriginalCandidateData(parsedSubmitted);
+          setIsSubmittedSuccess(true);
+        }
+      }
+    } catch (err) {
+      console.warn("Auto restore candidate draft error:", err);
+    }
+  }, []);
+
+  // Persist Form Draft Inputs on Every Field Update
+  useEffect(() => {
+    try {
+      if (candidateName || candidateEmail || candidatePhone || candidateLocation || extractedSkills.length > 0) {
+        const draft = {
+          name: candidateName,
+          email: candidateEmail,
+          phone: candidatePhone,
+          gender: candidateGender,
+          location: candidateLocation,
+          exp: candidateExp,
+          education: candidateEducation,
+          status: candidateEmploymentStatus,
+          noticeVal: candidateNoticePeriodVal,
+          noticeUnit: candidateNoticePeriodUnit,
+          currentSalary: candidateCurrentSalary,
+          expectedSalary: candidateExpectedSalary,
+          skills: extractedSkills,
+          extraBioText: extraBioText,
+        };
+        sessionStorage.setItem('dsource_candidate_draft_form', JSON.stringify(draft));
+      }
+    } catch (err) {
+      console.warn("Save candidate draft error:", err);
+    }
+  }, [
+    candidateName, candidateEmail, candidatePhone, candidateGender, candidateLocation,
+    candidateExp, candidateEducation, candidateEmploymentStatus, candidateNoticePeriodVal,
+    candidateNoticePeriodUnit, candidateCurrentSalary, candidateExpectedSalary, extractedSkills, extraBioText
+  ]);
+
+  // Persist Matched Candidate Results State on Form Submission
+  useEffect(() => {
+    if (submittedCandidateData) {
+      try {
+        sessionStorage.setItem('dsource_candidate_submitted_data', JSON.stringify(submittedCandidateData));
+      } catch (err) {
+        console.warn("Save submitted data error:", err);
+      }
+    }
+  }, [submittedCandidateData]);
+
   const handleOpenApplyModal = (matchResult: JobMatchResult) => {
     setApplyingJobModal(matchResult);
     setApplyName(submittedCandidateData?.name || candidateName || '');
@@ -1534,7 +1612,9 @@ export default function PublicJobSeekerUpload() {
                 <button
                   onClick={() => setMatchFilter('EligibleOnly')}
                   className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                    matchFilter === 'EligibleOnly' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                    matchFilter === 'EligibleOnly' 
+                      ? 'bg-emerald-600 text-white shadow-sm' 
+                      : isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-semibold'
                   }`}
                 >
                   Eligible
@@ -1542,7 +1622,9 @@ export default function PublicJobSeekerUpload() {
                 <button
                   onClick={() => setMatchFilter('HighMatch')}
                   className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                    matchFilter === 'HighMatch' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                    matchFilter === 'HighMatch' 
+                      ? 'bg-emerald-600 text-white shadow-sm' 
+                      : isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-semibold'
                   }`}
                 >
                   High Match (&ge; 75%)
@@ -1550,7 +1632,9 @@ export default function PublicJobSeekerUpload() {
                 <button
                   onClick={() => setMatchFilter('LocalCity')}
                   className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                    matchFilter === 'LocalCity' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                    matchFilter === 'LocalCity' 
+                      ? 'bg-emerald-600 text-white shadow-sm' 
+                      : isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-semibold'
                   }`}
                 >
                   📍 {submittedCandidateData?.location || 'Location'}
@@ -1558,7 +1642,9 @@ export default function PublicJobSeekerUpload() {
                 <button
                   onClick={() => setMatchFilter('All')}
                   className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                    matchFilter === 'All' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                    matchFilter === 'All' 
+                      ? 'bg-emerald-600 text-white shadow-sm' 
+                      : isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-semibold'
                   }`}
                 >
                   All ({activeJobs.length})

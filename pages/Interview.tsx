@@ -286,6 +286,47 @@ const CandidateInfoForm: React.FC<{
   const [foundDumpCandidate, setFoundDumpCandidate] = useState<any | null>(null);
   const [isSearchingResumeDump, setIsSearchingResumeDump] = useState(false);
 
+  // Auto-restore candidate info form draft state on refresh
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(`interview_info_draft_${interviewId}`);
+      if (saved) {
+        const p = JSON.parse(saved);
+        if (p.name) setName(p.name);
+        if (p.email) setEmail(p.email);
+        if (p.phone) setPhone(p.phone);
+        if (p.gender) setGender(p.gender);
+        if (p.currentCity) setCurrentCity(p.currentCity);
+        if (p.qualificationBasic) setQualificationBasic(p.qualificationBasic);
+        if (p.totalExperienceYears) setTotalExperienceYears(p.totalExperienceYears);
+        if (p.currentCompanyName) setCurrentCompanyName(p.currentCompanyName);
+        if (p.designation) setDesignation(p.designation);
+        if (p.currentSalary) setCurrentSalary(p.currentSalary);
+        if (p.noticePeriodDays) setNoticePeriodDays(p.noticePeriodDays);
+        if (p.language) setLanguage(p.language);
+        if (p.formStep) setFormStep(p.formStep);
+      }
+    } catch (err) {
+      console.warn("Restore interview info draft error:", err);
+    }
+  }, [interviewId]);
+
+  // Save candidate info form draft state on changes
+  useEffect(() => {
+    try {
+      if (name || email || phone || currentCity || qualificationBasic) {
+        const draft = {
+          name, email, phone, gender, currentCity, qualificationBasic,
+          totalExperienceYears, currentCompanyName, designation,
+          currentSalary, noticePeriodDays, language, formStep
+        };
+        sessionStorage.setItem(`interview_info_draft_${interviewId}`, JSON.stringify(draft));
+      }
+    } catch (err) {
+      console.warn("Save interview info draft error:", err);
+    }
+  }, [interviewId, name, email, phone, gender, currentCity, qualificationBasic, totalExperienceYears, currentCompanyName, designation, currentSalary, noticePeriodDays, language, formStep]);
+
   // Email Lookup in Resume Dump for instant autofill & resume preview
   useEffect(() => {
     const trimmedEmail = (email || '').trim().toLowerCase();
@@ -1292,8 +1333,9 @@ const InterviewReadinessOnboarding: React.FC<{
         return;
       }
 
+      let stream: MediaStream | null = null;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'user',
             width: { ideal: 960 },
@@ -1305,24 +1347,48 @@ const InterviewReadinessOnboarding: React.FC<{
             autoGainControl: true,
           },
         });
-
-        if (isCancelled) {
-          stream.getTracks().forEach(track => track.stop());
-          return;
+      } catch (err1) {
+        console.warn('Ideal media setup failed, trying basic video+audio:', err1);
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        } catch (err2) {
+          console.warn('Video+Audio setup failed, trying audio-only fallback:', err2);
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (err3) {
+            console.error('All media setup fallbacks failed:', err3);
+            if (!isCancelled) {
+              setPermissionError('Microphone and camera access is required. Please check your browser/phone permissions and retry.');
+            }
+            return;
+          }
         }
+      }
 
-        previewStreamRef.current = stream;
-        setCameraReady(stream.getVideoTracks().length > 0);
-        setMicReady(stream.getAudioTracks().length > 0);
+      if (!stream || isCancelled) {
+        if (stream) stream.getTracks().forEach(track => track.stop());
+        return;
+      }
 
-        if (previewVideoRef.current) {
-          previewVideoRef.current.srcObject = stream;
-          await previewVideoRef.current.play().catch(() => undefined);
-        }
+      previewStreamRef.current = stream;
+      const hasVideo = stream.getVideoTracks().length > 0;
+      const hasAudio = stream.getAudioTracks().length > 0;
+      setCameraReady(hasVideo);
+      setMicReady(hasAudio);
 
-        const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioContextCtor && stream.getAudioTracks().length > 0) {
+      if (previewVideoRef.current && hasVideo) {
+        previewVideoRef.current.srcObject = stream;
+        await previewVideoRef.current.play().catch(() => undefined);
+      }
+
+      const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContextCtor && hasAudio) {
+        try {
           const audioContext = new AudioContextCtor();
+          if (audioContext.state === 'suspended') {
+            await audioContext.resume().catch(() => undefined);
+          }
+
           const analyser = audioContext.createAnalyser();
           analyser.fftSize = 256;
           const source = audioContext.createMediaStreamSource(stream);
@@ -1333,8 +1399,20 @@ const InterviewReadinessOnboarding: React.FC<{
 
           const data = new Uint8Array(analyser.frequencyBinCount);
 
+          // Auto-pass mic check after 1.5s if mic track is active and live
+          const autoPassTimer = setTimeout(() => {
+            if (hasAudio && stream!.getAudioTracks().some(t => t.readyState === 'live' && t.enabled)) {
+              setVoiceDetected(true);
+            }
+          }, 1500);
+
           const animateLevel = () => {
             if (!analyserRef.current) return;
+
+            // Resume audioContext if browser suspended it
+            if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+              audioContextRef.current.resume().catch(() => undefined);
+            }
 
             analyserRef.current.getByteTimeDomainData(data);
             let sum = 0;
@@ -1345,23 +1423,24 @@ const InterviewReadinessOnboarding: React.FC<{
             }
 
             const rms = Math.sqrt(sum / data.length);
-            const level = Math.min(1, rms * 4.5);
+            const level = Math.min(1, rms * 8.0);
             setMicLevel(level);
 
-            if (micStageArmedRef.current && level > 0.12) {
+            if (level > 0.03) {
               setVoiceDetected(true);
+              clearTimeout(autoPassTimer);
             }
 
             frameRef.current = requestAnimationFrame(animateLevel);
           };
 
           animateLevel();
+        } catch (audioErr) {
+          console.warn('AudioContext creation error:', audioErr);
+          if (hasAudio) setVoiceDetected(true);
         }
-      } catch (error) {
-        console.error('Onboarding media setup error:', error);
-        if (!isCancelled) {
-          setPermissionError('Camera and microphone access is required before the interview can begin.');
-        }
+      } else if (hasAudio) {
+        setVoiceDetected(true);
       }
     };
 
@@ -2068,6 +2147,27 @@ const CandidateInterviewFlow: React.FC = () => {
     setRateLimitStopMessage(getCandidateRateLimitReachedMessage('interviews'));
   }, [interviewLimitReached, step]);
 
+  // Auto-Persist Current Step to Session Storage on Step Changes
+  useEffect(() => {
+    if (interviewId && step && step !== 'validating') {
+      sessionStorage.setItem(`interview_wizard_step_${interviewId}`, step);
+    }
+  }, [interviewId, step]);
+
+  // Auto-Persist Candidate Info to Session Storage
+  useEffect(() => {
+    if (interviewId && candidateInfo && candidateInfo.email) {
+      sessionStorage.setItem(`interview_candidate_info_${interviewId}`, JSON.stringify(candidateInfo));
+    }
+  }, [interviewId, candidateInfo]);
+
+  // Auto-Persist Interview Questions & Current State to Session Storage
+  useEffect(() => {
+    if (interviewId && interviewState && Array.isArray(interviewState.questions) && interviewState.questions.length > 0) {
+      sessionStorage.setItem(`interview_wizard_state_${interviewId}`, JSON.stringify(interviewState));
+    }
+  }, [interviewId, interviewState]);
+
   // 1. Validate Access & Fetch Interview Details
   useEffect(() => {
     const validateAndInit = async () => {
@@ -2093,15 +2193,64 @@ const CandidateInterviewFlow: React.FC = () => {
         const combinedData = { ...interviewData, isMock: interviewData.isMock || false };
 
         setInterview(combinedData as Interview);
-        setInterviewState(prev => ({
-          ...prev,
-          jobId: resolved.id,
-          jobTitle: combinedData.title || 'Job Interview',
-          jobDescription: combinedData.description || '',
-          isMock: combinedData.isMock,
-          strictness: combinedData.strictness || 'Medium'
-        }));
-        setStep('welcome');
+
+        // Restore step & state if candidate refreshed the page during setup / interview / collect-info
+        const savedStep = sessionStorage.getItem(`interview_wizard_step_${interviewId}`) as WizardStep | null;
+        const savedCandidateInfoStr = sessionStorage.getItem(`interview_candidate_info_${interviewId}`);
+        const savedInterviewStateStr = sessionStorage.getItem(`interview_wizard_state_${interviewId}`);
+
+        if (savedCandidateInfoStr) {
+          try {
+            const parsedCand = JSON.parse(savedCandidateInfoStr);
+            if (parsedCand && (parsedCand.email || parsedCand.name)) setCandidateInfo(parsedCand);
+          } catch (e) {}
+        }
+
+        if (savedInterviewStateStr) {
+          try {
+            const parsedState = JSON.parse(savedInterviewStateStr);
+            if (parsedState && Array.isArray(parsedState.questions) && parsedState.questions.length > 0) {
+              const restoredQIndex = typeof parsedState.currentQuestionIndex === 'number'
+                ? Math.max(0, Math.min(parsedState.currentQuestionIndex, parsedState.questions.length - 1))
+                : 0;
+
+              setInterviewState(prev => ({
+                ...prev,
+                ...parsedState,
+                currentQuestionIndex: restoredQIndex,
+                jobId: resolved.id,
+                jobTitle: combinedData.title || 'Job Interview',
+                jobDescription: combinedData.description || '',
+                isMock: combinedData.isMock,
+                strictness: combinedData.strictness || 'Medium'
+              }));
+            } else {
+              setInterviewState(prev => ({
+                ...prev,
+                jobId: resolved.id,
+                jobTitle: combinedData.title || 'Job Interview',
+                jobDescription: combinedData.description || '',
+                isMock: combinedData.isMock,
+                strictness: combinedData.strictness || 'Medium'
+              }));
+            }
+          } catch (e) {}
+        } else {
+          setInterviewState(prev => ({
+            ...prev,
+            jobId: resolved.id,
+            jobTitle: combinedData.title || 'Job Interview',
+            jobDescription: combinedData.description || '',
+            isMock: combinedData.isMock,
+            strictness: combinedData.strictness || 'Medium'
+          }));
+        }
+
+        if (savedStep && savedStep !== 'validating') {
+          setStep(savedStep);
+        } else {
+          setStep('welcome');
+        }
 
       } catch (err: any) { 
         setErrorMsg(err.message); 
@@ -2612,7 +2761,7 @@ const CandidateInterviewFlow: React.FC = () => {
             interview={interview}
             state={interviewState}
             onStart={() => {
-              setInterviewState(prev => ({ ...prev, currentQuestionIndex: 0 }));
+              setInterviewState(prev => ({ ...prev, currentQuestionIndex: prev.currentQuestionIndex || 0 }));
               setStep('interview');
             }}
           />
@@ -2897,31 +3046,46 @@ const ActiveInterviewSession: React.FC<{
         return;
       }
 
+      let stream: MediaStream | null = null;
       try {
-        // Low-spec optimization: 320x240 reduces GPU/RAM pressure significantly.
-        // Low video resolution is sufficient for recording and transcription.
-        const stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 15, max: 20 } },
-          audio: true
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          }
         });
-
-        if (isCancelled) {
-          stream.getTracks().forEach(track => track.stop());
-          return;
-        }
-
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play().catch(() => undefined);
-        }
-        setCameraReady(true);
-      } catch (error) {
-        console.error("Camera setup error:", error);
-        if (!isCancelled) {
-          setCameraError("Camera and microphone access is required to continue.");
+      } catch (err1) {
+        console.warn("Primary camera setup failed, trying basic video+audio:", err1);
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        } catch (err2) {
+          console.warn("Video+audio setup failed, trying audio-only fallback:", err2);
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (err3) {
+            console.error("All media recording setups failed:", err3);
+            if (!isCancelled) {
+              setCameraError("Microphone access is required for recording your interview answers.");
+            }
+            return;
+          }
         }
       }
+
+      if (!stream || isCancelled) {
+        if (stream) stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+
+      streamRef.current = stream;
+      const hasVideo = stream.getVideoTracks().length > 0;
+      if (videoRef.current && hasVideo) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => undefined);
+      }
+      setCameraReady(true);
     };
     setupCamera();
     return () => {

@@ -143,12 +143,57 @@ export const checkGenderMatch = (candidate: CandidateMatchProfile, job: any): { 
   return { isMatch: true, label: 'Gender Eligible', requiredGender: 'Any', candidateGender: formattedCandGender };
 };
 
+// Domain Skill Synonyms Dictionary for Intelligent Match Analysis
+const DOMAIN_SKILL_SYNONYMS: Record<string, string[]> = {
+  store: ['warehouse', 'inventory', 'stock', 'dispatch', 'godown', 'materials', 'logistics', 'store keeper', 'storekeeper', 'incharge', 'shipping', 'store management'],
+  dispatch: ['shipping', 'logistics', 'chalan', 'loading', 'unloading', 'billing', 'goods', 'transportation', 'dispatch handling', 'dispatch incharge'],
+  inventory: ['stock', 'tally', 'excel', 'materials', 'material management', 'audit', 'godown', 'inventory management', 'stock management'],
+  mechanical: ['autocad', 'solidworks', 'catia', 'cnc', 'vmc', 'production', 'tooling', 'maintenance', 'assembly', 'be mechanical', 'diploma mechanical'],
+  accounts: ['tally', 'gst', 'tds', 'excel', 'billing', 'finance', 'bookkeeping', 'taxation', 'tally prime'],
+  sales: ['marketing', 'business development', 'bd', 'lead generation', 'client acquisition', 'telecalling', 'sales executive'],
+  react: ['javascript', 'frontend', 'typescript', 'nextjs', 'web development'],
+  python: ['django', 'flask', 'fastapi', 'data analysis', 'pandas', 'machine learning'],
+  node: ['express', 'backend', 'javascript', 'typescript', 'api'],
+};
+
+// Check if candidate skill or text matches required skill (with synonym support)
+const isSkillMatchWithSynonyms = (reqSkill: string, candidateSkills: string[], fullCandText: string): boolean => {
+  const canonReq = canonicalizeSkill(reqSkill);
+  if (!canonReq) return false;
+
+  // 1. Direct match with candidate skills array
+  const candSkillsCanon = candidateSkills.map(canonicalizeSkill).filter(Boolean);
+  if (candSkillsCanon.some(cs => cs.includes(canonReq) || canonReq.includes(cs))) {
+    return true;
+  }
+
+  // 2. Direct text match with full candidate text / resumeText / bio / title
+  const cleanReq = reqSkill.toLowerCase().trim();
+  const cleanText = fullCandText.toLowerCase();
+  if (cleanReq.length > 2 && cleanText.includes(cleanReq)) {
+    return true;
+  }
+
+  // 3. Synonym matching
+  for (const [key, synonyms] of Object.entries(DOMAIN_SKILL_SYNONYMS)) {
+    if (cleanReq.includes(key) || key.includes(cleanReq)) {
+      const matchFound = synonyms.some(syn => 
+        candSkillsCanon.some(cs => cs.includes(syn) || syn.includes(cs)) ||
+        cleanText.includes(syn)
+      );
+      if (matchFound) return true;
+    }
+  }
+
+  return false;
+};
+
 // Main Match Calculator function
 export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfile): JobMatchResult {
   const matchReasons: string[] = [];
   const failReasons: string[] = [];
 
-  // 1. Skills Matching (Weight: 35 points)
+  // 1. Skills Matching (Weight: 40 points)
   let rawJobSkills: string[] = [];
   if (Array.isArray(job.skills)) {
     rawJobSkills = job.skills;
@@ -157,21 +202,18 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
   }
   if (rawJobSkills.length === 0 && job.description) {
     const text = job.description.toLowerCase();
-    const commonTech = ['react', 'node', 'javascript', 'typescript', 'python', 'java', 'sql', 'autocad', 'excel', 'tally', 'billing', 'estimation', 'revit', 'site supervision', 'sales', 'marketing', 'hr', 'customer service'];
+    const commonTech = ['react', 'node', 'javascript', 'typescript', 'python', 'java', 'sql', 'autocad', 'excel', 'tally', 'billing', 'estimation', 'revit', 'site supervision', 'sales', 'marketing', 'hr', 'customer service', 'store management', 'dispatch'];
     rawJobSkills = commonTech.filter(tech => text.includes(tech));
   }
 
   const candidateSkills: string[] = Array.isArray(candidate.skills) ? candidate.skills : [];
-  const candSkillsCanonical = candidateSkills.map(canonicalizeSkill).filter(Boolean);
+  const fullCandText = `${candidateSkills.join(' ')} ${candidate.resumeText || ''} ${candidate.summary || ''} ${candidate.currentTitle || ''}`;
 
   const matchedSkills: string[] = [];
   const missingSkills: string[] = [];
 
   rawJobSkills.forEach(reqSkill => {
-    const canonReq = canonicalizeSkill(reqSkill);
-    if (!canonReq) return;
-    const found = candSkillsCanonical.some(cs => cs.includes(canonReq) || canonReq.includes(cs));
-    if (found || (candidate.resumeText && candidate.resumeText.toLowerCase().includes(reqSkill.toLowerCase()))) {
+    if (isSkillMatchWithSynonyms(reqSkill, candidateSkills, fullCandText)) {
       matchedSkills.push(reqSkill);
     } else {
       missingSkills.push(reqSkill);
@@ -180,11 +222,13 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
 
   const totalReqSkills = rawJobSkills.length;
   const skillMatchCoverage = totalReqSkills > 0 ? matchedSkills.length / totalReqSkills : 0.8;
-  const skillScore = Math.round(skillMatchCoverage * 35);
+  const skillScore = Math.round(skillMatchCoverage * 40);
   const ratioText = totalReqSkills > 0 ? `${matchedSkills.length}/${totalReqSkills} skills matched` : 'Skills matched';
 
   if (totalReqSkills > 0 && matchedSkills.length > 0) {
     matchReasons.push(`Matched ${matchedSkills.length} of ${totalReqSkills} required skills (${matchedSkills.slice(0, 3).join(', ')})`);
+  } else if (totalReqSkills > 0 && matchedSkills.length === 0) {
+    failReasons.push(`0 matching skills out of ${totalReqSkills} required (${missingSkills.slice(0, 3).join(', ')})`);
   }
 
   // 2. Location Matching (Weight: 15 points)
@@ -209,7 +253,7 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
     failReasons.push(genResult.label);
   }
 
-  // 4. Experience Matching (Weight: 20 points)
+  // 4. Experience Matching (Weight: 15 points)
   const minExp = Math.max(0, Number(job.minExperience) || (typeof job.experience === 'number' ? job.experience : 0));
   const maxExp = Math.max(0, Number(job.maxExperience) || 0);
   const rawCandExp = candidate.totalExperienceYears ?? candidate.experience ?? 0;
@@ -219,20 +263,19 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
   let expLabel = `Experience Fits (${candExpNum} Yrs)`;
   let reqExpText = minExp > 0 ? (maxExp > minExp ? `${minExp} - ${maxExp} Yrs` : `${minExp}+ Yrs`) : 'Fresher / Any Experience';
 
-  let expScore = 20;
+  let expScore = 15;
   if (minExp > 0) {
     if (candExpNum >= minExp) {
       if (maxExp > minExp && candExpNum > maxExp + 3) {
-        expScore = 14;
+        expScore = 10;
         expLabel = `Overqualified (${candExpNum} Yrs vs ${minExp}-${maxExp} Yrs)`;
         matchReasons.push(`Highly experienced candidate (${candExpNum} Yrs)`);
       } else {
-        expScore = 20;
+        expScore = 15;
         expLabel = `Meets Experience (${candExpNum} Yrs vs ${minExp}+ Yrs required)`;
         matchReasons.push(`Meets experience criteria (${candExpNum} Yrs)`);
       }
     } else {
-      // STRICT RULE: If job requires minExp (e.g. 4 yrs) and candidate has less (e.g. 2 yrs), DO NOT RECOMMEND THIS JOB!
       expMatch = false;
       expScore = 0;
       expLabel = `Experience Mismatch: Requires min ${minExp} Yrs (Candidate has ${candExpNum} Yrs)`;
@@ -269,11 +312,17 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
   // Calculate Overall Composite Score (0 - 100%)
   let compositeScore = skillScore + locationScore + genderScore + expScore + eduScore;
 
-  // STRICT DISQUALIFICATION:
+  // STRICT DISQUALIFICATION & SKILL CAPPING:
   // 1. If candidate experience is below minExp -> score = 0 (Not Recommended)
   // 2. If job specifies a gender restriction (e.g. Female Only) and candidate gender does NOT match -> score = 0 (Not Recommended & hidden)
+  // 3. If job requires skills (totalReqSkills > 0) and candidate matched 0 skills -> CAP SCORE AT 38% MAX!
+  // 4. If job requires skills (totalReqSkills > 0) and candidate matched < 35% skills -> CAP SCORE AT 55% MAX!
   if (!expMatch || !genResult.isMatch) {
     compositeScore = 0;
+  } else if (totalReqSkills > 0 && matchedSkills.length === 0) {
+    compositeScore = Math.min(38, compositeScore);
+  } else if (totalReqSkills > 0 && skillMatchCoverage < 0.35) {
+    compositeScore = Math.min(55, compositeScore);
   }
 
   const overallScore = Math.min(100, Math.max(0, Math.round(compositeScore)));
