@@ -1455,10 +1455,26 @@ const InterviewCandidates: React.FC = () => {
 
                     <div>
                       <p className="geist-label mb-1 uppercase text-[#6b7280] lg:hidden">Status</p>
-                      <span className={`geist-caption inline-flex h-7 items-center gap-1.5 rounded-[6px] border px-2 font-medium ${candidate.hasSubmitted ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:border-[#173d25] dark:bg-[#071a10] dark:text-[#7ee787]' : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:border-[#4b3a16] dark:bg-[#181104] dark:text-[#ffd166]'}`}>
-                        <i className={candidate.hasSubmitted ? 'fas fa-check-circle text-[10px]' : 'fas fa-clock text-[10px]'}></i>
-                        {candidate.hasSubmitted ? 'Submitted' : 'Pending'}
-                      </span>
+                      {candidate.hasSubmitted ? (
+                        <span className="geist-caption inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-emerald-500/40 bg-gradient-to-r from-emerald-500/20 to-teal-500/10 text-emerald-300 font-extrabold shadow-sm text-xs">
+                          <i className="fas fa-check-circle text-emerald-400 text-xs"></i>
+                          <span>Interview Completed</span>
+                        </span>
+                      ) : (candidateData?.status === 'interested' || candidateData?.source === 'public_job_match') ? (
+                        <span className="geist-caption inline-flex items-center gap-2 px-3 py-1 rounded-full border border-emerald-400/50 bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-950 text-emerald-300 font-extrabold shadow-md text-xs" title="Candidate registered interest & applied via Job Match Portal">
+                          <span className="relative flex h-2 w-2 shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                          </span>
+                          <span>Applied & Interested</span>
+                          <span className="text-[10px] text-emerald-200/80 border-l border-emerald-500/40 pl-2 font-semibold">Pending</span>
+                        </span>
+                      ) : (
+                        <span className="geist-caption inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 font-semibold text-xs">
+                          <i className="fas fa-clock text-amber-400 text-xs"></i>
+                          <span>Pending</span>
+                        </span>
+                      )}
                     </div>
 
                     <div>
@@ -1469,6 +1485,18 @@ const InterviewCandidates: React.FC = () => {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 lg:justify-end lg:whitespace-nowrap">
+                      {/* Direct Recruiter Operations Call Link */}
+                      {candidateData?.phone && candidateData.phone !== 'N/A' && (
+                        <a
+                          href={`tel:${candidateData.phone.replace(/[^0-9+]/g, '')}`}
+                          className="geist-caption inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-blue-500/30 bg-blue-500/10 px-2.5 font-semibold text-blue-400 hover:bg-blue-600 hover:text-white transition-colors"
+                          title={`Call candidate ${candidateData.name || candidate.email} at ${candidateData.phone}`}
+                        >
+                          <i className="fas fa-phone-alt text-[10px]"></i>
+                          <span>Call</span>
+                        </a>
+                      )}
+
                       {candidate.hasSubmitted && (
                         <button
                           type="button"

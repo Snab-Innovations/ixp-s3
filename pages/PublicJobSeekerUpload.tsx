@@ -1,5 +1,13 @@
-import React, { useState } from 'react';
-import { Sparkles, CheckCircle2, Upload, FileText, User, Mail, Phone, MapPin, Briefcase, GraduationCap, ArrowRight, RefreshCw, Plus, X, Tag, IndianRupee, Clock, UserCheck, DollarSign } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Sparkles, CheckCircle2, Upload, FileText, User, Mail, Phone, MapPin, 
+  Briefcase, GraduationCap, ArrowRight, RefreshCw, Plus, X, Tag, IndianRupee, 
+  Clock, UserCheck, Search, Filter, Check, ChevronRight, AlertCircle, 
+  ExternalLink, Eye, ShieldCheck, SlidersHorizontal, RotateCcw, Edit3, ChevronDown, ChevronUp, Ban, Sun, Moon,
+  Layers, Menu
+} from 'lucide-react';
+import { collection, query, where, getDocs, onSnapshot, doc, updateDoc, arrayUnion, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import { LocationCityInput } from '../components/LocationCityInput';
 import { EducationInput } from '../components/EducationInput';
 import { parseResumeFileLocally, saveResumeDumpCandidate } from '../services/resumeService';
@@ -7,82 +15,10 @@ import { uploadToCloudinary } from '../services/api';
 import { ALL_EDUCATION_DEGREES } from '../data/allEducationDegrees';
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
 import { useMessageBox } from '../components/MessageBox';
-import { Link } from 'react-router-dom';
+import { useTheme } from '../context/ThemeContext';
+import { Link, useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo';
-
-const matchEducationToAvailableFormat = (rawEdu: string): string => {
-  if (!rawEdu || !rawEdu.trim()) return '';
-  const text = rawEdu.toLowerCase().trim();
-
-  // 1. Direct match
-  const exact = ALL_EDUCATION_DEGREES.find(deg => deg.toLowerCase() === text);
-  if (exact) return exact;
-
-  // 2. Civil Engineering
-  if (text.includes('civil')) {
-    if (text.includes('diploma') || text.includes('polytechnic')) return "Diploma in Civil Engineering";
-    if (text.includes('m.tech') || text.includes('m.e') || text.includes('master') || text.includes('structur')) return "M.Tech / M.E. - Structural Engineering";
-    return "B.Tech / B.E. - Civil Engineering";
-  }
-
-  // 3. Mechanical
-  if (text.includes('mechanic')) {
-    if (text.includes('diploma') || text.includes('polytechnic')) return "Diploma in Mechanical Engineering";
-    return "B.Tech / B.E. - Mechanical Engineering";
-  }
-
-  // 4. Computer Science / IT / CSE
-  if (text.includes('computer') || text.includes('cse') || text.includes('it') || text.includes('software') || text.includes('information tech')) {
-    if (text.includes('diploma') || text.includes('polytechnic')) return "Diploma in Computer Engineering / IT";
-    if (text.includes('bca')) return "BCA - Bachelor of Computer Applications";
-    if (text.includes('mca')) return "MCA - Master of Computer Applications";
-    return "B.Tech / B.E. - Computer Science & Engineering (CSE)";
-  }
-
-  // 5. Electrical / Electronics / E&TC
-  if (text.includes('electrical') || text.includes('electronic') || text.includes('telecom') || text.includes('e&tc') || text.includes('entc')) {
-    if (text.includes('diploma') || text.includes('polytechnic')) return "Diploma in Electrical Engineering";
-    return "B.Tech / B.E. - Electrical Engineering";
-  }
-
-  // 6. Automobile
-  if (text.includes('auto') || text.includes('vehicle')) {
-    if (text.includes('diploma')) return "Diploma in Automobile Engineering";
-    return "B.Tech / B.E. - Automobile Engineering";
-  }
-
-  // 7. Management / MBA
-  if (text.includes('mba') || text.includes('business admin') || text.includes('management')) {
-    if (text.includes('hr') || text.includes('human resource')) return "MBA - Human Resources (HR)";
-    if (text.includes('finance')) return "MBA - Finance Management";
-    if (text.includes('market')) return "MBA - Marketing Management";
-    return "MBA - Master of Business Administration";
-  }
-
-  // 8. Commerce / B.Com
-  if (text.includes('b.com') || text.includes('commerce') || text.includes('account') || text.includes('finance')) {
-    if (text.includes('m.com') || text.includes('master of commerce')) return "M.Com - Master of Commerce";
-    return "B.Com - Bachelor of Commerce";
-  }
-
-  // 9. Arts / BA
-  if (text.includes('b.a') || text.includes('bachelor of arts') || text.includes('humanities')) {
-    return "B.A - Bachelor of Arts";
-  }
-
-  // 10. Science / B.Sc
-  if (text.includes('b.sc') || text.includes('bachelor of science')) {
-    return "B.Sc - Bachelor of Science";
-  }
-
-  // Fallback keyword match in available degrees
-  const keywordMatch = ALL_EDUCATION_DEGREES.find(deg => {
-    const degLower = deg.toLowerCase();
-    return text.split(/\s+/).some(w => w.length > 3 && degLower.includes(w));
-  });
-
-  return keywordMatch || '';
-};
+import { calculateJobMatchScore, JobMatchResult, CandidateMatchProfile } from '../services/jobMatchService';
 
 const matchExtractedLocationToPresentCity = (rawLocation: string): string => {
   if (!rawLocation || typeof rawLocation !== 'string') return '';
@@ -112,12 +48,16 @@ const matchExtractedLocationToPresentCity = (rawLocation: string): string => {
   if (clean.includes('ahmednagar')) return 'Ahmednagar';
   if (clean.includes('satara')) return 'Satara';
 
-  // Do NOT forcefully select any other city if not present/matched!
   return '';
 };
 
 export default function PublicJobSeekerUpload() {
   const messageBox = useMessageBox();
+  const navigate = useNavigate();
+  const { isDark, toggleTheme } = useTheme();
+
+  // Mobile Navbar Drawer State
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Form State
   const [candidateName, setCandidateName] = useState('');
@@ -127,13 +67,17 @@ export default function PublicJobSeekerUpload() {
   const [candidateLocation, setCandidateLocation] = useState('');
   const [candidateExp, setCandidateExp] = useState('');
   const [candidateEducation, setCandidateEducation] = useState('');
-  const [candidateEmploymentStatus, setCandidateEmploymentStatus] = useState('Working'); // 'Working' | 'Not Working' | 'Serving Notice'
-  const [candidateNoticePeriodVal, setCandidateNoticePeriodVal] = useState('');
+  const [candidateEmploymentStatus, setCandidateEmploymentStatus] = useState('Working');
+  const [candidateNoticePeriodVal, setCandidateNoticePeriodVal] = useState('30');
   const [candidateNoticePeriodUnit, setCandidateNoticePeriodUnit] = useState<'Days' | 'Months'>('Days');
   const [candidateCurrentSalary, setCandidateCurrentSalary] = useState('');
   const [candidateExpectedSalary, setCandidateExpectedSalary] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [extraBioText, setExtraBioText] = useState('');
+
+  // Email Autocheck State for existing candidates
+  const [existingEmailCandidate, setExistingEmailCandidate] = useState<any | null>(null);
+  const [isCheckingEmailBlur, setIsCheckingEmailBlur] = useState(false);
 
   // Skills Auto-Fetch & Editing State
   const [extractedSkills, setExtractedSkills] = useState<string[]>([]);
@@ -141,27 +85,306 @@ export default function PublicJobSeekerUpload() {
   const [isParsingResume, setIsParsingResume] = useState(false);
   const [parsedProfileData, setParsedProfileData] = useState<{ profile: any; resumeText: string } | null>(null);
 
+  // Email Lookup State for Existing Submitted Candidates
+  const [showEmailLookup, setShowEmailLookup] = useState(false);
+  const [lookupEmailInput, setLookupEmailInput] = useState('');
+  const [isSearchingEmail, setIsSearchingEmail] = useState(false);
+
   // Processing & Success State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmittedSuccess, setIsSubmittedSuccess] = useState(false);
-  const [submittedCandidateData, setSubmittedCandidateData] = useState<any>(null);
+  const [submittedCandidateData, setSubmittedCandidateData] = useState<CandidateMatchProfile | null>(null);
+  const [originalCandidateData, setOriginalCandidateData] = useState<CandidateMatchProfile | null>(null);
 
-  // Handle file selection & local text analysis (NO cloud upload yet!)
+  // Criteria Editor Toggle on Results View
+  const [showCriteriaEditor, setShowCriteriaEditor] = useState(false);
+  const [resultSkillInput, setResultSkillInput] = useState('');
+
+  // Active Jobs & Matching State
+  const [activeJobs, setActiveJobs] = useState<any[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(true);
+  const [selectedJobForModal, setSelectedJobForModal] = useState<JobMatchResult | null>(null);
+  const [matchFilter, setMatchFilter] = useState<'EligibleOnly' | 'All' | 'HighMatch' | 'LocalCity'>('EligibleOnly');
+
+  // Candidate Application Modal & State
+  const [applyingJobModal, setApplyingJobModal] = useState<JobMatchResult | null>(null);
+  const [applyName, setApplyName] = useState('');
+  const [applyEmail, setApplyEmail] = useState('');
+  const [applyPhone, setApplyPhone] = useState('');
+  const [isSubmittingApplication, setIsSubmittingApplication] = useState(false);
+
+  const handleOpenApplyModal = (matchResult: JobMatchResult) => {
+    setApplyingJobModal(matchResult);
+    setApplyName(submittedCandidateData?.name || candidateName || '');
+    setApplyEmail(submittedCandidateData?.email || candidateEmail || '');
+    setApplyPhone(submittedCandidateData?.phone || candidatePhone || '');
+  };
+
+  const handleConfirmApplicationAndStart = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!applyingJobModal) return;
+
+    const name = applyName.trim();
+    const email = applyEmail.trim().toLowerCase();
+    const phone = applyPhone.trim();
+
+    if (!name) {
+      messageBox.showError("Please enter your Full Name.");
+      return;
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      messageBox.showError("Please enter a valid Email Address.");
+      return;
+    }
+    if (!phone) {
+      messageBox.showError("Please enter your Mobile / WhatsApp Phone Number.");
+      return;
+    }
+
+    setIsSubmittingApplication(true);
+    const job = applyingJobModal.job;
+
+    try {
+      // 1. Record candidate application in Firestore interviews collection
+      const intRef = doc(db, 'interviews', job.id);
+      await updateDoc(intRef, {
+        candidateEmails: arrayUnion(email),
+        candidateData: arrayUnion({
+          name,
+          email,
+          phone,
+          appliedAt: new Date().toISOString(),
+          status: 'interested',
+          source: 'public_job_match'
+        })
+      });
+
+      // 2. Add application document to candidateApplications collection
+      try {
+        await addDoc(collection(db, 'candidateApplications'), {
+          interviewId: job.id,
+          jobTitle: job.title || '',
+          candidateName: name,
+          candidateEmail: email,
+          candidatePhone: phone,
+          recruiterUID: job.recruiterUID || job.createdBy?.uid || '',
+          status: 'pending',
+          appliedAt: serverTimestamp(),
+          source: 'public_job_match'
+        });
+      } catch (appErr) {
+        console.warn("candidateApplications save fallback:", appErr);
+      }
+
+      sessionStorage.setItem(`direct_bypass_${job.id}`, 'true');
+      const codeParam = job.accessCode ? `?code=${encodeURIComponent(job.accessCode)}&direct=true` : '?direct=true';
+      messageBox.showSuccess(`Application registered for ${job.title}! Opening your interview directly...`);
+      setApplyingJobModal(null);
+      navigate(`/interview/${job.id}${codeParam}`);
+    } catch (err: any) {
+      console.error("Application Submit Error:", err);
+      sessionStorage.setItem(`direct_bypass_${job.id}`, 'true');
+      const codeParam = job.accessCode ? `?code=${encodeURIComponent(job.accessCode)}&direct=true` : '?direct=true';
+      navigate(`/interview/${job.id}${codeParam}`);
+    } finally {
+      setIsSubmittingApplication(false);
+    }
+  };
+
+  // Check email on blur/typing to automatically inform candidate if they already submitted
+  const handleCheckEmailExists = async (emailVal: string) => {
+    const cleanEmail = emailVal.trim().toLowerCase();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setExistingEmailCandidate(null);
+      return;
+    }
+
+    setIsCheckingEmailBlur(true);
+    try {
+      const q = query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanEmail));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const found = snap.docs[0].data();
+        setExistingEmailCandidate({ id: snap.docs[0].id, ...found });
+      } else {
+        setExistingEmailCandidate(null);
+      }
+    } catch (err) {
+      console.warn("Email exists check warning:", err);
+    } finally {
+      setIsCheckingEmailBlur(false);
+    }
+  };
+
+  // Load existing profile from email match
+  const handleLoadExistingProfile = (candData: any) => {
+    const profileObj: CandidateMatchProfile = {
+      name: candData.name || candData.profile?.name || candidateName || 'Job Seeker',
+      email: candData.email || candidateEmail.trim().toLowerCase(),
+      phone: candData.phone || candData.profile?.phone || candidatePhone,
+      gender: candData.gender || candData.profile?.gender || candidateGender || 'Any',
+      location: candData.location || candData.profile?.location || candidateLocation || 'Nashik',
+      experience: candData.experienceYears || candData.totalExperienceYears || candData.experience || candidateExp || 0,
+      totalExperienceYears: candData.experienceYears || candData.totalExperienceYears || candData.experience || candidateExp || 0,
+      education: candData.highestEducation || candData.education || (candData.profile?.education ? candData.profile.education[0]?.degree : candidateEducation) || 'Graduate',
+      highestEducation: candData.highestEducation || (candData.profile?.education ? candData.profile.education[0]?.degree : candidateEducation) || 'Graduate',
+      employmentStatus: candData.employmentStatus || candidateEmploymentStatus || 'Working',
+      noticePeriod: candData.noticePeriod || `${candidateNoticePeriodVal} ${candidateNoticePeriodUnit}`,
+      currentSalary: candData.currentSalary || candidateCurrentSalary || 'As per Industry',
+      expectedSalary: candData.expectedSalary || candidateExpectedSalary || 'As per Industry',
+      skills: candData.skills || candData.profile?.skills || extractedSkills || [],
+      resumeText: candData.resumeText || candData.additionalText || '',
+      resumeUrl: candData.resumeUrl || ''
+    };
+
+    setSubmittedCandidateData(profileObj);
+    setOriginalCandidateData({ ...profileObj });
+    setIsSubmittedSuccess(true);
+    messageBox.showSuccess(`Welcome back, ${profileObj.name}! Your existing profile has been loaded and matched with active job openings.`);
+  };
+
+  // Fetch active jobs from Firestore interviews collection
+  useEffect(() => {
+    const q = query(collection(db, 'interviews'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const fetched = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: data.title || 'Untitled Job Role',
+          recruiterName: data.contactPerson || data.createdBy?.name || data.recruiterName || 'DSource Hiring Team',
+          description: data.description || data.jobDescription || '',
+          department: data.department || data.roleCategory || data.category || 'General',
+          location: data.location || (data.city && data.state ? `${data.city}, ${data.state}` : data.city || 'Nashik, Maharashtra'),
+          city: data.city || data.location || 'Nashik',
+          genderRequirement: data.genderRequirement || data.gender || data.genderPreference || 'Any',
+          employmentType: data.employmentType || data.jobType || 'Full-Time',
+          salary: data.salary || data.salaryRange || (data.minSalary && data.maxSalary ? `₹${data.minSalary} - ₹${data.maxSalary} / month` : 'Competitive CTC'),
+          minSalary: data.minSalary,
+          maxSalary: data.maxSalary,
+          minExperience: data.minExperience || data.experience || 0,
+          maxExperience: data.maxExperience || 0,
+          qualification: data.qualification || data.education || 'Diploma / Graduate',
+          education: data.education || data.qualification || 'Diploma / Graduate',
+          skills: data.skills || [],
+          accessCode: data.accessCode || doc.id.slice(0, 6).toUpperCase(),
+          deadline: data.deadline || data.applyDeadline,
+          isMock: Boolean(data.isMock)
+        };
+      });
+
+      const realJobs = fetched.filter(j => !j.isMock);
+      setActiveJobs(realJobs);
+      setJobsLoading(false);
+    }, (error) => {
+      console.error('Error fetching jobs for matching:', error);
+      setJobsLoading(false);
+    });
+
+    return () => unsub();
+  }, []);
+
+  // Compute matched jobs dynamically whenever submittedCandidateData changes
+  const matchedJobsList: JobMatchResult[] = useMemo(() => {
+    if (!submittedCandidateData || activeJobs.length === 0) return [];
+    
+    const results = activeJobs.map(job => calculateJobMatchScore(job, submittedCandidateData));
+    
+    results.sort((a, b) => b.overallScore - a.overallScore);
+
+    if (matchFilter === 'EligibleOnly') {
+      return results.filter(r => r.expMatch.isMatch && r.genderMatch.isMatch && r.overallScore > 0);
+    }
+    if (matchFilter === 'HighMatch') {
+      return results.filter(r => r.expMatch.isMatch && r.genderMatch.isMatch && r.overallScore >= 75);
+    }
+    if (matchFilter === 'LocalCity' && submittedCandidateData.location) {
+      const candCity = submittedCandidateData.location.toLowerCase();
+      return results.filter(r => r.expMatch.isMatch && r.genderMatch.isMatch && (r.locationMatch.isMatch || (r.job.location && r.job.location.toLowerCase().includes(candCity))));
+    }
+
+    return results;
+  }, [submittedCandidateData, activeJobs, matchFilter]);
+
+  // Dynamic Live Criteria Updates
+  const handleUpdateCandidateCriteria = (field: string, value: any) => {
+    setSubmittedCandidateData(prev => {
+      if (!prev) return null;
+      const updated = { ...prev, [field]: value };
+
+      if (field === 'experience') {
+        const numVal = parseFloat(value) || 0;
+        updated.experience = numVal;
+        updated.experienceYears = numVal;
+        updated.totalExperienceYears = numVal;
+      }
+      if (field === 'education') {
+        updated.highestEducation = value;
+      }
+
+      return updated;
+    });
+  };
+
+  const handleAddSkillToResults = () => {
+    const trimmed = resultSkillInput.trim();
+    if (!trimmed || !submittedCandidateData) return;
+    const currentSkills = submittedCandidateData.skills || [];
+    if (currentSkills.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
+      messageBox.showError(`"${trimmed}" is already added.`);
+      return;
+    }
+    handleUpdateCandidateCriteria('skills', [...currentSkills, trimmed]);
+    setResultSkillInput('');
+    messageBox.showSuccess(`Added "${trimmed}" to skill criteria.`);
+  };
+
+  const handleRemoveSkillFromResults = (skillToRemove: string) => {
+    if (!submittedCandidateData) return;
+    const currentSkills = submittedCandidateData.skills || [];
+    handleUpdateCandidateCriteria('skills', currentSkills.filter(s => s !== skillToRemove));
+  };
+
+  const handleResetToOriginalCriteria = () => {
+    if (originalCandidateData) {
+      setSubmittedCandidateData({ ...originalCandidateData });
+      messageBox.showSuccess("Reset criteria to original resume profile.");
+    }
+  };
+
+  // Handle file selection & local text analysis
   const handleFileSelection = async (file: File) => {
     setSelectedFile(file);
     setIsParsingResume(true);
     try {
-      // Analyze resume text locally without cloud storage upload
       const ingested = await parseResumeFileLocally(file, {}, extraBioText);
       setParsedProfileData(ingested);
 
       if (ingested.profile) {
-        // Auto-fill contact details if empty
         if (ingested.profile.name && !candidateName.trim()) setCandidateName(ingested.profile.name);
-        if (ingested.profile.email && !candidateEmail.trim()) setCandidateEmail(ingested.profile.email);
+        if (ingested.profile.email && !candidateEmail.trim()) {
+          const cleanExtractedEmail = ingested.profile.email.trim().toLowerCase();
+          setCandidateEmail(cleanExtractedEmail);
+
+          // Check if candidate email is ALREADY REGISTERED in Firestore
+          try {
+            const q = query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanExtractedEmail));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+              const matchedCand: any = { id: snap.docs[0].id, ...snap.docs[0].data() };
+              messageBox.showSuccess(`Welcome back, ${matchedCand.name || matchedCand.profile?.name || 'Job Seeker'}! We found your existing profile registered under ${cleanExtractedEmail}. Showing your best matched job openings.`);
+              handleLoadExistingProfile(matchedCand);
+              setIsParsingResume(false);
+              return;
+            }
+          } catch (lookupErr) {
+            console.warn("Auto email registration check error:", lookupErr);
+          }
+
+          handleCheckEmailExists(cleanExtractedEmail);
+        }
         if (ingested.profile.phone && !candidatePhone.trim()) setCandidatePhone(ingested.profile.phone);
 
-        // Auto-fill location ONLY if detected from resume and matches present cities
         if (ingested.profile.location) {
           const matchedCity = matchExtractedLocationToPresentCity(ingested.profile.location);
           if (matchedCity && !candidateLocation.trim()) {
@@ -169,7 +392,6 @@ export default function PublicJobSeekerUpload() {
           }
         }
 
-        // Auto-fetch & populate extracted skills
         if (Array.isArray(ingested.profile.skills) && ingested.profile.skills.length > 0) {
           setExtractedSkills(ingested.profile.skills);
           messageBox.showSuccess(`AI analyzed resume & auto-fetched ${ingested.profile.skills.length} skills!`);
@@ -182,6 +404,37 @@ export default function PublicJobSeekerUpload() {
       messageBox.showInfo("Resume attached. You can fill or verify your details below.");
     } finally {
       setIsParsingResume(false);
+    }
+  };
+
+  // Handle Returning Candidate Email Lookup
+  const handleLookupEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanEmail = lookupEmailInput.trim().toLowerCase();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      messageBox.showError("Please enter a valid email address.");
+      return;
+    }
+
+    setIsSearchingEmail(true);
+    try {
+      const q = query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanEmail));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        messageBox.showError(`No registered resume profile found for "${cleanEmail}". Please submit your resume below to get instant job recommendations.`);
+        setIsSearchingEmail(false);
+        return;
+      }
+
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const matchedCand: any = docs[0];
+      handleLoadExistingProfile(matchedCand);
+    } catch (err: any) {
+      console.error("Email Lookup Error:", err);
+      messageBox.showError("Failed to lookup email. Please try again or fill out the form below.");
+    } finally {
+      setIsSearchingEmail(false);
     }
   };
 
@@ -207,10 +460,26 @@ export default function PublicJobSeekerUpload() {
       messageBox.showError("Please enter your Full Name.");
       return;
     }
-    if (!candidateEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidateEmail.trim())) {
+    const cleanSubmitEmail = candidateEmail.trim().toLowerCase();
+    if (!cleanSubmitEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanSubmitEmail)) {
       messageBox.showError("Please enter a valid Email Address.");
       return;
     }
+
+    // Check if candidate email is ALREADY REGISTERED - do not duplicate, show matched jobs directly!
+    try {
+      const q = query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanSubmitEmail));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const matchedCand: any = { id: snap.docs[0].id, ...snap.docs[0].data() };
+        messageBox.showSuccess(`Welcome back, ${matchedCand.name || matchedCand.profile?.name || 'Job Seeker'}! We found your existing profile registered under ${cleanSubmitEmail}. Showing your best matched job openings.`);
+        handleLoadExistingProfile(matchedCand);
+        return;
+      }
+    } catch (lookupErr) {
+      console.warn("Submit auto email lookup warning:", lookupErr);
+    }
+
     if (!candidatePhone.trim()) {
       messageBox.showError("Please enter your Phone / WhatsApp Contact Number.");
       return;
@@ -228,7 +497,7 @@ export default function PublicJobSeekerUpload() {
       return;
     }
     if (!candidateEducation.trim()) {
-      messageBox.showError("Please select or type your Highest Education Qualification.");
+      messageBox.showError("Please select your Highest Education Qualification.");
       return;
     }
     if (!candidateEmploymentStatus.trim()) {
@@ -236,7 +505,7 @@ export default function PublicJobSeekerUpload() {
       return;
     }
     if (!candidateNoticePeriodVal.trim()) {
-      messageBox.showError("Please enter your Notice Period (in days or months).");
+      messageBox.showError("Please enter your Notice Period.");
       return;
     }
     if (!candidateCurrentSalary.trim()) {
@@ -247,24 +516,23 @@ export default function PublicJobSeekerUpload() {
       messageBox.showError("Please enter your Expected Salary.");
       return;
     }
-
-    if (!selectedFile) {
+    if (!selectedFile && !existingEmailCandidate) {
       messageBox.showError("Please attach your Resume file (PDF, DOCX, TXT).");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      // 1. Upload Resume file to Cloudinary / AWS S3 only on form submission
-      let resumeUrl = '';
-      try {
-        resumeUrl = await uploadToCloudinary(selectedFile);
-      } catch (uploadErr) {
-        console.warn("Cloudinary upload fallback to blob URL:", uploadErr);
-        resumeUrl = URL.createObjectURL(selectedFile);
+      let resumeUrl = existingEmailCandidate?.resumeUrl || '';
+      if (selectedFile) {
+        try {
+          resumeUrl = await uploadToCloudinary(selectedFile);
+        } catch (uploadErr) {
+          console.warn("Cloudinary upload fallback to blob URL:", uploadErr);
+          resumeUrl = URL.createObjectURL(selectedFile);
+        }
       }
 
-      // 2. Prepare profile object
       const finalProfile = parsedProfileData?.profile ? { ...parsedProfileData.profile } : {};
       const finalResumeText = parsedProfileData?.resumeText || extraBioText || '';
 
@@ -277,8 +545,9 @@ export default function PublicJobSeekerUpload() {
 
       const expNum = parseFloat(candidateExp) || 0;
       finalProfile.experienceYears = expNum;
+      finalProfile.totalExperienceYears = expNum;
+      finalProfile.experience = expNum;
 
-      // Salary & Notice Period & Employment Status fields
       finalProfile.employmentStatus = candidateEmploymentStatus;
       finalProfile.isWorking = candidateEmploymentStatus === 'Working' || candidateEmploymentStatus === 'Currently Working';
       finalProfile.noticePeriodVal = candidateNoticePeriodVal.trim();
@@ -290,19 +559,6 @@ export default function PublicJobSeekerUpload() {
       finalProfile.currentSalary = candidateCurrentSalary.trim();
       finalProfile.expectedSalary = candidateExpectedSalary.trim();
 
-      if (!finalProfile.workExperience || finalProfile.workExperience.length === 0) {
-        finalProfile.workExperience = [
-          {
-            title: 'Candidate Specified Experience',
-            company: 'Professional Background',
-            startDate: '',
-            endDate: 'Present',
-            highlights: [extraBioText.trim() || `Candidate indicated ${expNum} years of relevant experience.`],
-            skills: extractedSkills
-          }
-        ];
-      }
-
       const selectedDegree = candidateEducation.trim();
       const existingEdu = finalProfile.education || [];
       finalProfile.education = [
@@ -310,7 +566,6 @@ export default function PublicJobSeekerUpload() {
         ...existingEdu.filter((e: any) => e.degree?.toLowerCase() !== selectedDegree.toLowerCase())
       ];
 
-      // 3. Save candidate into DSource talent roster in Firestore
       await saveResumeDumpCandidate({
         recruiterUID: 'DSOURCE_PUBLIC_JOB_SEEKER_POOL',
         teamId: 'DSOURCE_TALENT_ROSTER',
@@ -322,36 +577,43 @@ export default function PublicJobSeekerUpload() {
         },
         profile: finalProfile,
         resumeText: finalResumeText,
-        resumeUrl,
-        fileName: selectedFile.name,
-        mimeType: selectedFile.type,
-        fileSize: selectedFile.size,
+        resumeUrl: resumeUrl || 'https://via.placeholder.com/150',
+        fileName: selectedFile ? selectedFile.name : (existingEmailCandidate?.fileName || 'resume.pdf'),
+        mimeType: selectedFile ? selectedFile.type : 'application/pdf',
+        fileSize: selectedFile ? selectedFile.size : 1024,
         additionalText: extraBioText.trim(),
         source: 'public_job_seeker_upload'
       });
 
       const formattedStatus = candidateEmploymentStatus === 'Working' ? 'Currently Working' : candidateEmploymentStatus;
 
-      setSubmittedCandidateData({
+      const profileMatchCandidate: CandidateMatchProfile = {
         name: candidateName.trim(),
         email: candidateEmail.trim().toLowerCase(),
         phone: candidatePhone.trim(),
+        gender: candidateGender,
         location: candidateLocation.trim(),
         experience: expNum,
+        totalExperienceYears: expNum,
         education: selectedDegree,
+        highestEducation: selectedDegree,
         employmentStatus: formattedStatus,
         noticePeriod: `${candidateNoticePeriodVal.trim()} ${candidateNoticePeriodUnit}`,
         currentSalary: candidateCurrentSalary.trim(),
         expectedSalary: candidateExpectedSalary.trim(),
-        fileName: selectedFile.name,
-        skills: extractedSkills
-      });
+        fileName: selectedFile ? selectedFile.name : (existingEmailCandidate?.fileName || 'resume.pdf'),
+        skills: extractedSkills,
+        resumeText: finalResumeText,
+        resumeUrl
+      };
 
+      setSubmittedCandidateData(profileMatchCandidate);
+      setOriginalCandidateData({ ...profileMatchCandidate });
       setIsSubmittedSuccess(true);
-      messageBox.showSuccess("Your resume & profile have been uploaded & submitted to DSource Talent Pool!");
+      messageBox.showSuccess("Your profile has been saved & matched with current job openings!");
     } catch (err: any) {
       console.error("Public Job Seeker Resume Upload Error:", err);
-      messageBox.showError(err.message || "Failed to upload resume. Please check your connection and try again.");
+      messageBox.showError(err.message || "Failed to upload resume. Please check connection and try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -361,11 +623,12 @@ export default function PublicJobSeekerUpload() {
     setCandidateName('');
     setCandidateEmail('');
     setCandidatePhone('');
+    setCandidateGender('');
     setCandidateLocation('');
     setCandidateExp('');
     setCandidateEducation('');
     setCandidateEmploymentStatus('Working');
-    setCandidateNoticePeriodVal('');
+    setCandidateNoticePeriodVal('30');
     setCandidateNoticePeriodUnit('Days');
     setCandidateCurrentSalary('');
     setCandidateExpectedSalary('');
@@ -376,65 +639,252 @@ export default function PublicJobSeekerUpload() {
     setParsedProfileData(null);
     setIsSubmittedSuccess(false);
     setSubmittedCandidateData(null);
+    setOriginalCandidateData(null);
+    setExistingEmailCandidate(null);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans transition-colors duration-200">
-      {/* Top Navbar Header */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 px-4 sm:px-8 py-3 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-3">
-          <Logo className="h-9 w-auto object-contain" isDark={false} />
-          <div className="hidden sm:block border-l border-slate-200 pl-3">
-            <span className="font-bold text-base tracking-tight text-slate-900 block">DSource</span>
-            <span className="text-[11px] font-mono text-emerald-600 font-semibold block -mt-0.5">Candidate Career Roster</span>
+    <div className={`min-h-screen font-sans transition-colors duration-300 ${
+      isDark ? 'bg-[#0a0a0a] text-white' : 'bg-slate-50 text-slate-900'
+    }`}>
+      {/* Sleek Responsive Top Navbar */}
+      <header className={`sticky top-0 z-40 backdrop-blur-md border-b transition-colors ${
+        isDark ? 'bg-[#0d0d0d]/95 border-white/[0.08]' : 'bg-white/95 border-slate-200 shadow-sm'
+      }`}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <Logo className="h-8 sm:h-9 w-auto object-contain" isDark={isDark} />
+            <div className="border-l pl-2.5 sm:pl-3 border-slate-200 dark:border-white/10">
+              <span className="font-extrabold text-sm sm:text-base tracking-tight block text-slate-900 dark:text-white">DSource</span>
+              <span className="text-[10px] sm:text-[11px] font-mono text-emerald-500 font-bold block -mt-0.5 uppercase tracking-wider">Candidate Match Portal</span>
+            </div>
+          </div>
+
+          {/* Desktop Right Nav Items */}
+          <div className="hidden md:flex items-center gap-2.5">
+            <button
+              onClick={toggleTheme}
+              className={`p-2.5 rounded-xl border transition-all cursor-pointer shadow-sm ${
+                isDark ? 'bg-white/10 border-white/15 text-amber-400 hover:bg-white/15' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+              }`}
+              title={isDark ? "Switch to Light Theme" : "Switch to Dark Theme"}
+            >
+              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+            </button>
+
+            <button
+              onClick={() => setShowEmailLookup(!showEmailLookup)}
+              className={`inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-sm cursor-pointer border ${
+                isDark 
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100'
+              }`}
+            >
+              <Mail className="w-4 h-4" />
+              <span>Already Submitted Resume?</span>
+            </button>
+
+            <Link
+              to="/jobs"
+              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl border transition-all shadow-sm ${
+                isDark 
+                  ? 'bg-white/10 border-white/15 text-white hover:bg-white/15' 
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <Briefcase className="w-4 h-4 text-emerald-500" />
+              <span>View Openings</span>
+            </Link>
+          </div>
+
+          {/* Mobile Right Controls: Theme Toggle & Hamburger Menu */}
+          <div className="flex md:hidden items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className={`p-2 rounded-xl border transition-all ${
+                isDark ? 'bg-white/10 border-white/15 text-amber-400' : 'bg-slate-100 border-slate-200 text-slate-700'
+              }`}
+            >
+              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+            </button>
+
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className={`p-2 rounded-xl border transition-all ${
+                isDark ? 'bg-white/10 border-white/15 text-white' : 'bg-slate-100 border-slate-200 text-slate-800'
+              }`}
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Link
-            to="/jobs"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 transition-all shadow-sm"
-          >
-            <Briefcase className="w-4 h-4 text-emerald-600" />
-            <span>View DSource Openings</span>
-          </Link>
-        </div>
+        {/* Mobile Collapsible Navigation Menu Drawer */}
+        {mobileMenuOpen && (
+          <div className={`md:hidden border-t px-4 py-3 space-y-2.5 animate-in slide-in-from-top-2 duration-200 ${
+            isDark ? 'bg-[#0d0d0d] border-white/10' : 'bg-white border-slate-200'
+          }`}>
+            <button
+              onClick={() => {
+                setShowEmailLookup(!showEmailLookup);
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center justify-between text-xs font-bold px-3.5 py-2.5 rounded-xl border transition-all ${
+                isDark 
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-800'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Mail className="w-4 h-4" />
+                <span>Already Submitted Resume? (Lookup)</span>
+              </span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            <Link
+              to="/jobs"
+              onClick={() => setMobileMenuOpen(false)}
+              className={`w-full flex items-center justify-between text-xs font-semibold px-3.5 py-2.5 rounded-xl border transition-all ${
+                isDark 
+                  ? 'bg-white/10 border-white/15 text-white' 
+                  : 'bg-slate-100 border-slate-200 text-slate-800'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-emerald-500" />
+                <span>Browse All Active Job Openings</span>
+              </span>
+              <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+        )}
       </header>
 
-      {/* Main Hero Container */}
-      <main className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
-        {!isSubmittedSuccess ? (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            {/* Header Banner */}
-            <div className="text-center space-y-3">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold uppercase tracking-wider">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                <span>DSource Automated Candidate Roster</span>
+      {/* Main Single-Page Responsive Container */}
+      <main className="max-w-5xl mx-auto px-3 sm:px-6 py-5 sm:py-10">
+
+        {/* Existing Submitted Candidate Email Lookup Card */}
+        {showEmailLookup && !isSubmittedSuccess && (
+          <div className="mb-6 p-4 sm:p-6 bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-950 text-white rounded-3xl shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-4 duration-300 border border-emerald-500/40 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="flex items-start justify-between relative z-10">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold uppercase tracking-wider border border-emerald-400/30">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Existing Candidate Lookup</span>
+                </div>
+                <h3 className="text-base sm:text-xl font-extrabold tracking-tight">Already Submitted Your Resume to DSource?</h3>
+                <p className="text-xs sm:text-sm text-slate-300">
+                  Enter your registered email address to instantly retrieve your profile and check top matching job openings.
+                </p>
               </div>
-              <h1 className="text-2xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-                Submit Your Resume to DSource Talent Pool
+              <button
+                onClick={() => setShowEmailLookup(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleLookupEmailSubmit} className="flex flex-col sm:flex-row gap-3 pt-1 relative z-10">
+              <div className="relative flex-1">
+                <Mail className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+                <input
+                  type="email"
+                  required
+                  value={lookupEmailInput}
+                  onChange={(e) => setLookupEmailInput(e.target.value)}
+                  placeholder="Enter your registered email address..."
+                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/10 border border-slate-700 text-xs sm:text-sm text-white placeholder-slate-400 outline-none focus:border-emerald-400 font-medium"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isSearchingEmail}
+                className="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-lg cursor-pointer disabled:opacity-50"
+              >
+                {isSearchingEmail ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Searching...</span>
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4" />
+                    <span>Find My Matched Jobs</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {!isSubmittedSuccess ? (
+          <div className="space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            {/* Header Title */}
+            <div className="text-center space-y-2.5">
+              <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border ${
+                isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+              }`}>
+                <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+                <span>DSource Automated Candidate Match Portal</span>
+              </div>
+              <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
+                Upload Resume & Get Best-Matched Jobs
               </h1>
-              <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
-                Upload your candidate profile once. Our automated AI parser extracts your skills, experience, and education, pre-fills your profile, and saves your resume into DSource's recruiter database for immediate job matching!
+              <p className={`text-xs sm:text-base max-w-2xl mx-auto leading-relaxed ${
+                isDark ? 'text-slate-400' : 'text-slate-600'
+              }`}>
+                Our AI resume parser extracts your skills, location, experience, and education, pre-fills your profile, and matches you against active openings based on skills, location, gender, experience, and qualification fit!
               </p>
             </div>
 
-            {/* Upload Form Card */}
+            {/* Existing Email Live Alert Banner inside Form */}
+            {existingEmailCandidate && (
+              <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-950 text-white border border-emerald-400/50 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-300">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-400/30">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="text-xs sm:text-sm font-extrabold text-emerald-300 block">Registered Candidate Profile Found!</span>
+                    <span className="text-xs text-slate-200 block">
+                      Welcome back, <strong>{existingEmailCandidate.name || existingEmailCandidate.email}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleLoadExistingProfile(existingEmailCandidate)}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer shrink-0"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Load Profile & Show Matched Jobs</span>
+                </button>
+              </div>
+            )}
+
+            {/* SINGLE-PAGE ALL-IN-ONE RESPONSIVE FORM */}
             <form
               onSubmit={handleSubmit}
-              className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6"
+              className="space-y-4 sm:space-y-6"
             >
-              {/* Step 1: File Dropzone First to Auto-Fetch Skills & Education */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold uppercase text-slate-700 flex items-center gap-1.5">
-                    <Upload className="w-4 h-4 text-emerald-600" />
-                    <span>Upload Resume File (PDF, DOCX, TXT) <span className="text-red-500">*</span></span>
+              {/* CARD BLOCK 1: RESUME FILE UPLOAD & SKILLS EXTRACTION */}
+              <div className={`rounded-3xl p-4 sm:p-6 border shadow-lg space-y-3.5 ${
+                isDark ? 'bg-[#0d0d0d] border-white/[0.1]' : 'bg-white border-slate-200'
+              }`}>
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2.5">
+                  <label className="block text-xs sm:text-sm font-extrabold uppercase tracking-wider flex items-center gap-2">
+                    <Upload className="w-4 h-4 text-emerald-500" />
+                    <span>1. Resume File & AI Skills Extraction <span className="text-red-500">*</span></span>
                   </label>
                   {isParsingResume && (
-                    <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5 animate-pulse">
+                    <span className="text-xs text-emerald-500 font-semibold flex items-center gap-1.5 animate-pulse">
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>AI Extracting Profile & Skills...</span>
+                      <span>AI Parsing...</span>
                     </span>
                   )}
                 </div>
@@ -442,7 +892,9 @@ export default function PublicJobSeekerUpload() {
                 <div
                   className={`relative flex flex-col items-center justify-center p-6 sm:p-8 border-2 border-dashed rounded-2xl transition-all cursor-pointer text-center ${
                     selectedFile
-                      ? 'border-emerald-500 bg-emerald-50/70'
+                      ? isDark ? 'border-emerald-500 bg-emerald-500/10' : 'border-emerald-500 bg-emerald-50/80'
+                      : isDark 
+                      ? 'border-white/20 hover:border-emerald-500 bg-white/[0.02] hover:bg-white/[0.05]' 
                       : 'border-slate-300 hover:border-emerald-500 hover:bg-slate-50'
                   }`}
                   onClick={() => document.getElementById('public-resume-input')?.click()}
@@ -457,376 +909,437 @@ export default function PublicJobSeekerUpload() {
                       if (file) handleFileSelection(file);
                     }}
                   />
-                  <div className="h-12 w-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-3 shadow-inner">
-                    {isParsingResume ? <RefreshCw className="w-6 h-6 animate-spin text-emerald-600" /> : <Upload className="w-6 h-6" />}
+                  <div className={`h-12 w-12 rounded-full flex items-center justify-center mb-2 shadow-inner ${
+                    isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-700'
+                  }`}>
+                    {isParsingResume ? <RefreshCw className="w-6 h-6 animate-spin text-emerald-500" /> : <Upload className="w-6 h-6" />}
                   </div>
 
                   {selectedFile ? (
                     <div className="space-y-1">
-                      <span className="font-bold text-sm text-emerald-800 block">
+                      <span className="font-bold text-xs sm:text-sm text-emerald-500 block">
                         ✓ File Attached: {selectedFile.name}
                       </span>
-                      <span className="text-xs text-slate-500 block">
-                        Size: {(selectedFile.size / 1024).toFixed(1)} KB (File will be stored securely upon clicking Submit)
+                      <span className="text-xs text-slate-400 block">
+                        Size: {(selectedFile.size / 1024).toFixed(1)} KB (Skills auto-parsed below)
                       </span>
                     </div>
                   ) : (
                     <div className="space-y-1">
-                      <span className="font-bold text-sm text-slate-800 block">
-                        Click to browse or drag & drop your resume file
+                      <span className="font-bold text-xs sm:text-sm block">
+                        Click or tap to upload resume file (PDF, DOCX, TXT)
                       </span>
-                      <span className="text-xs text-slate-500 block">
-                        PDF, DOCX, and TXT formats supported (Auto-fetches skills & location)
+                      <span className="text-xs text-slate-400 block">
+                        Auto-extracts skills, location, experience & qualification fit!
                       </span>
                     </div>
                   )}
                 </div>
-              </div>
 
-              {/* Step 2: Auto-Fetched Skills Roster */}
-              {(extractedSkills.length > 0 || selectedFile) && (
-                <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
-                      <Tag className="w-4 h-4 text-emerald-600" />
-                      <span className="font-extrabold text-xs uppercase tracking-wider text-slate-900">
-                        Fetched Skills & Technical Competencies ({extractedSkills.length})
+                {/* Auto-Fetched Skills Tags Roster */}
+                {(extractedSkills.length > 0 || selectedFile) && (
+                  <div className={`p-4 rounded-2xl border space-y-3 ${
+                    isDark ? 'bg-white/[0.03] border-white/10' : 'bg-slate-50 border-slate-200'
+                  }`}>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <Tag className="w-4 h-4 text-emerald-500" />
+                        <span className="font-extrabold text-xs uppercase tracking-wider">
+                          Extracted Technical Skills ({extractedSkills.length})
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-400">
+                        * Auto-extracted from your resume. Add or remove skills below.
                       </span>
                     </div>
-                    <span className="text-[11px] text-slate-500">
-                      * Auto-extracted from your resume. You can add or remove skills below.
-                    </span>
-                  </div>
 
-                  {/* Skills Tags */}
-                  <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto pr-1">
-                    {extractedSkills.map((skill) => (
-                      <span
-                        key={skill}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 border border-emerald-300 text-emerald-900 shadow-sm"
-                      >
-                        <span>{skill}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSkill(skill)}
-                          className="hover:text-red-600 transition-colors ml-0.5 p-0.5 cursor-pointer"
-                          title="Remove Skill"
+                    <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+                      {extractedSkills.map((skill) => (
+                        <span
+                          key={skill}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                            isDark 
+                              ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' 
+                              : 'bg-emerald-100 border-emerald-300 text-emerald-900'
+                          }`}
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <span>{skill}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSkill(skill)}
+                            className="hover:text-red-500 transition-colors ml-0.5 p-0.5 cursor-pointer"
+                            title="Remove Skill"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="text"
+                        value={newSkillInput}
+                        onChange={(e) => setNewSkillInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddSkill();
+                          }
+                        }}
+                        placeholder="Add key skill (e.g. React, Java, AutoCAD)..."
+                        className={`flex-1 px-3.5 py-2 rounded-xl text-xs outline-none focus:border-emerald-500 border ${
+                          isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddSkill}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shrink-0 cursor-pointer shadow-sm"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* CARD BLOCK 2: PERSONAL INFORMATION & CONTACT */}
+              <div className={`rounded-3xl p-4 sm:p-6 border shadow-lg space-y-4 ${
+                isDark ? 'bg-[#0d0d0d] border-white/[0.1]' : 'bg-white border-slate-200'
+              }`}>
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2.5 font-extrabold text-xs sm:text-sm uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <User className="w-4 h-4 text-emerald-500" />
+                    <span>2. Personal Details & Contact</span>
+                  </div>
+                  <span className="text-[11px] text-red-500">* Mandatory</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Full Name <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                      <input
+                        type="text"
+                        required
+                        value={candidateName}
+                        onChange={(e) => setCandidateName(e.target.value)}
+                        placeholder="e.g. Rahul Sharma"
+                        className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 transition-all ${
+                          isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Email Address <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                      <input
+                        type="email"
+                        required
+                        value={candidateEmail}
+                        onChange={(e) => {
+                          setCandidateEmail(e.target.value);
+                          handleCheckEmailExists(e.target.value);
+                        }}
+                        onBlur={(e) => handleCheckEmailExists(e.target.value)}
+                        placeholder="e.g. rahul.sharma@example.com"
+                        className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 transition-all ${
+                          isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                      WhatsApp Phone <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                      <input
+                        type="tel"
+                        required
+                        value={candidatePhone}
+                        onChange={(e) => setCandidatePhone(e.target.value)}
+                        placeholder="e.g. +91 9876543210"
+                        className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 transition-all ${
+                          isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Gender <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {['Male', 'Female', 'Any'].map(g => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setCandidateGender(g)}
+                          className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                            candidateGender === g
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                              : isDark ? 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10' : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                          }`}
+                        >
+                          {g}
                         </button>
-                      </span>
-                    ))}
-                    {extractedSkills.length === 0 && (
-                      <span className="text-xs text-slate-400 italic">No skills extracted yet. Type below to add your skills.</span>
-                    )}
+                      ))}
+                    </div>
                   </div>
-
-                  {/* Add Custom Skill */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="text"
-                      value={newSkillInput}
-                      onChange={(e) => setNewSkillInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddSkill();
-                        }
-                      }}
-                      placeholder="Add another key skill (e.g. React, Java, AutoCAD, Python)..."
-                      className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-300 text-xs text-slate-900 outline-none focus:border-emerald-500 placeholder:text-slate-400"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddSkill}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-500 transition-colors flex items-center gap-1 shrink-0 cursor-pointer shadow-sm"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Skill</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Step 3: Contact & Qualification Details */}
-              <div className="border-t border-slate-200 pt-5 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-slate-900 font-extrabold text-base sm:text-lg">
-                  <User className="w-5 h-5 text-emerald-600" />
-                  <h2>Personal & Qualification Details</h2>
-                </div>
-                <span className="text-xs text-red-500 font-semibold">* Mandatory Fields</span>
-              </div>
-
-              {/* Personal Details Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    Full Name <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <User className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
-                    <input
-                      type="text"
-                      required
-                      value={candidateName}
-                      onChange={(e) => setCandidateName(e.target.value)}
-                      placeholder="e.g. Rahul Sharma"
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    Email Address <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
-                    <input
-                      type="email"
-                      required
-                      value={candidateEmail}
-                      onChange={(e) => setCandidateEmail(e.target.value)}
-                      placeholder="e.g. rahul.sharma@example.com"
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    WhatsApp Phone <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
-                    <input
-                      type="tel"
-                      required
-                      value={candidatePhone}
-                      onChange={(e) => setCandidatePhone(e.target.value)}
-                      placeholder="e.g. +91 9876543210"
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    Gender <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    required
-                    value={candidateGender}
-                    onChange={(e) => setCandidateGender(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all font-semibold"
-                  >
-                    <option value="">-- Select Gender --</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Any">Prefer Not To Say / Any</option>
-                  </select>
                 </div>
               </div>
 
-              {/* Location, Exp, Education Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    Location / City <span className="text-red-500">*</span>
-                  </label>
-                  <LocationCityInput
-                    value={candidateLocation}
-                    onChange={setCandidateLocation}
-                    placeholder="Search city (e.g. Nashik, Pune, Mumbai)..."
-                    className="w-full rounded-xl bg-slate-50 border border-slate-300 p-2.5 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white placeholder:text-slate-400"
-                  />
+              {/* CARD BLOCK 3: TARGET LOCATION, EXPERIENCE & QUALIFICATION */}
+              <div className={`rounded-3xl p-4 sm:p-6 border shadow-lg space-y-4 ${
+                isDark ? 'bg-[#0d0d0d] border-white/[0.1]' : 'bg-white border-slate-200'
+              }`}>
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2.5 font-extrabold text-xs sm:text-sm uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-emerald-500" />
+                    <span>3. Target Location & Qualification</span>
+                  </div>
+                  <span className="text-[11px] text-red-500">* Mandatory</span>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    Experience (Years) <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <Briefcase className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="60"
-                      required
-                      value={candidateExp}
-                      onChange={(e) => setCandidateExp(e.target.value)}
-                      placeholder="e.g. 0 (Fresher) or 2.5 Yrs"
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Location / Target City <span className="text-red-500">*</span>
+                    </label>
+                    <LocationCityInput
+                      value={candidateLocation}
+                      onChange={setCandidateLocation}
+                      placeholder="Search city (e.g. Nashik, Pune, Mumbai)..."
+                      className={`w-full rounded-xl border p-2.5 text-xs sm:text-sm outline-none focus:border-emerald-500 ${
+                        isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                      }`}
+                    />
+
+                    {/* Quick City Presets */}
+                    <div className="flex flex-wrap gap-1.5 pt-2">
+                      {['Nashik', 'Pune', 'Mumbai', 'Thane', 'Nagpur', 'Chhatrapati Sambhajinagar'].map(city => (
+                        <button
+                          key={city}
+                          type="button"
+                          onClick={() => setCandidateLocation(city)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                            candidateLocation.toLowerCase().includes(city.toLowerCase())
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                              : isDark ? 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          📍 {city}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Experience (Years) <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Briefcase className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="60"
+                        required
+                        value={candidateExp}
+                        onChange={(e) => setCandidateExp(e.target.value)}
+                        placeholder="e.g. 0 (Fresher) or 2.5 Yrs"
+                        className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 transition-all ${
+                          isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                        }`}
+                      />
+                    </div>
+                    {/* Quick Experience Pills */}
+                    <div className="flex flex-wrap gap-1 pt-2">
+                      {['0', '1', '2', '3', '5'].map(yr => (
+                        <button
+                          key={yr}
+                          type="button"
+                          onClick={() => setCandidateExp(yr)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                            candidateExp === yr
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                              : isDark ? 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {yr === '0' ? 'Fresher' : `${yr} Yr`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Highest Education Qualification <span className="text-red-500">*</span>
+                    </label>
+                    <EducationInput
+                      value={candidateEducation}
+                      onChange={setCandidateEducation}
+                      placeholder="Select degree (B.Tech, Diploma, BCA)..."
+                      className={`w-full rounded-xl border p-2.5 text-xs sm:text-sm outline-none focus:border-emerald-500 ${
+                        isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                      }`}
                     />
                   </div>
                 </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                    Highest Education <span className="text-red-500">*</span>
-                  </label>
-                  <EducationInput
-                    value={candidateEducation}
-                    onChange={setCandidateEducation}
-                    placeholder="Select or type degree..."
-                    className="w-full rounded-xl bg-slate-50 border border-slate-300 p-2.5 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white placeholder:text-slate-400"
-                  />
-                </div>
               </div>
 
-              {/* Working Status & Notice Period Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Current Working / Not Working */}
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5 flex items-center justify-between">
-                    <span>Working Status <span className="text-red-500">*</span></span>
-                    <span className="text-[11px] text-slate-400 font-normal">Currently employed?</span>
-                  </label>
-                  <div className="relative">
-                    <UserCheck className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+              {/* CARD BLOCK 4: EMPLOYMENT STATUS, NOTICE PERIOD & SALARY */}
+              <div className={`rounded-3xl p-4 sm:p-6 border shadow-lg space-y-4 ${
+                isDark ? 'bg-[#0d0d0d] border-white/[0.1]' : 'bg-white border-slate-200'
+              }`}>
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2.5 font-extrabold text-xs sm:text-sm uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="w-4 h-4 text-emerald-500" />
+                    <span>4. Employment Status, Notice Period & Salary</span>
+                  </div>
+                  <span className="text-[11px] text-red-500">* Mandatory</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Working Status <span className="text-red-500">*</span>
+                    </label>
                     <select
                       required
                       value={candidateEmploymentStatus}
                       onChange={(e) => setCandidateEmploymentStatus(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all font-semibold"
+                      className={`w-full px-3 py-2.5 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 font-semibold cursor-pointer ${
+                        isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                      }`}
                     >
                       <option value="Working">Currently Working (Employed)</option>
                       <option value="Not Working">Not Working (Unemployed)</option>
                       <option value="Serving Notice">Serving Notice Period</option>
                     </select>
                   </div>
-                </div>
 
-                {/* Notice Period in Days / Month */}
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5 flex items-center justify-between">
-                    <span>Notice Period <span className="text-red-500">*</span></span>
-                    <span className="text-[11px] text-slate-400 font-normal">In Days or Months</span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <Clock className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
-                      <input
-                        type="number"
-                        min="0"
-                        max="365"
-                        required
-                        value={candidateNoticePeriodVal}
-                        onChange={(e) => setCandidateNoticePeriodVal(e.target.value)}
-                        placeholder="e.g. 30 or 1"
-                        className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
-                      />
-                    </div>
-                    <select
-                      value={candidateNoticePeriodUnit}
-                      onChange={(e) => setCandidateNoticePeriodUnit(e.target.value as 'Days' | 'Months')}
-                      className="px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 font-bold outline-none focus:border-emerald-500 focus:bg-white shrink-0 cursor-pointer"
-                    >
-                      <option value="Days">Days</option>
-                      <option value="Months">Months</option>
-                    </select>
-                  </div>
-                  {/* Quick Select Presets */}
-                  <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                    <span className="text-[10px] font-semibold text-slate-400">Quick select:</span>
-                    {[
-                      { label: 'Immediate (0d)', val: '0', unit: 'Days' },
-                      { label: '15 Days', val: '15', unit: 'Days' },
-                      { label: '30 Days (1 Mo)', val: '30', unit: 'Days' },
-                      { label: '60 Days (2 Mo)', val: '60', unit: 'Days' },
-                      { label: '90 Days (3 Mo)', val: '90', unit: 'Days' }
-                    ].map((p) => (
-                      <button
-                        key={p.label}
-                        type="button"
-                        onClick={() => {
-                          setCandidateNoticePeriodVal(p.val);
-                          setCandidateNoticePeriodUnit(p.unit as 'Days' | 'Months');
-                        }}
-                        className={`text-[10px] px-2 py-0.5 rounded-md border font-medium transition-all ${
-                          candidateNoticePeriodVal === p.val && candidateNoticePeriodUnit === p.unit
-                            ? 'bg-emerald-100 border-emerald-400 text-emerald-800 font-bold'
-                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-100'
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                      <span>Notice Period <span className="text-red-500">*</span></span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Clock className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                        <input
+                          type="number"
+                          min="0"
+                          max="365"
+                          required
+                          value={candidateNoticePeriodVal}
+                          onChange={(e) => setCandidateNoticePeriodVal(e.target.value)}
+                          placeholder="30"
+                          className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 ${
+                            isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                          }`}
+                        />
+                      </div>
+                      <select
+                        value={candidateNoticePeriodUnit}
+                        onChange={(e) => setCandidateNoticePeriodUnit(e.target.value as 'Days' | 'Months')}
+                        className={`px-3 py-2.5 rounded-xl border text-xs font-bold outline-none cursor-pointer ${
+                          isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
                         }`}
                       >
-                        {p.label}
-                      </button>
-                    ))}
+                        <option value="Days">Days</option>
+                        <option value="Months">Months</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Current Salary <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <IndianRupee className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                      <input
+                        type="text"
+                        required
+                        value={candidateCurrentSalary}
+                        onChange={(e) => setCandidateCurrentSalary(e.target.value)}
+                        placeholder="e.g. 4.5 LPA (0 if fresher)"
+                        className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 transition-all ${
+                          isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Expected Salary <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <IndianRupee className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                      <input
+                        type="text"
+                        required
+                        value={candidateExpectedSalary}
+                        onChange={(e) => setCandidateExpectedSalary(e.target.value)}
+                        placeholder="e.g. 6.5 LPA"
+                        className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 transition-all ${
+                          isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                        }`}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Salary Fields Row: Current Salary & Expected Salary */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Current Salary */}
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5 flex items-center justify-between">
-                    <span>Current Salary <span className="text-red-500">*</span></span>
-                    <span className="text-[11px] text-slate-400 font-normal">CTC per Annum / Month</span>
-                  </label>
-                  <div className="relative">
-                    <IndianRupee className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
-                    <input
-                      type="text"
-                      required
-                      value={candidateCurrentSalary}
-                      onChange={(e) => setCandidateCurrentSalary(e.target.value)}
-                      placeholder="e.g. 4.5 LPA or 35,000 / month (0 if fresher)"
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
-                    />
-                  </div>
-                </div>
-
-                {/* Expected Salary */}
-                <div>
-                  <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5 flex items-center justify-between">
-                    <span>Expected Salary <span className="text-red-500">*</span></span>
-                    <span className="text-[11px] text-slate-400 font-normal">Desired CTC</span>
-                  </label>
-                  <div className="relative">
-                    <IndianRupee className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
-                    <input
-                      type="text"
-                      required
-                      value={candidateExpectedSalary}
-                      onChange={(e) => setCandidateExpectedSalary(e.target.value)}
-                      placeholder="e.g. 6.5 LPA or 50,000 / month"
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Extra Bio / Notes */}
-              <div>
-                <label className="block text-xs font-bold uppercase text-slate-700 mb-1.5">
-                  Preferred Domain Roles & Additional Notes (Optional)
+              {/* CARD BLOCK 5: NOTES & PREFERRED DOMAIN ROLES */}
+              <div className={`rounded-3xl p-4 sm:p-6 border shadow-lg space-y-2.5 ${
+                isDark ? 'bg-[#0d0d0d] border-white/[0.1]' : 'bg-white border-slate-200'
+              }`}>
+                <label className="block text-xs font-bold uppercase tracking-wider">
+                  5. Preferred Domain Roles & Additional Notes (Optional)
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={extraBioText}
                   onChange={(e) => setExtraBioText(e.target.value)}
                   placeholder="Mention preferred job roles, expected CTC, or work availability..."
-                  className="w-full p-3 rounded-xl bg-slate-50 border border-slate-300 text-xs sm:text-sm text-slate-900 outline-none focus:border-emerald-500 focus:bg-white focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-400"
+                  className={`w-full p-3 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 transition-all ${
+                    isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                  }`}
                 />
               </div>
 
-              {/* Submit Button */}
+              {/* Single Primary Action Submit Button */}
               <button
                 type="submit"
                 disabled={isSubmitting || isParsingResume}
-                className="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-emerald-600/25 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-emerald-600/25 disabled:opacity-50 cursor-pointer"
               >
                 {isSubmitting ? (
                   <>
                     <RefreshCw className="w-5 h-5 animate-spin" />
-                    <span>Uploading Resume & Saving Candidate Profile...</span>
+                    <span>Processing Profile & Matching Active Jobs...</span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-5 h-5" />
-                    <span>Submit Resume to DSource Talent Pool</span>
+                    <span>Submit Resume & Get Matched Jobs</span>
                     <ArrowRight className="w-5 h-5" />
                   </>
                 )}
@@ -834,71 +1347,708 @@ export default function PublicJobSeekerUpload() {
             </form>
           </div>
         ) : (
-          /* Success Confirmation View */
-          <div className="bg-white border border-emerald-300 rounded-3xl p-6 sm:p-10 shadow-2xl space-y-6 text-center animate-in zoom-in-95 duration-300">
-            <div className="h-16 w-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
-              <CheckCircle2 className="w-10 h-10" />
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-                Resume Submitted to DSource!
-              </h2>
-              <p className="text-slate-600 text-sm sm:text-base max-w-lg mx-auto leading-relaxed">
-                Thank you, <strong>{submittedCandidateData?.name}</strong>! Your profile & resume have been registered in DSource's recruiter roster.
-              </p>
-            </div>
-
-            {/* Profile Summary Card */}
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-left max-w-lg mx-auto space-y-3 text-xs sm:text-sm">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                <span className="font-bold text-slate-700">DSource Talent Roster Status</span>
-                <span className="font-mono text-emerald-700 font-extrabold">VERIFIED</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-slate-800">
-                <div><strong>Email:</strong> {submittedCandidateData?.email}</div>
-                <div><strong>Phone:</strong> {submittedCandidateData?.phone}</div>
-                <div><strong>Location:</strong> {submittedCandidateData?.location}</div>
-                <div><strong>Experience:</strong> {submittedCandidateData?.experience} Years</div>
-                <div><strong>Working Status:</strong> {submittedCandidateData?.employmentStatus}</div>
-                <div><strong>Notice Period:</strong> {submittedCandidateData?.noticePeriod}</div>
-                <div><strong>Current Salary:</strong> {submittedCandidateData?.currentSalary}</div>
-                <div><strong>Expected Salary:</strong> {submittedCandidateData?.expectedSalary}</div>
-                <div className="col-span-2"><strong>Highest Education:</strong> {submittedCandidateData?.education}</div>
+          /* Post-Submission / Email Lookup Results View */
+          <div className="space-y-6 sm:space-y-8 animate-in zoom-in-95 duration-300">
+            {/* Compact Profile Matched Bar - Ultra Short to focus on Jobs */}
+            <div className="bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-950 text-white border border-emerald-500/40 rounded-2xl px-4 py-3 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 animate-in fade-in duration-200">
+              <div className="flex items-center gap-2.5 truncate">
+                <span className="h-7 w-7 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-400/30">
+                  <CheckCircle2 className="w-4 h-4" />
+                </span>
+                <div className="truncate text-xs">
+                  <span className="font-extrabold text-white">Profile Matched: </span>
+                  <span className="text-emerald-300 font-bold">{submittedCandidateData?.name}</span>
+                  <span className="text-slate-300 text-[11px] ml-2 hidden sm:inline">
+                    📍 {submittedCandidateData?.location || 'Nashik'} • 💼 {submittedCandidateData?.experience || 0} Yrs Exp • 🎓 {submittedCandidateData?.highestEducation || 'Graduate'}
+                  </span>
+                </div>
               </div>
 
-              {submittedCandidateData?.skills && submittedCandidateData.skills.length > 0 && (
-                <div className="pt-2 border-t border-slate-200">
-                  <span className="font-bold block mb-1.5 text-slate-900">Registered Skills ({submittedCandidateData.skills.length}):</span>
-                  <div className="flex flex-wrap gap-1">
-                    {submittedCandidateData.skills.map((s: string) => (
-                      <span key={s} className="px-2 py-0.5 rounded bg-emerald-100 border border-emerald-300 text-[11px] font-bold text-emerald-900">
-                        {s}
-                      </span>
-                    ))}
+              <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+                <button
+                  onClick={() => setShowCriteriaEditor(!showCriteriaEditor)}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-500 text-slate-950 font-extrabold text-xs hover:bg-emerald-400 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>{showCriteriaEditor ? 'Hide Criteria' : 'Edit Criteria'}</span>
+                </button>
+
+                <button
+                  onClick={handleResetForm}
+                  className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs border border-white/20 transition-all cursor-pointer"
+                >
+                  Change Resume
+                </button>
+              </div>
+            </div>
+
+            {/* Live Preferences Customizer Panel */}
+            {showCriteriaEditor && submittedCandidateData && (
+              <div className={`border-2 rounded-3xl p-5 shadow-xl space-y-4 animate-in fade-in slide-in-from-top-4 duration-200 transition-colors ${
+                isDark 
+                  ? 'bg-[#0d0d0d] border-emerald-500/50' 
+                  : 'bg-white border-emerald-500/30'
+              }`}>
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-4 h-4 text-emerald-500" />
+                    <h3 className="text-base font-extrabold">
+                      Customize Match Criteria Live
+                    </h3>
                   </div>
                 </div>
-              )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  {/* Location Selector */}
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
+                      Target City / Location
+                    </label>
+                    <LocationCityInput
+                      value={submittedCandidateData.location || ''}
+                      onChange={(val) => handleUpdateCandidateCriteria('location', val)}
+                      placeholder="e.g. Nashik, Pune, Mumbai..."
+                      className={`w-full rounded-xl border p-2.5 text-xs outline-none focus:border-emerald-500 font-semibold ${
+                        isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                      }`}
+                    />
+                  </div>
+
+                  {/* Experience Selector */}
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
+                      Experience (Years)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max="60"
+                      value={submittedCandidateData.experience || 0}
+                      onChange={(e) => handleUpdateCandidateCriteria('experience', e.target.value)}
+                      className={`w-full px-3 py-2.5 rounded-xl border text-xs font-semibold outline-none focus:border-emerald-500 ${
+                        isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                      }`}
+                    />
+                  </div>
+
+                  {/* Gender Selector */}
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
+                      Gender Criterion
+                    </label>
+                    <select
+                      value={submittedCandidateData.gender || 'Any'}
+                      onChange={(e) => handleUpdateCandidateCriteria('gender', e.target.value)}
+                      className={`w-full px-3 py-2.5 rounded-xl border text-xs font-semibold outline-none focus:border-emerald-500 cursor-pointer ${
+                        isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                      }`}
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Any">Prefer Not To Say / Any</option>
+                    </select>
+                  </div>
+
+                  {/* Highest Qualification */}
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
+                      Highest Education
+                    </label>
+                    <EducationInput
+                      value={submittedCandidateData.highestEducation || submittedCandidateData.education || ''}
+                      onChange={(val) => handleUpdateCandidateCriteria('education', val)}
+                      placeholder="Select degree..."
+                      className={`w-full rounded-xl border p-2.5 text-xs outline-none focus:border-emerald-500 font-semibold ${
+                        isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Quick City Presets */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {['Nashik', 'Pune', 'Mumbai', 'Thane', 'Nagpur', 'Chhatrapati Sambhajinagar', 'Remote'].map((city) => (
+                    <button
+                      key={city}
+                      type="button"
+                      onClick={() => handleUpdateCandidateCriteria('location', city)}
+                      className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                        (submittedCandidateData.location || '').toLowerCase().includes(city.toLowerCase())
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : isDark ? 'bg-white/10 text-slate-300 border-white/10' : 'bg-slate-100 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      📍 {city}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Add Custom Skill Filter */}
+                <div className="flex items-center gap-2 pt-1 border-t border-slate-200 dark:border-white/10">
+                  <input
+                    type="text"
+                    value={resultSkillInput}
+                    onChange={(e) => setResultSkillInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddSkillToResults();
+                      }
+                    }}
+                    placeholder="Add target skill (e.g. AutoCAD, Python, Java, Tally)..."
+                    className={`flex-1 px-3 py-2 rounded-xl text-xs outline-none focus:border-emerald-500 border ${
+                      isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddSkillToResults}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Recommended Jobs Header & Filter Tabs */}
+            <div className="space-y-3">
+              <div>
+                <div className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 border ${
+                  isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-100 border-emerald-200 text-emerald-800'
+                }`}>
+                  <Sparkles className="w-3 h-3 text-emerald-500" />
+                  <span>AI Job Recommendations</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight">
+                  Best Matched Job Openings ({matchedJobsList.length})
+                </h3>
+              </div>
+
+              {/* Filter Tabs */}
+              <div className={`flex items-center gap-1 p-1 rounded-2xl shadow-sm border overflow-x-auto ${
+                isDark ? 'bg-[#0d0d0d] border-white/10' : 'bg-white border-slate-200'
+              }`}>
+                <button
+                  onClick={() => setMatchFilter('EligibleOnly')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                    matchFilter === 'EligibleOnly' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Eligible
+                </button>
+                <button
+                  onClick={() => setMatchFilter('HighMatch')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                    matchFilter === 'HighMatch' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  High Match (&ge; 75%)
+                </button>
+                <button
+                  onClick={() => setMatchFilter('LocalCity')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                    matchFilter === 'LocalCity' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  📍 {submittedCandidateData?.location || 'Location'}
+                </button>
+                <button
+                  onClick={() => setMatchFilter('All')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                    matchFilter === 'All' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  All ({activeJobs.length})
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center justify-center gap-3 pt-2 flex-wrap">
-              <button
-                onClick={handleResetForm}
-                className="px-5 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-800 font-bold text-xs sm:text-sm hover:bg-slate-100 transition-colors shadow-sm cursor-pointer"
-              >
-                Submit Another Resume
-              </button>
-              <Link
-                to="/jobs"
-                className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-extrabold text-xs sm:text-sm hover:bg-emerald-500 transition-colors flex items-center gap-1.5 shadow-md cursor-pointer"
-              >
-                <span>Browse DSource Job Openings</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
+            {/* Jobs List Grid */}
+            {jobsLoading ? (
+              <div className={`py-12 text-center space-y-3 rounded-3xl border ${
+                isDark ? 'bg-[#0d0d0d] border-white/10' : 'bg-white border-slate-200'
+              }`}>
+                <RefreshCw className="w-8 h-8 animate-spin text-emerald-500 mx-auto" />
+                <p className="text-sm font-bold text-slate-400">Scoring active job openings...</p>
+              </div>
+            ) : matchedJobsList.length === 0 ? (
+              <div className={`py-10 text-center space-y-3 rounded-3xl border px-4 ${
+                isDark ? 'bg-[#0d0d0d] border-white/10' : 'bg-white border-slate-200'
+              }`}>
+                <AlertCircle className="w-8 h-8 text-slate-400 mx-auto" />
+                <h4 className="text-base font-bold">No Job Matches Found for this Filter</h4>
+                <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                  Switch filter to "All" or edit your preferences to view more openings.
+                </p>
+                <button
+                  onClick={() => setMatchFilter('All')}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold cursor-pointer"
+                >
+                  View All Openings
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {matchedJobsList.map((matchItem) => {
+                  const { job, overallScore, matchGrade, badgeColor, skillMatch, locationMatch, genderMatch, expMatch, eduMatch, failReasons } = matchItem;
+                  const isDisqualified = !expMatch.isMatch || !genderMatch.isMatch || overallScore === 0;
+
+                  return (
+                    <div
+                      key={job.id}
+                      className={`group relative flex flex-col justify-between rounded-3xl border p-5 transition-all duration-300 shadow-xl overflow-hidden ${
+                        isDark 
+                          ? 'bg-[#0d0d0d] border-white/[0.1] hover:border-emerald-500/40 hover:bg-[#111111]' 
+                          : 'bg-white border-slate-200 hover:border-emerald-500/50 hover:shadow-2xl hover:shadow-emerald-500/10'
+                      } ${isDisqualified ? 'opacity-85' : ''}`}
+                    >
+                      <div className="space-y-3 relative z-10">
+                        {/* Top Header Badge Row */}
+                        <div className="flex items-start justify-between gap-2">
+                          <span className={`px-3 py-1 rounded-full text-[11px] sm:text-xs font-extrabold shadow-sm flex items-center gap-1 ${badgeColor}`}>
+                            {isDisqualified ? <Ban className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
+                            <span>{overallScore}% Match • {matchGrade}</span>
+                          </span>
+
+                          <span className={`text-[10px] font-mono font-extrabold px-2 py-0.5 rounded-lg border ${
+                            isDark ? 'bg-white/10 border-white/15 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-600'
+                          }`}>
+                            Code: {job.accessCode}
+                          </span>
+                        </div>
+
+                        {/* Title & Department */}
+                        <div>
+                          <h4 className={`text-base sm:text-lg font-extrabold transition-colors tracking-tight line-clamp-1 ${
+                            isDark ? 'text-white group-hover:text-emerald-400' : 'text-slate-900 group-hover:text-emerald-600'
+                          }`}>
+                            {job.title}
+                          </h4>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-semibold mt-0.5">
+                            <span className="text-slate-300">{job.recruiterName}</span>
+                            <span>•</span>
+                            <span className="text-emerald-400">{job.department}</span>
+                          </div>
+                        </div>
+
+                        {/* Attribute Badges */}
+                        <div className="grid grid-cols-2 gap-2 pt-0.5">
+                          {/* Location Badge */}
+                          <div className={`p-2 rounded-xl border text-[11px] flex items-center justify-between gap-1 ${
+                            locationMatch.isMatch 
+                              ? isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                              : isDark ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-900'
+                          }`}>
+                            <div className="flex items-center gap-1 truncate">
+                              <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
+                              <span className="font-bold truncate">{job.location}</span>
+                            </div>
+                          </div>
+
+                          {/* Salary Badge */}
+                          <div className={`p-2 rounded-xl border text-[11px] flex items-center gap-1 ${
+                            isDark ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
+                          }`}>
+                            <IndianRupee className="w-3 h-3 text-emerald-500 shrink-0" />
+                            <span className="font-semibold truncate">{job.salary}</span>
+                          </div>
+
+                          {/* Experience Badge */}
+                          <div className={`p-2 rounded-xl border text-[11px] flex items-center gap-1 ${
+                            expMatch.isMatch 
+                              ? isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 font-bold' : 'bg-emerald-50 border-emerald-200 text-emerald-900 font-bold'
+                              : isDark ? 'bg-rose-500/20 border-rose-500/40 text-rose-300 font-extrabold' : 'bg-rose-100 border-rose-300 text-rose-900 font-extrabold'
+                          }`}>
+                            {expMatch.isMatch ? (
+                              <Briefcase className="w-3 h-3 text-emerald-500 shrink-0" />
+                            ) : (
+                              <Ban className="w-3 h-3 text-rose-500 shrink-0" />
+                            )}
+                            <span className="truncate">
+                              {expMatch.isMatch ? `Req: ${expMatch.requiredExp}` : `Min ${expMatch.requiredExp} Req`}
+                            </span>
+                          </div>
+
+                          {/* Gender Badge */}
+                          <div className={`p-2 rounded-xl border text-[11px] flex items-center gap-1 ${
+                            genderMatch.isMatch 
+                              ? isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                              : isDark ? 'bg-rose-500/20 border-rose-500/40 text-rose-300 font-extrabold' : 'bg-rose-100 border-rose-300 text-rose-900 font-extrabold'
+                          }`}>
+                            <User className="w-3 h-3 text-emerald-500 shrink-0" />
+                            <span className="font-semibold truncate">
+                              {genderMatch.requiredGender === 'Any' ? 'Gender: Any' : `${genderMatch.requiredGender}`}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Education Qualification */}
+                        <div className={`p-2 rounded-xl border text-[11px] flex items-center justify-between gap-1.5 ${
+                          isDark ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'
+                        }`}>
+                          <div className="flex items-center gap-1 truncate">
+                            <GraduationCap className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                            <span className="text-slate-400">Edu:</span>
+                            <span className="font-bold truncate">{job.qualification}</span>
+                          </div>
+                          {eduMatch.isMatch ? (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${
+                              isDark ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' : 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                            }`}>
+                              Fit
+                            </span>
+                          ) : (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${
+                              isDark ? 'bg-amber-500/20 border-amber-500/30 text-amber-300' : 'bg-amber-100 border-amber-300 text-amber-800'
+                            }`}>
+                              Mismatch
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Skills Display (Ratio count text like '0/4 matched' removed) */}
+                        {skillMatch.matchedSkills.length > 0 ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1 text-[11px] font-bold">
+                              <Tag className="w-3 h-3 text-emerald-500" />
+                              <span>Matched Skills</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {skillMatch.matchedSkills.map(s => (
+                                <span key={s} className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
+                                  isDark ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' : 'bg-emerald-100 border-emerald-300 text-emerald-900'
+                                }`}>
+                                  ✓ {s}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : skillMatch.missingSkills.length > 0 && (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1 text-[11px] font-bold text-slate-400">
+                              <Tag className="w-3 h-3 text-slate-400" />
+                              <span>Key Job Skills</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {skillMatch.missingSkills.slice(0, 3).map(s => (
+                                <span key={s} className={`px-2 py-0.5 rounded text-[9px] border ${
+                                  isDark ? 'bg-white/5 border-white/10 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-500'
+                                }`}>
+                                  {s}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Fail Reasons if strict criteria fail */}
+                        {failReasons.length > 0 && (
+                          <div className={`p-2 rounded-xl border text-[10px] space-y-0.5 ${
+                            isDisqualified 
+                              ? isDark ? 'bg-rose-950/40 border-rose-800/60 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-950' 
+                              : isDark ? 'bg-amber-950/40 border-amber-800/60 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-900'
+                          }`}>
+                            <span className="font-bold block">
+                              {isDisqualificationReason(failReasons[0]) ? '🚫 Reason: ' : '⚠️ Note: '} {failReasons[0]}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Card Action Footer */}
+                      <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between gap-2 relative z-10">
+                        <button
+                          onClick={() => setSelectedJobForModal(matchItem)}
+                          className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer border ${
+                            isDark ? 'bg-white/10 border-white/10 text-white hover:bg-white/15' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
+                          }`}
+                        >
+                          <Eye className="w-3.5 h-3.5 text-slate-400" />
+                          <span>View Details</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleOpenApplyModal(matchItem)}
+                          disabled={isDisqualified}
+                          className={`flex-1 py-2.5 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                            isDisqualified 
+                              ? 'bg-slate-200 dark:bg-white/5 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-300 dark:border-white/10' 
+                              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20'
+                          }`}
+                        >
+                          <span>{isDisqualified ? 'Criteria Unmet' : 'Apply & Start'}</span>
+                          {!isDisqualified && <ArrowRight className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </main>
+
+      {/* Modal Dialog for View Job Details */}
+      {selectedJobForModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className={`border rounded-3xl max-w-2xl w-full p-5 sm:p-8 shadow-2xl space-y-5 relative max-h-[90vh] overflow-y-auto transition-colors ${
+            isDark ? 'bg-[#0d0d0d] border-white/15 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <button
+              onClick={() => setSelectedJobForModal(null)}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white p-1 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Modal Top Match Header */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className={`px-3 py-1 rounded-full text-xs font-extrabold ${selectedJobForModal.badgeColor}`}>
+                  {selectedJobForModal.overallScore}% Match • {selectedJobForModal.matchGrade}
+                </span>
+                <span className={`text-xs font-mono px-2.5 py-1 rounded-lg border ${
+                  isDark ? 'bg-white/10 border-white/10 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-600'
+                }`}>
+                  Code: {selectedJobForModal.job.accessCode}
+                </span>
+              </div>
+
+              <h3 className="text-xl sm:text-2xl font-extrabold">
+                {selectedJobForModal.job.title}
+              </h3>
+              <p className="text-xs text-slate-400 font-semibold">
+                Posted by: {selectedJobForModal.job.recruiterName} • {selectedJobForModal.job.department}
+              </p>
+            </div>
+
+            {/* Breakdown Highlights */}
+            <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl text-xs border ${
+              isDark ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'
+            }`}>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Location</span>
+                <strong className="block truncate">{selectedJobForModal.job.location}</strong>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Salary</span>
+                <strong className="block truncate">{selectedJobForModal.job.salary}</strong>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Experience</span>
+                <strong className="block truncate">{selectedJobForModal.expMatch.requiredExp}</strong>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Gender</span>
+                <strong className="block truncate">{selectedJobForModal.genderMatch.requiredGender}</strong>
+              </div>
+            </div>
+
+            {/* Strict Disqualification Warning */}
+            {(!selectedJobForModal.expMatch.isMatch || !selectedJobForModal.genderMatch.isMatch) && (
+              <div className={`p-3.5 rounded-2xl border text-xs font-semibold space-y-1 ${
+                isDark ? 'bg-rose-950/50 border-rose-800 text-rose-200' : 'bg-rose-50 border-rose-300 text-rose-950'
+              }`}>
+                <div className="font-extrabold text-rose-400 flex items-center gap-1">
+                  <Ban className="w-4 h-4 text-rose-500" />
+                  <span>Not Recommended due to Criteria Mismatch</span>
+                </div>
+                <p className="text-[11px]">
+                  {!selectedJobForModal.expMatch.isMatch && (
+                    <span>Requires minimum <strong>{selectedJobForModal.expMatch.requiredExp}</strong> experience (Your experience is <strong>{selectedJobForModal.expMatch.candidateExp} Yrs</strong>). </span>
+                  )}
+                  {!selectedJobForModal.genderMatch.isMatch && (
+                    <span>Requires <strong>{selectedJobForModal.genderMatch.requiredGender}</strong> (Candidate gender is <strong>{selectedJobForModal.genderMatch.candidateGender}</strong>).</span>
+                  )}
+                </p>
+              </div>
+            )}
+
+            {/* Full Job Description */}
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Job Description & Responsibilities</h4>
+              <p className={`text-xs leading-relaxed whitespace-pre-line p-3 rounded-2xl border max-h-44 overflow-y-auto ${
+                isDark ? 'bg-white/5 border-white/10 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-600'
+              }`}>
+                {selectedJobForModal.job.description || 'No detailed job description provided.'}
+              </p>
+            </div>
+
+            {/* Education & Qualification */}
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Qualification & Education</h4>
+              <div className={`p-2.5 rounded-2xl border text-xs font-bold flex items-center justify-between ${
+                isDark ? 'bg-emerald-950/50 border-emerald-800 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              }`}>
+                <span>{selectedJobForModal.job.qualification}</span>
+                <span>{selectedJobForModal.eduMatch.isMatch ? '✓ Qualification Fits' : 'Mismatch'}</span>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-200 dark:border-white/10">
+              <button
+                onClick={() => setSelectedJobForModal(null)}
+                className={`px-4 py-2 rounded-xl border font-bold text-xs transition-colors cursor-pointer ${
+                  isDark ? 'bg-white/10 border-white/10 text-slate-300 hover:bg-white/15' : 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  const match = selectedJobForModal;
+                  setSelectedJobForModal(null);
+                  handleOpenApplyModal(match);
+                }}
+                disabled={!selectedJobForModal.expMatch.isMatch || !selectedJobForModal.genderMatch.isMatch}
+                className={`px-5 py-2 rounded-xl font-extrabold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                  (!selectedJobForModal.expMatch.isMatch || !selectedJobForModal.genderMatch.isMatch)
+                    ? 'bg-slate-200 dark:bg-white/10 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-300 dark:border-white/10'
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md'
+                }`}
+              >
+                <span>{(!selectedJobForModal.expMatch.isMatch || !selectedJobForModal.genderMatch.isMatch) ? 'Criteria Unmet' : 'Apply & Start Interview'}</span>
+                {(selectedJobForModal.expMatch.isMatch && selectedJobForModal.genderMatch.isMatch) && <ArrowRight className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Apply & Start Pre-Interview Confirmation Modal */}
+      {applyingJobModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className={`border rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 relative transition-colors ${
+            isDark ? 'bg-[#0d0d0d] border-emerald-500/40 text-white' : 'bg-white border-emerald-500/30 text-slate-900'
+          }`}>
+            <button
+              onClick={() => setApplyingJobModal(null)}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white p-1 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase tracking-wider border border-emerald-500/30">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Job Application & Interview Entry</span>
+              </div>
+              <h3 className="text-xl font-extrabold tracking-tight">
+                Apply for {applyingJobModal.job.title}
+              </h3>
+              <p className="text-xs text-slate-400">
+                Confirm your details to register your application interest with the recruiter before starting your interview.
+              </p>
+            </div>
+
+            <form onSubmit={handleConfirmApplicationAndStart} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1">
+                  Full Name <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={applyName}
+                    onChange={(e) => setApplyName(e.target.value)}
+                    placeholder="Enter your full name..."
+                    className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs font-semibold outline-none focus:border-emerald-500 ${
+                      isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1">
+                  Email Address <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                  <input
+                    type="email"
+                    required
+                    value={applyEmail}
+                    onChange={(e) => setApplyEmail(e.target.value)}
+                    placeholder="Enter your email address..."
+                    className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs font-semibold outline-none focus:border-emerald-500 ${
+                      isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1">
+                  Mobile / WhatsApp Number <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                  <input
+                    type="tel"
+                    required
+                    value={applyPhone}
+                    onChange={(e) => setApplyPhone(e.target.value)}
+                    placeholder="Enter mobile number..."
+                    className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs font-semibold outline-none focus:border-emerald-500 ${
+                      isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 space-y-1">
+                <span className="font-extrabold block">✓ Direct Recruiter Notification</span>
+                <p className="text-slate-300 text-[10px]">
+                  Your application will be marked in the hiring manager's portal. Green status will be marked upon interview completion!
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setApplyingJobModal(null)}
+                  className={`flex-1 py-2.5 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+                    isDark ? 'bg-white/10 border-white/10 text-slate-300 hover:bg-white/15' : 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingApplication}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingApplication ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Confirm & Start</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const isDisqualificationReason = (reason: string): boolean => {
+  if (!reason) return false;
+  const lower = reason.toLowerCase();
+  return lower.includes('requires female') || lower.includes('requires male') || lower.includes('minimum') || lower.includes('disqualif');
+};

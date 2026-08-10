@@ -749,11 +749,19 @@ export const saveResumeDumpCandidate = async ({
 
   const cleanLocationStr = isErroneousLocation ? '' : rawLocation;
 
+  const rawExpVal = profile.totalExperienceYears !== undefined 
+    ? profile.totalExperienceYears 
+    : ((profile as any).experienceYears !== undefined ? (profile as any).experienceYears : (typeof (profile as any).experience === 'number' ? (profile as any).experience : undefined));
+
   const normalizedProfile: ParsedResumeProfile = {
     ...profile,
     email: normalizeResumeEmail(profile.email),
     phone: formatExtractedPhone(profile.phone),
     location: cleanLocationStr || profile.location || '',
+    ...(rawExpVal !== undefined ? {
+      totalExperienceYears: Number(rawExpVal) || 0,
+      experienceYears: Number(rawExpVal) || 0,
+    } as any : {})
   };
 
   // Lookup existing candidate doc by email/phone so updates (e.g. city/location entered in interview) auto-overwrite existing record

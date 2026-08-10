@@ -36,14 +36,28 @@ const InterviewAccess: React.FC = () => {
       try {
         const resolved = await resolveJobOrInterviewDocument(interviewId);
         if (resolved && resolved.data) {
-           const interviewData = resolved.data as Interview;
-           setInterview(interviewData);
-           setInterviewTitle(interviewData.title || 'Job Interview');
-           const rateLimitStatus = await loadCompanyRateLimitStatus();
-           if (isRateLimitReached(rateLimitStatus, 'interviews')) {
-             setIsRateLimited(true);
-             setError(getRateLimitReachedMessage('interviews'));
-           }
+          const interviewData = resolved.data as Interview;
+          setInterview(interviewData);
+          setInterviewTitle(interviewData.title || 'Job Interview');
+
+          // Auto-bypass Access Code screen if candidate applied via Job Match Portal
+          const hashParts = window.location.hash.split('?');
+          const queryStr = hashParts.length > 1 ? hashParts[1] : '';
+          const urlParams = new URLSearchParams(queryStr || window.location.search);
+          const urlCode = urlParams.get('code');
+          const isDirect = urlParams.get('direct') === 'true' || sessionStorage.getItem(`direct_bypass_${interviewId}`) === 'true';
+
+          if (urlCode || isDirect) {
+            const validCode = urlCode || interviewData.accessCode || '';
+            setAccessCode(validCode);
+            setShowConsent(true); // Direct bypass access code screen!
+          }
+
+          const rateLimitStatus = await loadCompanyRateLimitStatus();
+          if (isRateLimitReached(rateLimitStatus, 'interviews')) {
+            setIsRateLimited(true);
+            setError(getRateLimitReachedMessage('interviews'));
+          }
           
           if ((interviewData as any).deadline) {
             const deadlineDate = new Date((interviewData as any).deadline);
