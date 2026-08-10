@@ -18,7 +18,7 @@ import { EducationInput } from '../components/EducationInput';
 
 import { evaluateResumeMatch } from '../services/api';
 import { ingestResumeFile, saveResumeDumpCandidate, checkMandatoryCriteriaMatch } from '../services/resumeService';
-import { parseCandidateDocument } from '../services/candidateFileParser';
+import { parseCandidateDocument, parseBulkCandidateTextInput } from '../services/candidateFileParser';
 import { logTeamActivity } from '../services/auditService';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rateLimitService';
@@ -2128,10 +2128,22 @@ const RecruiterInterviews: React.FC = () => {
                                             );
                                         }
 
+                                        const candName = parsedData?.name && parsedData.name !== 'Candidate'
+                                            ? parsedData.name
+                                            : (email.includes('@') && !email.endsWith('@whatsapp.local')
+                                                ? email.split('@')[0].split(/[._-]/).map(p=>p.charAt(0).toUpperCase()+p.slice(1)).join(' ')
+                                                : 'Candidate');
+
                                         return (
                                             <div key={email} className="flex items-start justify-between text-xs bg-gray-50 dark:bg-white/[0.025] border border-gray-200 dark:border-white/[0.11] rounded-[6px] px-3.5 py-2.5 shadow-sm transition-colors hover:border-gray-300 dark:hover:border-white/20">
                                                 <div className="flex flex-col min-w-0">
-                                                    <span className="font-semibold text-slate-900 dark:text-white truncate max-w-[260px]">{email}</span>
+                                                    <span className="font-bold text-slate-900 dark:text-white text-xs truncate max-w-[280px] flex items-center gap-1.5">
+                                                        <i className="fas fa-user-circle text-emerald-500"></i>
+                                                        {candName}
+                                                    </span>
+                                                    {!email.endsWith('@whatsapp.local') && (
+                                                        <span className="text-[11px] text-gray-500 dark:text-[#999] truncate max-w-[280px] mt-0.5">{email}</span>
+                                                    )}
                                                     {parsedData?.phone && parsedData.phone !== 'N/A' && (
                                                         <span className="text-xs text-blue-600 dark:text-[#8bbde8] font-mono flex items-center gap-1.5 mt-0.5"><i className="fas fa-phone-alt"></i>{parsedData.phone}</span>
                                                     )}

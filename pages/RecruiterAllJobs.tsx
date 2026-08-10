@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMessageBox } from '../components/MessageBox';
 import { sendInterviewInvitations } from '../services/brevoService';
-import { parseCandidateDocument } from '../services/candidateFileParser';
+import { parseCandidateDocument, parseBulkCandidateTextInput } from '../services/candidateFileParser';
 import { ingestResumeFile, saveResumeDumpCandidate, checkMandatoryCriteriaMatch } from '../services/resumeService';
 import { sendInterviewWhatsAppInvite, formatPhoneForWhatsApp, buildWhatsAppInviteText, openWhatsAppWebInvite, sendBulkWhatsAppInvites } from '../services/waSenderService';
 import EditJobModal from './EditJob';
@@ -46,7 +46,8 @@ import {
   MessageSquare,
   Clock,
   Send,
-  Bell
+  Bell,
+  User
 } from 'lucide-react';
 
 
@@ -1077,10 +1078,8 @@ const RecruiterAllJobs: React.FC = () => {
       return;
     }
 
-    const extraInputEmails = candidateEmailsInput
-      .split(/[\n,;]/)
-      .map(e => e.trim().toLowerCase())
-      .filter(e => e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+    const parsedInputCandidates = parseBulkCandidateTextInput(candidateEmailsInput);
+    const extraInputEmails = parsedInputCandidates.map(c => c.email.toLowerCase()).filter(Boolean);
 
     const finalEmails = Array.from(new Set([...inviteEmailsList, ...extraInputEmails]));
 
@@ -1093,12 +1092,13 @@ const RecruiterAllJobs: React.FC = () => {
         const updatedCandidateEmails = Array.from(new Set([...existingCandidateEmails, ...finalEmails]));
 
         const candidateDataToAdd = finalEmails.map(email => {
-          const parsed = parsedCandidates.find(c => c.email.toLowerCase() === email.toLowerCase());
+          const parsed = parsedCandidates.find(c => c.email.toLowerCase() === email.toLowerCase()) ||
+                         parsedInputCandidates.find(c => c.email.toLowerCase() === email.toLowerCase());
           return {
             email: email.toLowerCase(),
             name: parsed?.name || email.split('@')[0] || 'Candidate',
             phone: parsed?.phone || 'N/A',
-            experience: parsed?.experience || 'N/A'
+            experience: (parsed as any)?.experience || 'N/A'
           };
         });
 
@@ -1117,7 +1117,8 @@ const RecruiterAllJobs: React.FC = () => {
       const targetLink = invitingJob.interviewLink || `${window.location.origin}/#/interview/${invitingJob.id}`;
 
       let candidatesPayload = finalEmails.map(email => {
-        const parsed = parsedCandidates.find(c => c.email.toLowerCase() === email.toLowerCase());
+        const parsed = parsedCandidates.find(c => c.email.toLowerCase() === email.toLowerCase()) ||
+                       parsedInputCandidates.find(c => c.email.toLowerCase() === email.toLowerCase());
         return {
           email: email.toLowerCase(),
           name: parsed?.name || email.split('@')[0] || 'Candidate',
@@ -2288,21 +2289,34 @@ const RecruiterAllJobs: React.FC = () => {
                     {inviteEmailsList.map(email => {
                       const parsed = parsedCandidates.find(c => c.email.toLowerCase() === email.toLowerCase());
                       const phone = parsed?.phone && parsed.phone !== 'N/A' ? parsed.phone : '';
+                      const candName = parsed?.name && parsed.name !== 'Candidate'
+                        ? parsed.name
+                        : (email.includes('@') && !email.endsWith('@whatsapp.local')
+                            ? email.split('@')[0].split(/[._-]/).map(p=>p.charAt(0).toUpperCase()+p.slice(1)).join(' ')
+                            : 'Candidate');
+
                       return (
                         <span
                           key={email}
-                          className="geist-small inline-flex flex-col items-start gap-0.5 px-2.5 py-1 rounded-[4px] bg-white/[0.06] border border-white/[0.1] text-white"
+                          className="geist-small inline-flex flex-col items-start gap-1 px-3 py-1.5 rounded-[6px] bg-white/[0.06] border border-white/[0.1] text-white min-w-[180px]"
                         >
                           <div className="flex items-center gap-1.5 w-full justify-between">
-                            <span className="font-semibold text-white">{email}</span>
+                            <span className="font-bold text-white text-xs flex items-center gap-1.5 truncate">
+                              <User className="w-3 h-3 text-emerald-400 shrink-0" />
+                              {candName}
+                            </span>
                             <button
                               type="button"
                               onClick={() => handleRemoveEmail(email)}
-                              className="text-[#8f8f8f] hover:text-[#ff8f8f] ml-1 cursor-pointer"
+                              className="text-[#8f8f8f] hover:text-[#ff8f8f] ml-1 cursor-pointer font-bold text-base"
+                              title="Remove candidate"
                             >
                               &times;
                             </button>
                           </div>
+                          {!email.endsWith('@whatsapp.local') && (
+                            <span className="text-[10px] text-[#aaa] font-mono truncate max-w-[200px]">{email}</span>
+                          )}
                           {phone && (
                             <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
                               <Phone className="w-2.5 h-2.5" />

@@ -24,6 +24,7 @@ import {
   type CandidateMatch,
   type ResumeDumpRecord,
 } from '../services/resumeService';
+import { parseCandidateDocument, parseBulkCandidateTextInput } from '../services/candidateFileParser';
 import { logTeamActivity } from '../services/auditService';
 
 // Setup PDF.js worker to enable PDF parsing
@@ -712,8 +713,25 @@ const CreateInterview: React.FC = () => {
     if (!user || files.length === 0) return;
 
     setParsingResumes(true);
+    let spreadsheetCandidates: { email: string; phone: string; name?: string }[] = [];
+
     const results = await Promise.all(files.map(async (file) => {
       try {
+        const fileName = file.name.toLowerCase();
+        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv')) {
+          const parsed = await parseCandidateDocument(file);
+          parsed.forEach(c => {
+            if (c.email || c.phone) {
+              spreadsheetCandidates.push({
+                email: c.email.toLowerCase(),
+                phone: c.phone || 'N/A',
+                name: c.name
+              });
+            }
+          });
+          return { candidateId: '', email: '', phone: '', name: '', fileName: file.name, ok: true };
+        }
+
         const ingested = await ingestResumeFile(file);
         const candidateId = await saveResumeDumpCandidate({
           recruiterUID: user.uid,
@@ -740,18 +758,24 @@ const CreateInterview: React.FC = () => {
       }
     }));
 
-    const newEmailsFound = uniqueByNormalized(results.map((result) => result.email).filter(Boolean));
+    const newEmailsFound = uniqueByNormalized([
+      ...results.map((result) => result.email).filter(Boolean),
+      ...spreadsheetCandidates.map((c) => c.email).filter(Boolean)
+    ]);
     const savedCandidateIds = results.map((result) => result.candidateId).filter(Boolean);
     setUploadedResumeCandidateIds((current) => Array.from(new Set([...current, ...savedCandidateIds])));
     const filesProcessed = results.filter((result) => result.ok).length;
     const filesWithErrors = results.length - filesProcessed;
 
     // Collect candidate metadata (email, phone, name)
-    const validCandidates = results.filter((r) => r.ok && r.email).map((r) => ({
-      email: r.email,
-      phone: r.phone,
-      name: r.name,
-    }));
+    const validCandidates = [
+      ...results.filter((r) => r.ok && r.email).map((r) => ({
+        email: r.email,
+        phone: r.phone,
+        name: r.name,
+      })),
+      ...spreadsheetCandidates
+    ];
 
     if (validCandidates.length > 0) {
       setCandidateDataList((prev) => {
@@ -1597,14 +1621,19 @@ const CreateInterview: React.FC = () => {
             {candidateDataList.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {candidateDataList.map((candidate, index) => (
-                  <span key={index} className="geist-small inline-flex h-8 items-center gap-2 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-gray-50 dark:bg-white/[0.05] px-3 text-gray-800 dark:text-[#d4d4d4] font-medium shadow-sm dark:shadow-none">
+                  <span key={index} className="geist-small inline-flex h-auto flex-col items-start gap-0.5 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-gray-50 dark:bg-white/[0.05] p-2 text-gray-800 dark:text-[#d4d4d4] font-medium shadow-sm dark:shadow-none min-w-[170px]">
+                    <div className="flex items-center justify-between w-full gap-2">
+                      <span className="font-bold text-gray-900 dark:text-white text-xs flex items-center gap-1">
+                        👤 {candidate.name || (candidate.email ? candidate.email.split('@')[0] : 'Candidate')}
+                      </span>
+                      <button type="button" onClick={() => handleRemoveCandidate(index)} className="text-gray-400 dark:text-[#8f8f8f] transition-colors hover:text-red-500 dark:hover:text-white font-bold text-base">&times;</button>
+                    </div>
                     {candidate.email ? (
-                      <span>✉️ {candidate.email}</span>
+                      <span className="text-[10px] text-gray-500 dark:text-[#aaa] font-mono">✉️ {candidate.email}</span>
                     ) : null}
-                    {candidate.phone ? (
-                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono">📱 {candidate.phone}</span>
+                    {candidate.phone && candidate.phone !== 'N/A' ? (
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">📱 {candidate.phone}</span>
                     ) : null}
-                    <button type="button" onClick={() => handleRemoveCandidate(index)} className="text-gray-400 dark:text-[#8f8f8f] transition-colors hover:text-red-500 dark:hover:text-white font-bold ml-1">&times;</button>
                   </span>
                 ))}
               </div>

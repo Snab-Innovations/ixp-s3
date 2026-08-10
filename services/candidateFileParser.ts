@@ -46,8 +46,11 @@ async function parseSpreadsheetFile(file: File): Promise<CandidateFileRecord[]> 
 
   for (const row of jsonRows) {
     let name = '';
+    let firstName = '';
+    let lastName = '';
     let email = '';
     let phone = '';
+    let unassignedTextValues: string[] = [];
 
     // Inspect object keys for header names
     for (const [key, val] of Object.entries(row)) {
@@ -55,33 +58,76 @@ async function parseSpreadsheetFile(file: File): Promise<CandidateFileRecord[]> 
       const strVal = String(val).trim();
       if (!strVal) continue;
 
-      if (colName.includes('name')) {
-        name = strVal;
-      } else if (colName.includes('email') || colName.includes('mail')) {
-        email = strVal;
-      } else if (colName.includes('phone') || colName.includes('mobile') || colName.includes('contact') || colName.includes('num') || colName.includes('whatsapp')) {
-        phone = strVal;
+      if (colName.includes('first name') || colName.includes('fname') || colName.includes('given name')) {
+        firstName = strVal;
+      } else if (colName.includes('last name') || colName.includes('lname') || colName.includes('surname') || colName.includes('family name')) {
+        lastName = strVal;
+      } else if (
+        colName.includes('candidate name') ||
+        colName.includes('full name') ||
+        colName.includes('fullname') ||
+        colName.includes('applicant name') ||
+        colName.includes('student name') ||
+        colName.includes('person name') ||
+        colName.includes('candidate') ||
+        colName.includes('applicant') ||
+        colName.includes('student') ||
+        colName.includes('name')
+      ) {
+        if (!name) name = strVal;
+      } else if (colName.includes('email') || colName.includes('mail') || colName.includes('e-mail')) {
+        if (!email) email = strVal;
+      } else if (
+        colName.includes('phone') ||
+        colName.includes('mobile') ||
+        colName.includes('contact') ||
+        colName.includes('num') ||
+        colName.includes('whatsapp') ||
+        colName.includes('tel') ||
+        colName.includes('cell')
+      ) {
+        if (!phone) phone = strVal;
       } else {
-        // Fallback value matching
+        // Unassigned columns fallback
         if (!email && EMAIL_REGEX.test(strVal)) {
           email = strVal.match(EMAIL_REGEX)?.[1] || strVal;
         } else if (!phone && PHONE_REGEX.test(strVal)) {
           phone = strVal;
-        } else if (!name && strVal.length > 2 && strVal.length < 50 && !strVal.includes('@') && !/\d{5,}/.test(strVal)) {
-          name = strVal;
+        } else if (strVal.length >= 2 && strVal.length <= 60 && !strVal.includes('@') && !/^\d+$/.test(strVal)) {
+          unassignedTextValues.push(strVal);
         }
       }
     }
 
-    // Clean up extracted email and phone
-    const cleanEmail = email.match(EMAIL_REGEX)?.[1] || email;
-    const cleanPhone = phone.replace(/[^0-9+]/g, '');
+    // Combine First & Last Name if present
+    if (!name && (firstName || lastName)) {
+      name = `${firstName} ${lastName}`.trim();
+    }
 
-    if (cleanEmail || cleanPhone || name) {
+    // Fallback name from unassigned text columns
+    if (!name && unassignedTextValues.length > 0) {
+      name = unassignedTextValues[0];
+    }
+
+    // Clean up extracted email and phone
+    const cleanEmail = email ? (email.match(EMAIL_REGEX)?.[1] || email).trim() : '';
+    const cleanPhone = phone ? phone.replace(/[^0-9+]/g, '').trim() : '';
+
+    let cleanName = name.replace(/["',]/g, '').trim();
+    if (!cleanName || cleanName.toLowerCase() === 'candidate') {
+      if (cleanEmail) {
+        const parts = cleanEmail.split('@')[0].split(/[._-]/).filter(Boolean);
+        cleanName = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ') || 'Candidate';
+      } else {
+        cleanName = 'Candidate';
+      }
+    }
+
+    if (cleanEmail || cleanPhone) {
       candidates.push({
-        name: name || (cleanEmail ? cleanEmail.split('@')[0] : 'Candidate'),
-        email: cleanEmail || '',
-        phone: cleanPhone || ''
+        name: cleanName,
+        email: cleanEmail,
+        phone: cleanPhone
       });
     }
   }
@@ -164,6 +210,53 @@ async function parseTextContentWithAI(text: string): Promise<CandidateFileRecord
         email,
         phone
       });
+    }
+  }
+
+  return candidates;
+}
+
+/**
+ * Smart parser for bulk candidate text (e.g. copied & pasted directly from Excel or CSV tables).
+ * Extracts Name, Email, and Phone for each line.
+ */
+export function parseBulkCandidateTextInput(rawText: string): CandidateFileRecord[] {
+  if (!rawText || !rawText.trim()) return [];
+
+  const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const candidates: CandidateFileRecord[] = [];
+
+  for (const line of lines) {
+    const emailMatch = line.match(EMAIL_REGEX);
+    const phoneMatch = line.match(PHONE_REGEX);
+
+    const email = emailMatch ? emailMatch[1].trim() : '';
+    const phone = phoneMatch ? phoneMatch[0].replace(/[^0-9+]/g, '').trim() : '';
+
+    // Remove email and phone from line to isolate candidate name
+    let namePart = line;
+    if (emailMatch) {
+      namePart = namePart.replace(emailMatch[0], '');
+    }
+    if (phoneMatch) {
+      namePart = namePart.replace(phoneMatch[0], '');
+    }
+
+    // Clean up residual punctuation and tab separators from Excel copy-paste
+    namePart = namePart.replace(/[,|;:\t<>/]/g, ' ').replace(/\s+/g, ' ').trim();
+
+    let name = namePart;
+    if (!name || name.length < 2) {
+      if (email) {
+        const parts = email.split('@')[0].split(/[._-]/).filter(Boolean);
+        name = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ') || 'Candidate';
+      } else {
+        name = 'Candidate';
+      }
+    }
+
+    if (email || phone) {
+      candidates.push({ name, email, phone });
     }
   }
 

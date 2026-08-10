@@ -307,12 +307,12 @@ const InterviewCandidates: React.FC = () => {
 
             if (lowerEmail && !(interview.candidateEmails || []).includes(lowerEmail) && !newEmails.includes(lowerEmail)) {
               if (!candidatesFound.some(c => c.email === lowerEmail)) {
-                candidatesFound.push({ email: lowerEmail, phone, matchScore: 'N/A' });
+                candidatesFound.push({ email: lowerEmail, phone, name, matchScore: 'N/A' });
               }
             } else if (phone && phone !== 'N/A') {
               const pseudoEmail = `${phone.replace(/[^0-9]/g, '')}@whatsapp.local`;
               if (!newEmails.includes(pseudoEmail) && !candidatesFound.some(c => c.phone === phone)) {
-                candidatesFound.push({ email: pseudoEmail, phone, matchScore: 'N/A' });
+                candidatesFound.push({ email: pseudoEmail, phone, name, matchScore: 'N/A' });
               }
             }
           }
@@ -320,6 +320,7 @@ const InterviewCandidates: React.FC = () => {
           const ingested = await ingestResumeFile(file);
           const lowerEmail = (ingested.profile.email || '').toLowerCase();
           const phone = ingested.profile.phone || 'N/A';
+          const name = ingested.profile.name || 'Candidate';
 
           await saveResumeDumpCandidate({
             recruiterUID: user.uid,
@@ -335,8 +336,9 @@ const InterviewCandidates: React.FC = () => {
           });
 
           if (lowerEmail) {
-            const alreadyInvited = (interview.candidateEmails || []).some((email) => email.toLowerCase() === lowerEmail);
-            const alreadyQueued = newEmails.some((email) => email.toLowerCase() === lowerEmail);
+            const alreadyInvited = (interview.candidateEmails || []).includes(lowerEmail);
+            const alreadyQueued = newEmails.includes(lowerEmail);
+
             if (!alreadyInvited && !alreadyQueued && !candidatesFound.some((candidate) => candidate.email === lowerEmail)) {
               let matchScore = 'N/A';
               if (ingested.resumeText.length > 50) {
@@ -354,7 +356,7 @@ const InterviewCandidates: React.FC = () => {
                   console.error('Match score error:', error);
                 }
               }
-              candidatesFound.push({ email: lowerEmail, phone, matchScore });
+              candidatesFound.push({ email: lowerEmail, phone, name, matchScore });
             }
           }
         }
