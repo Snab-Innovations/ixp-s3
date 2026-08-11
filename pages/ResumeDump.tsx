@@ -13,7 +13,7 @@ import { EducationInput } from '../components/EducationInput';
 import { isEducationMatching } from '../utils/educationMatcher';
 
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
-import { ALL_JOB_DOMAINS } from '../data/jobDomains';
+import { ALL_JOB_DOMAINS, ALL_JOB_SECTORS, ALL_JOB_DEPARTMENTS } from '../data/jobDomains';
 import { SKILL_OPTIONS } from './Profile';
 import { analyzeResumeText, ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 import { sendBulkWhatsAppInvites } from '../services/waSenderService';
@@ -89,6 +89,12 @@ interface ResumeDumpCandidate {
   noticePeriodUnit?: string;
   currentSalary?: string;
   expectedSalary?: string;
+  domain?: string;
+  domains?: string[];
+  sector?: string;
+  sectors?: string[];
+  department?: string;
+  departments?: string[];
   createdAt?: TimestampLike;
   updatedAt?: TimestampLike;
 }
@@ -510,6 +516,9 @@ const ResumeDump: React.FC = () => {
   const [expFilter, setExpFilter] = useState<string>('all');
   const [locationFilter, setLocationFilter] = useState<string>('all');
   const [domainFilter, setDomainFilter] = useState<string>('all');
+  const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
+  const [isDomainRecBoxOpen, setIsDomainRecBoxOpen] = useState<boolean>(false);
+  const [domainRecSearch, setDomainRecSearch] = useState<string>('');
   const [matchScoreFilter, setMatchScoreFilter] = useState<string>('all');
   const [educationFilter, setEducationFilter] = useState<string>('all');
   const [selectedEducation, setSelectedEducation] = useState<string[]>([]);
@@ -865,6 +874,7 @@ const ResumeDump: React.FC = () => {
     if (expFilter !== 'all') count++;
     if (locationFilter !== 'all') count++;
     if (domainFilter !== 'all') count++;
+    if (selectedDomains.length > 0) count++;
     if (matchScoreFilter !== 'all') count++;
     if (educationFilter !== 'all') count++;
     if (selectedEducation.length > 0) count++;
@@ -875,7 +885,7 @@ const ResumeDump: React.FC = () => {
     if (strictEducation) count++;
     if (strictExperience) count++;
     return count;
-  }, [selectedJobId, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, domainFilter, matchScoreFilter, educationFilter, selectedEducation, sourceFilter, dateFilter, searchTerm, strictGender, strictLocation, strictEducation, strictExperience]);
+  }, [selectedJobId, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, domainFilter, selectedDomains, matchScoreFilter, educationFilter, selectedEducation, sourceFilter, dateFilter, searchTerm, strictGender, strictLocation, strictEducation, strictExperience]);
 
   const handleClearAllFilters = () => {
     setSelectedJobId('all');
@@ -886,6 +896,7 @@ const ResumeDump: React.FC = () => {
     setExpFilter('all');
     setLocationFilter('all');
     setDomainFilter('all');
+    setSelectedDomains([]);
     setMatchScoreFilter('all');
     setEducationFilter('all');
     setSelectedEducation([]);
@@ -1134,6 +1145,27 @@ const ResumeDump: React.FC = () => {
           matchesDomain = targetDomainObj.keywords.some(kw => candDom.includes(kw) || candTitle.includes(kw) || candSkills.includes(kw));
         }
         if (!matchesDomain) return false;
+      }
+
+      // 6.6. Multi-Select Target Sectors & Departments Checkmark Filter
+      if (selectedDomains.length > 0) {
+        const candDom = (candidate.domain || '').toLowerCase().trim();
+        const candTitle = (candidate.currentTitle || candidate.sourceJobTitle || '').toLowerCase();
+        const candSkills = (candidate.skills || []).join(' ').toLowerCase();
+
+        const matchesCheckmarkDomain = selectedDomains.some(reqDomain => {
+          const domReqLower = reqDomain.toLowerCase().trim();
+          if (candDom.includes(domReqLower) || domReqLower.includes(candDom) || candTitle.includes(domReqLower)) {
+            return true;
+          }
+          const targetDomainObj = ALL_JOB_DOMAINS.find(d => d.name.toLowerCase() === domReqLower);
+          if (targetDomainObj) {
+            return targetDomainObj.keywords.some(kw => candDom.includes(kw) || candTitle.includes(kw) || candSkills.includes(kw));
+          }
+          return false;
+        });
+
+        if (!matchesCheckmarkDomain) return false;
       }
 
       // 7. Match Score Filter
@@ -1886,20 +1918,255 @@ const ResumeDump: React.FC = () => {
               ))}
             </select>
 
-            {/* Target Domain Filter Dropdown */}
-            <div className="flex items-center gap-1 shrink-0">
-              <Briefcase size={13} className="text-[#8f8f8f] shrink-0" />
-              <select
-                value={domainFilter}
-                onChange={(e) => setDomainFilter(e.target.value)}
-                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[170px]"
+            {/* Target Domain, Industry Sectors & Departments Checkmark Filter Button */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsDomainRecBoxOpen(true)}
+                className={`geist-caption h-8 rounded-[6px] border px-3 text-xs outline-none transition-colors flex items-center gap-2 cursor-pointer ${
+                  selectedDomains.length > 0 || domainFilter !== 'all'
+                    ? 'border-emerald-500 bg-emerald-950/40 text-emerald-300 font-bold'
+                    : 'border-white/[0.11] bg-[#111] text-white hover:border-white/30'
+                }`}
               >
-                <option value="all">All Domains ({allAvailableDomains.length})</option>
-                {allAvailableDomains.map(d => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
+                <Briefcase size={13} className={selectedDomains.length > 0 ? 'text-emerald-400' : 'text-[#8f8f8f]'} />
+                <span>
+                  {selectedDomains.length > 0
+                    ? `${selectedDomains.length} Sector/Dept Selected`
+                    : domainFilter !== 'all'
+                    ? `Domain: ${domainFilter}`
+                    : 'All Domains & Sectors (Checkmarks)'}
+                </span>
+                {selectedDomains.length > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-emerald-500 text-black text-[10px] font-black flex items-center justify-center">
+                    {selectedDomains.length}
+                  </span>
+                )}
+                <ChevronDown size={12} className="text-[#8f8f8f]" />
+              </button>
             </div>
+
+                {isDomainRecBoxOpen && createPortal(
+                  <div 
+                    className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
+                    onClick={() => setIsDomainRecBoxOpen(false)}
+                  >
+                    <div 
+                      className="bg-white dark:bg-[#0f0f0f] border border-gray-200 dark:border-white/10 text-slate-900 dark:text-white rounded-3xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* Header */}
+                      <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-white/10 flex items-center justify-between gap-4 bg-slate-50 dark:bg-white/[0.02]">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 shrink-0">
+                            <Briefcase className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <h3 className="text-base sm:text-lg font-extrabold flex items-center gap-2">
+                              <span>Filter Sectors & Departments</span>
+                              {selectedDomains.length > 0 && (
+                                <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                                  {selectedDomains.length} Active
+                                </span>
+                              )}
+                            </h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              Checkmark options to filter candidate resumes live by industry sectors and functional departments.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsDomainRecBoxOpen(false)}
+                          className="w-8 h-8 rounded-full bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 flex items-center justify-center text-slate-600 dark:text-slate-300 transition-colors cursor-pointer shrink-0"
+                        >
+                          <XCircle className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      {/* Search & Actions Bar */}
+                      <div className="p-3.5 sm:p-4 border-b border-gray-200 dark:border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white dark:bg-[#121212]">
+                        <div className="relative w-full sm:w-80">
+                          <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                          <input
+                            type="text"
+                            value={domainRecSearch}
+                            onChange={(e) => setDomainRecSearch(e.target.value)}
+                            placeholder="Search sector or department..."
+                            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs text-slate-900 dark:text-white outline-none focus:border-emerald-500"
+                          />
+                          {domainRecSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setDomainRecSearch('')}
+                              className="absolute right-2.5 top-2 text-xs text-slate-400 hover:text-slate-200"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                          {selectedDomains.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDomains([])}
+                              className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 font-bold text-xs border border-red-500/20 transition-all cursor-pointer"
+                            >
+                              Clear All Checkmarks ({selectedDomains.length})
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Scrollable Checkmarks Grid Container */}
+                      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                        {/* 1. Industry Sectors Grid */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
+                            <label className="text-xs font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                              Industry Sectors ({ALL_JOB_SECTORS.length})
+                            </label>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                            {ALL_JOB_SECTORS.filter(s => s.toLowerCase().includes(domainRecSearch.toLowerCase())).map((sectorName) => {
+                              const isChecked = selectedDomains.some(d => d.toLowerCase() === sectorName.toLowerCase());
+                              return (
+                                <button
+                                  key={sectorName}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDomains(prev =>
+                                      isChecked
+                                        ? prev.filter(d => d.toLowerCase() !== sectorName.toLowerCase())
+                                        : [...prev, sectorName]
+                                    );
+                                  }}
+                                  className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border text-xs transition-all text-left cursor-pointer ${
+                                    isChecked
+                                      ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-600/20 ring-1 ring-emerald-400 font-bold'
+                                      : 'bg-slate-50 dark:bg-[#181818] border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-emerald-500/40 font-semibold'
+                                  }`}
+                                >
+                                  <span className="break-words font-semibold text-[11px] sm:text-xs min-w-0 flex-1 pr-1">{sectorName}</span>
+                                  <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-all ${
+                                    isChecked
+                                      ? 'bg-white text-emerald-600 border-white'
+                                      : 'border-slate-300 dark:border-white/20 bg-white dark:bg-white/5'
+                                  }`}>
+                                    {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* 2. Functional Departments Grid */}
+                        <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-white/10">
+                          <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
+                            <label className="text-xs font-extrabold uppercase tracking-wider text-teal-600 dark:text-teal-400">
+                              Functional Departments ({ALL_JOB_DEPARTMENTS.length})
+                            </label>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                            {ALL_JOB_DEPARTMENTS.filter(d => d.toLowerCase().includes(domainRecSearch.toLowerCase())).map((deptName) => {
+                              const isChecked = selectedDomains.some(d => d.toLowerCase() === deptName.toLowerCase());
+                              return (
+                                <button
+                                  key={deptName}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedDomains(prev =>
+                                      isChecked
+                                        ? prev.filter(d => d.toLowerCase() !== deptName.toLowerCase())
+                                        : [...prev, deptName]
+                                    );
+                                  }}
+                                  className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border text-xs transition-all text-left cursor-pointer ${
+                                    isChecked
+                                      ? 'bg-teal-600 text-white border-teal-500 shadow-md shadow-teal-600/20 ring-1 ring-teal-400 font-bold'
+                                      : 'bg-slate-50 dark:bg-[#181818] border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-teal-500/40 font-semibold'
+                                  }`}
+                                >
+                                  <span className="break-words font-semibold text-[11px] sm:text-xs min-w-0 flex-1 pr-1">{deptName}</span>
+                                  <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-all ${
+                                    isChecked
+                                      ? 'bg-white text-teal-600 border-white'
+                                      : 'border-slate-300 dark:border-white/20 bg-white dark:bg-white/5'
+                                  }`}>
+                                    {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {/* 3. Active Candidate Database Domains */}
+                        {allAvailableDomains.length > 0 && (
+                          <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-white/10">
+                            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
+                              <label className="text-xs font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                                Active Database Candidate Domains ({allAvailableDomains.length})
+                              </label>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                              {allAvailableDomains.filter(d => d.toLowerCase().includes(domainRecSearch.toLowerCase())).map((domName) => {
+                                const isChecked = selectedDomains.some(d => d.toLowerCase() === domName.toLowerCase()) || domainFilter.toLowerCase() === domName.toLowerCase();
+                                return (
+                                  <button
+                                    key={domName}
+                                    type="button"
+                                    onClick={() => {
+                                      if (domainFilter !== 'all') setDomainFilter('all');
+                                      setSelectedDomains(prev =>
+                                        isChecked
+                                          ? prev.filter(d => d.toLowerCase() !== domName.toLowerCase())
+                                          : [...prev, domName]
+                                      );
+                                    }}
+                                    className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border text-xs transition-all text-left cursor-pointer ${
+                                      isChecked
+                                        ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-600/20 ring-1 ring-blue-400 font-bold'
+                                        : 'bg-slate-50 dark:bg-[#181818] border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-blue-500/40 font-semibold'
+                                    }`}
+                                  >
+                                    <span className="break-words font-semibold text-[11px] sm:text-xs min-w-0 flex-1 pr-1">{domName}</span>
+                                    <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-all ${
+                                      isChecked
+                                        ? 'bg-white text-blue-600 border-white'
+                                        : 'border-slate-300 dark:border-white/20 bg-white dark:bg-white/5'
+                                    }`}>
+                                      {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Modal Footer */}
+                      <div className="p-4 border-t border-gray-200 dark:border-white/10 flex items-center justify-between gap-3 bg-slate-50 dark:bg-white/[0.02]">
+                        <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                          {selectedDomains.length} Checkmark Filters Active
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsDomainRecBoxOpen(false)}
+                            className="px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+                          >
+                            <Check className="w-4 h-4 stroke-[3]" />
+                            <span>Apply & Show Resumes</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>,
+                  document.body
+                )}
 
             {/* Experience Range Filter */}
             <div className="flex items-center gap-1 shrink-0">
@@ -2400,11 +2667,39 @@ const ResumeDump: React.FC = () => {
                       <div className="geist-small mt-0.5 max-w-[280px] truncate text-[11px] text-gray-600 dark:text-[#9ca3af]" title={candidate.currentTitle}>
                         {candidate.currentTitle || 'Candidate Profile'}
                       </div>
-                      {candidate.domain && (
-                        <div className="geist-small mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 max-w-[280px] truncate">
+                      {/* Candidate Industry Sector Badges */}
+                      {(candidate.sectors && candidate.sectors.length > 0) ? (
+                        <div className="geist-small mt-1 flex flex-wrap gap-1 max-w-[280px]">
+                          {candidate.sectors.slice(0, 2).map(sec => (
+                            <span key={sec} className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/30 truncate max-w-[240px]">
+                              Sector: {sec}
+                            </span>
+                          ))}
+                        </div>
+                      ) : candidate.sector ? (
+                        <div className="geist-small mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/30 max-w-[280px] truncate">
+                          <span>Sector: {candidate.sector}</span>
+                        </div>
+                      ) : null}
+
+                      {/* Candidate Functional Department / Domain Badges */}
+                      {(candidate.departments && candidate.departments.length > 0) ? (
+                        <div className="geist-small mt-0.5 flex flex-wrap gap-1 max-w-[280px]">
+                          {candidate.departments.slice(0, 2).map(dept => (
+                            <span key={dept} className="text-[10px] font-bold text-teal-700 dark:text-teal-300 bg-teal-500/15 px-2 py-0.5 rounded border border-teal-500/30 truncate max-w-[240px]">
+                              Dept: {dept}
+                            </span>
+                          ))}
+                        </div>
+                      ) : candidate.department ? (
+                        <div className="geist-small mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold text-teal-700 dark:text-teal-300 bg-teal-500/15 px-2 py-0.5 rounded border border-teal-500/30 max-w-[280px] truncate">
+                          <span>Dept: {candidate.department}</span>
+                        </div>
+                      ) : candidate.domain ? (
+                        <div className="geist-small mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold text-teal-700 dark:text-teal-300 bg-teal-500/15 px-2 py-0.5 rounded border border-teal-500/30 max-w-[280px] truncate">
                           <span>Domain: {candidate.domain}</span>
                         </div>
-                      )}
+                      ) : null}
                       {candidate.location && (
                         <div className="geist-small mt-0.5 text-[10px] text-gray-500 dark:text-[#6b7280]">📍 {candidate.location}</div>
                       )}
@@ -2726,6 +3021,64 @@ const ResumeDump: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                {/* Target Industry Sectors & Functional Departments */}
+                <div className="p-3.5 rounded-[12px] bg-slate-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.08] space-y-2.5">
+                  <div className="flex items-center gap-2 border-b border-gray-200 dark:border-white/10 pb-1.5">
+                    <Briefcase className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span className="text-xs font-extrabold uppercase tracking-wider text-slate-800 dark:text-white">
+                      Target Industry Sectors & Functional Departments
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {/* Industry Sectors */}
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 block mb-1">
+                        Industry Sectors
+                      </span>
+                      {((skillsPanelCandidate.sectors && skillsPanelCandidate.sectors.length > 0) || skillsPanelCandidate.sector) ? (
+                        <div className="flex flex-wrap gap-1">
+                          {(skillsPanelCandidate.sectors && skillsPanelCandidate.sectors.length > 0
+                            ? skillsPanelCandidate.sectors
+                            : [skillsPanelCandidate.sector!]
+                          ).map(sec => (
+                            <span key={sec} className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-[11px] font-bold">
+                              {sec}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-[11px]">Not specified</span>
+                      )}
+                    </div>
+
+                    {/* Functional Departments / Domain */}
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-teal-600 dark:text-teal-400 block mb-1">
+                        Functional Departments / Domain
+                      </span>
+                      {((skillsPanelCandidate.departments && skillsPanelCandidate.departments.length > 0) || skillsPanelCandidate.department || skillsPanelCandidate.domain || (skillsPanelCandidate.domains && skillsPanelCandidate.domains.length > 0)) ? (
+                        <div className="flex flex-wrap gap-1">
+                          {(skillsPanelCandidate.departments && skillsPanelCandidate.departments.length > 0
+                            ? skillsPanelCandidate.departments
+                            : skillsPanelCandidate.department
+                            ? [skillsPanelCandidate.department]
+                            : skillsPanelCandidate.domains && skillsPanelCandidate.domains.length > 0
+                            ? skillsPanelCandidate.domains
+                            : [skillsPanelCandidate.domain!]
+                          ).map(dept => (
+                            <span key={dept} className="px-2.5 py-0.5 rounded-full bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30 text-[11px] font-bold">
+                              {dept}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-[11px]">Not specified</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
 
                 {skillsPanelCandidate.summary && (
                   <div className="min-w-0">

@@ -1220,7 +1220,7 @@ const CreateInterview: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 sm:gap-2 pt-1">
                   {ALL_JOB_SECTORS.map((sectorName) => {
                     const isChecked = selectedJobSectors.some(s => s.toLowerCase() === sectorName.toLowerCase());
                     return (
@@ -1228,19 +1228,19 @@ const CreateInterview: React.FC = () => {
                         key={sectorName}
                         type="button"
                         onClick={() => toggleJobSector(sectorName)}
-                        className={`flex items-center justify-between p-2.5 rounded-xl border text-xs leading-snug transition-all text-left cursor-pointer ${
+                        className={`flex items-center justify-between p-2 sm:p-2.5 rounded-xl border text-[10px] sm:text-[11px] leading-tight transition-all text-left cursor-pointer ${
                           isChecked
-                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-600/20 ring-1 ring-emerald-400 font-bold'
+                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm ring-1 ring-emerald-400 font-bold'
                             : 'bg-white dark:bg-[#141414] border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-emerald-500/40 font-semibold'
                         }`}
                       >
-                        <span className="break-words font-semibold text-[11px] sm:text-xs min-w-0 flex-1 pr-1">{sectorName}</span>
-                        <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-all ${
+                        <span className="break-words font-semibold text-[10px] sm:text-[11px] min-w-0 flex-1 pr-1">{sectorName}</span>
+                        <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-all ${
                           isChecked
                             ? 'bg-white text-emerald-600 border-white'
                             : 'border-slate-300 dark:border-white/20 bg-slate-100 dark:bg-white/5'
                         }`}>
-                          {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                          {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                         </div>
                       </button>
                     );
@@ -1260,7 +1260,7 @@ const CreateInterview: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 sm:gap-2 pt-1">
                   {ALL_JOB_DEPARTMENTS.map((deptName) => {
                     const isChecked = selectedJobDepartments.some(d => d.toLowerCase() === deptName.toLowerCase());
                     return (
@@ -1268,19 +1268,19 @@ const CreateInterview: React.FC = () => {
                         key={deptName}
                         type="button"
                         onClick={() => toggleJobDepartment(deptName)}
-                        className={`flex items-center justify-between p-2.5 rounded-xl border text-xs leading-snug transition-all text-left cursor-pointer ${
+                        className={`flex items-center justify-between p-2 sm:p-2.5 rounded-xl border text-[10px] sm:text-[11px] leading-tight transition-all text-left cursor-pointer ${
                           isChecked
-                            ? 'bg-teal-600 text-white border-teal-500 shadow-md shadow-teal-600/20 ring-1 ring-teal-400 font-bold'
+                            ? 'bg-teal-600 text-white border-teal-500 shadow-sm ring-1 ring-teal-400 font-bold'
                             : 'bg-white dark:bg-[#141414] border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-teal-500/40 font-semibold'
                         }`}
                       >
-                        <span className="break-words font-semibold text-[11px] sm:text-xs min-w-0 flex-1 pr-1">{deptName}</span>
-                        <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-all ${
+                        <span className="break-words font-semibold text-[10px] sm:text-[11px] min-w-0 flex-1 pr-1">{deptName}</span>
+                        <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-all ${
                           isChecked
                             ? 'bg-white text-teal-600 border-white'
                             : 'border-slate-300 dark:border-white/20 bg-slate-100 dark:bg-white/5'
                         }`}>
-                          {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                          {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                         </div>
                       </button>
                     );
