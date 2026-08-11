@@ -66,6 +66,7 @@ export default function PublicJobSeekerUpload() {
   const [candidatePhone, setCandidatePhone] = useState('');
   const [candidateGender, setCandidateGender] = useState('');
   const [candidateLocation, setCandidateLocation] = useState('');
+  const [candidateState, setCandidateState] = useState('Maharashtra');
   const [candidateSectors, setCandidateSectors] = useState<string[]>([]);
   const [candidateDepartments, setCandidateDepartments] = useState<string[]>([]);
   const [candidateDomains, setCandidateDomains] = useState<string[]>([]);
@@ -1432,19 +1433,24 @@ export default function PublicJobSeekerUpload() {
                     <LocationCityInput
                       value={candidateLocation}
                       onChange={setCandidateLocation}
+                      selectedState={candidateState}
+                      onStateChange={setCandidateState}
                       placeholder="Search city (e.g. Nashik, Pune, Mumbai)..."
                       className={`w-full rounded-xl border p-2.5 text-xs sm:text-sm outline-none focus:border-emerald-500 ${
                         isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
                       }`}
                     />
 
-                    {/* Quick City Presets */}
+                    {/* Quick Fast Feed City Presets */}
                     <div className="flex flex-wrap gap-1.5 pt-2">
                       {['Nashik', 'Pune', 'Mumbai', 'Thane', 'Nagpur', 'Chhatrapati Sambhajinagar'].map(city => (
                         <button
                           key={city}
                           type="button"
-                          onClick={() => setCandidateLocation(city)}
+                          onClick={() => {
+                            setCandidateLocation(city);
+                            setCandidateState('Maharashtra');
+                          }}
                           className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
                             candidateLocation.toLowerCase().includes(city.toLowerCase())
                               ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
