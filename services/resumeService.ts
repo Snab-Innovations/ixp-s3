@@ -172,12 +172,27 @@ const SKILL_DEFINITIONS: Array<[string, RegExp[]]> = [
   ['Cypress', [/\bcypress\b/i]],
   ['Playwright', [/\bplaywright\b/i]],
   ['Selenium', [/\bselenium\b/i]],
-  ['Machine Learning', [/\bmachine learning\b/i]],
-  ['Deep Learning', [/\bdeep learning\b/i]],
+  ['Machine Learning', [/\bmachine learning\b/i, /\bml\b/i]],
+  ['Deep Learning', [/\bdeep learning\b/i, /\bdl\b/i]],
+  ['Artificial Intelligence', [/\bartificial intelligence\b/i, /\bai\b/i]],
+  ['Natural Language Processing', [/\bnlp\b/i, /\bnatural language processing\b/i]],
+  ['Computer Vision', [/\bcomputer vision\b/i, /\bopencv\b/i]],
+  ['Generative AI', [/\bgenerative ai\b/i, /\bgenai\b/i, /\bllms?\b/i, /\blarge language models?\b/i]],
+  ['Pandas', [/\bpandas\b/i]],
+  ['NumPy', [/\bnumpy\b/i]],
+  ['Scikit-Learn', [/\bscikit[ -]?learn\b/i, /\bsklearn\b/i]],
+  ['Keras', [/\bkeras\b/i]],
   ['TensorFlow', [/\btensorflow\b/i]],
   ['PyTorch', [/\bpytorch\b/i]],
+  ['Neural Networks', [/\bneural networks?\b/i, /\bcnn\b/i, /\brnn\b/i, /\btransformers?\b/i]],
+  ['MLOps', [/\bmlops\b/i]],
+  ['Big Data', [/\bbig data\b/i, /\bspark\b/i, /\bpyspark\b/i, /\bhadoop\b/i]],
+  ['Data Engineering', [/\bdata engineering\b/i, /\betl\b/i]],
   ['Data Analysis', [/\bdata analys(?:is|tics)\b/i]],
-  ['Data Science', [/\bdata science\b/i]],
+  ['Data Science', [/\bdata science\b/i, /\bdata scientist\b/i]],
+  ['Statistical Modeling', [/\bstats?tistical modeling\b/i]],
+  ['Matplotlib & Seaborn', [/\bmatplotlib\b/i, /\bseaborn\b/i]],
+  ['Computer Engineering', [/\bcomputer engineering\b/i]],
   ['Power BI', [/\bpower\s*bi\b/i]],
   ['Tableau', [/\btableau\b/i]],
   ['Microsoft Excel', [/\bms\s*excel\b/i, /\bmicrosoft excel\b/i, /\badvanced excel\b/i]],
@@ -218,6 +233,13 @@ const SKILL_DEFINITIONS: Array<[string, RegExp[]]> = [
   ['Communication', [/\bcommunication skills?\b/i]],
   ['Leadership', [/\bleadership\b/i]],
   ['Problem Solving', [/\bproblem[ -]solving\b/i]],
+  ['DSA (Data Structures and Algorithms)', [/\bdsa\b/i, /\bdata structures?\s*(?:and|&)?\s*algorithms?\b/i]],
+  ['OOP (Object-Oriented Programming)', [/\boop\b/i, /\bobject[- ]oriented programming\b/i]],
+  ['MERN Stack', [/\bmern\b/i, /\bmern stack\b/i]],
+  ['MEAN Stack', [/\bmean stack\b/i]],
+  ['System Design', [/\bsystem design\b/i]],
+  ['Microservices', [/\bmicroservices\b/i]],
+  ['Time Management', [/\btime management\b/i]],
 ];
 
 const SKILL_ALIASES = new Map<string, string>();
@@ -275,11 +297,7 @@ const SENSELESS_SKILL_PATTERNS = [
   /fast\s*learner/i,
   /positive\s*attitude/i,
   /multi\s*tasking/i,
-  /interpersonal\s*skill/i,
-  /problem\s*solving\s*skills?/i,
-  /time\s*management/i,
-  /work\s*ethic/i,
-  /creative\s*thinking/i
+  /work\s*ethic/i
 ];
 
 export function sanitizeDomainSkills(skills: string[]): string[] {
@@ -502,8 +520,21 @@ export const analyzeResumeText = async (
 
   try {
     let ai: AIResumeProfile;
-    const sysPrompt = 'You extract factual resume data for recruiters. Extract candidate gender if specified or inferrable ("Male", "Female", or "Unspecified"). CRITICAL: Extract ONLY standard, recognized technical/engineering/domain skills (e.g. AutoCAD, Site Supervision, Python, Quantity Surveying, Billing & Estimation, RCC Design, Tally, REVIT, Financial Modeling, Project Management). Strictly EXCLUDE any non-technical buzzwords or senseless phrases. Return only valid JSON.';
-    const userPrompt = `Extract this resume into the exact JSON shape below. Fill ALL fields automatically from the resume text. Ensure skills contain ONLY standard domain/technical skills and NO senseless generic words. totalExperienceYears must be a number.\n\n{"name":"","email":"","phone":"","gender":"","location":"","currentTitle":"","summary":"","totalExperienceYears":0,"skills":[],"experience":[{"title":"","company":"","startDate":"","endDate":"","highlights":[],"skills":[]}],"education":[{"degree":"","institution":"","year":""}],"certifications":[],"languages":[],"keywords":[],"linkedinUrl":"","portfolioUrl":""}\n\nRESUME TEXT:\n${text.slice(0, 18_000)}`;
+    const sysPrompt = 'You are an elite AI Recruiter and Resume Parser powered by Bedrock GLM-4.7. Extract complete, precise, highly detailed candidate profile data from the resume text. Extract all technical skills, frameworks, tools, programming languages, databases, libraries, methodologies, domain competencies, soft skills, and engineering concepts mentioned in the resume. Return valid JSON ONLY.';
+    const userPrompt = `Analyze the resume text and generate the exact JSON payload below.
+RULES FOR HIGH ACCURACY ANALYSIS:
+1. "summary": Extract the candidate's exact Professional Summary or Profile Statement. If no summary section is explicitly written in the resume, WRITE a comprehensive 3-4 sentence recruiter executive summary highlighting their role, experience, tech stack, key projects, and education.
+2. "skills": Extract ALL technical skills, tools, frameworks, programming languages, databases, technologies, libraries, certifications, and domain skills listed or implied in the resume (aim for 10 to 25+ relevant skills). Include concepts like DSA, OOP, MERN, REST APIs, System Design, Cloud, DevOps, Agile, etc.
+3. "currentTitle": Extract the candidate's exact role/designation (e.g. Full Stack Developer, Software Engineer, Data Scientist, Civil Engineer). Avoid generic titles like "engg" if a specific title is present.
+4. "education": Extract all degrees, institutions, specializations (e.g. B.Tech / B.E. - Computer Science & Engineering (CSE)), and pass-out years.
+5. "experience": Extract work history with title, company, dates, highlights, and technologies used.
+totalExperienceYears must be a number.
+
+Return ONLY valid JSON matching this exact structure:
+{"name":"","email":"","phone":"","gender":"","location":"","currentTitle":"","summary":"","totalExperienceYears":0,"skills":[],"experience":[{"title":"","company":"","startDate":"","endDate":"","highlights":[],"skills":[]}],"education":[{"degree":"","institution":"","year":""}],"certifications":[],"languages":[],"keywords":[],"linkedinUrl":"","portfolioUrl":""}
+
+RESUME TEXT:
+${text.slice(0, 20_000)}`;
 
     try {
       ai = await geminiGenerateJson<AIResumeProfile>(
@@ -528,7 +559,31 @@ export const analyzeResumeText = async (
 
     const nameToUse = safeString(ai.name, 100) || fallback.name;
     const emailToUse = safeString(ai.email, 150).toLowerCase() || fallback.email;
-    const summaryToUse = safeString(ai.summary, 1200) || fallback.summary;
+    let summaryToUse = safeString(ai.summary, 1200) || fallback.summary;
+    let titleToUse = safeString(ai.currentTitle, 150) || fallback.currentTitle;
+
+    if (!titleToUse || ['engg', 'eng', 'engineer', 'developer', 'employee', 'fresher', 'student'].includes(titleToUse.toLowerCase().trim())) {
+      const topExperienceRole = aiExperience[0]?.title;
+      if (topExperienceRole && topExperienceRole.length > 3) {
+        titleToUse = topExperienceRole;
+      } else {
+        const titleMatches = text.match(/\b(Full Stack Developer|Full-Stack Developer|Software Engineer|Software Developer|Data Scientist|Machine Learning Engineer|Frontend Developer|Backend Developer|DevOps Engineer|UI\/UX Designer|Civil Engineer|Mechanical Engineer|Electrical Engineer|Project Manager|Business Analyst)\b/i);
+        if (titleMatches && titleMatches[1]) {
+          titleToUse = titleMatches[1];
+        }
+      }
+    }
+
+    const expToUse = safeNumber(ai.totalExperienceYears) || fallback.totalExperienceYears;
+    const locToUse = normalizeStandardCityName(safeString(ai.location, 150) || fallback.location);
+
+    const sanitizedSkills = sanitizeDomainSkills(rawSkills).slice(0, 40);
+    const finalSkills = sanitizedSkills.length > 0 ? sanitizedSkills : extractSkillSignals(text);
+
+    if (!summaryToUse.trim()) {
+      const skillsStr = finalSkills.slice(0, 6).join(', ');
+      summaryToUse = `${nameToUse} is a ${titleToUse || 'Professional'} with ${expToUse} years of experience${locToUse ? ` in ${locToUse}` : ''}.${skillsStr ? ` Key skills include: ${skillsStr}.` : ''}`;
+    }
 
     const detectedGender = detectCandidateGender({
       gender: safeString(ai.gender, 20),
@@ -545,11 +600,11 @@ export const analyzeResumeText = async (
       email: emailToUse,
       phone: formatExtractedPhone(safeString(ai.phone, 50)) || fallback.phone,
       gender: finalGender,
-      location: normalizeStandardCityName(safeString(ai.location, 150) || fallback.location),
-      currentTitle: safeString(ai.currentTitle, 150) || fallback.currentTitle,
+      location: locToUse,
+      currentTitle: titleToUse,
       summary: summaryToUse,
-      totalExperienceYears: safeNumber(ai.totalExperienceYears) || fallback.totalExperienceYears,
-      skills: sanitizeDomainSkills(rawSkills).slice(0, 40),
+      totalExperienceYears: expToUse,
+      skills: finalSkills,
       experience: aiExperience,
       education: parseAIEducation(ai.education).length ? parseAIEducation(ai.education) : fallback.education,
       certifications: uniqueStrings(Array.isArray(ai.certifications) ? ai.certifications : fallback.certifications, 12),
@@ -779,14 +834,32 @@ export const saveResumeDumpCandidate = async ({
   const candidateRef = doc(db, 'resumeDumpCandidates', candidateId);
   const dumpRef = doc(db, 'resumeDump', candidateId);
 
-  const summaryText = (normalizedProfile.summary || (normalizedProfile as any).professionalSummary || '').trim();
-  const skillsArray = Array.isArray(normalizedProfile.skills) ? normalizedProfile.skills : [];
+  let summaryText = (normalizedProfile.summary || (normalizedProfile as any).professionalSummary || '').trim();
+  let skillsArray = Array.isArray(normalizedProfile.skills) ? normalizedProfile.skills : [];
+
+  if (!skillsArray || skillsArray.length === 0) {
+    skillsArray = extractSkillSignals(resumeText || '');
+  }
+
+  if (!summaryText && (normalizedProfile.name || normalizedProfile.currentTitle)) {
+    const nameStr = normalizedProfile.name || 'Candidate';
+    const titleStr = normalizedProfile.currentTitle || 'Professional';
+    const expStr = normalizedProfile.totalExperienceYears || 0;
+    const locStr = normalizedProfile.location || '';
+    const topSkills = skillsArray.slice(0, 6).join(', ');
+    summaryText = `${nameStr} is a ${titleStr} with ${expStr} years of experience${locStr ? ` in ${locStr}` : ''}.${topSkills ? ` Key skills: ${topSkills}.` : ''}`;
+  }
+
+  const isPublic = source === 'public_job_seeker_upload' || recruiterUID === 'DSOURCE_PUBLIC_JOB_SEEKER_POOL' || Boolean((normalizedProfile as any).isPublicUpload || (normalizedProfile as any).isGlobalPublicCandidate);
 
   const payload = {
     ...normalizedProfile,
     summary: summaryText,
     professionalSummary: summaryText,
     skills: skillsArray,
+    isPublicUpload: isPublic,
+    isPublicCandidate: isPublic,
+    isGlobalPublicCandidate: isPublic,
     recruiterUID,
     teamId: teamId || recruiterUID,
     ...(createdBy ? { createdBy } : {}),

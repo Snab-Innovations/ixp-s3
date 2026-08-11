@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import * as pdfjsLib from 'pdfjs-dist';
 import * as mammoth from 'mammoth';
 import { Award, Clock, Edit3, Filter, GraduationCap, MapPin, Plus, Archive, Briefcase, Check, CheckCircle2, CheckSquare, ChevronDown, Copy, ExternalLink, FileText, Mail, MessageSquare, RotateCcw, Search, Send, SlidersHorizontal, Sparkles, Square, Trash2, UploadCloud, UserCheck, UserX, XCircle } from 'lucide-react';
@@ -727,8 +727,17 @@ const ResumeDump: React.FC = () => {
             } as ResumeDumpCandidate;
           })
           .filter((c: any) => {
-            // Include candidates from public upload portal (http://localhost:3000/#/upload-resume)
-            if (c.source === 'public_job_seeker_upload' || c.recruiterUID === 'DSOURCE_PUBLIC_JOB_SEEKER_POOL' || c.recruiterUID === 'PUBLIC_JOB_SEEKER_POOL' || c.teamId === 'DSOURCE_TALENT_ROSTER' || c.teamId === 'GLOBAL_CANDIDATE_POOL') {
+            // Include candidates from public upload portal (/#/upload-resume) for ALL recruiters on the platform
+            if (
+              c.isPublicUpload === true ||
+              c.isPublicCandidate === true ||
+              c.isGlobalPublicCandidate === true ||
+              c.source === 'public_job_seeker_upload' ||
+              c.recruiterUID === 'DSOURCE_PUBLIC_JOB_SEEKER_POOL' ||
+              c.recruiterUID === 'PUBLIC_JOB_SEEKER_POOL' ||
+              c.teamId === 'DSOURCE_TALENT_ROSTER' ||
+              c.teamId === 'GLOBAL_CANDIDATE_POOL'
+            ) {
               return true;
             }
             if (teamId && c.teamId === teamId) return true;
@@ -1519,16 +1528,34 @@ const ResumeDump: React.FC = () => {
   const deleteCandidate = async (candidate: ResumeDumpCandidate) => {
     setDeletingCandidateId(candidate.id);
     try {
-      // 1. Delete candidate document from Firestore
-      await deleteDoc(doc(db, 'resumeDumpCandidates', candidate.id));
+      // 1. Delete primary candidate document from Firestore
+      await deleteDoc(doc(db, 'resumeDumpCandidates', candidate.id)).catch(() => null);
+      await deleteDoc(doc(db, 'resumeDump', candidate.id)).catch(() => null);
 
-      // 2. Delete candidate resume file from Amazon S3 Bucket
-      if (candidate.resumeUrl) {
-        console.log(`[Resume Dump] Deleting S3 resume file for ${candidate.name || candidate.email}...`);
-        await deleteFileFromS3ByUrl(candidate.resumeUrl);
+      // 2. Also delete all matching candidate records by email so stale data is completely purged
+      const targetEmail = (candidate.email || '').trim().toLowerCase();
+      if (targetEmail && targetEmail.includes('@')) {
+        try {
+          const matchingSnap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('email', '==', targetEmail))).catch(() => null);
+          if (matchingSnap && !matchingSnap.empty) {
+            await Promise.all(matchingSnap.docs.map((d) => deleteDoc(d.ref).catch(() => null)));
+          }
+          const matchingDumpSnap = await getDocs(query(collection(db, 'resumeDump'), where('email', '==', targetEmail))).catch(() => null);
+          if (matchingDumpSnap && !matchingDumpSnap.empty) {
+            await Promise.all(matchingDumpSnap.docs.map((d) => deleteDoc(d.ref).catch(() => null)));
+          }
+        } catch (e) {
+          console.warn("Clean matching email docs notice:", e);
+        }
       }
 
-      // 3. Log audit event
+      // 3. Delete candidate resume file from Amazon S3 Bucket / Cloudinary storage
+      if (candidate.resumeUrl) {
+        console.log(`[Resume Dump] Deleting S3/Cloudinary resume file for ${candidate.name || candidate.email}...`);
+        await deleteFileFromS3ByUrl(candidate.resumeUrl).catch((err) => console.warn("S3 delete notice:", err));
+      }
+
+      // 4. Log audit event
       const creatorInfo = {
         uid: user?.uid || '',
         name: userProfile?.name || user?.email || 'Recruiter',

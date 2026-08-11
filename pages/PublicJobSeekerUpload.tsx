@@ -644,6 +644,10 @@ export default function PublicJobSeekerUpload() {
         ...existingEdu.filter((e: any) => e.degree?.toLowerCase() !== selectedDegree.toLowerCase())
       ];
 
+      finalProfile.isPublicUpload = true;
+      finalProfile.isPublicCandidate = true;
+      finalProfile.isGlobalPublicCandidate = true;
+
       await saveResumeDumpCandidate({
         recruiterUID: 'DSOURCE_PUBLIC_JOB_SEEKER_POOL',
         teamId: 'DSOURCE_TALENT_ROSTER',

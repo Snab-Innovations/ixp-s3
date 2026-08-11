@@ -2510,6 +2510,11 @@ const CandidateInterviewFlow: React.FC = () => {
         { name: submittedInfo.name, email: submittedInfo.email, phone: submittedInfo.phone }
       );
       const saveToRecruiterLibraryPromise = parsedProfilePromise.then((profile) => {
+            const userEnteredSkills = submittedInfo.highlightedSkillsForJob
+              ? submittedInfo.highlightedSkillsForJob.split(',').map((s: string) => s.trim()).filter(Boolean)
+              : [];
+            const mergedSkills = Array.from(new Set([...(profile.skills || []), ...userEnteredSkills]));
+
             // Overwrite parsed profile with candidate-entered preferred data
             const preferredProfile = {
               ...profile,
@@ -2524,6 +2529,7 @@ const CandidateInterviewFlow: React.FC = () => {
               education: submittedInfo.qualificationBasic
                 ? [{ degree: submittedInfo.qualificationBasic, institution: '', year: '' }]
                 : profile.education,
+              skills: mergedSkills,
             };
 
             return saveResumeDumpCandidate({
