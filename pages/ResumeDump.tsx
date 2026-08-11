@@ -89,6 +89,7 @@ interface ResumeDumpCandidate {
   noticePeriodUnit?: string;
   currentSalary?: string;
   expectedSalary?: string;
+  maritalStatus?: string;
   domain?: string;
   domains?: string[];
   sector?: string;
@@ -578,7 +579,9 @@ const ResumeDump: React.FC = () => {
     employmentStatus: 'Working',
     noticePeriod: '',
     currentSalary: '',
-    expectedSalary: ''
+    expectedSalary: '',
+    gender: '',
+    maritalStatus: ''
   });
   const [isSavingCandidateEdit, setIsSavingCandidateEdit] = useState(false);
 
@@ -598,7 +601,9 @@ const ResumeDump: React.FC = () => {
       employmentStatus: candidate.employmentStatus || 'Working',
       noticePeriod: candidate.noticePeriod || (candidate.noticePeriodDays ? `${candidate.noticePeriodDays} Days` : ''),
       currentSalary: candidate.currentSalary || '',
-      expectedSalary: candidate.expectedSalary || ''
+      expectedSalary: candidate.expectedSalary || '',
+      gender: (candidate as any).gender || '',
+      maritalStatus: candidate.maritalStatus || ''
     });
   };
 
@@ -638,6 +643,8 @@ const ResumeDump: React.FC = () => {
         noticePeriod: editingCandidateForm.noticePeriod.trim(),
         currentSalary: editingCandidateForm.currentSalary.trim(),
         expectedSalary: editingCandidateForm.expectedSalary.trim(),
+        gender: editingCandidateForm.gender,
+        maritalStatus: editingCandidateForm.maritalStatus,
         updatedAt: serverTimestamp(),
       };
 
@@ -3012,12 +3019,17 @@ const ResumeDump: React.FC = () => {
                       <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">{skillsPanelCandidate.noticePeriod || (skillsPanelCandidate.noticePeriodDays ? `${skillsPanelCandidate.noticePeriodDays} Days` : 'N/A')}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Current Salary</span>
-                      <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">{skillsPanelCandidate.currentSalary || 'N/A'}</span>
+                      <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Gender & Marital</span>
+                      <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
+                        {(skillsPanelCandidate as any).gender || 'Not specified'}
+                        {skillsPanelCandidate.maritalStatus ? ` · ${skillsPanelCandidate.maritalStatus}` : ''}
+                      </span>
                     </div>
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Expected Salary</span>
-                      <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">{skillsPanelCandidate.expectedSalary || 'N/A'}</span>
+                      <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Salary (Cur / Exp)</span>
+                      <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
+                        {skillsPanelCandidate.currentSalary || 'N/A'} / {skillsPanelCandidate.expectedSalary || 'N/A'}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -3929,6 +3941,44 @@ const ResumeDump: React.FC = () => {
                         placeholder="e.g. Nashik, Mumbai, Pune..."
                         className="w-full h-9 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-3 text-slate-900 dark:text-white outline-none focus:border-slate-900 dark:focus:border-white/30 text-xs"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Gender</label>
+                      <div className="grid grid-cols-3 gap-1">
+                        {['Male', 'Female', 'Other'].map(g => (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => setEditingCandidateForm(prev => ({ ...prev, gender: g }))}
+                            className={`h-9 rounded-[6px] text-xs font-bold border transition-colors cursor-pointer ${
+                              editingCandidateForm.gender === g
+                                ? 'bg-emerald-600 text-white border-emerald-600'
+                                : 'bg-white dark:bg-[#111] border-gray-300 dark:border-white/[0.11] text-slate-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
+                            }`}
+                          >
+                            {g}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Marital Status</label>
+                      <div className="grid grid-cols-2 gap-1">
+                        {['Single / Unmarried', 'Married'].map(m => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setEditingCandidateForm(prev => ({ ...prev, maritalStatus: m }))}
+                            className={`h-9 rounded-[6px] text-xs font-bold border transition-colors cursor-pointer ${
+                              editingCandidateForm.maritalStatus === m
+                                ? 'bg-emerald-600 text-white border-emerald-600'
+                                : 'bg-white dark:bg-[#111] border-gray-300 dark:border-white/[0.11] text-slate-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5'
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -65,6 +65,7 @@ export default function PublicJobSeekerUpload() {
   const [candidateEmail, setCandidateEmail] = useState('');
   const [candidatePhone, setCandidatePhone] = useState('');
   const [candidateGender, setCandidateGender] = useState('');
+  const [candidateMaritalStatus, setCandidateMaritalStatus] = useState('');
   const [candidateLocation, setCandidateLocation] = useState('');
   const [candidateState, setCandidateState] = useState('Maharashtra');
   const [candidateSectors, setCandidateSectors] = useState<string[]>([]);
@@ -840,6 +841,7 @@ export default function PublicJobSeekerUpload() {
       finalProfile.email = candidateEmail.trim().toLowerCase();
       finalProfile.phone = candidatePhone.trim();
       finalProfile.gender = candidateGender;
+      finalProfile.maritalStatus = candidateMaritalStatus;
       finalProfile.location = candidateLocation.trim();
       finalProfile.domain = targetDomainStr;
       finalProfile.domains = targetDomainsList;
@@ -899,6 +901,7 @@ export default function PublicJobSeekerUpload() {
         email: candidateEmail.trim().toLowerCase(),
         phone: candidatePhone.trim(),
         gender: candidateGender,
+        maritalStatus: candidateMaritalStatus,
         location: candidateLocation.trim(),
         domain: targetDomainStr,
         domains: targetDomainsList,
@@ -934,6 +937,7 @@ export default function PublicJobSeekerUpload() {
     setCandidateEmail('');
     setCandidatePhone('');
     setCandidateGender('');
+    setCandidateMaritalStatus('');
     setCandidateLocation('');
     setCandidateExp('');
     setCandidateEducation('');
@@ -1327,7 +1331,7 @@ export default function PublicJobSeekerUpload() {
                   <span className="text-[11px] text-red-500">* Mandatory</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
                       Full Name <span className="text-red-500">*</span>
@@ -1394,7 +1398,7 @@ export default function PublicJobSeekerUpload() {
                       Gender <span className="text-red-500">*</span>
                     </label>
                     <div className="grid grid-cols-3 gap-1.5">
-                      {['Male', 'Female', 'Any'].map(g => (
+                      {['Male', 'Female', 'Other'].map(g => (
                         <button
                           key={g}
                           type="button"
@@ -1406,6 +1410,28 @@ export default function PublicJobSeekerUpload() {
                           }`}
                         >
                           {g}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Marital Status
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {['Single / Unmarried', 'Married'].map(m => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setCandidateMaritalStatus(m)}
+                          className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                            candidateMaritalStatus === m
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                              : isDark ? 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10' : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                          }`}
+                        >
+                          {m}
                         </button>
                       ))}
                     </div>
