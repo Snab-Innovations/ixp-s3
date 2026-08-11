@@ -1,5 +1,6 @@
 import { isEducationMatching } from '../utils/educationMatcher';
 import { detectCandidateGender } from './resumeService';
+import { isJobMatchingDomain } from '../data/jobDomains';
 
 export interface CandidateMatchProfile {
   name?: string;
@@ -8,6 +9,8 @@ export interface CandidateMatchProfile {
   gender?: string;
   location?: string;
   city?: string;
+  domain?: string;
+  preferredDomains?: string[];
   experience?: number | string;
   totalExperienceYears?: number | string;
   education?: string | any[];
@@ -24,6 +27,10 @@ export interface JobMatchResult {
   overallScore: number;
   matchGrade: 'Excellent Fit' | 'Great Fit' | 'Good Fit' | 'Moderate Fit' | 'Low Fit' | 'Not Recommended';
   badgeColor: string;
+  domainMatch?: {
+    isMatch: boolean;
+    domain: string;
+  };
   skillMatch: {
     score: number;
     matchedSkills: string[];
@@ -359,11 +366,27 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
     badgeColor = 'bg-slate-500 text-white shadow-slate-500/30';
   }
 
+  // 6. Domain Matching
+  const candDomainsList: string[] = Array.isArray(candidate.domains) && candidate.domains.length > 0
+    ? candidate.domains
+    : (Array.isArray(candidate.preferredDomains) && candidate.preferredDomains.length > 0
+      ? candidate.preferredDomains
+      : (candidate.domain ? [candidate.domain] : []));
+
+  const domainMatched = isJobMatchingDomain(job, candDomainsList);
+  if (domainMatched && candDomainsList.length > 0) {
+    matchReasons.unshift(`Target Domain Fits (${candDomainsList.join(', ')})`);
+  }
+
   return {
     job,
     overallScore,
     matchGrade,
     badgeColor,
+    domainMatch: {
+      isMatch: domainMatched,
+      domain: candDomainsList.join(', ')
+    },
     skillMatch: {
       score: skillScore,
       matchedSkills,

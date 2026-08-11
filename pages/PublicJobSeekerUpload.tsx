@@ -4,7 +4,7 @@ import {
   Briefcase, GraduationCap, ArrowRight, RefreshCw, Plus, X, Tag, IndianRupee, 
   Clock, UserCheck, Search, Filter, Check, ChevronRight, AlertCircle, 
   ExternalLink, Eye, ShieldCheck, SlidersHorizontal, RotateCcw, Edit3, ChevronDown, ChevronUp, Ban, Sun, Moon,
-  Layers, Menu
+  Layers, Menu, Save
 } from 'lucide-react';
 import { collection, query, where, getDocs, onSnapshot, doc, updateDoc, arrayUnion, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -14,6 +14,7 @@ import { parseResumeFileLocally, saveResumeDumpCandidate } from '../services/res
 import { uploadToCloudinary } from '../services/api';
 import { ALL_EDUCATION_DEGREES } from '../data/allEducationDegrees';
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
+import { ALL_JOB_DOMAINS, detectDomainFromText, detectDomainsFromText } from '../data/jobDomains';
 import { useMessageBox } from '../components/MessageBox';
 import { useTheme } from '../context/ThemeContext';
 import { Link, useNavigate } from 'react-router-dom';
@@ -65,7 +66,22 @@ export default function PublicJobSeekerUpload() {
   const [candidatePhone, setCandidatePhone] = useState('');
   const [candidateGender, setCandidateGender] = useState('');
   const [candidateLocation, setCandidateLocation] = useState('');
+  const [candidateDomains, setCandidateDomains] = useState<string[]>([]);
+  const [candidateDomain, setCandidateDomain] = useState('');
   const [candidateExp, setCandidateExp] = useState('');
+
+  const toggleDomain = (domainName: string) => {
+    setCandidateDomains(prev => {
+      let updated: string[];
+      if (prev.includes(domainName)) {
+        updated = prev.filter(d => d !== domainName);
+      } else {
+        updated = [...prev, domainName];
+      }
+      setCandidateDomain(updated.join(', '));
+      return updated;
+    });
+  };
   const [candidateEducation, setCandidateEducation] = useState('');
   const [candidateEmploymentStatus, setCandidateEmploymentStatus] = useState('Working');
   const [candidateNoticePeriodVal, setCandidateNoticePeriodVal] = useState('30');
@@ -124,6 +140,14 @@ export default function PublicJobSeekerUpload() {
         if (parsed.phone) setCandidatePhone(parsed.phone);
         if (parsed.gender) setCandidateGender(parsed.gender);
         if (parsed.location) setCandidateLocation(parsed.location);
+        if (Array.isArray(parsed.domains)) {
+          setCandidateDomains(parsed.domains);
+          setCandidateDomain(parsed.domains.join(', '));
+        } else if (parsed.domain) {
+          const doms = parsed.domain.split(', ').filter(Boolean);
+          setCandidateDomains(doms);
+          setCandidateDomain(parsed.domain);
+        }
         if (parsed.exp) setCandidateExp(parsed.exp);
         if (parsed.education) setCandidateEducation(parsed.education);
         if (parsed.status) setCandidateEmploymentStatus(parsed.status);
@@ -141,6 +165,13 @@ export default function PublicJobSeekerUpload() {
         if (parsedSubmitted && (parsedSubmitted.email || parsedSubmitted.name)) {
           setSubmittedCandidateData(parsedSubmitted);
           setOriginalCandidateData(parsedSubmitted);
+          if (Array.isArray(parsedSubmitted.domains)) {
+            setCandidateDomains(parsedSubmitted.domains);
+            setCandidateDomain(parsedSubmitted.domains.join(', '));
+          } else if (parsedSubmitted.domain) {
+            setCandidateDomains(parsedSubmitted.domain.split(', ').filter(Boolean));
+            setCandidateDomain(parsedSubmitted.domain);
+          }
           setIsSubmittedSuccess(true);
         }
       }
@@ -152,13 +183,15 @@ export default function PublicJobSeekerUpload() {
   // Persist Form Draft Inputs on Every Field Update
   useEffect(() => {
     try {
-      if (candidateName || candidateEmail || candidatePhone || candidateLocation || extractedSkills.length > 0) {
+      if (candidateName || candidateEmail || candidatePhone || selectedFile) {
         const draft = {
           name: candidateName,
           email: candidateEmail,
           phone: candidatePhone,
           gender: candidateGender,
           location: candidateLocation,
+          domains: candidateDomains,
+          domain: candidateDomains.join(', '),
           exp: candidateExp,
           education: candidateEducation,
           status: candidateEmploymentStatus,
@@ -175,7 +208,7 @@ export default function PublicJobSeekerUpload() {
       console.warn("Save candidate draft error:", err);
     }
   }, [
-    candidateName, candidateEmail, candidatePhone, candidateGender, candidateLocation,
+    candidateName, candidateEmail, candidatePhone, candidateGender, candidateLocation, candidateDomains,
     candidateExp, candidateEducation, candidateEmploymentStatus, candidateNoticePeriodVal,
     candidateNoticePeriodUnit, candidateCurrentSalary, candidateExpectedSalary, extractedSkills, extraBioText
   ]);
@@ -296,12 +329,23 @@ export default function PublicJobSeekerUpload() {
 
   // Load existing profile from email match
   const handleLoadExistingProfile = (candData: any) => {
+    const existingDoms: string[] = Array.isArray(candData.domains)
+      ? candData.domains
+      : (candData.domain ? candData.domain.split(', ').filter(Boolean) : (candidateDomains.length > 0 ? candidateDomains : detectDomainsFromText(candData.resumeText || candData.title || '')));
+    
+    if (existingDoms.length > 0) {
+      setCandidateDomains(existingDoms);
+      setCandidateDomain(existingDoms.join(', '));
+    }
+
     const profileObj: CandidateMatchProfile = {
       name: candData.name || candData.profile?.name || candidateName || 'Job Seeker',
       email: candData.email || candidateEmail.trim().toLowerCase(),
       phone: candData.phone || candData.profile?.phone || candidatePhone,
       gender: candData.gender || candData.profile?.gender || candidateGender || 'Any',
       location: candData.location || candData.profile?.location || candidateLocation || 'Nashik',
+      domain: existingDoms.join(', '),
+      domains: existingDoms,
       experience: candData.experienceYears || candData.totalExperienceYears || candData.experience || candidateExp || 0,
       totalExperienceYears: candData.experienceYears || candData.totalExperienceYears || candData.experience || candidateExp || 0,
       education: candData.highestEducation || candData.education || (candData.profile?.education ? candData.profile.education[0]?.degree : candidateEducation) || 'Graduate',
@@ -384,6 +428,128 @@ export default function PublicJobSeekerUpload() {
     return results;
   }, [submittedCandidateData, activeJobs, matchFilter]);
 
+  // Combine domains: Domains present in active posted jobs appear FIRST, remaining domains follow afterwards
+  const availableDomainsList = useMemo(() => {
+    // 1. Find all active job departments/categories & matched domain names from active posted jobs
+    const activeDeptsSet = new Set<string>();
+    activeJobs.forEach(job => {
+      const dept = (job.department || job.category || job.roleCategory || '').trim();
+      if (dept && dept.toLowerCase() !== 'general') {
+        activeDeptsSet.add(dept.toLowerCase());
+      }
+      if (job.title) {
+        ALL_JOB_DOMAINS.forEach(d => {
+          if (d.keywords.some(k => job.title.toLowerCase().includes(k))) {
+            activeDeptsSet.add(d.name.toLowerCase());
+          }
+        });
+      }
+    });
+
+    const activeDomainObjs: JobDomain[] = [];
+    const addedSet = new Set<string>();
+
+    // Add standard domains that have active posted jobs FIRST
+    ALL_JOB_DOMAINS.forEach(d => {
+      const nameLower = d.name.toLowerCase();
+      const isPresentInJobs = activeDeptsSet.has(nameLower) || d.keywords.some(k => activeDeptsSet.has(k));
+      if (isPresentInJobs) {
+        activeDomainObjs.push(d);
+        addedSet.add(nameLower);
+      }
+    });
+
+    // Add any custom job departments present in active jobs that are not in standard domains
+    activeJobs.forEach(job => {
+      const dept = (job.department || job.category || job.roleCategory || '').trim();
+      if (dept && dept.toLowerCase() !== 'general' && !addedSet.has(dept.toLowerCase())) {
+        addedSet.add(dept.toLowerCase());
+        activeDomainObjs.push({
+          id: dept.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+          name: dept,
+          category: 'Active Job Roles',
+          keywords: [dept.toLowerCase()]
+        });
+      }
+    });
+
+    // Add remaining standard domains AFTERWARDS
+    const remainingDomainObjs: JobDomain[] = [];
+    ALL_JOB_DOMAINS.forEach(d => {
+      if (!addedSet.has(d.name.toLowerCase())) {
+        remainingDomainObjs.push(d);
+      }
+    });
+
+    return [...activeDomainObjs, ...remainingDomainObjs];
+  }, [activeJobs]);
+
+  const [isSavingCriteria, setIsSavingCriteria] = useState(false);
+
+  const handleSaveUpdatedCriteriaToResumeDump = async () => {
+    if (!submittedCandidateData) return;
+    setIsSavingCriteria(true);
+    try {
+      const activeDoms = submittedCandidateData.domains || candidateDomains;
+      const targetDomainStr = activeDoms.join(', ');
+
+      const updatedProfile = {
+        name: submittedCandidateData.name || candidateName || 'Job Seeker',
+        email: (submittedCandidateData.email || candidateEmail).trim().toLowerCase(),
+        phone: submittedCandidateData.phone || candidatePhone,
+        gender: submittedCandidateData.gender || candidateGender,
+        location: submittedCandidateData.location || candidateLocation,
+        domains: activeDoms,
+        preferredDomains: activeDoms,
+        domain: targetDomainStr,
+        experienceYears: submittedCandidateData.experience || 0,
+        totalExperienceYears: submittedCandidateData.experience || 0,
+        experience: submittedCandidateData.experience || 0,
+        highestEducation: submittedCandidateData.education || submittedCandidateData.highestEducation || 'Graduate',
+        education: [
+          { degree: submittedCandidateData.education || submittedCandidateData.highestEducation || 'Graduate', institution: 'Candidate Specified', year: '' }
+        ],
+        skills: submittedCandidateData.skills || extractedSkills || [],
+        employmentStatus: submittedCandidateData.employmentStatus || 'Working',
+        noticePeriod: submittedCandidateData.noticePeriod || '30 Days',
+        currentSalary: submittedCandidateData.currentSalary || 'As per industry',
+        expectedSalary: submittedCandidateData.expectedSalary || 'As per industry',
+        isPublicUpload: true,
+        isPublicCandidate: true,
+        isGlobalPublicCandidate: true,
+      };
+
+      await saveResumeDumpCandidate({
+        recruiterUID: 'DSOURCE_PUBLIC_JOB_SEEKER_POOL',
+        teamId: 'DSOURCE_TALENT_ROSTER',
+        createdBy: {
+          uid: 'PUBLIC_CANDIDATE',
+          name: updatedProfile.name,
+          email: updatedProfile.email,
+          role: 'job_seeker'
+        },
+        profile: updatedProfile,
+        resumeText: submittedCandidateData.resumeText || extraBioText || '',
+        resumeUrl: submittedCandidateData.resumeUrl || 'https://via.placeholder.com/150',
+        fileName: submittedCandidateData.fileName || 'resume.pdf',
+        mimeType: 'application/pdf',
+        fileSize: 1024,
+        additionalText: extraBioText.trim(),
+        source: 'public_job_seeker_upload'
+      });
+
+      // Update sessionStorage so state persists on page refresh
+      sessionStorage.setItem('dsource_candidate_submitted_data', JSON.stringify(submittedCandidateData));
+
+      messageBox.showSuccess(`Updated domains (${targetDomainStr || 'Selected'}) & criteria saved to your profile and resume dump!`);
+    } catch (err: any) {
+      console.error("Save updated criteria error:", err);
+      messageBox.showError("Failed to save updated criteria. Please try again.");
+    } finally {
+      setIsSavingCriteria(false);
+    }
+  };
+
   // Dynamic Live Criteria Updates
   const handleUpdateCandidateCriteria = (field: string, value: any) => {
     setSubmittedCandidateData(prev => {
@@ -398,6 +564,18 @@ export default function PublicJobSeekerUpload() {
       }
       if (field === 'education') {
         updated.highestEducation = value;
+      }
+      if (field === 'domains' || field === 'domain') {
+        if (Array.isArray(value)) {
+          updated.domains = value;
+          updated.preferredDomains = value;
+          updated.domain = value.join(', ');
+        } else if (typeof value === 'string') {
+          const list = value.split(', ').filter(Boolean);
+          updated.domains = list;
+          updated.preferredDomains = list;
+          updated.domain = value;
+        }
       }
 
       return updated;
@@ -468,6 +646,12 @@ export default function PublicJobSeekerUpload() {
           if (matchedCity && !candidateLocation.trim()) {
             setCandidateLocation(matchedCity);
           }
+        }
+
+        const autoDetectedDoms = detectDomainsFromText(ingested.resumeText || '');
+        if (autoDetectedDoms.length > 0 && candidateDomains.length === 0) {
+          setCandidateDomains(autoDetectedDoms);
+          setCandidateDomain(autoDetectedDoms.join(', '));
         }
 
         if (Array.isArray(ingested.profile.skills) && ingested.profile.skills.length > 0) {
@@ -614,11 +798,19 @@ export default function PublicJobSeekerUpload() {
       const finalProfile = parsedProfileData?.profile ? { ...parsedProfileData.profile } : {};
       const finalResumeText = parsedProfileData?.resumeText || extraBioText || '';
 
+      const targetDomainsList = candidateDomains.length > 0
+        ? candidateDomains
+        : detectDomainsFromText(`${candidateName} ${extractedSkills.join(' ')} ${finalResumeText}`);
+      const targetDomainStr = targetDomainsList.join(', ');
+
       finalProfile.name = candidateName.trim();
       finalProfile.email = candidateEmail.trim().toLowerCase();
       finalProfile.phone = candidatePhone.trim();
       finalProfile.gender = candidateGender;
       finalProfile.location = candidateLocation.trim();
+      finalProfile.domain = targetDomainStr;
+      finalProfile.domains = targetDomainsList;
+      finalProfile.preferredDomains = targetDomainsList;
       finalProfile.skills = extractedSkills;
 
       const expNum = parseFloat(candidateExp) || 0;
@@ -675,6 +867,9 @@ export default function PublicJobSeekerUpload() {
         phone: candidatePhone.trim(),
         gender: candidateGender,
         location: candidateLocation.trim(),
+        domain: targetDomainStr,
+        domains: targetDomainsList,
+        preferredDomains: targetDomainsList,
         experience: expNum,
         totalExperienceYears: expNum,
         education: selectedDegree,
@@ -1389,12 +1584,64 @@ export default function PublicJobSeekerUpload() {
                 </div>
               </div>
 
-              {/* CARD BLOCK 5: NOTES & PREFERRED DOMAIN ROLES */}
+              {/* CARD BLOCK: TARGET JOB DOMAIN / SECTOR (MULTI-SELECT) */}
+              <div className={`rounded-3xl p-4 sm:p-6 border shadow-lg space-y-3 ${
+                isDark ? 'bg-[#0d0d0d] border-white/[0.1]' : 'bg-white border-slate-200'
+              }`}>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider">
+                      5. Select Target Job Domains / Sectors <span className="text-red-500">*</span>
+                    </label>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Select one or multiple functional domains to personalize your job matching recommendations:
+                    </p>
+                  </div>
+                  {candidateDomains.length > 0 && (
+                    <span className="text-xs font-extrabold text-emerald-500 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20 shrink-0">
+                      {candidateDomains.length} {candidateDomains.length === 1 ? 'Domain' : 'Domains'} Selected
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                  {availableDomainsList.map((domainObj) => {
+                    const isSelected = candidateDomains.some(d => d.toLowerCase() === domainObj.name.toLowerCase());
+                    return (
+                      <button
+                        key={domainObj.id}
+                        type="button"
+                        onClick={() => toggleDomain(domainObj.name)}
+                        className={`flex items-center justify-between p-3 rounded-xl border text-xs transition-all text-left cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-600/20 ring-1 ring-emerald-400 font-bold'
+                            : isDark
+                            ? 'bg-[#141414] border-white/10 text-slate-300 hover:border-emerald-500/40 hover:bg-[#1a1a1a] font-semibold'
+                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50/50 font-semibold'
+                        }`}
+                      >
+                        <span className="truncate">{domainObj.name}</span>
+                        <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-all ${
+                          isSelected
+                            ? 'bg-white text-emerald-600 border-white'
+                            : isDark
+                            ? 'border-white/20 bg-white/5'
+                            : 'border-slate-300 bg-white'
+                        }`}>
+                          {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* CARD BLOCK 6: NOTES & PREFERRED DOMAIN ROLES */}
               <div className={`rounded-3xl p-4 sm:p-6 border shadow-lg space-y-2.5 ${
                 isDark ? 'bg-[#0d0d0d] border-white/[0.1]' : 'bg-white border-slate-200'
               }`}>
                 <label className="block text-xs font-bold uppercase tracking-wider">
-                  5. Preferred Domain Roles & Additional Notes (Optional)
+                  6. Preferred Domain Roles & Additional Notes (Optional)
                 </label>
                 <textarea
                   rows={2}
@@ -1441,7 +1688,7 @@ export default function PublicJobSeekerUpload() {
                   <span className="font-extrabold text-white">Profile Matched: </span>
                   <span className="text-emerald-300 font-bold">{submittedCandidateData?.name}</span>
                   <span className="text-slate-300 text-[11px] ml-2 hidden sm:inline">
-                    📍 {submittedCandidateData?.location || 'Nashik'} • 💼 {submittedCandidateData?.experience || 0} Yrs Exp • 🎓 {submittedCandidateData?.highestEducation || 'Graduate'}
+                    📍 {submittedCandidateData?.location || 'Nashik'} • {submittedCandidateData?.domain ? `Domains: ${submittedCandidateData.domain} • ` : ''}{submittedCandidateData?.experience || 0} Yrs Exp • 🎓 {submittedCandidateData?.highestEducation || 'Graduate'}
                   </span>
                 </div>
               </div>
@@ -1480,7 +1727,65 @@ export default function PublicJobSeekerUpload() {
                   </div>
                 </div>
 
+                {/* Multi-Domain Interactive Live Selection Grid */}
+                <div className="space-y-2 pb-2 border-b border-slate-200 dark:border-white/10">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Target Job Domains / Sectors (Click to toggle/realign matches)
+                    </label>
+                    <span className="text-[11px] font-extrabold text-emerald-500 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                      {(submittedCandidateData.domains || candidateDomains).length} Domain(s) Active
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-1.5">
+                    {availableDomainsList.map((domainObj) => {
+                      const activeDomains = submittedCandidateData.domains || candidateDomains;
+                      const isSelected = activeDomains.some(d => d.toLowerCase() === domainObj.name.toLowerCase());
+                      
+                      const handleToggleDomainLive = () => {
+                        let updated: string[];
+                        if (isSelected) {
+                          updated = activeDomains.filter(d => d.toLowerCase() !== domainObj.name.toLowerCase());
+                        } else {
+                          updated = [...activeDomains, domainObj.name];
+                        }
+                        setCandidateDomains(updated);
+                        setCandidateDomain(updated.join(', '));
+                        handleUpdateCandidateCriteria('domains', updated);
+                      };
+
+                      return (
+                        <button
+                          key={domainObj.id}
+                          type="button"
+                          onClick={handleToggleDomainLive}
+                          className={`flex items-center justify-between p-2 rounded-lg border text-[11px] font-semibold transition-all cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm font-bold'
+                              : isDark
+                              ? 'bg-[#141414] border-white/10 text-slate-300 hover:border-emerald-500/40 hover:bg-[#1a1a1a]'
+                              : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50/50'
+                          }`}
+                        >
+                          <span className="truncate">{domainObj.name}</span>
+                          <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-all ${
+                            isSelected
+                              ? 'bg-white text-emerald-600 border-white'
+                              : isDark
+                              ? 'border-white/20 bg-white/5'
+                              : 'border-slate-300 bg-white'
+                          }`}>
+                            {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+
                   {/* Location Selector */}
                   <div>
                     <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
@@ -1590,6 +1895,31 @@ export default function PublicJobSeekerUpload() {
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add</span>
+                  </button>
+                </div>
+
+                {/* Save Updated Criteria Action Button */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-200 dark:border-white/10">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Saving syncs your updated target domains and criteria with your candidate profile in the recruiter resume dump.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={isSavingCriteria}
+                    onClick={handleSaveUpdatedCriteriaToResumeDump}
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/30 shrink-0 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingCriteria ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Saving to Resume Dump...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Save Updated Domains & Criteria</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

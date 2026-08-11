@@ -13,6 +13,7 @@ import { EducationInput } from '../components/EducationInput';
 import { isEducationMatching } from '../utils/educationMatcher';
 
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
+import { ALL_JOB_DOMAINS } from '../data/jobDomains';
 import { SKILL_OPTIONS } from './Profile';
 import { analyzeResumeText, ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 import { sendBulkWhatsAppInvites } from '../services/waSenderService';
@@ -508,6 +509,7 @@ const ResumeDump: React.FC = () => {
   const [titleFilter, setTitleFilter] = useState<string>('all');
   const [expFilter, setExpFilter] = useState<string>('all');
   const [locationFilter, setLocationFilter] = useState<string>('all');
+  const [domainFilter, setDomainFilter] = useState<string>('all');
   const [matchScoreFilter, setMatchScoreFilter] = useState<string>('all');
   const [educationFilter, setEducationFilter] = useState<string>('all');
   const [selectedEducation, setSelectedEducation] = useState<string[]>([]);
@@ -836,6 +838,23 @@ const ResumeDump: React.FC = () => {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [candidates]);
 
+  const allAvailableDomains = useMemo(() => {
+    const list = ALL_JOB_DOMAINS.map(d => d.name);
+    const set = new Set(list.map(d => d.toLowerCase()));
+    candidates.forEach(c => {
+      if (c.domain) {
+        c.domain.split(', ').forEach(d => {
+          const trimmed = d.trim();
+          if (trimmed && !set.has(trimmed.toLowerCase())) {
+            set.add(trimmed.toLowerCase());
+            list.push(trimmed);
+          }
+        });
+      }
+    });
+    return list;
+  }, [candidates]);
+
   const activeFiltersCount = useMemo(() => {
     let count = 0;
     if (selectedJobId !== 'all') count++;
@@ -845,6 +864,7 @@ const ResumeDump: React.FC = () => {
     if (titleFilter !== 'all') count++;
     if (expFilter !== 'all') count++;
     if (locationFilter !== 'all') count++;
+    if (domainFilter !== 'all') count++;
     if (matchScoreFilter !== 'all') count++;
     if (educationFilter !== 'all') count++;
     if (selectedEducation.length > 0) count++;
@@ -855,7 +875,7 @@ const ResumeDump: React.FC = () => {
     if (strictEducation) count++;
     if (strictExperience) count++;
     return count;
-  }, [selectedJobId, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, selectedEducation, sourceFilter, dateFilter, searchTerm, strictGender, strictLocation, strictEducation, strictExperience]);
+  }, [selectedJobId, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, domainFilter, matchScoreFilter, educationFilter, selectedEducation, sourceFilter, dateFilter, searchTerm, strictGender, strictLocation, strictEducation, strictExperience]);
 
   const handleClearAllFilters = () => {
     setSelectedJobId('all');
@@ -865,6 +885,7 @@ const ResumeDump: React.FC = () => {
     setTitleFilter('all');
     setExpFilter('all');
     setLocationFilter('all');
+    setDomainFilter('all');
     setMatchScoreFilter('all');
     setEducationFilter('all');
     setSelectedEducation([]);
@@ -1098,6 +1119,21 @@ const ResumeDump: React.FC = () => {
       if (locationFilter !== 'all') {
         const candLoc = (candidate.location || '').toLowerCase();
         if (!candLoc.includes(locationFilter.toLowerCase())) return false;
+      }
+
+      // 6.5. Target Domain Filter
+      if (domainFilter !== 'all') {
+        const candDom = (candidate.domain || '').toLowerCase().trim();
+        const candTitle = (candidate.currentTitle || candidate.sourceJobTitle || '').toLowerCase();
+        const candSkills = (candidate.skills || []).join(' ').toLowerCase();
+        const targetDomainObj = ALL_JOB_DOMAINS.find(d => d.name.toLowerCase() === domainFilter.toLowerCase());
+        const domReqLower = domainFilter.toLowerCase();
+
+        let matchesDomain = candDom.includes(domReqLower) || domReqLower.includes(candDom) || candTitle.includes(domReqLower);
+        if (!matchesDomain && targetDomainObj) {
+          matchesDomain = targetDomainObj.keywords.some(kw => candDom.includes(kw) || candTitle.includes(kw) || candSkills.includes(kw));
+        }
+        if (!matchesDomain) return false;
       }
 
       // 7. Match Score Filter
@@ -1850,6 +1886,21 @@ const ResumeDump: React.FC = () => {
               ))}
             </select>
 
+            {/* Target Domain Filter Dropdown */}
+            <div className="flex items-center gap-1 shrink-0">
+              <Briefcase size={13} className="text-[#8f8f8f] shrink-0" />
+              <select
+                value={domainFilter}
+                onChange={(e) => setDomainFilter(e.target.value)}
+                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[170px]"
+              >
+                <option value="all">All Domains ({allAvailableDomains.length})</option>
+                {allAvailableDomains.map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+
             {/* Experience Range Filter */}
             <div className="flex items-center gap-1 shrink-0">
               <Award size={13} className="text-[#8f8f8f] shrink-0" />
@@ -2349,6 +2400,11 @@ const ResumeDump: React.FC = () => {
                       <div className="geist-small mt-0.5 max-w-[280px] truncate text-[11px] text-gray-600 dark:text-[#9ca3af]" title={candidate.currentTitle}>
                         {candidate.currentTitle || 'Candidate Profile'}
                       </div>
+                      {candidate.domain && (
+                        <div className="geist-small mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 max-w-[280px] truncate">
+                          <span>Domain: {candidate.domain}</span>
+                        </div>
+                      )}
                       {candidate.location && (
                         <div className="geist-small mt-0.5 text-[10px] text-gray-500 dark:text-[#6b7280]">📍 {candidate.location}</div>
                       )}

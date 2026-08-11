@@ -6,8 +6,7 @@ import { uploadToCloudinary } from './api';
 import { grokGenerateJson } from './grokService';
 import { geminiGenerateJson } from './geminiService';
 import { isEducationMatching } from '../utils/educationMatcher';
-
-
+import { detectDomainFromText } from '../data/jobDomains';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
@@ -34,6 +33,8 @@ export interface ParsedResumeProfile {
   phone: string;
   gender?: string;
   location: string;
+  domain?: string;
+  preferredDomains?: string[];
   currentTitle: string;
   summary: string;
   totalExperienceYears: number;
@@ -435,6 +436,7 @@ const deterministicParse = (text: string, fallbackFileName: string): ParsedResum
     phone,
     gender,
     location,
+    domain: detectDomainFromText(cleanText),
     currentTitle: extractCurrentTitle(cleanText, name),
     summary,
     totalExperienceYears: extractExperienceYears(cleanText),
@@ -852,8 +854,11 @@ export const saveResumeDumpCandidate = async ({
 
   const isPublic = source === 'public_job_seeker_upload' || recruiterUID === 'DSOURCE_PUBLIC_JOB_SEEKER_POOL' || Boolean((normalizedProfile as any).isPublicUpload || (normalizedProfile as any).isGlobalPublicCandidate);
 
+  const resolvedDomain = normalizedProfile.domain || detectDomainFromText(`${normalizedProfile.currentTitle || ''} ${skillsArray.join(' ')} ${resumeText}`);
+
   const payload = {
     ...normalizedProfile,
+    domain: resolvedDomain,
     summary: summaryText,
     professionalSummary: summaryText,
     skills: skillsArray,

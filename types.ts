@@ -61,6 +61,8 @@ export interface Interview {
     skills?: string[];
     experience?: number;
     resumeUrl?: string;
+    domain?: string;
+    preferredDomains?: string[];
     parentRecruiterId?: string;
     teamId?: string;
     isSecondary?: boolean;
