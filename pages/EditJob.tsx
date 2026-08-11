@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { createPortal } from 'react-dom';
 import { SKILL_OPTIONS, JOB_CATEGORIES } from './Profile';
+import { ALL_JOB_SECTORS, ALL_JOB_DEPARTMENTS } from '../data/jobDomains';
 import { parseJobDescriptionText, ParsedJdResult, compileCompanyProfile } from '../services/geminiService';
 import { resolveStrictListedCity } from '../data/maharashtraCities';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -691,6 +692,19 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
+                    <label className={labelClass}>Industry Sector</label>
+                    <select 
+                      name="sector" 
+                      value={(formData as any).sector || ''} 
+                      onChange={handleFormChange}
+                      className={inputClass}
+                    >
+                      <option value="">Select Industry Sector</option>
+                      {ALL_JOB_SECTORS.map(sec => <option key={sec} value={sec}>{sec}</option>)}
+                    </select>
+                  </div>
+
+                  <div>
                     <label className={labelClass}>Job Category / Department</label>
                     <select 
                       name="category" 
@@ -698,13 +712,8 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                       onChange={handleFormChange}
                       className={inputClass}
                     >
-                      <option value="">Select a Category</option>
-                      {formData.category && !JOB_CATEGORIES.includes(formData.category) && (
-                        <option key={formData.category} value={formData.category}>
-                          {formData.category}
-                        </option>
-                      )}
-                      {JOB_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                      <option value="">Select Functional Department</option>
+                      {ALL_JOB_DEPARTMENTS.map(dept => <option key={dept} value={dept}>{dept}</option>)}
                     </select>
                   </div>
 

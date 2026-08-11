@@ -5,27 +5,80 @@ export interface JobDomain {
   keywords: string[];
 }
 
+export const ALL_JOB_SECTORS: string[] = [
+  'Manufacturing / Engineering',
+  'Automobile / Auto Components',
+  'Electrical / Electronics',
+  'Pharma / Chemical',
+  'FMCG / Food Processing',
+  'Real Estate / Construction / Infrastructure',
+  'Software / IT / Technology',
+  'Banking / Finance / Insurance / NBFC',
+  'Healthcare / Hospital / Medical',
+  'Hotel / Restaurant / Café / Hospitality',
+  'Travel / Tourism',
+  'Aviation / Airlines',
+  'Logistics / Transport / Warehousing',
+  'Retail / Wholesale / Trading',
+  'E-commerce',
+  'Education / Training / Coaching',
+  'Recruitment / HR Services / Consulting',
+  'Professional Services / Consultancy',
+  'Telecom',
+  'Agriculture / Agri Business',
+  'Textile / Garment / Fashion',
+  'Media / Advertising / Digital Marketing',
+  'Printing / Packaging',
+  'Security / Facility Management',
+  'BPO / KPO / Call Centre',
+  'Oil / Gas / Energy / Power',
+  'Renewable Energy / Solar',
+  'Government / PSU',
+  'NGO / Social Sector'
+];
+
+export const ALL_JOB_DEPARTMENTS: string[] = [
+  'Production / Manufacturing',
+  'Quality / QA / QC',
+  'Maintenance / Service / Installation',
+  'Design / Engineering / R&D',
+  'Projects / Planning / PPC',
+  'Purchase / Procurement',
+  'Stores / Inventory / Warehouse',
+  'Logistics / Dispatch / Supply Chain',
+  'Sales / Business Development',
+  'Marketing / Digital Marketing',
+  'Customer Support / Telecalling / Back Office',
+  'HR / Recruitment / Training',
+  'Accounts / Finance / Taxation / Billing',
+  'Admin / Front Office / Facility Management',
+  'IT / Software / Technical Support',
+  'Civil / Construction / Site Execution',
+  'Legal / Compliance',
+  'Healthcare / Medical / Pharmacy',
+  'Hospitality / Food & Beverage',
+  'Education / Teaching / Training',
+  'Creative / Graphic Design / Media',
+  'Other'
+];
+
 export const ALL_JOB_DOMAINS: JobDomain[] = [
-  { id: 'accountant', name: 'Accountant', category: 'Finance & Accounts', keywords: ['accountant', 'accounts', 'tally', 'gst', 'tds', 'finance', 'billing', 'bookkeeping', 'taxation', 'tally prime', 'audit', 'chartered accountant', 'ca', 'balance sheet'] },
-  { id: 'sales', name: 'Sales', category: 'Sales & Business Development', keywords: ['sales', 'business development', 'bd', 'field sales', 'sales executive', 'b2b sales', 'b2c sales', 'client acquisition', 'lead generation', 'target'] },
-  { id: 'marketing', name: 'Marketing', category: 'Marketing & PR', keywords: ['marketing', 'digital marketing', 'social media', 'seo', 'sem', 'branding', 'content marketing', 'campaign', 'advertising', 'email marketing'] },
-  { id: 'hr', name: 'HR', category: 'Human Resources', keywords: ['hr', 'human resources', 'recruiter', 'recruitment', 'talent acquisition', 'payroll', 'employee relations', 'onboarding', 'hr generalist', 'hr executive'] },
-  { id: 'admin', name: 'Admin', category: 'Administration & Office', keywords: ['admin', 'administration', 'office admin', 'office manager', 'facility', 'front office', 'admin executive', 'operations'] },
-  { id: 'back_office', name: 'Back Office', category: 'Office Operations', keywords: ['back office', 'data entry', 'computer operator', 'backoffice', 'documentation', 'office assistant', 'mis', 'excel'] },
-  { id: 'receptionist', name: 'Receptionist', category: 'Office Operations', keywords: ['receptionist', 'front desk', 'desk executive', 'reception', 'visitor management', 'office receptionist'] },
-  { id: 'telecaller', name: 'Telecaller', category: 'Customer Care & Sales', keywords: ['telecaller', 'telecalling', 'bpo', 'customer support', 'call center', 'inbound', 'outbound', 'customer care', 'voice process'] },
-  { id: 'production', name: 'Production', category: 'Manufacturing & Operations', keywords: ['production', 'manufacturing', 'assembly', 'shop floor', 'plant', 'production engineer', 'line supervisor', 'process engineer'] },
-  { id: 'quality', name: 'Quality', category: 'Manufacturing & QA', keywords: ['quality', 'qa', 'qc', 'quality control', 'quality assurance', 'iso', 'quality inspector', 'testing', 'audit', 'six sigma'] },
-  { id: 'maintenance', name: 'Maintenance', category: 'Engineering & Plant', keywords: ['maintenance', 'breakdown', 'preventive maintenance', 'electrical maintenance', 'mechanical maintenance', 'technician', 'utility', 'plant maintenance'] },
-  { id: 'stores', name: 'Stores', category: 'Logistics & Inventory', keywords: ['stores', 'store keeper', 'inventory', 'warehouse', 'godown', 'stock', 'material management', 'store executive'] },
-  { id: 'purchase', name: 'Purchase', category: 'Procurement & SCM', keywords: ['purchase', 'procurement', 'vendor management', 'buying', 'sourcing', 'purchase executive', 'rfq', 'negotiation'] },
-  { id: 'scm', name: 'SCM', category: 'Logistics & Supply Chain', keywords: ['scm', 'supply chain', 'supply chain management', 'logistics', 'dispatch', 'freight', 'transportation', 'distribution'] },
-  { id: 'software', name: 'Software', category: 'IT & Software Development', keywords: ['software', 'developer', 'software engineer', 'full stack', 'frontend', 'backend', 'web developer', 'app developer', 'coding', 'react', 'python', 'java', 'node', 'c#', 'c++'] },
-  { id: 'it', name: 'IT', category: 'IT Support & Systems', keywords: ['it', 'information technology', 'it support', 'system admin', 'network engineer', 'hardware', 'desktop support', 'infrastructure', 'cloud', 'devops'] },
+  ...ALL_JOB_DEPARTMENTS.map(dept => ({
+    id: dept.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+    name: dept,
+    category: 'Functional Department',
+    keywords: dept.toLowerCase().split(/[\s\/&]+/).filter(k => k.length > 2)
+  })),
+  ...ALL_JOB_SECTORS.map(sec => ({
+    id: sec.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+    name: sec,
+    category: 'Industry Sector',
+    keywords: sec.toLowerCase().split(/[\s\/&]+/).filter(k => k.length > 2)
+  }))
 ];
 
 /**
- * Auto-detect primary domain from text
+ * Auto-detect primary domain/department from text
  */
 export function detectDomainFromText(text: string): string {
   if (!text || typeof text !== 'string') return '';
@@ -51,34 +104,74 @@ export function detectDomainFromText(text: string): string {
 }
 
 /**
- * Auto-detect multiple candidate domains from text
+ * Auto-detect matching Industry Sectors from text
  */
-export function detectDomainsFromText(text: string): string[] {
+export function detectSectorsFromText(text: string): string[] {
   if (!text || typeof text !== 'string') return [];
   const clean = text.toLowerCase();
 
-  const domainScores: { name: string; score: number }[] = [];
+  const scores: { name: string; score: number }[] = [];
 
-  for (const domain of ALL_JOB_DOMAINS) {
+  for (const sector of ALL_JOB_SECTORS) {
+    const keywords = sector.toLowerCase().split(/[\s\/&]+/).filter(k => k.length > 2);
     let score = 0;
-    for (const kw of domain.keywords) {
+    for (const kw of keywords) {
       if (clean.includes(kw)) {
         score += kw.length > 5 ? 3 : 1;
       }
     }
     if (score > 0) {
-      domainScores.push({ name: domain.name, score });
+      scores.push({ name: sector, score });
     }
   }
 
-  return domainScores
+  return scores
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map(s => s.name);
+}
+
+/**
+ * Auto-detect matching Functional Departments from text
+ */
+export function detectDepartmentsFromText(text: string): string[] {
+  if (!text || typeof text !== 'string') return [];
+  const clean = text.toLowerCase();
+
+  const scores: { name: string; score: number }[] = [];
+
+  for (const dept of ALL_JOB_DEPARTMENTS) {
+    const keywords = dept.toLowerCase().split(/[\s\/&]+/).filter(k => k.length > 2);
+    let score = 0;
+    for (const kw of keywords) {
+      if (clean.includes(kw)) {
+        score += kw.length > 5 ? 3 : 1;
+      }
+    }
+    if (score > 0) {
+      scores.push({ name: dept, score });
+    }
+  }
+
+  return scores
     .sort((a, b) => b.score - a.score)
     .slice(0, 3)
     .map(d => d.name);
 }
 
 /**
- * Check if job matches any candidate domain(s)
+ * Auto-detect multiple candidate domains/departments from text
+ */
+export function detectDomainsFromText(text: string): string[] {
+  if (!text || typeof text !== 'string') return [];
+  const detectedSecs = detectSectorsFromText(text);
+  const detectedDepts = detectDepartmentsFromText(text);
+  const combined = Array.from(new Set([...detectedSecs, ...detectedDepts]));
+  return combined.slice(0, 4);
+}
+
+/**
+ * Check if job matches candidate target sectors/departments
  */
 export function isJobMatchingDomain(job: any, candidateDomains: string | string[]): boolean {
   if (!job || !candidateDomains) return false;
@@ -90,6 +183,7 @@ export function isJobMatchingDomain(job: any, candidateDomains: string | string[
   if (domainsList.length === 0) return false;
 
   const jobDept = (job.department || job.category || job.roleCategory || '').toLowerCase();
+  const jobSector = (job.sector || job.industry || '').toLowerCase();
   const jobTitle = (job.title || '').toLowerCase();
   const jobDesc = (job.description || '').toLowerCase();
 
@@ -97,8 +191,10 @@ export function isJobMatchingDomain(job: any, candidateDomains: string | string[
     const cleanCandDomain = candDomain.toLowerCase().trim();
     if (!cleanCandDomain) return false;
 
-    // Direct department/title match
-    if (jobDept.includes(cleanCandDomain) || cleanCandDomain.includes(jobDept) || jobTitle.includes(cleanCandDomain)) {
+    // Direct department/sector/title match
+    if (jobDept.includes(cleanCandDomain) || cleanCandDomain.includes(jobDept) || 
+        jobSector.includes(cleanCandDomain) || cleanCandDomain.includes(jobSector) || 
+        jobTitle.includes(cleanCandDomain)) {
       return true;
     }
 
@@ -108,7 +204,7 @@ export function isJobMatchingDomain(job: any, candidateDomains: string | string[
 
     if (targetDomainObj) {
       return targetDomainObj.keywords.some(
-        kw => jobDept.includes(kw) || jobTitle.includes(kw) || jobDesc.includes(kw)
+        kw => jobDept.includes(kw) || jobSector.includes(kw) || jobTitle.includes(kw) || jobDesc.includes(kw)
       );
     }
 

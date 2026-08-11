@@ -14,7 +14,7 @@ import { parseResumeFileLocally, saveResumeDumpCandidate } from '../services/res
 import { uploadToCloudinary } from '../services/api';
 import { ALL_EDUCATION_DEGREES } from '../data/allEducationDegrees';
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
-import { ALL_JOB_DOMAINS, detectDomainFromText, detectDomainsFromText } from '../data/jobDomains';
+import { ALL_JOB_DOMAINS, ALL_JOB_SECTORS, ALL_JOB_DEPARTMENTS, detectDomainFromText, detectDomainsFromText, detectSectorsFromText, detectDepartmentsFromText } from '../data/jobDomains';
 import { useMessageBox } from '../components/MessageBox';
 import { useTheme } from '../context/ThemeContext';
 import { Link, useNavigate } from 'react-router-dom';
@@ -66,9 +66,35 @@ export default function PublicJobSeekerUpload() {
   const [candidatePhone, setCandidatePhone] = useState('');
   const [candidateGender, setCandidateGender] = useState('');
   const [candidateLocation, setCandidateLocation] = useState('');
+  const [candidateSectors, setCandidateSectors] = useState<string[]>([]);
+  const [candidateDepartments, setCandidateDepartments] = useState<string[]>([]);
   const [candidateDomains, setCandidateDomains] = useState<string[]>([]);
   const [candidateDomain, setCandidateDomain] = useState('');
   const [candidateExp, setCandidateExp] = useState('');
+
+  const toggleSector = (sectorName: string) => {
+    setCandidateSectors(prev => {
+      const updated = prev.includes(sectorName)
+        ? prev.filter(s => s !== sectorName)
+        : [...prev, sectorName];
+      const combined = Array.from(new Set([...updated, ...candidateDepartments]));
+      setCandidateDomains(combined);
+      setCandidateDomain(combined.join(', '));
+      return updated;
+    });
+  };
+
+  const toggleDepartment = (deptName: string) => {
+    setCandidateDepartments(prev => {
+      const updated = prev.includes(deptName)
+        ? prev.filter(d => d !== deptName)
+        : [...prev, deptName];
+      const combined = Array.from(new Set([...candidateSectors, ...updated]));
+      setCandidateDomains(combined);
+      setCandidateDomain(combined.join(', '));
+      return updated;
+    });
+  };
 
   const toggleDomain = (domainName: string) => {
     setCandidateDomains(prev => {
@@ -648,10 +674,16 @@ export default function PublicJobSeekerUpload() {
           }
         }
 
-        const autoDetectedDoms = detectDomainsFromText(ingested.resumeText || '');
-        if (autoDetectedDoms.length > 0 && candidateDomains.length === 0) {
-          setCandidateDomains(autoDetectedDoms);
-          setCandidateDomain(autoDetectedDoms.join(', '));
+        const autoSecs = detectSectorsFromText(ingested.resumeText || '');
+        const autoDepts = detectDepartmentsFromText(ingested.resumeText || '');
+
+        if (autoSecs.length > 0) setCandidateSectors(autoSecs);
+        if (autoDepts.length > 0) setCandidateDepartments(autoDepts);
+
+        const combinedAuto = Array.from(new Set([...autoSecs, ...autoDepts]));
+        if (combinedAuto.length > 0) {
+          setCandidateDomains(combinedAuto);
+          setCandidateDomain(combinedAuto.join(', '));
         }
 
         if (Array.isArray(ingested.profile.skills) && ingested.profile.skills.length > 0) {
@@ -1584,55 +1616,114 @@ export default function PublicJobSeekerUpload() {
                 </div>
               </div>
 
-              {/* CARD BLOCK: TARGET JOB DOMAIN / SECTOR (MULTI-SELECT) */}
-              <div className={`rounded-3xl p-4 sm:p-6 border shadow-lg space-y-3 ${
+              {/* CARD BLOCK 5: TARGET INDUSTRY SECTORS & FUNCTIONAL DEPARTMENTS (MULTI-SELECT) */}
+              <div className={`rounded-3xl p-4 sm:p-6 border shadow-lg space-y-5 ${
                 isDark ? 'bg-[#0d0d0d] border-white/[0.1]' : 'bg-white border-slate-200'
               }`}>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 border-b border-slate-200 dark:border-white/10 pb-3">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider">
-                      5. Select Target Job Domains / Sectors <span className="text-red-500">*</span>
+                      5. Select Target Industry Sectors & Functional Departments <span className="text-red-500">*</span>
                     </label>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Select one or multiple functional domains to personalize your job matching recommendations:
+                      Select one or multiple sectors and departments to get tailored job recommendation matches:
                     </p>
                   </div>
                   {candidateDomains.length > 0 && (
                     <span className="text-xs font-extrabold text-emerald-500 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20 shrink-0">
-                      {candidateDomains.length} {candidateDomains.length === 1 ? 'Domain' : 'Domains'} Selected
+                      {candidateDomains.length} Selected
                     </span>
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
-                  {availableDomainsList.map((domainObj) => {
-                    const isSelected = candidateDomains.some(d => d.toLowerCase() === domainObj.name.toLowerCase());
-                    return (
-                      <button
-                        key={domainObj.id}
-                        type="button"
-                        onClick={() => toggleDomain(domainObj.name)}
-                        className={`flex items-center justify-between p-3 rounded-xl border text-xs transition-all text-left cursor-pointer ${
-                          isSelected
-                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-600/20 ring-1 ring-emerald-400 font-bold'
-                            : isDark
-                            ? 'bg-[#141414] border-white/10 text-slate-300 hover:border-emerald-500/40 hover:bg-[#1a1a1a] font-semibold'
-                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50/50 font-semibold'
-                        }`}
-                      >
-                        <span className="truncate">{domainObj.name}</span>
-                        <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-all ${
-                          isSelected
-                            ? 'bg-white text-emerald-600 border-white'
-                            : isDark
-                            ? 'border-white/20 bg-white/5'
-                            : 'border-slate-300 bg-white'
-                        }`}>
-                          {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                        </div>
-                      </button>
-                    );
-                  })}
+                {/* 5A. TARGET INDUSTRY SECTORS */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                      Industry Sectors ({ALL_JOB_SECTORS.length})
+                    </label>
+                    {candidateSectors.length > 0 && (
+                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                        {candidateSectors.length} Sectors Active
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {ALL_JOB_SECTORS.map((sectorName) => {
+                      const isSelected = candidateSectors.some(s => s.toLowerCase() === sectorName.toLowerCase());
+                      return (
+                        <button
+                          key={sectorName}
+                          type="button"
+                          onClick={() => toggleSector(sectorName)}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border text-xs leading-snug transition-all text-left cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-600/20 ring-1 ring-emerald-400 font-bold'
+                              : isDark
+                              ? 'bg-[#141414] border-white/10 text-slate-300 hover:border-emerald-500/40 hover:bg-[#1a1a1a] font-semibold'
+                              : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50/50 font-semibold'
+                          }`}
+                        >
+                          <span className="break-words font-semibold text-[11px] sm:text-xs min-w-0 flex-1 pr-1">{sectorName}</span>
+                          <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-all ${
+                            isSelected
+                              ? 'bg-white text-emerald-600 border-white'
+                              : isDark
+                              ? 'border-white/20 bg-white/5'
+                              : 'border-slate-300 bg-white'
+                          }`}>
+                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 5B. TARGET FUNCTIONAL DEPARTMENTS */}
+                <div className="space-y-2 pt-3 border-t border-slate-200 dark:border-white/10">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">
+                      Functional Departments ({ALL_JOB_DEPARTMENTS.length})
+                    </label>
+                    {candidateDepartments.length > 0 && (
+                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                        {candidateDepartments.length} Departments Active
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {ALL_JOB_DEPARTMENTS.map((deptName) => {
+                      const isSelected = candidateDepartments.some(d => d.toLowerCase() === deptName.toLowerCase());
+                      return (
+                        <button
+                          key={deptName}
+                          type="button"
+                          onClick={() => toggleDepartment(deptName)}
+                          className={`flex items-center justify-between p-2.5 rounded-xl border text-xs leading-snug transition-all text-left cursor-pointer ${
+                            isSelected
+                              ? 'bg-teal-600 text-white border-teal-500 shadow-md shadow-teal-600/20 ring-1 ring-teal-400 font-bold'
+                              : isDark
+                              ? 'bg-[#141414] border-white/10 text-slate-300 hover:border-teal-500/40 hover:bg-[#1a1a1a] font-semibold'
+                              : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-teal-400 hover:bg-teal-50/50 font-semibold'
+                          }`}
+                        >
+                          <span className="break-words font-semibold text-[11px] sm:text-xs min-w-0 flex-1 pr-1">{deptName}</span>
+                          <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-all ${
+                            isSelected
+                              ? 'bg-white text-teal-600 border-white'
+                              : isDark
+                              ? 'border-white/20 bg-white/5'
+                              : 'border-slate-300 bg-white'
+                          }`}>
+                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
@@ -1728,59 +1819,114 @@ export default function PublicJobSeekerUpload() {
                 </div>
 
                 {/* Multi-Domain Interactive Live Selection Grid */}
-                <div className="space-y-2 pb-2 border-b border-slate-200 dark:border-white/10">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                      Target Job Domains / Sectors (Click to toggle/realign matches)
-                    </label>
-                    <span className="text-[11px] font-extrabold text-emerald-500 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                      {(submittedCandidateData.domains || candidateDomains).length} Domain(s) Active
-                    </span>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-1.5">
-                    {availableDomainsList.map((domainObj) => {
-                      const activeDomains = submittedCandidateData.domains || candidateDomains;
-                      const isSelected = activeDomains.some(d => d.toLowerCase() === domainObj.name.toLowerCase());
-                      
-                      const handleToggleDomainLive = () => {
-                        let updated: string[];
-                        if (isSelected) {
-                          updated = activeDomains.filter(d => d.toLowerCase() !== domainObj.name.toLowerCase());
-                        } else {
-                          updated = [...activeDomains, domainObj.name];
-                        }
-                        setCandidateDomains(updated);
-                        setCandidateDomain(updated.join(', '));
-                        handleUpdateCandidateCriteria('domains', updated);
-                      };
+                <div className="space-y-4 pb-3 border-b border-slate-200 dark:border-white/10">
+                  {/* Sectors Live */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                        Target Industry Sectors ({ALL_JOB_SECTORS.length})
+                      </label>
+                      <span className="text-[11px] font-extrabold text-emerald-500 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                        {(submittedCandidateData.domains || candidateDomains).length} Criteria Active
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5">
+                      {ALL_JOB_SECTORS.map((sectorName) => {
+                        const activeDomains = submittedCandidateData.domains || candidateDomains;
+                        const isSelected = activeDomains.some(d => d.toLowerCase() === sectorName.toLowerCase());
 
-                      return (
-                        <button
-                          key={domainObj.id}
-                          type="button"
-                          onClick={handleToggleDomainLive}
-                          className={`flex items-center justify-between p-2 rounded-lg border text-[11px] font-semibold transition-all cursor-pointer ${
-                            isSelected
-                              ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm font-bold'
-                              : isDark
-                              ? 'bg-[#141414] border-white/10 text-slate-300 hover:border-emerald-500/40 hover:bg-[#1a1a1a]'
-                              : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50/50'
-                          }`}
-                        >
-                          <span className="truncate">{domainObj.name}</span>
-                          <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-all ${
-                            isSelected
-                              ? 'bg-white text-emerald-600 border-white'
-                              : isDark
-                              ? 'border-white/20 bg-white/5'
-                              : 'border-slate-300 bg-white'
-                          }`}>
-                            {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                          </div>
-                        </button>
-                      );
-                    })}
+                        const handleToggleSectorLive = () => {
+                          let updated: string[];
+                          if (isSelected) {
+                            updated = activeDomains.filter(d => d.toLowerCase() !== sectorName.toLowerCase());
+                          } else {
+                            updated = [...activeDomains, sectorName];
+                          }
+                          setCandidateDomains(updated);
+                          setCandidateDomain(updated.join(', '));
+                          handleUpdateCandidateCriteria('domains', updated);
+                        };
+
+                        return (
+                          <button
+                            key={sectorName}
+                            type="button"
+                            onClick={handleToggleSectorLive}
+                            className={`flex items-center justify-between p-2 rounded-lg border text-[11px] transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm font-bold'
+                                : isDark
+                                ? 'bg-[#141414] border-white/10 text-slate-300 hover:border-emerald-500/40 hover:bg-[#1a1a1a] font-semibold'
+                                : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50/50 font-semibold'
+                            }`}
+                          >
+                            <span className="truncate pr-1">{sectorName}</span>
+                            <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-all ${
+                              isSelected
+                                ? 'bg-white text-emerald-600 border-white'
+                                : isDark
+                                ? 'border-white/20 bg-white/5'
+                                : 'border-slate-300 bg-white'
+                            }`}>
+                              {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Departments Live */}
+                  <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-white/10">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">
+                        Target Functional Departments ({ALL_JOB_DEPARTMENTS.length})
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5">
+                      {ALL_JOB_DEPARTMENTS.map((deptName) => {
+                        const activeDomains = submittedCandidateData.domains || candidateDomains;
+                        const isSelected = activeDomains.some(d => d.toLowerCase() === deptName.toLowerCase());
+
+                        const handleToggleDeptLive = () => {
+                          let updated: string[];
+                          if (isSelected) {
+                            updated = activeDomains.filter(d => d.toLowerCase() !== deptName.toLowerCase());
+                          } else {
+                            updated = [...activeDomains, deptName];
+                          }
+                          setCandidateDomains(updated);
+                          setCandidateDomain(updated.join(', '));
+                          handleUpdateCandidateCriteria('domains', updated);
+                        };
+
+                        return (
+                          <button
+                            key={deptName}
+                            type="button"
+                            onClick={handleToggleDeptLive}
+                            className={`flex items-center justify-between p-2 rounded-lg border text-[11px] transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-teal-600 text-white border-teal-500 shadow-sm font-bold'
+                                : isDark
+                                ? 'bg-[#141414] border-white/10 text-slate-300 hover:border-teal-500/40 hover:bg-[#1a1a1a] font-semibold'
+                                : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-teal-400 hover:bg-teal-50/50 font-semibold'
+                            }`}
+                          >
+                            <span className="truncate pr-1">{deptName}</span>
+                            <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-all ${
+                              isSelected
+                                ? 'bg-white text-teal-600 border-white'
+                                : isDark
+                                ? 'border-white/20 bg-white/5'
+                                : 'border-slate-300 bg-white'
+                            }`}>
+                              {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
