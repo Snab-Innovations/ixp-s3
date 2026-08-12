@@ -76,9 +76,16 @@ export default function PublicJobSeekerUpload() {
 
   const toggleSector = (sectorName: string) => {
     setCandidateSectors(prev => {
-      const updated = prev.includes(sectorName)
-        ? prev.filter(s => s !== sectorName)
-        : [...prev, sectorName];
+      let updated: string[];
+      if (prev.some(s => s.toLowerCase() === sectorName.toLowerCase())) {
+        updated = prev.filter(s => s.toLowerCase() !== sectorName.toLowerCase());
+      } else {
+        if (prev.length >= 5) {
+          messageBox.showError("You can select a maximum of 5 Target Industry Sectors.");
+          return prev;
+        }
+        updated = [...prev, sectorName];
+      }
       const combined = Array.from(new Set([...updated, ...candidateDepartments]));
       setCandidateDomains(combined);
       setCandidateDomain(combined.join(', '));
@@ -88,9 +95,16 @@ export default function PublicJobSeekerUpload() {
 
   const toggleDepartment = (deptName: string) => {
     setCandidateDepartments(prev => {
-      const updated = prev.includes(deptName)
-        ? prev.filter(d => d !== deptName)
-        : [...prev, deptName];
+      let updated: string[];
+      if (prev.some(d => d.toLowerCase() === deptName.toLowerCase())) {
+        updated = prev.filter(d => d.toLowerCase() !== deptName.toLowerCase());
+      } else {
+        if (prev.length >= 5) {
+          messageBox.showError("You can select a maximum of 5 Functional Departments.");
+          return prev;
+        }
+        updated = [...prev, deptName];
+      }
       const combined = Array.from(new Set([...candidateSectors, ...updated]));
       setCandidateDomains(combined);
       setCandidateDomain(combined.join(', '));
@@ -679,8 +693,8 @@ export default function PublicJobSeekerUpload() {
         const autoSecs = detectSectorsFromText(ingested.resumeText || '');
         const autoDepts = detectDepartmentsFromText(ingested.resumeText || '');
 
-        if (autoSecs.length > 0) setCandidateSectors(autoSecs);
-        if (autoDepts.length > 0) setCandidateDepartments(autoDepts);
+        if (autoSecs.length > 0) setCandidateSectors(autoSecs.slice(0, 5));
+        if (autoDepts.length > 0) setCandidateDepartments(autoDepts.slice(0, 5));
 
         const combinedAuto = Array.from(new Set([...autoSecs, ...autoDepts]));
         if (combinedAuto.length > 0) {
@@ -810,6 +824,22 @@ export default function PublicJobSeekerUpload() {
     }
     if (!candidateExpectedSalary.trim()) {
       messageBox.showError("Please enter your Expected Salary.");
+      return;
+    }
+    if (candidateSectors.length < 2) {
+      messageBox.showError("Please select at least 2 Target Industry Sectors (Min 2, Max 5).");
+      return;
+    }
+    if (candidateSectors.length > 5) {
+      messageBox.showError("Please select a maximum of 5 Target Industry Sectors.");
+      return;
+    }
+    if (candidateDepartments.length < 2) {
+      messageBox.showError("Please select at least 2 Functional Departments (Min 2, Max 5).");
+      return;
+    }
+    if (candidateDepartments.length > 5) {
+      messageBox.showError("Please select a maximum of 5 Functional Departments.");
       return;
     }
     if (!selectedFile && !existingEmailCandidate) {
@@ -1648,37 +1678,36 @@ export default function PublicJobSeekerUpload() {
                 </div>
               </div>
 
-              {/* CARD BLOCK 5: TARGET INDUSTRY SECTORS & FUNCTIONAL DEPARTMENTS (MULTI-SELECT) */}
-              <div className={`rounded-3xl p-4 sm:p-6 border shadow-lg space-y-5 ${
+              {/* CARD BLOCK 5: TARGET INDUSTRY SECTORS (MULTI-SELECT: MIN 2, MAX 5) */}
+              <div className={`rounded-3xl p-4 sm:p-6 border shadow-lg space-y-4 ${
                 isDark ? 'bg-[#0d0d0d] border-white/[0.1]' : 'bg-white border-slate-200'
               }`}>
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 border-b border-slate-200 dark:border-white/10 pb-3">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider">
-                      5. Select Target Industry Sectors & Functional Departments <span className="text-red-500">*</span>
+                      5. Select Target Industry Sectors <span className="text-red-500">*</span>
                     </label>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Select one or multiple sectors and departments to get tailored job recommendation matches:
+                      Select minimum 2 and maximum 5 target industry sectors:
                     </p>
                   </div>
-                  {candidateDomains.length > 0 && (
-                    <span className="text-xs font-extrabold text-emerald-500 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20 shrink-0">
-                      {candidateDomains.length} Selected
-                    </span>
-                  )}
+                  <span className={`text-xs font-extrabold px-3 py-1 rounded-full border shrink-0 ${
+                    candidateSectors.length >= 2 && candidateSectors.length <= 5
+                      ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20'
+                      : 'text-amber-500 bg-amber-500/10 border-amber-500/20'
+                  }`}>
+                    {candidateSectors.length} / 5 Selected (Min 2, Max 5)
+                  </span>
                 </div>
 
-                {/* 5A. TARGET INDUSTRY SECTORS */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                      Industry Sectors ({ALL_JOB_SECTORS.length})
+                      Industry Sectors ({ALL_JOB_SECTORS.length}) <span className="text-red-500">*</span>
                     </label>
-                    {candidateSectors.length > 0 && (
-                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                        {candidateSectors.length} Sectors Active
-                      </span>
-                    )}
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                      {candidateSectors.length} Active (Min 2, Max 5)
+                    </span>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 sm:gap-2">
@@ -1712,18 +1741,38 @@ export default function PublicJobSeekerUpload() {
                     })}
                   </div>
                 </div>
+              </div>
 
-                {/* 5B. TARGET FUNCTIONAL DEPARTMENTS */}
-                <div className="space-y-2 pt-3 border-t border-slate-200 dark:border-white/10">
+              {/* CARD BLOCK 6: TARGET FUNCTIONAL DEPARTMENTS (MULTI-SELECT: MIN 2, MAX 5) */}
+              <div className={`rounded-3xl p-4 sm:p-6 border shadow-lg space-y-4 ${
+                isDark ? 'bg-[#0d0d0d] border-white/[0.1]' : 'bg-white border-slate-200'
+              }`}>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 border-b border-slate-200 dark:border-white/10 pb-3">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider">
+                      6. Select Functional Departments ({ALL_JOB_DEPARTMENTS.length}) <span className="text-red-500">*</span>
+                    </label>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Select minimum 2 and maximum 5 functional departments:
+                    </p>
+                  </div>
+                  <span className={`text-xs font-extrabold px-3 py-1 rounded-full border shrink-0 ${
+                    candidateDepartments.length >= 2 && candidateDepartments.length <= 5
+                      ? 'text-teal-500 bg-teal-500/10 border-teal-500/20'
+                      : 'text-amber-500 bg-amber-500/10 border-amber-500/20'
+                  }`}>
+                    {candidateDepartments.length} / 5 Selected (Min 2, Max 5)
+                  </span>
+                </div>
+
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">
-                      Functional Departments ({ALL_JOB_DEPARTMENTS.length})
+                      Functional Departments ({ALL_JOB_DEPARTMENTS.length}) <span className="text-red-500">*</span>
                     </label>
-                    {candidateDepartments.length > 0 && (
-                      <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                        {candidateDepartments.length} Departments Active
-                      </span>
-                    )}
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                      {candidateDepartments.length} Active (Min 2, Max 5)
+                    </span>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 sm:gap-2">
@@ -1759,12 +1808,12 @@ export default function PublicJobSeekerUpload() {
                 </div>
               </div>
 
-              {/* CARD BLOCK 6: NOTES & PREFERRED DOMAIN ROLES */}
+              {/* CARD BLOCK 7: NOTES & PREFERRED DOMAIN ROLES */}
               <div className={`rounded-3xl p-4 sm:p-6 border shadow-lg space-y-2.5 ${
                 isDark ? 'bg-[#0d0d0d] border-white/[0.1]' : 'bg-white border-slate-200'
               }`}>
                 <label className="block text-xs font-bold uppercase tracking-wider">
-                  6. Preferred Domain Roles & Additional Notes (Optional)
+                  7. Preferred Domain Roles & Additional Notes (Optional)
                 </label>
                 <textarea
                   rows={2}
