@@ -68,26 +68,117 @@ const authenticateApiKey = (req, res, next) => {
 };
 
 /**
+ * AI / Rule-based prediction for Industry Sector & Role Category
+ */
+function predictSectorAndRole(title = '', description = '', skills = [], company = '') {
+  const text = `${title} ${description} ${Array.isArray(skills) ? skills.join(' ') : skills} ${company}`.toLowerCase();
+
+  if (text.includes('electrical') || text.includes('mep') || text.includes('switchgear') || text.includes('revit') || text.includes('autocad') || text.includes('cad')) {
+    return {
+      industrySector: 'MEP Consultant',
+      roleCategory: 'Design Engineer - Electrical',
+      alternativeSectors: ['Electrical & Electronics', 'Engineering Services', 'Building Systems'],
+      alternativeCategories: ['Design Engineer - Electrical', 'Electrical Engineer', 'AutoCAD & Revit Specialist', 'MEP Project Engineer']
+    };
+  }
+  if (text.includes('mechanical') || text.includes('hvac') || text.includes('piping') || text.includes('solidworks')) {
+    return {
+      industrySector: 'Mechanical & Heavy Engineering',
+      roleCategory: 'Design Engineer - Mechanical',
+      alternativeSectors: ['MEP Consultant', 'Automotive & Industrial Manufacturing'],
+      alternativeCategories: ['Design Engineer - Mechanical', 'HVAC Engineer', 'Piping Specialist']
+    };
+  }
+  if (text.includes('software') || text.includes('developer') || text.includes('full stack') || text.includes('frontend') || text.includes('backend') || text.includes('react') || text.includes('python')) {
+    return {
+      industrySector: 'Information Technology & Software Services',
+      roleCategory: 'Software Development & Engineering',
+      alternativeSectors: ['SaaS & Internet Services', 'IT Consulting'],
+      alternativeCategories: ['Full Stack Developer', 'Backend Engineer', 'Frontend Web Developer', 'Software Architect']
+    };
+  }
+  if (text.includes('civil') || text.includes('construction') || text.includes('site engineer') || text.includes('structural')) {
+    return {
+      industrySector: 'Construction & Real Estate Development',
+      roleCategory: 'Site & Civil Engineering',
+      alternativeSectors: ['Infrastructure & Heavy Construction', 'Engineering Consultancy'],
+      alternativeCategories: ['Site Engineer', 'Structural Design Engineer', 'Civil Project Manager']
+    };
+  }
+  if (text.includes('hr') || text.includes('human resource') || text.includes('recruiter') || text.includes('talent')) {
+    return {
+      industrySector: 'Human Resources & Recruitment',
+      roleCategory: 'Talent Acquisition & HR Operations',
+      alternativeSectors: ['Corporate Staffing', 'Consulting & Advisory'],
+      alternativeCategories: ['HR Executive / Generalist', 'Technical Recruiter', 'Talent Acquisition Specialist']
+    };
+  }
+  if (text.includes('account') || text.includes('finance') || text.includes('tally') || text.includes('audit') || text.includes('tax')) {
+    return {
+      industrySector: 'Accounting & Financial Services',
+      roleCategory: 'Finance & Accounting Operations',
+      alternativeSectors: ['Banking & Financial Services', 'Corporate Audit'],
+      alternativeCategories: ['Accounts Executive', 'Senior Accountant', 'Taxation Specialist']
+    };
+  }
+  return {
+    industrySector: 'Engineering & Industrial Operations',
+    roleCategory: 'Technical Engineering Specialist',
+    alternativeSectors: ['Industrial Services', 'Corporate Operations'],
+    alternativeCategories: ['Technical Specialist', 'Operations Engineer', 'Project Coordinator']
+  };
+}
+
+/**
  * ── 1. RECEIVE JOB DESCRIPTION FROM ANY OTHER DATABASE ──
  * Endpoint: POST /api/jobs/receive
  * Description: Call this from any external DB or system to create a new AI Interview Job inside InterviewXpert.
  */
 app.post('/api/jobs/receive', authenticateApiKey, async (req, res) => {
-  const {
-    title,
-    description,
-    department = "Engineering",
-    employmentType = "Full-time",
-    experience = 1,
-    skills = "",
-    education = "Bachelor's",
-    deadline = "",
-    numQuestions = 5,
-    difficulty = "Medium",
-    strictness = "Medium",
-    candidateEmails = [],
-    recruiterUID = "system_api_integration"
-  } = req.body;
+  const payload = req.body || {};
+  const recruiterUID = payload.recruiterUID || "pbbMTYxPDaf7jhc9uPEZ34CcWfz2";
+  const title = (payload.title || "").trim();
+  const description = payload.description || "";
+  const company = (payload.company || payload.companyName || "").trim();
+  const companyName = company;
+  const skills = Array.isArray(payload.skills) ? payload.skills : (typeof payload.skills === 'string' ? payload.skills.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+  // AI Prediction for missing or generic Industry Sector / Role Category
+  const rawIndustry = (payload.industryName || payload.sector || "").trim();
+  const rawRole = (payload.roleName || payload.roleCategory || "").trim();
+  const isGenericIndustry = !rawIndustry || ['general', 'engineering', 'other', 'unknown'].includes(rawIndustry.toLowerCase());
+  const isGenericRole = !rawRole || ['general', 'engineering', 'other', 'unknown'].includes(rawRole.toLowerCase());
+
+  const prediction = predictSectorAndRole(title, description, skills, company);
+
+  const industryName = isGenericIndustry ? prediction.industrySector : rawIndustry;
+  const roleName = isGenericRole ? prediction.roleCategory : rawRole;
+  const sectors = Array.from(new Set([industryName, ...(payload.sectors || []), ...prediction.alternativeSectors]));
+  const categories = Array.from(new Set([roleName, ...(payload.categories || []), ...(payload.roleCategories || []), ...prediction.alternativeCategories]));
+
+  const department = payload.department || payload.category || roleName || industryName || "General";
+  const category = department;
+  const employmentType = payload.employmentType || "Full-time";
+  const location = (payload.location || payload.city || "").trim();
+  const city = (payload.city || "").trim();
+  const minExperience = payload.minExperience !== undefined ? Number(payload.minExperience) : 0;
+  const maxExperience = payload.maxExperience !== undefined ? Number(payload.maxExperience) : minExperience;
+  const experience = payload.experience ? String(payload.experience).trim() : (maxExperience > minExperience ? `${minExperience} - ${maxExperience} Years` : `${minExperience} Years`);
+  const salaryRange = payload.salaryRange || payload.salary || "";
+  const salary = salaryRange;
+  const education = Array.isArray(payload.education) ? payload.education : (typeof payload.education === 'string' ? payload.education.split(',').map(e => e.trim()).filter(Boolean) : (payload.education ? [String(payload.education)] : []));
+  const qualifications = Array.isArray(education) ? education.join(', ') : String(education);
+  const genderRequirement = payload.genderRequirement || payload.gender || "Any";
+  const strictGenderMatch = Boolean(payload.strictGenderMatch);
+  const jobNo = payload.jobNo ? String(payload.jobNo).trim() : "";
+  const accessCode = jobNo || payload.accessCode || Math.random().toString(36).substring(2, 8).toUpperCase();
+  const status = payload.status || "Active";
+  const entryBy = payload.entryBy || payload.recruiterName || "";
+  const deadline = payload.deadline || payload.applyDeadline || "";
+  const numQuestions = Number(payload.numQuestions || 5);
+  const difficulty = payload.difficulty || "Medium";
+  const strictness = payload.strictness || "Medium";
+  const candidateEmails = Array.isArray(payload.candidateEmails) ? payload.candidateEmails : [];
 
   // Basic Validation
   if (!title || !description) {
@@ -101,63 +192,92 @@ app.post('/api/jobs/receive', authenticateApiKey, async (req, res) => {
     console.warn("⚠️ Firestore connection unavailable. Returning mock response for testing/demo.");
     const mockRand = Math.random().toString(36).substring(2, 15);
     const mockLink = `http://localhost:3000/#/interview/${mockRand}`;
-    const mockCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     
     return res.status(201).json({
       success: true,
       message: "Job description received and interview successfully scheduled inside InterviewXpert! (MOCK MODE: Firestore key missing)",
       data: {
         interviewId: mockRand,
-        accessCode: mockCode,
+        jobNo,
+        accessCode,
         interviewLink: mockLink,
         title,
-        department
+        recruiterUID,
+        company,
+        location,
+        status
       }
     });
   }
 
   try {
-    // Generate secure interview ID, link, and access code
     const newRand = Math.random().toString(36).substring(2, 15);
     const newInterviewLink = `${process.env.IX_FRONTEND_URL || 'http://localhost:5173'}/#/interview/${newRand}`;
-    const newAccessCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
     const jobData = {
       title,
       description,
+      company,
+      companyName,
+      industryName,
+      sector: industryName,
+      sectors,
+      roleName,
+      roleCategory: roleName,
+      categories,
+      roleCategories: categories,
       department,
+      category,
       employmentType,
-      experience: Number(experience),
+      minExperience,
+      maxExperience,
+      experience,
+      location,
+      city,
+      salaryRange,
+      salary,
       skills,
-      education,
+      education: qualifications,
+      qualifications,
+      genderRequirement,
+      strictGenderMatch,
+      jobNo,
+      accessCode,
+      status,
+      entryBy,
+      recruiterName: entryBy,
+      recruiterUID,
       deadline,
-      numQuestions: Number(numQuestions),
+      numQuestions,
       difficulty,
       strictness,
       manualQuestions: [],
       customFields: [],
       candidateEmails,
       interviewLink: newInterviewLink,
-      accessCode: newAccessCode,
-      recruiterUID,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       isMock: false
     };
 
-    // Save to Firestore
+    // Save to both collections ('interviews' and 'jobs') for complete database sync
     await db.collection('interviews').doc(newRand).set(jobData);
+    await db.collection('jobs').doc(newRand).set(jobData);
 
-    console.log(`[REST API] New Job created from external DB: ${title} (Access Code: ${newAccessCode})`);
+    console.log(`[REST API] New Job created from external DB: ${title} (Access Code: ${accessCode}, recruiterUID: ${recruiterUID})`);
 
     res.status(201).json({
       success: true,
       message: "Job description received and interview successfully scheduled inside InterviewXpert!",
       data: {
         interviewId: newRand,
-        accessCode: newAccessCode,
+        jobNo,
+        accessCode,
         interviewLink: newInterviewLink,
         title,
-        department
+        recruiterUID,
+        company,
+        location,
+        status
       }
     });
 
@@ -166,6 +286,217 @@ app.post('/api/jobs/receive', authenticateApiKey, async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Internal server error saving the job description.",
+      details: error.message
+    });
+  }
+});
+
+/**
+ * ── UPDATE EXISTING JOB BY ID OR JOB NO ──
+ * Endpoints: POST /api/jobs/update or PUT /api/jobs/:id
+ * Description: Updates job/interview details in Firestore by ID, jobNo, or accessCode.
+ */
+app.post('/api/jobs/update', authenticateApiKey, async (req, res) => {
+  const payload = req.body || {};
+  const targetId = payload.id || payload.jobId || payload.jobNo || payload.accessCode;
+
+  if (!targetId) {
+    return res.status(400).json({ success: false, error: "Missing 'id', 'jobId', or 'jobNo' in request body." });
+  }
+
+  try {
+    const recruiterUID = payload.recruiterUID || "pbbMTYxPDaf7jhc9uPEZ34CcWfz2";
+    const title = (payload.title || "").trim();
+    const description = payload.description || "";
+    const company = (payload.company || payload.companyName || "").trim();
+    const companyName = company;
+    const industryName = (payload.industryName || payload.sector || "").trim();
+    const roleName = (payload.roleName || payload.roleCategory || "").trim();
+    const department = payload.department || payload.category || roleName || industryName || "General";
+    const category = department;
+    const employmentType = payload.employmentType || "Full-time";
+    const location = (payload.location || payload.city || "").trim();
+    const city = (payload.city || "").trim();
+    const minExperience = payload.minExperience !== undefined ? Number(payload.minExperience) : 0;
+    const maxExperience = payload.maxExperience !== undefined ? Number(payload.maxExperience) : minExperience;
+    const experience = payload.experience ? String(payload.experience).trim() : (maxExperience > minExperience ? `${minExperience} - ${maxExperience} Years` : `${minExperience} Years`);
+    const salaryRange = payload.salaryRange || payload.salary || "";
+    const salary = salaryRange;
+    const skills = Array.isArray(payload.skills) ? payload.skills : (typeof payload.skills === 'string' ? payload.skills.split(',').map(s => s.trim()).filter(Boolean) : []);
+    const education = Array.isArray(payload.education) ? payload.education : (typeof payload.education === 'string' ? payload.education.split(',').map(e => e.trim()).filter(Boolean) : (payload.education ? [String(payload.education)] : []));
+    const qualifications = Array.isArray(education) ? education.join(', ') : String(education);
+    const genderRequirement = payload.genderRequirement || payload.gender || "Any";
+    const strictGenderMatch = Boolean(payload.strictGenderMatch);
+    const jobNo = payload.jobNo ? String(payload.jobNo).trim() : String(targetId).trim();
+    const accessCode = jobNo || payload.accessCode || Math.random().toString(36).substring(2, 8).toUpperCase();
+    const status = payload.status || "Active";
+    const entryBy = payload.entryBy || payload.recruiterName || "";
+
+    const updatedJobData = {
+      title,
+      description,
+      company,
+      companyName,
+      industryName,
+      sector: industryName,
+      roleName,
+      roleCategory: roleName,
+      department,
+      category,
+      employmentType,
+      minExperience,
+      maxExperience,
+      experience,
+      location,
+      city,
+      salaryRange,
+      salary,
+      skills,
+      education: qualifications,
+      qualifications,
+      genderRequirement,
+      strictGenderMatch,
+      jobNo,
+      accessCode,
+      status,
+      entryBy,
+      recruiterName: entryBy,
+      recruiterUID,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (!db) {
+      return res.status(200).json({ success: true, message: "Job updated (MOCK MODE).", data: updatedJobData });
+    }
+
+    let docRef = db.collection('jobs').doc(String(targetId));
+    let intRef = db.collection('interviews').doc(String(targetId));
+
+    const jobSnap = await docRef.get();
+    if (!jobSnap.exists) {
+      const q = await db.collection('jobs').where('jobNo', '==', String(targetId)).get().catch(() => ({ empty: true }));
+      if (!q.empty) {
+        docRef = q.docs[0].ref;
+        intRef = db.collection('interviews').doc(q.docs[0].id);
+      }
+    }
+
+    await Promise.all([
+      docRef.set(updatedJobData, { merge: true }),
+      intRef.set(updatedJobData, { merge: true })
+    ]);
+
+    console.log(`[REST API] Job updated successfully: ${targetId} (Status: ${status})`);
+    return res.status(200).json({
+      success: true,
+      message: `Job '${targetId}' updated successfully in Firestore.`,
+      data: updatedJobData
+    });
+  } catch (error) {
+    console.error("Error updating job via API:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Internal server error updating job.",
+      details: error.message
+    });
+  }
+});
+
+app.put('/api/jobs/:id', authenticateApiKey, async (req, res) => {
+  req.body = { ...req.body, id: req.params.id };
+  const targetId = req.params.id;
+
+  try {
+    const recruiterUID = req.body.recruiterUID || "pbbMTYxPDaf7jhc9uPEZ34CcWfz2";
+    const title = (req.body.title || "").trim();
+    const description = req.body.description || "";
+    const company = (req.body.company || req.body.companyName || "").trim();
+    const companyName = company;
+    const industryName = (req.body.industryName || req.body.sector || "").trim();
+    const roleName = (req.body.roleName || req.body.roleCategory || "").trim();
+    const department = req.body.department || req.body.category || roleName || industryName || "General";
+    const category = department;
+    const employmentType = req.body.employmentType || "Full-time";
+    const location = (req.body.location || req.body.city || "").trim();
+    const city = (req.body.city || "").trim();
+    const minExperience = req.body.minExperience !== undefined ? Number(req.body.minExperience) : 0;
+    const maxExperience = req.body.maxExperience !== undefined ? Number(req.body.maxExperience) : minExperience;
+    const experience = req.body.experience ? String(req.body.experience).trim() : (maxExperience > minExperience ? `${minExperience} - ${maxExperience} Years` : `${minExperience} Years`);
+    const salaryRange = req.body.salaryRange || req.body.salary || "";
+    const salary = salaryRange;
+    const skills = Array.isArray(req.body.skills) ? req.body.skills : (typeof req.body.skills === 'string' ? req.body.skills.split(',').map(s => s.trim()).filter(Boolean) : []);
+    const education = Array.isArray(req.body.education) ? req.body.education : (typeof req.body.education === 'string' ? req.body.education.split(',').map(e => e.trim()).filter(Boolean) : (req.body.education ? [String(req.body.education)] : []));
+    const qualifications = Array.isArray(education) ? education.join(', ') : String(education);
+    const genderRequirement = req.body.genderRequirement || req.body.gender || "Any";
+    const strictGenderMatch = Boolean(req.body.strictGenderMatch);
+    const jobNo = req.body.jobNo ? String(req.body.jobNo).trim() : String(targetId).trim();
+    const accessCode = jobNo || req.body.accessCode || Math.random().toString(36).substring(2, 8).toUpperCase();
+    const status = req.body.status || "Active";
+    const entryBy = req.body.entryBy || req.body.recruiterName || "";
+
+    const updatedJobData = {
+      title,
+      description,
+      company,
+      companyName,
+      industryName,
+      sector: industryName,
+      roleName,
+      roleCategory: roleName,
+      department,
+      category,
+      employmentType,
+      minExperience,
+      maxExperience,
+      experience,
+      location,
+      city,
+      salaryRange,
+      salary,
+      skills,
+      education: qualifications,
+      qualifications,
+      genderRequirement,
+      strictGenderMatch,
+      jobNo,
+      accessCode,
+      status,
+      entryBy,
+      recruiterName: entryBy,
+      recruiterUID,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (!db) {
+      return res.status(200).json({ success: true, message: "Job updated (MOCK MODE).", data: updatedJobData });
+    }
+
+    let docRef = db.collection('jobs').doc(String(targetId));
+    let intRef = db.collection('interviews').doc(String(targetId));
+
+    const jobSnap = await docRef.get();
+    if (!jobSnap.exists) {
+      const q = await db.collection('jobs').where('jobNo', '==', String(targetId)).get().catch(() => ({ empty: true }));
+      if (!q.empty) {
+        docRef = q.docs[0].ref;
+        intRef = db.collection('interviews').doc(q.docs[0].id);
+      }
+    }
+
+    await Promise.all([
+      docRef.set(updatedJobData, { merge: true }),
+      intRef.set(updatedJobData, { merge: true })
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: `Job '${targetId}' updated successfully in Firestore.`,
+      data: updatedJobData
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: "Internal server error updating job.",
       details: error.message
     });
   }

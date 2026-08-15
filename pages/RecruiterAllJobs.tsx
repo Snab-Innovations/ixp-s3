@@ -12,6 +12,7 @@ import { parseCandidateDocument, parseBulkCandidateTextInput } from '../services
 import { ingestResumeFile, saveResumeDumpCandidate, checkMandatoryCriteriaMatch } from '../services/resumeService';
 import { sendInterviewWhatsAppInvite, formatPhoneForWhatsApp, buildWhatsAppInviteText, openWhatsAppWebInvite, sendBulkWhatsAppInvites } from '../services/waSenderService';
 import EditJobModal from './EditJob';
+import { normalizeJobData, fetchJobFetchedApiJobs } from '../services/jobResolutionService';
 import WhatsAppConnectModal from '../components/WhatsAppConnectModal';
 import { useTheme } from '../context/ThemeContext';
 import { useBackgroundSend } from '../context/BackgroundSendContext';
@@ -637,6 +638,7 @@ const RecruiterAllJobs: React.FC = () => {
     let fetchedUserJobs: any[] = [];
     let fetchedTeamInterviews: any[] = [];
     let fetchedUserInterviews: any[] = [];
+    let fetchedApiJobs: any[] = [];
 
     const mergeAndSetJobs = () => {
       const jobMap = new Map<string, AllJobItem>();
@@ -652,40 +654,48 @@ const RecruiterAllJobs: React.FC = () => {
       const interviewsList = Array.from(rawInterviewsMap.values());
 
       jobsList.forEach((j) => {
+        const norm = normalizeJobData(j.id, j, 'jobs') || j;
         jobMap.set(j.id, {
           id: j.id,
-          title: j.title || 'Untitled Role',
-          companyName: j.companyName || j.company || userProfile?.company || 'Company',
-          location: j.location || j.city || 'Remote',
-          category: j.category || j.department || 'General',
-          department: j.department || j.category,
-          employmentType: j.employmentType || 'Full-time',
-          description: j.description || '',
-          skills: Array.isArray(j.skills) ? j.skills : (typeof j.skills === 'string' ? j.skills.split(',').map((s: string) => s.trim()) : []),
-          qualifications: j.qualifications || j.education || '',
-          education: j.education || j.qualifications || '',
-          minExperience: j.minExperience ?? j.experience ?? 0,
-          maxExperience: j.maxExperience ?? j.experience ?? 0,
-          experience: j.experience ?? 0,
-          salary: j.salary || j.salaryRange || '',
-          salaryRange: j.salaryRange || j.salary || '',
-          accessCode: j.accessCode || (j.jobNo ? String(j.jobNo) : ''),
-          jobNo: j.jobNo ? String(j.jobNo) : '',
-          interviewLink: j.interviewLink || `${window.location.origin}/#/interview/${j.id}`,
+          title: norm.title || 'Untitled Role',
+          companyName: norm.companyName || norm.company || userProfile?.company || '',
+          company: norm.company || norm.companyName || userProfile?.company || '',
+          location: norm.location || 'Remote',
+          city: norm.city || '',
+          industryName: norm.industryName || '',
+          sector: norm.sector || '',
+          roleName: norm.roleName || '',
+          category: norm.category || 'General',
+          department: norm.department || 'General',
+          employmentType: norm.employmentType || 'Full-time',
+          description: norm.description || '',
+          skills: norm.skills || [],
+          qualifications: norm.qualifications || '',
+          education: norm.education || '',
+          minExperience: norm.minExperience ?? 0,
+          maxExperience: norm.maxExperience ?? 0,
+          experience: norm.experience || '0 - 2 Years',
+          salary: norm.salary || '',
+          salaryRange: norm.salaryRange || '',
+          accessCode: norm.accessCode || (norm.jobNo ? String(norm.jobNo) : ''),
+          jobNo: norm.jobNo ? String(norm.jobNo) : '',
+          interviewLink: norm.interviewLink || `${window.location.origin}/#/interview/${j.id}`,
           candidateEmails: j.candidateEmails || [],
           candidateData: j.candidateData || [],
           createdAt: j.createdAt || j.postedAt || j.updatedAt,
           deadline: j.applyDeadline || j.deadline,
           customFields: j.customFields || [],
-          genderRequirement: j.genderRequirement || j.gender || 'Any',
+          genderRequirement: norm.genderRequirement || 'Any',
           strictness: j.strictness || 'Low',
           difficulty: j.difficulty || 'Easy',
           permission: j.interviewPermission || j.permission || 'anyone',
           numQuestions: j.numQuestions || 5,
           manualQuestions: j.manualQuestions || [],
-          recruiterName: j.recruiterName || '',
+          recruiterName: norm.recruiterName || j.recruiterName || '',
           recruiterEmail: j.recruiterEmail || '',
-          recruiterUID: j.recruiterUID,
+          recruiterUID: norm.recruiterUID || j.recruiterUID,
+          entryBy: norm.entryBy || j.entryBy || '',
+          status: norm.status || 'Active',
           hasJobDoc: true,
           hasInterviewDoc: false,
         });
@@ -697,7 +707,7 @@ const RecruiterAllJobs: React.FC = () => {
         jobMap.set(i.id, {
           id: i.id,
           title: title || existing?.title || 'Untitled Role',
-          companyName: existing?.companyName || i.company || i.companyName || userProfile?.company || 'Company',
+          companyName: i.companyName || i.company || existing?.companyName || existing?.company || userProfile?.company || '',
           location: i.location || i.city || existing?.location || 'Remote',
           category: i.department || existing?.category || 'General',
           department: i.department || existing?.department,
@@ -734,6 +744,43 @@ const RecruiterAllJobs: React.FC = () => {
         });
       });
 
+      fetchedApiJobs.forEach((i: any) => {
+        const existing = jobMap.get(i.id);
+        jobMap.set(i.id, {
+          id: i.id,
+          accessCode: i.accessCode || i.jobNo || existing?.accessCode || i.id.slice(0, 6).toUpperCase(),
+          jobNo: i.jobNo || existing?.jobNo,
+          title: i.title || existing?.title || 'Untitled Role',
+          department: i.department || i.roleCategory || i.category || existing?.department || 'General',
+          category: i.category || i.department || i.roleCategory || existing?.category || 'General',
+          description: i.description || existing?.description || '',
+          experience: i.experience || existing?.experience || 'Freshers & Experienced',
+          minExperience: i.minExperience ?? existing?.minExperience ?? 0,
+          maxExperience: i.maxExperience ?? existing?.maxExperience ?? 0,
+          qualifications: i.qualifications || i.education || existing?.qualifications || '',
+          skills: Array.isArray(i.skills) ? i.skills : (i.skills ? String(i.skills).split(',').map((s: string) => s.trim()) : existing?.skills || []),
+          salary: i.salaryRange || i.salary || existing?.salary || 'Competitive Salary',
+          employmentType: i.employmentType || existing?.employmentType || 'Full-time',
+          location: i.location || existing?.location || 'Nashik, Maharashtra',
+          city: i.city || existing?.city || 'Nashik',
+          companyName: i.companyName || i.company || existing?.companyName || existing?.company || 'Company',
+          createdAt: i.createdAt || existing?.createdAt,
+          deadline: i.deadline || i.applyDeadline || existing?.deadline,
+          customFields: i.customFields || existing?.customFields || [],
+          genderRequirement: i.genderRequirement || i.gender || existing?.genderRequirement || 'Any',
+          strictness: i.strictness || existing?.strictness || 'Low',
+          difficulty: i.difficulty || existing?.difficulty || 'Easy',
+          permission: i.interviewPermission || i.permission || existing?.permission || 'anyone',
+          numQuestions: i.numQuestions || existing?.numQuestions || 5,
+          manualQuestions: i.manualQuestions || existing?.manualQuestions || [],
+          recruiterName: i.recruiterName || existing?.recruiterName || '',
+          recruiterEmail: i.recruiterEmail || existing?.recruiterEmail || '',
+          recruiterUID: i.recruiterUID || existing?.recruiterUID || 'pbbMTYxPDaf7jhc9uPEZ34CcWfz2',
+          hasJobDoc: existing?.hasJobDoc || false,
+          hasInterviewDoc: true,
+        });
+      });
+
       const mergedList = Array.from(jobMap.values()).sort((a, b) => {
         const timeA = parseDeadlineMillis(a.createdAt);
         const timeB = parseDeadlineMillis(b.createdAt);
@@ -743,6 +790,14 @@ const RecruiterAllJobs: React.FC = () => {
       setJobs(mergedList);
       setLoading(false);
     };
+
+    fetchJobFetchedApiJobs(user?.uid || 'pbbMTYxPDaf7jhc9uPEZ34CcWfz2').then((apiJobs) => {
+      fetchedApiJobs = apiJobs;
+      mergeAndSetJobs();
+    }).catch((err) => {
+      console.warn("Failed to fetch jobs from JobFetched REST API:", err);
+      mergeAndSetJobs();
+    });
 
     const unsubJobs = onSnapshot(jobsQuery, (snap) => {
       fetchedTeamJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));

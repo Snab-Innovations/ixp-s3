@@ -142,6 +142,8 @@ const ActiveJobsPage: React.FC = () => {
     const unsub = onSnapshot(q, (snapshot) => {
       const fetched: ActiveJobItem[] = snapshot.docs.map((doc) => {
         const data = doc.data();
+        const jobNo = data.jobNo ? String(data.jobNo).trim() : '';
+        const accessCode = jobNo || data.accessCode || doc.id.slice(0, 6).toUpperCase();
         const contactPerson = data.contactPerson || 
                               data.contactPersonName || 
                               data.uploadedBy || 
@@ -151,6 +153,7 @@ const ActiveJobsPage: React.FC = () => {
 
         return {
           id: doc.id,
+          jobNo,
           title: data.title || 'Untitled Role',
           contactPerson: contactPerson,
           description: data.description || data.jobDescription || '',
@@ -167,7 +170,8 @@ const ActiveJobsPage: React.FC = () => {
           qualification: data.qualification || data.education || 'Diploma / Graduate',
           skills: data.skills || [],
           deadline: data.deadline || data.applyDeadline || data.interviewDates,
-          accessCode: data.accessCode || doc.id.slice(0, 6).toUpperCase(),
+          accessCode,
+          status: data.status || 'Active',
           createdBy: data.createdBy,
           createdAt: data.createdAt,
           isMock: Boolean(data.isMock),
@@ -177,6 +181,10 @@ const ActiveJobsPage: React.FC = () => {
       const now = Date.now();
       const activeOnly = fetched.filter((job) => {
         if (job.isMock) return false;
+        const statusLower = String((job as any).status || '').trim().toLowerCase();
+        if (['inactive', 'expired', 'closed', 'disabled', 'deactivated', 'draft'].includes(statusLower)) {
+          return false;
+        }
         const millis = parseDeadlineMillis(job.deadline);
         if (!millis) return true;
         const endOfDay = new Date(millis);

@@ -413,8 +413,11 @@ export default function PublicJobSeekerUpload() {
     const unsub = onSnapshot(q, (snapshot) => {
       const fetched = snapshot.docs.map((doc) => {
         const data = doc.data();
+        const jobNo = data.jobNo ? String(data.jobNo).trim() : '';
+        const accessCode = jobNo || data.accessCode || doc.id.slice(0, 6).toUpperCase();
         return {
           id: doc.id,
+          jobNo,
           title: data.title || 'Untitled Job Role',
           recruiterName: data.contactPerson || data.createdBy?.name || data.recruiterName || 'DSource Hiring Team',
           description: data.description || data.jobDescription || '',
@@ -431,13 +434,21 @@ export default function PublicJobSeekerUpload() {
           qualification: data.qualification || data.education || 'Diploma / Graduate',
           education: data.education || data.qualification || 'Diploma / Graduate',
           skills: data.skills || [],
-          accessCode: data.accessCode || doc.id.slice(0, 6).toUpperCase(),
+          accessCode,
+          status: data.status || 'Active',
           deadline: data.deadline || data.applyDeadline,
           isMock: Boolean(data.isMock)
         };
       });
 
-      const realJobs = fetched.filter(j => !j.isMock);
+      const realJobs = fetched.filter(j => {
+        if (j.isMock) return false;
+        const statusLower = String((j as any).status || '').trim().toLowerCase();
+        if (['inactive', 'expired', 'closed', 'disabled', 'deactivated', 'draft'].includes(statusLower)) {
+          return false;
+        }
+        return true;
+      });
       setActiveJobs(realJobs);
       setJobsLoading(false);
     }, (error) => {

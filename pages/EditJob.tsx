@@ -22,6 +22,20 @@ export interface CandidateContact {
   name?: string;
 }
 
+const formatStringValue = (val: any): string => {
+  if (!val) return '';
+  if (Array.isArray(val)) return val.map(item => String(item).trim()).filter(Boolean).join(', ');
+  if (typeof val === 'string') return val;
+  return String(val);
+};
+
+const parseList = (val: any): string[] => {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.map(item => String(item).trim()).filter(Boolean);
+  if (typeof val === 'string') return val.split(',').map(item => item.trim()).filter(Boolean);
+  return [String(val).trim()].filter(Boolean);
+};
+
 const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
   const { user, userProfile } = useAuth();
   const { isDark } = useTheme();
@@ -80,8 +94,11 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
   };
 
   const [formData, setFormData] = useState({
+    jobNo: '',
     title: '',
     companyName: '',
+    industryName: '',
+    roleName: '',
     qualifications: '',
     deadline: '',
     description: '',
@@ -95,6 +112,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     experience: 0,
     difficulty: 'Easy',
     location: '',
+    city: '',
     salaryRange: '',
     genderRequirement: 'Any',
     strictGenderMatch: false,
@@ -102,6 +120,8 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     strictEducationMatch: false,
     strictExperienceMatch: false,
     strictness: 'Low',
+    entryBy: '',
+    status: 'Active',
   });
 
   const handleApplyParsedJdData = (parsed: ParsedJdResult) => {
@@ -140,8 +160,8 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
       minExperience: parsed.minExperience !== undefined ? Number(parsed.minExperience) : prev.minExperience,
       maxExperience: parsed.maxExperience !== undefined ? Number(parsed.maxExperience) : prev.maxExperience,
       experience: parsed.minExperience !== undefined ? Number(parsed.minExperience) : prev.experience,
-      skills: parsed.skills || (parsed.technicalSkills && parsed.softSkills ? `${parsed.technicalSkills}, ${parsed.softSkills}` : prev.skills),
-      qualifications: parsed.qualification || parsed.education || prev.qualifications,
+      skills: formatStringValue(parsed.skills || (parsed.technicalSkills && parsed.softSkills ? `${parsed.technicalSkills}, ${parsed.softSkills}` : prev.skills)),
+      qualifications: formatStringValue(parsed.qualification || parsed.education || prev.qualifications),
       location: resolvedStrictCity || prev.location || '',
       salaryRange: (parsed as any).salaryRange || (parsed as any).salary || prev.salaryRange,
       genderRequirement: (parsed as any).genderRequirement || (parsed as any).gender || prev.genderRequirement,
@@ -271,14 +291,35 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
             sourceData.industry || 
             '';
 
+          const loadedCustomFields = sourceData.customFields || [];
+          const uploadedByCf = loadedCustomFields.find((cf: any) => {
+            const k = String(cf?.key || '').toLowerCase();
+            return k.includes('uploaded by') || k.includes('entry by') || k.includes('entered by');
+          })?.value;
+
+          const resolvedEntryBy = (
+            sourceData.entryBy ||
+            sourceData.entry_by ||
+            sourceData.uploadedBy ||
+            sourceData.uploaded_by ||
+            sourceData.recruiterName ||
+            sourceData.contactPerson ||
+            (typeof sourceData.createdBy === 'string' ? sourceData.createdBy : sourceData.createdBy?.name) ||
+            uploadedByCf ||
+            ''
+          );
+
           setFormData({
+            jobNo: sourceData.jobNo ? String(sourceData.jobNo) : (sourceData.accessCode || ''),
             title: sourceData.title?.replace(' Interview', '') || '',
-            companyName: sourceData.companyName || sourceData.company || 'N/A',
-            qualifications: sourceData.qualifications || sourceData.education || sourceData.qualification || '',
+            companyName: sourceData.companyName || sourceData.company || '',
+            industryName: sourceData.industryName || sourceData.sector || '',
+            roleName: sourceData.roleName || sourceData.roleCategory || '',
+            qualifications: formatStringValue(sourceData.qualifications || sourceData.education || sourceData.qualification || ''),
             deadline: deadlineStr,
             description: sourceData.description || '',
             permission: sourceData.interviewPermission || sourceData.permission || 'anyone',
-            skills: Array.isArray(sourceData.skills) ? sourceData.skills.join(', ') : (sourceData.skills || ''),
+            skills: formatStringValue(sourceData.skills),
             category: loadedCategory,
             numQuestions: sourceData.numQuestions || 5,
             employmentType: sourceData.employmentType || 'Full-time',
@@ -286,14 +327,17 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
             maxExperience: sourceData.maxExperience ?? sourceData.experience ?? 0,
             experience: sourceData.experience ?? 0,
             difficulty: sourceData.difficulty || 'Easy',
-            location: sourceData.location || sourceData.city || '',
-            salaryRange: sourceData.salaryRange || sourceData.salary || '',
+            location: formatStringValue(sourceData.location || ''),
+            city: formatStringValue(sourceData.city || ''),
+            salaryRange: formatStringValue(sourceData.salaryRange || sourceData.salary || ''),
             genderRequirement: sourceData.genderRequirement || sourceData.gender || 'Any',
             strictGenderMatch: sourceData.strictGenderMatch ?? false,
             strictLocationMatch: sourceData.strictLocationMatch ?? false,
             strictEducationMatch: sourceData.strictEducationMatch ?? false,
             strictExperienceMatch: sourceData.strictExperienceMatch ?? false,
             strictness: sourceData.strictness || 'Low',
+            entryBy: resolvedEntryBy,
+            status: sourceData.status || 'Active',
           });
 
           setCustomFields(sourceData.customFields || []);
@@ -405,9 +449,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     const trimmed = skillName.trim();
     if (!trimmed) return;
 
-    const currentSkills = Array.isArray(formData.skills)
-      ? (formData.skills as string[]).map(s => String(s).trim()).filter(Boolean)
-      : (typeof formData.skills === 'string' ? formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0) : []);
+    const currentSkills = parseList(formData.skills);
     
     let newSkills: string[];
     if (currentSkills.includes(trimmed)) {
@@ -419,17 +461,13 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
   };
 
   const removeSkill = (skillName: string) => {
-    const currentSkills = Array.isArray(formData.skills)
-      ? (formData.skills as string[]).map(s => String(s).trim()).filter(Boolean)
-      : (typeof formData.skills === 'string' ? formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0) : []);
+    const currentSkills = parseList(formData.skills);
     const newSkills = currentSkills.filter(s => s !== skillName.trim());
     setFormData({ ...formData, skills: newSkills.join(', ') });
   };
 
   const toggleEducation = (edu: string) => {
-    const currentEducations = formData.qualifications
-      ? formData.qualifications.split(',').map(e => e.trim()).filter(e => e)
-      : [];
+    const currentEducations = parseList(formData.qualifications);
 
     let newEducations;
     if (currentEducations.includes(edu)) {
@@ -465,9 +503,19 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
       const maxExp = Number(formData.maxExperience) || 0;
       const expString = maxExp > minExp ? `${minExp} - ${maxExp} Years` : (minExp > 0 ? `${minExp} Years` : '0 - 2 Years');
 
+      const resolvedJobNo = formData.jobNo ? String(formData.jobNo).trim() : (accessCode || targetDocId);
+      const resolvedAccessCode = resolvedJobNo;
+
       const jobPayload = {
+        jobNo: resolvedJobNo,
+        accessCode: resolvedAccessCode,
         title: formData.title,
         companyName: formData.companyName,
+        company: formData.companyName,
+        industryName: formData.industryName,
+        sector: formData.industryName,
+        roleName: formData.roleName,
+        roleCategory: formData.roleName || formData.category,
         qualifications: formData.qualifications,
         description: formData.description,
         interviewPermission: formData.permission,
@@ -477,13 +525,13 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         customFields,
         category: formData.category,
         department: formData.category,
-        roleCategory: formData.category,
         jobCategory: formData.category,
         employmentType: formData.employmentType,
         minExperience: minExp,
         maxExperience: maxExp,
         experience: expString,
         location: formData.location,
+        city: formData.city,
         salaryRange: formData.salaryRange,
         salary: formData.salaryRange,
         genderRequirement: formData.genderRequirement,
@@ -493,23 +541,31 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         strictEducationMatch: formData.strictEducationMatch,
         strictExperienceMatch: formData.strictExperienceMatch,
         strictness: formData.strictness,
+        entryBy: formData.entryBy,
+        status: formData.status,
         applyDeadline: Timestamp.fromDate(deadlineDate),
         difficulty: formData.difficulty,
         updatedAt: serverTimestamp(),
         recruiterUID: user.uid,
-        recruiterName: userProfile?.fullname || (userProfile as any)?.name || user.email,
+        recruiterName: formData.entryBy || userProfile?.fullname || (userProfile as any)?.name || user.email,
         recruiterEmail: user.email,
         interviewLink: `${window.location.origin}/#/interview/${jobId}`,
-        accessCode: accessCode,
         isMock: false,
       };
 
       const interviewPayload = {
+        jobNo: resolvedJobNo,
+        accessCode: resolvedAccessCode,
         title: `${formData.title} Interview`,
+        companyName: formData.companyName,
+        company: formData.companyName,
+        industryName: formData.industryName,
+        sector: formData.industryName,
+        roleName: formData.roleName,
+        roleCategory: formData.roleName || formData.category,
         description: formData.description,
         category: formData.category,
         department: formData.category,
-        roleCategory: formData.category,
         jobCategory: formData.category,
         employmentType: formData.employmentType,
         minExperience: minExp,
@@ -519,11 +575,14 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
         education: formData.qualifications,
         qualification: formData.qualifications,
         location: formData.location,
+        city: formData.city,
         salaryRange: formData.salaryRange,
         salary: formData.salaryRange,
         genderRequirement: formData.genderRequirement,
         gender: formData.genderRequirement,
         strictness: formData.strictness,
+        entryBy: formData.entryBy,
+        status: formData.status,
         deadline: formData.deadline,
         numQuestions: Number(formData.numQuestions),
         customFields,
@@ -549,9 +608,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
     }
   };
 
-  const selectedSkillsList = Array.isArray(formData.skills)
-    ? (formData.skills as string[]).map(s => String(s).trim()).filter(Boolean)
-    : (typeof formData.skills === 'string' ? formData.skills.split(',').map(s => s.trim()).filter(s => s.length > 0) : []);
+  const selectedSkillsList = parseList(formData.skills);
 
   const inputClass = isDark
     ? "w-full px-3.5 py-2.5 bg-[#0d0d0d] text-white border border-white/[0.14] focus:border-indigo-500 rounded-[6px] text-xs font-medium outline-none transition-colors placeholder-slate-500"
@@ -662,6 +719,52 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                 )}
               </div>
 
+              {/* Job Identification & Recruiter Meta */}
+              <div className={panelClass}>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-white/[0.11] pb-2">
+                  <i className="fa-solid fa-id-card text-black dark:text-white"></i> Job Identification & Recruiter Meta
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className={labelClass}>Job Number (jobNo) *</label>
+                    <input 
+                      type="text" required 
+                      className={inputClass}
+                      value={formData.jobNo}
+                      onChange={handleFormChange} name="jobNo"
+                      placeholder="e.g. 23467"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Access Code</label>
+                    <input 
+                      type="text" 
+                      className={`${inputClass} font-mono`}
+                      value={formData.jobNo || accessCode}
+                      onChange={(e) => setAccessCode(e.target.value)}
+                      placeholder="e.g. 23467"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Job Status</label>
+                    <select name="status" value={formData.status} onChange={handleFormChange} className={inputClass}>
+                      <option value="Active">Active (Visible)</option>
+                      <option value="Inactive">Inactive (Hidden / Expired)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Entered By (Recruiter)</label>
+                    <input 
+                      type="text" 
+                      className={inputClass}
+                      value={formData.entryBy}
+                      onChange={handleFormChange} name="entryBy"
+                      placeholder="e.g. Rohini Chaure"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Basic Information */}
               <div className={panelClass}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-white/[0.11] pb-2">
@@ -685,38 +788,79 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                       className={inputClass}
                       value={formData.companyName}
                       onChange={handleFormChange} name="companyName"
-                      placeholder="e.g. TechCorp Solutions"
+                      placeholder="e.g. Mukta Group / TechCorp"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
                     <label className={labelClass}>Industry Sector</label>
-                    <select 
-                      name="sector" 
-                      value={(formData as any).sector || ''} 
+                    <input 
+                      type="text" 
+                      name="industryName" 
+                      value={formData.industryName} 
                       onChange={handleFormChange}
+                      placeholder="e.g. MEP Consultant / IT Services"
                       className={inputClass}
-                    >
-                      <option value="">Select Industry Sector</option>
-                      {ALL_JOB_SECTORS.map(sec => <option key={sec} value={sec}>{sec}</option>)}
-                    </select>
+                    />
                   </div>
 
                   <div>
-                    <label className={labelClass}>Job Category / Department</label>
+                    <label className={labelClass}>Role Category</label>
+                    <input 
+                      type="text" 
+                      name="roleName" 
+                      value={formData.roleName} 
+                      onChange={handleFormChange}
+                      placeholder="e.g. Design Engineer - Electrical"
+                      className={inputClass}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelClass}>Functional Department</label>
                     <select 
                       name="category" 
                       value={formData.category} 
                       onChange={handleFormChange}
                       className={inputClass}
                     >
-                      <option value="">Select Functional Department</option>
+                      <option value="">Select Department</option>
                       {ALL_JOB_DEPARTMENTS.map(dept => <option key={dept} value={dept}>{dept}</option>)}
                     </select>
                   </div>
+                </div>
+              </div>
 
+              {/* Experience, Location & Compensation */}
+              <div className={panelClass}>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-white/[0.11] pb-2">
+                  <i className="fa-solid fa-location-dot text-black dark:text-white"></i> Experience, Location & Salary
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className={labelClass}>Location (Typed / Address)</label>
+                    <input 
+                      type="text" 
+                      name="location" 
+                      placeholder="e.g. Gadkari Chowk,Nashik"
+                      value={formData.location}
+                      onChange={handleFormChange} 
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>City</label>
+                    <input 
+                      type="text" 
+                      name="city" 
+                      placeholder="e.g. Nashik"
+                      value={formData.city}
+                      onChange={handleFormChange} 
+                      className={inputClass}
+                    />
+                  </div>
                   <div>
                     <label className={labelClass}>Employment Type</label>
                     <select name="employmentType" value={formData.employmentType} onChange={handleFormChange} className={inputClass}>
@@ -729,13 +873,6 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                     </select>
                   </div>
                 </div>
-              </div>
-
-              {/* Experience, Location & Compensation */}
-              <div className={panelClass}>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-white/[0.11] pb-2">
-                  <i className="fa-solid fa-location-dot text-black dark:text-white"></i> Experience, Location & Salary
-                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
                     <label className={labelClass}>Min Exp (Years)</label>
@@ -857,7 +994,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                       <div>
                         <span className="text-xs font-semibold text-gray-900 dark:text-amber-100 block">Strict Education</span>
                         <span className="text-[10px] text-gray-500 dark:text-amber-300/70 block truncate max-w-[100px]">
-                          {formData.qualifications ? `Must match ${formData.qualifications}` : 'Must match Qualification'}
+                          {formData.qualifications ? `Must match ${formatStringValue(formData.qualifications)}` : 'Must match Qualification'}
                         </span>
                       </div>
                     </label>
@@ -887,7 +1024,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                   <i className="fa-solid fa-graduation-cap text-black dark:text-white"></i> Qualifications & Education
                 </h3>
                 <div className="flex flex-wrap gap-2 min-h-[40px] p-2.5 bg-white dark:bg-[#050505] border border-gray-300 dark:border-white/[0.14] rounded-[6px]">
-                  {formData.qualifications ? formData.qualifications.split(',').map(e => e.trim()).filter(e => e).map(edu => (
+                  {parseList(formData.qualifications).length > 0 ? parseList(formData.qualifications).map(edu => (
                     <span key={edu} className="px-3 py-1 bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-white border border-gray-300 dark:border-white/20 rounded-[4px] text-xs font-bold flex items-center gap-2 animate-in fade-in zoom-in duration-200">
                       {edu}
                       <button type="button" onClick={() => toggleEducation(edu)} className="hover:text-red-500 transition-colors font-bold text-sm">&times;</button>

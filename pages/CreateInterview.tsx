@@ -38,7 +38,12 @@ const SkeletonBlock = ({ className = '' }: { className?: string }) => (
 type ResumeDumpCandidate = ResumeDumpRecord;
 type CandidateSuggestion = CandidateMatch;
 
-const splitCommaList = (value: string) => value.split(',').map((item) => item.trim()).filter(Boolean);
+const splitCommaList = (val: any): string[] => {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.map(item => String(item).trim()).filter(Boolean);
+  if (typeof val === 'string') return val.split(',').map((item) => item.trim()).filter(Boolean);
+  return [String(val).trim()].filter(Boolean);
+};
 
 const normalizeSearchText = (value: string) => (
   value
@@ -438,9 +443,7 @@ const CreateInterview: React.FC = () => {
   };
 
   const toggleSkill = (skill: string) => {
-    const currentSkills = formData.skills
-      ? formData.skills.split(',').map(s => s.trim()).filter(s => s)
-      : [];
+    const currentSkills = splitCommaList(formData.skills);
 
     let newSkills;
     if (currentSkills.includes(skill)) {
@@ -452,9 +455,7 @@ const CreateInterview: React.FC = () => {
   };
 
   const toggleEducation = (edu: string) => {
-    const currentEducations = formData.education
-      ? formData.education.split(',').map(e => e.trim()).filter(e => e)
-      : [];
+    const currentEducations = splitCommaList(formData.education);
 
     let newEducations;
     if (currentEducations.includes(edu)) {
@@ -1450,7 +1451,7 @@ const CreateInterview: React.FC = () => {
                 <label className={labelClass}>Minimum education level</label>
                 <div className="min-h-10 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-gray-50 dark:bg-white/[0.025] p-2">
                   <div className="flex flex-wrap gap-2">
-                    {formData.education ? formData.education.split(',').map(e => e.trim()).filter(e => e).map(edu => (
+                    {splitCommaList(formData.education).length > 0 ? splitCommaList(formData.education).map(edu => (
                       <span key={edu} className="geist-small inline-flex h-7 items-center gap-2 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-white/[0.05] px-2.5 text-gray-900 dark:text-[#d4d4d4] font-medium shadow-sm dark:shadow-none">
                         {edu}
                         <button type="button" onClick={() => toggleEducation(edu)} className="text-gray-400 dark:text-[#8f8f8f] transition-colors hover:text-red-500 dark:hover:text-white">&times;</button>
@@ -1516,7 +1517,7 @@ const CreateInterview: React.FC = () => {
 
             <div className="mt-5 min-h-10 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-gray-50 dark:bg-white/[0.025] p-2">
               <div className="flex flex-wrap gap-2">
-                {formData.skills ? formData.skills.split(',').map(s => s.trim()).filter(s => s).map(skill => (
+                {splitCommaList(formData.skills).length > 0 ? splitCommaList(formData.skills).map(skill => (
                   <span key={skill} className="geist-small inline-flex h-7 items-center gap-2 rounded-[6px] border border-purple-200 dark:border-white/[0.11] bg-purple-50 dark:bg-white/[0.05] px-2.5 text-purple-700 dark:text-[#d4d4d4] font-medium">
                     {skill}
                     <button type="button" onClick={() => toggleSkill(skill)} className="text-purple-400 dark:text-[#8f8f8f] transition-colors hover:text-red-500 dark:hover:text-white">&times;</button>
@@ -1568,7 +1569,7 @@ const CreateInterview: React.FC = () => {
               </p>
               <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto custom-scrollbar">
                 {aiRecommendedSkills.map((skill) => {
-                  const isSelected = formData.skills.split(',').map(s => s.trim()).includes(skill);
+                  const isSelected = splitCommaList(formData.skills).includes(skill);
                   return (
                     <button
                       key={skill}

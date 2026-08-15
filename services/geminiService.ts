@@ -189,3 +189,42 @@ Return ONLY valid JSON matching this schema.`;
   const userPrompt = `Job Description Text to parse:\n\n${rawText}`;
   return bedrockGenerateJson<ParsedJdResult>(systemPrompt, userPrompt, 0.1, 'default', 4096);
 }
+
+export async function predictJobSectorAndRoleAI(params: {
+  title?: string;
+  description?: string;
+  skills?: string | string[];
+  company?: string;
+}): Promise<{
+  industrySector: string;
+  roleCategory: string;
+  alternativeSectors: string[];
+  alternativeCategories: string[];
+}> {
+  const systemPrompt = `You are an expert AI recruiter and industrial taxonomist.
+Given a job title, job description, required skills, and company name, predict:
+1. "industrySector": The precise primary Industry Sector (e.g. "MEP Consultant", "Software & IT", "Automotive & Manufacturing", "Civil & Construction", "Healthcare & Pharma", "Finance & Banking").
+2. "roleCategory": The specific Role Category (e.g. "Design Engineer - Electrical", "Full Stack Developer", "Site Supervisor", "HR Executive").
+3. "alternativeSectors": Array of 2-3 relevant secondary industry sectors.
+4. "alternativeCategories": Array of 3-4 relevant role categories or designations for matching candidates.
+
+Return ONLY a valid JSON object matching this schema.`;
+
+  const userPrompt = `Job Data:
+Title: ${params.title || ''}
+Company: ${params.company || ''}
+Skills: ${Array.isArray(params.skills) ? params.skills.join(', ') : params.skills || ''}
+Description: ${(params.description || '').substring(0, 1500)}`;
+
+  try {
+    return await bedrockGenerateJson(systemPrompt, userPrompt, 0.1, 'default', 2048);
+  } catch (err) {
+    console.warn('AI Sector/Role prediction failed, returning default prediction:', err);
+    return {
+      industrySector: 'Engineering & Technology',
+      roleCategory: 'Technical Specialist',
+      alternativeSectors: ['Services & Operations', 'Industrial Consulting'],
+      alternativeCategories: ['Specialist', 'Project Engineer', 'Technical Lead']
+    };
+  }
+}

@@ -165,21 +165,78 @@ const InterviewOverview: React.FC = () => {
   const details = useMemo(() => {
     if (!interview) return [];
     const anyInterview = interview as any;
+    const minExp = anyInterview.minExperience;
+    const maxExp = anyInterview.maxExperience;
+    const expStr = (minExp !== undefined && minExp !== null) || (maxExp !== undefined && maxExp !== null)
+      ? `${minExp || 0} - ${maxExp || 0} Years`
+      : (anyInterview.experience || 'N/A');
+
+    const customFieldsArr = anyInterview.customFields || [];
+    const uploadedByCf = customFieldsArr.find((cf: any) => {
+      const k = String(cf?.key || '').toLowerCase();
+      return k.includes('uploaded by') || k.includes('entry by') || k.includes('entered by');
+    })?.value;
+
+    const uploadedOnCf = customFieldsArr.find((cf: any) => {
+      const k = String(cf?.key || '').toLowerCase();
+      return k.includes('uploaded on') || k.includes('entered on') || k.includes('entered date');
+    })?.value;
+
+    const rawCompany = (
+      (anyInterview.company && anyInterview.company !== 'InterviewXpert Partner' && anyInterview.company !== 'N/A')
+        ? anyInterview.company
+        : (anyInterview.companyName && anyInterview.companyName !== 'InterviewXpert Partner' && anyInterview.companyName !== 'N/A')
+          ? anyInterview.companyName
+          : (anyInterview.company || anyInterview.companyName || 'Not Specified')
+    );
+    const displayCompany = String(rawCompany).trim();
+
+    const displayEntryBy = (
+      anyInterview.entryBy ||
+      anyInterview.entry_by ||
+      anyInterview.uploadedBy ||
+      anyInterview.uploaded_by ||
+      anyInterview.recruiterName ||
+      anyInterview.contactPerson ||
+      anyInterview.contactPersonName ||
+      (typeof anyInterview.createdBy === 'string' ? anyInterview.createdBy : anyInterview.createdBy?.name) ||
+      uploadedByCf ||
+      'N/A'
+    );
+    const displayEnteredDate = uploadedOnCf || formatDate(interview.createdAt || anyInterview.postedAt || anyInterview.updatedAt) || 'N/A';
+
     return [
-      ['Employment Type', anyInterview.employmentType],
-      ['Experience', anyInterview.minExperience !== undefined || anyInterview.maxExperience !== undefined ? `${anyInterview.minExperience || 0} - ${anyInterview.maxExperience || 0} years` : anyInterview.experience],
-      ['Education', anyInterview.education],
-      ['Skills', anyInterview.skills],
-      ['Difficulty', interview.difficulty],
-      ['Strictness', interview.strictness],
-      ['Duration', interview.duration ? `${interview.duration} minutes` : undefined],
-      ['Question Count', getQuestionsCount(interview)],
-      ['Responses', responsesCount],
+      ['Job Number (jobNo)', anyInterview.jobNo || 'N/A'],
+      ['Access Code', interview.accessCode || anyInterview.jobNo || 'N/A'],
+      ['Company Name', displayCompany],
+      ['Industry Sector', anyInterview.industryName || anyInterview.sector || 'N/A'],
+      ['Role Category', anyInterview.roleName || anyInterview.roleCategory || 'N/A'],
+      ['Department / Category', interview.department || anyInterview.category || 'N/A'],
+      ['Employment Type', anyInterview.employmentType || 'N/A'],
+      ['Location (Typed)', anyInterview.location || 'N/A'],
+      ['City', anyInterview.city || 'N/A'],
+      ['Salary Range / CTC', anyInterview.salaryRange || anyInterview.salary || 'N/A'],
+      ['Experience Required', expStr],
+      ['Qualifications / Education', anyInterview.qualifications || anyInterview.education || 'N/A'],
+      ['Skills Required', Array.isArray(anyInterview.skills) ? anyInterview.skills.join(', ') : (anyInterview.skills || 'N/A')],
+      ['Gender Requirement', anyInterview.genderRequirement || anyInterview.gender || 'Any'],
+      ['Strict Gender Match', anyInterview.strictGenderMatch ? 'Yes (Strict)' : 'No'],
+      ['Strict Location Match', anyInterview.strictLocationMatch ? 'Yes (Strict)' : 'No'],
+      ['Strict Education Match', anyInterview.strictEducationMatch ? 'Yes (Strict)' : 'No'],
+      ['Strict Experience Match', anyInterview.strictExperienceMatch ? 'Yes (Strict)' : 'No'],
+      ['AI Strictness Level', interview.strictness || 'Medium'],
+      ['Difficulty Level', interview.difficulty || 'Easy'],
+      ['Duration', interview.duration ? `${interview.duration} minutes` : 'N/A'],
+      ['Questions Count', getQuestionsCount(interview)],
+      ['Total Responses', responsesCount],
+      ['Recruiter UID', anyInterview.recruiterUID || 'N/A'],
+      ['Entered By (Recruiter)', displayEntryBy],
+      ['Entered Date', displayEnteredDate],
+      ['Status', interview.status || 'Active'],
       ['Created At', formatDate(interview.createdAt)],
       ['Updated At', formatDate(interview.updatedAt)],
-      ['Deadline', formatDate(anyInterview.deadline)],
-      ['Status', interview.status],
-      ['Interview ID', interview.id],
+      ['Application Deadline', formatDate(anyInterview.deadline || anyInterview.applyDeadline)],
+      ['System Document ID', interview.id],
     ] as Array<[string, any]>;
   }, [interview, responsesCount]);
 
@@ -254,6 +311,44 @@ const InterviewOverview: React.FC = () => {
   const pendingCount = Math.max(candidateCount - responsesCount, 0);
   const description = interview.description || 'No description provided.';
 
+  const skillsList = Array.isArray(anyInterview.skills) 
+    ? anyInterview.skills 
+    : (typeof anyInterview.skills === 'string' ? anyInterview.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+
+  const customFieldsArr = anyInterview.customFields || [];
+  const uploadedByCf = customFieldsArr.find((cf: any) => {
+    const k = String(cf?.key || '').toLowerCase();
+    return k.includes('uploaded by') || k.includes('entry by') || k.includes('entered by');
+  })?.value;
+
+  const uploadedOnCf = customFieldsArr.find((cf: any) => {
+    const k = String(cf?.key || '').toLowerCase();
+    return k.includes('uploaded on') || k.includes('entered on') || k.includes('entered date');
+  })?.value;
+
+  const rawCompany = (
+    (anyInterview.company && anyInterview.company !== 'InterviewXpert Partner' && anyInterview.company !== 'N/A')
+      ? anyInterview.company
+      : (anyInterview.companyName && anyInterview.companyName !== 'InterviewXpert Partner' && anyInterview.companyName !== 'N/A')
+        ? anyInterview.companyName
+        : (anyInterview.company || anyInterview.companyName || 'Not Specified')
+  );
+  const displayCompany = String(rawCompany).trim();
+
+  const displayEntryBy = (
+    anyInterview.entryBy ||
+    anyInterview.entry_by ||
+    anyInterview.uploadedBy ||
+    anyInterview.uploaded_by ||
+    anyInterview.recruiterName ||
+    anyInterview.contactPerson ||
+    anyInterview.contactPersonName ||
+    (typeof anyInterview.createdBy === 'string' ? anyInterview.createdBy : anyInterview.createdBy?.name) ||
+    uploadedByCf ||
+    'N/A'
+  );
+  const displayEnteredDate = uploadedOnCf || formatDate(interview.createdAt || anyInterview.postedAt || anyInterview.updatedAt) || 'N/A';
+
   return (
     <div className="w-full min-h-[calc(100vh-3.5rem)] bg-[#000] text-white">
 
@@ -270,19 +365,39 @@ const InterviewOverview: React.FC = () => {
                   <span>Back to jobs</span>
                 </Link>
                 <span className="geist-label uppercase text-[#9ca3af]">Overview</span>
+                {anyInterview.jobNo && (
+                  <span className="geist-caption rounded-[6px] border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 font-mono font-bold text-indigo-300">
+                    Job #{anyInterview.jobNo}
+                  </span>
+                )}
+                {anyInterview.status && (
+                  <span className={`geist-caption rounded-[6px] border px-2 py-0.5 font-bold uppercase ${
+                    String(anyInterview.status).toLowerCase() === 'active'
+                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                      : 'border-red-500/30 bg-red-500/10 text-red-400'
+                  }`}>
+                    {anyInterview.status}
+                  </span>
+                )}
               </div>
               <h1 className="geist-page-title mt-2 max-w-5xl truncate text-white">{interview.title}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-2">
+                {displayCompany && (
+                  <span className="geist-small rounded-[6px] border border-white/[0.11] bg-white/[0.05] px-2.5 py-1 font-bold text-white">
+                    <i className="fas fa-building mr-1.5 text-indigo-400"></i>
+                    {displayCompany}
+                  </span>
+                )}
                 <span className="geist-small rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1 font-medium text-[#d4d4d4]">
-                  {interview.department || 'No department'}
+                  {interview.department || anyInterview.roleName || 'General'}
                 </span>
                 <button
                   type="button"
-                  onClick={() => navigator.clipboard.writeText(interview.accessCode || '').then(() => messageBox.showSuccess('Access code copied'))}
+                  onClick={() => navigator.clipboard.writeText(interview.accessCode || anyInterview.jobNo || '').then(() => messageBox.showSuccess('Access code copied'))}
                   className="geist-small inline-flex items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
                 >
                   <span className="text-[#8f8f8f]">Code</span>
-                  <span className="font-mono tracking-wider">{interview.accessCode || 'N/A'}</span>
+                  <span className="font-mono tracking-wider">{interview.accessCode || anyInterview.jobNo || 'N/A'}</span>
                   <i className="fas fa-copy text-[10px] text-[#6b7280]"></i>
                 </button>
                 <button
@@ -340,7 +455,7 @@ const InterviewOverview: React.FC = () => {
       </div>
 
       <div>
-        <section className="grid grid-cols-1 items-stretch border-b border-white/[0.11] xl:grid-cols-[minmax(0,2fr)_1px_minmax(330px,0.92fr)]">
+        <section className="grid grid-cols-1 items-stretch border-b border-white/[0.11] xl:grid-cols-[minmax(0,1.8fr)_1px_minmax(340px,1fr)]">
           <div className="flex flex-col">
             <div className="flex flex-col gap-3 border-b border-white/[0.11] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-7">
               <div>
@@ -362,7 +477,7 @@ const InterviewOverview: React.FC = () => {
                 style={{
                   display: '-webkit-box',
                   WebkitBoxOrient: 'vertical',
-                  WebkitLineClamp: 6,
+                  WebkitLineClamp: 8,
                   overflow: 'hidden',
                   overflowWrap: 'anywhere',
                   wordBreak: 'break-word',
@@ -375,26 +490,90 @@ const InterviewOverview: React.FC = () => {
 
           <div className="h-px bg-white/[0.11] xl:h-auto xl:w-px" />
 
+          {/* Extended Role Snapshot Grid - All Job Fields Visible */}
           <div className="flex flex-col">
             <div className="border-b border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
               <h2 className="geist-section-title text-white">Role snapshot</h2>
-              <p className="geist-small mt-0.5 text-[#8f8f8f]">The essentials at a glance.</p>
+              <p className="geist-small mt-0.5 text-[#8f8f8f]">All job specifications at a glance.</p>
             </div>
-            <InfoLine label="Department" value={interview.department || 'N/A'} />
-            <InfoLine label="Employment" value={anyInterview.employmentType} />
-            <InfoLine
-              label="Experience"
-              value={anyInterview.minExperience !== undefined || anyInterview.maxExperience !== undefined ? `${anyInterview.minExperience || 0} - ${anyInterview.maxExperience || 0} years` : anyInterview.experience}
-            />
-            <InfoLine label="Deadline" value={formatDate(anyInterview.deadline)} mono />
+            <div className="divide-y divide-white/[0.08]">
+              <InfoLine label="Job Number" value={anyInterview.jobNo || interview.accessCode} mono />
+              <InfoLine label="Company" value={displayCompany} />
+              <InfoLine label="Industry Sector" value={anyInterview.industryName || anyInterview.sector} />
+              <InfoLine label="Role Category" value={anyInterview.roleName || anyInterview.roleCategory} />
+              <InfoLine label="Department" value={interview.department || anyInterview.category} />
+              <InfoLine label="Employment" value={anyInterview.employmentType} />
+              <InfoLine label="Location" value={anyInterview.location} />
+              <InfoLine label="City" value={anyInterview.city} />
+              <InfoLine label="Salary / CTC" value={anyInterview.salaryRange || anyInterview.salary} />
+              <InfoLine label="Experience" value={anyInterview.minExperience !== undefined || anyInterview.maxExperience !== undefined ? `${anyInterview.minExperience || 0} - ${anyInterview.maxExperience || 0} Years` : anyInterview.experience} />
+              <InfoLine label="Qualifications" value={anyInterview.qualifications || anyInterview.education} />
+              <InfoLine label="Gender Req." value={anyInterview.genderRequirement || anyInterview.gender} />
+              <InfoLine label="Entered By" value={displayEntryBy} />
+              <InfoLine label="Entered Date" value={displayEnteredDate} mono />
+              <InfoLine label="Deadline" value={formatDate(anyInterview.deadline)} mono />
+            </div>
           </div>
         </section>
 
+        {/* Skills & Mandatory Criteria Badges Section */}
+        <section className="border-b border-white/[0.11] p-4 sm:p-6 lg:p-7 space-y-4">
+          <div>
+            <h2 className="geist-section-title text-white flex items-center gap-2">
+              <i className="fas fa-code text-purple-400"></i> Required Skills ({skillsList.length})
+            </h2>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {skillsList.length > 0 ? (
+                skillsList.map((skill: string, idx: number) => (
+                  <span key={idx} className="geist-caption rounded-[6px] border border-purple-500/30 bg-purple-500/10 px-3 py-1 font-semibold text-purple-200">
+                    {skill}
+                  </span>
+                ))
+              ) : (
+                <span className="geist-caption italic text-[#6b7280]">No skills specified.</span>
+              )}
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-white/[0.08]">
+            <h3 className="geist-caption font-bold uppercase text-[#9ca3af] tracking-wider mb-2">
+              AI Strict Criteria Checkmarks
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3 rounded-[6px] border border-white/[0.1] bg-white/[0.02]">
+                <span className="geist-label block text-[#8f8f8f] uppercase">Strict Gender</span>
+                <span className={`geist-caption font-bold mt-1 block ${anyInterview.strictGenderMatch ? 'text-amber-400' : 'text-[#6b7280]'}`}>
+                  {anyInterview.strictGenderMatch ? '✓ Strict Match' : 'Off'}
+                </span>
+              </div>
+              <div className="p-3 rounded-[6px] border border-white/[0.1] bg-white/[0.02]">
+                <span className="geist-label block text-[#8f8f8f] uppercase">Strict Location</span>
+                <span className={`geist-caption font-bold mt-1 block ${anyInterview.strictLocationMatch ? 'text-amber-400' : 'text-[#6b7280]'}`}>
+                  {anyInterview.strictLocationMatch ? '✓ Strict Match' : 'Off'}
+                </span>
+              </div>
+              <div className="p-3 rounded-[6px] border border-white/[0.1] bg-white/[0.02]">
+                <span className="geist-label block text-[#8f8f8f] uppercase">Strict Education</span>
+                <span className={`geist-caption font-bold mt-1 block ${anyInterview.strictEducationMatch ? 'text-amber-400' : 'text-[#6b7280]'}`}>
+                  {anyInterview.strictEducationMatch ? '✓ Strict Match' : 'Off'}
+                </span>
+              </div>
+              <div className="p-3 rounded-[6px] border border-white/[0.1] bg-white/[0.02]">
+                <span className="geist-label block text-[#8f8f8f] uppercase">Strict Experience</span>
+                <span className={`geist-caption font-bold mt-1 block ${anyInterview.strictExperienceMatch ? 'text-amber-400' : 'text-[#6b7280]'}`}>
+                  {anyInterview.strictExperienceMatch ? '✓ Strict Match' : 'Off'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Complete Configuration Data Grid */}
         <section className="border-b border-white/[0.11]">
-          <SectionHeader title="Configuration" description="Core interview settings and timestamps." />
+          <SectionHeader title="Full Configuration & Identifiers" description="Complete database record properties." />
           <dl className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
             {details.map(([label, value]) => (
-              <ConfigTile key={label} label={label} value={value} mono={label.includes('At') || label.includes('ID') || label.includes('Code')} />
+              <ConfigTile key={label} label={label} value={value} mono={label.includes('At') || label.includes('ID') || label.includes('Code') || label.includes('Number') || label.includes('UID')} />
             ))}
           </dl>
         </section>
@@ -406,7 +585,7 @@ const InterviewOverview: React.FC = () => {
         </section>
 
         <section>
-          <SectionHeader title="Custom fields" description="Additional fields collected or attached to this interview." />
+          <SectionHeader title="Custom fields" description="Additional key-value fields attached to this job." />
           {customFields.length === 0 ? (
             <p className="geist-caption px-4 py-5 text-[#6b7280] sm:px-6 lg:px-7">No custom fields added.</p>
           ) : (
