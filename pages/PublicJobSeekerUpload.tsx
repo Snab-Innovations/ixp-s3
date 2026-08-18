@@ -437,6 +437,31 @@ export default function PublicJobSeekerUpload() {
     };
 
     const qInterviews = query(collection(db, 'interviews'));
+    const parseExpMinMax = (data: any) => {
+      let min = 0;
+      let max = 0;
+      if (data.minExperience !== undefined && data.minExperience !== null && !isNaN(Number(data.minExperience))) {
+        min = Math.max(0, Number(data.minExperience));
+      }
+      if (data.maxExperience !== undefined && data.maxExperience !== null && !isNaN(Number(data.maxExperience))) {
+        max = Math.max(0, Number(data.maxExperience));
+      }
+      const rawStr = String(data.experience || data.minExperience || '').trim();
+      if (min === 0 && rawStr) {
+        const rangeMatch = rawStr.match(/(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)/i);
+        if (rangeMatch) {
+          min = parseFloat(rangeMatch[1]) || 0;
+          max = parseFloat(rangeMatch[2]) || 0;
+        } else {
+          const singleMatch = rawStr.match(/(\d+(?:\.\d+)?)/);
+          if (singleMatch && !/fresher|0\s*yr/i.test(rawStr)) {
+            min = parseFloat(singleMatch[1]) || 0;
+          }
+        }
+      }
+      return { minExperience: min, maxExperience: max, experience: rawStr || (min > 0 ? (max > min ? `${min} - ${max} Yrs` : `${min}+ Yrs`) : 'Fresher / Any Experience') };
+    };
+
     const unsubInterviews = onSnapshot(qInterviews, (snapshot) => {
       activeInterviewsList = snapshot.docs.map((doc) => {
         const data = doc.data();
@@ -453,6 +478,7 @@ export default function PublicJobSeekerUpload() {
           data.recruiterName ||
           'Recruiter'
         ).toString().trim();
+        const parsedExp = parseExpMinMax(data);
 
         return {
           id: doc.id,
@@ -475,8 +501,9 @@ export default function PublicJobSeekerUpload() {
           salary: data.salary || data.salaryRange || (data.minSalary && data.maxSalary ? `₹${data.minSalary} - ₹${data.maxSalary} / month` : 'Competitive CTC'),
           minSalary: data.minSalary,
           maxSalary: data.maxSalary,
-          minExperience: data.minExperience || data.experience || 0,
-          maxExperience: data.maxExperience || 0,
+          minExperience: parsedExp.minExperience,
+          maxExperience: parsedExp.maxExperience,
+          experience: parsedExp.experience,
           qualification: data.qualification || data.education || data.qualifications || 'Diploma / Graduate',
           education: data.education || data.qualification || data.qualifications || 'Diploma / Graduate',
           skills: data.skills || [],
@@ -509,6 +536,7 @@ export default function PublicJobSeekerUpload() {
           data.recruiterName ||
           'Recruiter'
         ).toString().trim();
+        const parsedExp = parseExpMinMax(data);
 
         return {
           id: doc.id,
@@ -531,8 +559,9 @@ export default function PublicJobSeekerUpload() {
           salary: data.salary || data.salaryRange || (data.minSalary && data.maxSalary ? `₹${data.minSalary} - ₹${data.maxSalary} / month` : 'Competitive CTC'),
           minSalary: data.minSalary,
           maxSalary: data.maxSalary,
-          minExperience: data.minExperience || data.experience || 0,
-          maxExperience: data.maxExperience || 0,
+          minExperience: parsedExp.minExperience,
+          maxExperience: parsedExp.maxExperience,
+          experience: parsedExp.experience,
           qualification: data.qualification || data.education || data.qualifications || 'Diploma / Graduate',
           education: data.education || data.qualification || data.qualifications || 'Diploma / Graduate',
           skills: data.skills || [],
@@ -1227,60 +1256,98 @@ export default function PublicJobSeekerUpload() {
       {/* Main Single-Page Responsive Container */}
       <main className="max-w-5xl mx-auto px-3 sm:px-6 py-5 sm:py-10">
 
-        {/* Existing Submitted Candidate Email Lookup Card */}
-        {showEmailLookup && !isSubmittedSuccess && (
-          <div className="mb-6 p-4 sm:p-6 bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-950 text-white rounded-3xl shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-4 duration-300 border border-emerald-500/40 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-
-            <div className="flex items-start justify-between relative z-10">
-              <div className="space-y-1">
-                <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold uppercase tracking-wider border border-emerald-400/30">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Existing Candidate Lookup</span>
+        {/* Existing Submitted Candidate Email Lookup Modal Popup */}
+        {showEmailLookup && (
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200">
+            <div className={`border rounded-3xl max-w-lg w-full p-5 sm:p-7 shadow-2xl space-y-5 relative transition-colors ${
+              isDark ? 'bg-[#0d0d0f] border-white/15 text-white' : 'bg-white border-slate-200 text-slate-900'
+            }`}>
+              {/* Modal Header */}
+              <div className="flex items-start justify-between border-b border-slate-200 dark:border-white/10 pb-4 relative">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 flex items-center justify-center shrink-0 shadow-inner">
+                    <Mail className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-black tracking-tight">
+                      Find Submitted Profile
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Retrieve your saved candidate details and job recommendations.
+                    </p>
+                  </div>
                 </div>
-                <h3 className="text-base sm:text-xl font-extrabold tracking-tight">Already Submitted Your Resume to DSource?</h3>
-                <p className="text-xs sm:text-sm text-slate-300">
-                  Enter your registered email address to instantly retrieve your profile and check top matching job openings.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowEmailLookup(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <form onSubmit={handleLookupEmailSubmit} className="flex flex-col sm:flex-row gap-3 pt-1 relative z-10">
-              <div className="relative flex-1">
-                <Mail className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
-                <input
-                  type="email"
-                  required
-                  value={lookupEmailInput}
-                  onChange={(e) => setLookupEmailInput(e.target.value)}
-                  placeholder="Enter your registered email address..."
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/10 border border-slate-700 text-xs sm:text-sm text-white placeholder-slate-400 outline-none focus:border-emerald-400 font-medium"
-                />
+                <button
+                  type="button"
+                  onClick={() => setShowEmailLookup(false)}
+                  className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-              <button
-                type="submit"
-                disabled={isSearchingEmail}
-                className="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-lg cursor-pointer disabled:opacity-50"
-              >
-                {isSearchingEmail ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Searching...</span>
-                  </>
-                ) : (
-                  <>
-                    <Search className="w-4 h-4" />
-                    <span>Find My Matched Jobs</span>
-                  </>
-                )}
-              </button>
-            </form>
+
+              {/* Modal Body & Form */}
+              <form onSubmit={handleLookupEmailSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-2">
+                    Registered Email Address <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+                    <input
+                      type="email"
+                      required
+                      autoFocus
+                      value={lookupEmailInput}
+                      onChange={(e) => setLookupEmailInput(e.target.value)}
+                      placeholder="e.g. yourname@gmail.com"
+                      className={`w-full pl-10 pr-4 py-3 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 font-medium transition-all ${
+                        isDark 
+                          ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' 
+                          : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                      }`}
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    Enter the email address you previously used to upload your resume.
+                  </p>
+                </div>
+
+                {/* Modal Footer Actions */}
+                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setShowEmailLookup(false)}
+                    className={`px-4 py-2.5 rounded-xl font-bold text-xs border transition-all cursor-pointer ${
+                      isDark 
+                        ? 'bg-white/10 hover:bg-white/15 text-white border-white/10' 
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isSearchingEmail || !lookupEmailInput.trim()}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/30 cursor-pointer disabled:opacity-50 active:scale-[0.98]"
+                  >
+                    {isSearchingEmail ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Searching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-3.5 h-3.5" />
+                        <span>Find My Profile</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 
@@ -1626,13 +1693,14 @@ export default function PublicJobSeekerUpload() {
                             setCandidateLocation(city);
                             setCandidateState('Maharashtra');
                           }}
-                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer inline-flex items-center gap-1 ${
                             candidateLocation.toLowerCase().includes(city.toLowerCase())
                               ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
                               : isDark ? 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10' : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
                           }`}
                         >
-                          📍 {city}
+                          <MapPin className="w-3 h-3" />
+                          <span>{city}</span>
                         </button>
                       ))}
                     </div>
@@ -1969,304 +2037,370 @@ export default function PublicJobSeekerUpload() {
         ) : (
           /* Post-Submission / Email Lookup Results View */
           <div className="space-y-6 sm:space-y-8 animate-in zoom-in-95 duration-300">
-            {/* Compact Profile Matched Bar - Ultra Short to focus on Jobs */}
-            <div className="bg-gradient-to-r from-emerald-950 via-teal-950 to-slate-950 text-white border border-emerald-500/40 rounded-2xl px-4 py-3 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 animate-in fade-in duration-200">
-              <div className="flex items-center gap-2.5 truncate">
-                <span className="h-7 w-7 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-400/30">
-                  <CheckCircle2 className="w-4 h-4" />
-                </span>
-                <div className="truncate text-xs">
-                  <span className="font-extrabold text-white">Profile Matched: </span>
-                  <span className="text-emerald-300 font-bold">{submittedCandidateData?.name}</span>
-                  <span className="text-slate-300 text-[11px] ml-2 hidden sm:inline">
-                    📍 {submittedCandidateData?.location || 'Nashik'} • {submittedCandidateData?.domain ? `Domains: ${submittedCandidateData.domain} • ` : ''}{submittedCandidateData?.experience || 0} Yrs Exp • 🎓 {submittedCandidateData?.highestEducation || 'Graduate'}
-                  </span>
+            {/* Compact Profile Matched Bar - Adaptive Day & Dark App Theme */}
+            <div className={`border rounded-2xl p-4 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in duration-200 backdrop-blur-xl transition-colors ${
+              isDark 
+                ? 'bg-gradient-to-r from-slate-900 via-slate-900 to-[#072418] text-white border-emerald-500/30 shadow-emerald-950/20' 
+                : 'bg-gradient-to-r from-white via-emerald-50/40 to-teal-50/30 text-slate-900 border-emerald-200 shadow-emerald-500/5'
+            }`}>
+              <div className="flex items-center gap-3 truncate">
+                <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shrink-0 font-extrabold text-sm shadow-md shadow-emerald-600/30">
+                  {submittedCandidateData?.name ? submittedCandidateData.name.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
+                </div>
+                <div className="truncate text-xs space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[11px] uppercase tracking-wider font-extrabold ${
+                      isDark ? 'text-emerald-400' : 'text-emerald-700'
+                    }`}>
+                      Profile Matched:
+                    </span>
+                    <span className={`font-extrabold text-sm ${
+                      isDark ? 'text-white' : 'text-slate-900'
+                    }`}>
+                      {submittedCandidateData?.name}
+                    </span>
+                  </div>
+                  <div className="text-[11px] flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex items-center gap-1 font-semibold ${
+                      isDark ? 'text-slate-200' : 'text-slate-600'
+                    }`}>
+                      <MapPin className={`w-3 h-3 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                      <span>{submittedCandidateData?.location || 'Nashik'}</span>
+                    </span>
+                    <span className={isDark ? 'text-slate-500' : 'text-slate-300'}>•</span>
+                    <span className={`inline-flex items-center gap-1 font-semibold ${
+                      isDark ? 'text-slate-200' : 'text-slate-600'
+                    }`}>
+                      <Briefcase className={`w-3 h-3 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                      <span>{submittedCandidateData?.experience || 0} Yrs Exp</span>
+                    </span>
+                    <span className={isDark ? 'text-slate-500' : 'text-slate-300'}>•</span>
+                    <span className={`inline-flex items-center gap-1 font-bold ${
+                      isDark ? 'text-emerald-300' : 'text-emerald-700'
+                    }`}>
+                      <GraduationCap className={`w-3 h-3 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                      <span>{submittedCandidateData?.highestEducation || 'Graduate'}</span>
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
                 <button
-                  onClick={() => setShowCriteriaEditor(!showCriteriaEditor)}
-                  className="px-3 py-1.5 rounded-xl bg-emerald-500 text-slate-950 font-extrabold text-xs hover:bg-emerald-400 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                  type="button"
+                  onClick={() => setShowCriteriaEditor(true)}
+                  className={`px-3.5 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 shadow-md active:scale-[0.98] ${
+                    isDark 
+                      ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20' 
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25'
+                  }`}
                 >
                   <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span>{showCriteriaEditor ? 'Hide Criteria' : 'Edit Criteria'}</span>
+                  <span>Edit Criteria</span>
                 </button>
 
                 <button
+                  type="button"
                   onClick={handleResetForm}
-                  className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs border border-white/20 transition-all cursor-pointer"
+                  className={`px-3 py-2 rounded-xl font-bold text-xs border transition-all cursor-pointer ${
+                    isDark 
+                      ? 'bg-white/10 hover:bg-white/15 text-white border-white/15 hover:border-white/30' 
+                      : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300 shadow-sm'
+                  }`}
                 >
                   Change Resume
                 </button>
               </div>
             </div>
 
-            {/* Live Preferences Customizer Panel */}
+            {/* Live Preferences Customizer Modal Popup */}
             {showCriteriaEditor && submittedCandidateData && (
-              <div className={`border-2 rounded-3xl p-5 shadow-xl space-y-4 animate-in fade-in slide-in-from-top-4 duration-200 transition-colors ${
-                isDark 
-                  ? 'bg-[#0d0d0d] border-emerald-500/50' 
-                  : 'bg-white border-emerald-500/30'
-              }`}>
-                <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <SlidersHorizontal className="w-4 h-4 text-emerald-500" />
-                    <h3 className="text-base font-extrabold">
-                      Customize Match Criteria Live
-                    </h3>
-                  </div>
-                </div>
-
-                {/* Multi-Domain Interactive Live Selection Grid */}
-                <div className="space-y-4 pb-3 border-b border-slate-200 dark:border-white/10">
-                  {/* Sectors Live */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                        Target Industry Sectors ({ALL_JOB_SECTORS.length})
-                      </label>
-                      <span className="text-[11px] font-extrabold text-emerald-500 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                        {(submittedCandidateData.domains || candidateDomains).length} Criteria Active
-                      </span>
+              <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200">
+                <div className={`border rounded-3xl max-w-3xl w-full p-5 sm:p-7 shadow-2xl space-y-5 relative max-h-[92vh] overflow-y-auto transition-colors ${
+                  isDark ? 'bg-[#0d0d0f] border-white/15 text-white' : 'bg-white border-slate-200 text-slate-900'
+                }`}>
+                  {/* Modal Header */}
+                  <div className="flex items-start justify-between border-b border-slate-200 dark:border-white/10 pb-4 relative">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 flex items-center justify-center shrink-0 shadow-inner">
+                        <SlidersHorizontal className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg sm:text-xl font-black tracking-tight">
+                          Customize Match Criteria Live
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Edit your target sectors, departments, location, experience, gender, and education to refresh matched jobs.
+                        </p>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5">
-                      {ALL_JOB_SECTORS.map((sectorName) => {
-                        const activeDomains = submittedCandidateData.domains || candidateDomains;
-                        const isSelected = activeDomains.some(d => d.toLowerCase() === sectorName.toLowerCase());
 
-                        const handleToggleSectorLive = () => {
-                          let updated: string[];
-                          if (isSelected) {
-                            updated = activeDomains.filter(d => d.toLowerCase() !== sectorName.toLowerCase());
-                          } else {
-                            updated = [...activeDomains, sectorName];
-                          }
-                          setCandidateDomains(updated);
-                          setCandidateDomain(updated.join(', '));
-                          handleUpdateCandidateCriteria('domains', updated);
-                        };
-
-                        return (
-                          <button
-                            key={sectorName}
-                            type="button"
-                            onClick={handleToggleSectorLive}
-                            className={`flex items-center justify-between p-2 rounded-lg border text-[11px] transition-all cursor-pointer ${
-                              isSelected
-                                ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm font-bold'
-                                : isDark
-                                ? 'bg-[#141414] border-white/10 text-slate-300 hover:border-emerald-500/40 hover:bg-[#1a1a1a] font-semibold'
-                                : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50/50 font-semibold'
-                            }`}
-                          >
-                            <span className="truncate pr-1">{sectorName}</span>
-                            <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-all ${
-                              isSelected
-                                ? 'bg-white text-emerald-600 border-white'
-                                : isDark
-                                ? 'border-white/20 bg-white/5'
-                                : 'border-slate-300 bg-white'
-                            }`}>
-                              {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Departments Live */}
-                  <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-white/10">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">
-                        Target Functional Departments ({ALL_JOB_DEPARTMENTS.length})
-                      </label>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5">
-                      {ALL_JOB_DEPARTMENTS.map((deptName) => {
-                        const activeDomains = submittedCandidateData.domains || candidateDomains;
-                        const isSelected = activeDomains.some(d => d.toLowerCase() === deptName.toLowerCase());
-
-                        const handleToggleDeptLive = () => {
-                          let updated: string[];
-                          if (isSelected) {
-                            updated = activeDomains.filter(d => d.toLowerCase() !== deptName.toLowerCase());
-                          } else {
-                            updated = [...activeDomains, deptName];
-                          }
-                          setCandidateDomains(updated);
-                          setCandidateDomain(updated.join(', '));
-                          handleUpdateCandidateCriteria('domains', updated);
-                        };
-
-                        return (
-                          <button
-                            key={deptName}
-                            type="button"
-                            onClick={handleToggleDeptLive}
-                            className={`flex items-center justify-between p-2 rounded-lg border text-[11px] transition-all cursor-pointer ${
-                              isSelected
-                                ? 'bg-teal-600 text-white border-teal-500 shadow-sm font-bold'
-                                : isDark
-                                ? 'bg-[#141414] border-white/10 text-slate-300 hover:border-teal-500/40 hover:bg-[#1a1a1a] font-semibold'
-                                : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-teal-400 hover:bg-teal-50/50 font-semibold'
-                            }`}
-                          >
-                            <span className="truncate pr-1">{deptName}</span>
-                            <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-all ${
-                              isSelected
-                                ? 'bg-white text-teal-600 border-white'
-                                : isDark
-                                ? 'border-white/20 bg-white/5'
-                                : 'border-slate-300 bg-white'
-                            }`}>
-                              {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-
-                  {/* Location Selector */}
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
-                      Target City / Location
-                    </label>
-                    <LocationCityInput
-                      value={submittedCandidateData.location || ''}
-                      onChange={(val) => handleUpdateCandidateCriteria('location', val)}
-                      placeholder="e.g. Nashik, Pune, Mumbai..."
-                      className={`w-full rounded-xl border p-2.5 text-xs outline-none focus:border-emerald-500 font-semibold ${
-                        isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                      }`}
-                    />
-                  </div>
-
-                  {/* Experience Selector */}
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
-                      Experience (Years)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      max="60"
-                      value={submittedCandidateData.experience || 0}
-                      onChange={(e) => handleUpdateCandidateCriteria('experience', e.target.value)}
-                      className={`w-full px-3 py-2.5 rounded-xl border text-xs font-semibold outline-none focus:border-emerald-500 ${
-                        isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                      }`}
-                    />
-                  </div>
-
-                  {/* Gender Selector */}
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
-                      Gender Criterion
-                    </label>
-                    <select
-                      value={submittedCandidateData.gender || 'Any'}
-                      onChange={(e) => handleUpdateCandidateCriteria('gender', e.target.value)}
-                      className={`w-full px-3 py-2.5 rounded-xl border text-xs font-semibold outline-none focus:border-emerald-500 cursor-pointer ${
-                        isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                      }`}
-                    >
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Any">Prefer Not To Say / Any</option>
-                    </select>
-                  </div>
-
-                  {/* Highest Qualification */}
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
-                      Highest Education
-                    </label>
-                    <EducationInput
-                      value={submittedCandidateData.highestEducation || submittedCandidateData.education || ''}
-                      onChange={(val) => handleUpdateCandidateCriteria('education', val)}
-                      placeholder="Select degree..."
-                      className={`w-full rounded-xl border p-2.5 text-xs outline-none focus:border-emerald-500 font-semibold ${
-                        isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
-                      }`}
-                    />
-                  </div>
-                </div>
-
-                {/* Quick City Presets */}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {['Nashik', 'Pune', 'Mumbai', 'Thane', 'Nagpur', 'Chhatrapati Sambhajinagar', 'Remote'].map((city) => (
                     <button
-                      key={city}
                       type="button"
-                      onClick={() => handleUpdateCandidateCriteria('location', city)}
-                      className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                        (submittedCandidateData.location || '').toLowerCase().includes(city.toLowerCase())
-                          ? 'bg-emerald-600 text-white border-emerald-600'
-                          : isDark ? 'bg-white/10 text-slate-300 border-white/10' : 'bg-slate-100 text-slate-700 border-slate-200'
-                      }`}
+                      onClick={() => setShowCriteriaEditor(false)}
+                      className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
                     >
-                      📍 {city}
+                      <X className="w-5 h-5" />
                     </button>
-                  ))}
-                </div>
+                  </div>
 
-                {/* Add Custom Skill Filter */}
-                <div className="flex items-center gap-2 pt-1 border-t border-slate-200 dark:border-white/10">
-                  <input
-                    type="text"
-                    value={resultSkillInput}
-                    onChange={(e) => setResultSkillInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddSkillToResults();
-                      }
-                    }}
-                    placeholder="Add target skill (e.g. AutoCAD, Python, Java, Tally)..."
-                    className={`flex-1 px-3 py-2 rounded-xl text-xs outline-none focus:border-emerald-500 border ${
-                      isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddSkillToResults}
-                    className="px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Add</span>
-                  </button>
-                </div>
+                  {/* Multi-Domain Interactive Live Selection Grid */}
+                  <div className="space-y-4 pb-3 border-b border-slate-200 dark:border-white/10">
+                    {/* Sectors Live */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                          Target Industry Sectors ({ALL_JOB_SECTORS.length})
+                        </label>
+                        <span className="text-[11px] font-extrabold text-emerald-500 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                          {(submittedCandidateData.domains || candidateDomains).length} Criteria Active
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5 max-h-44 overflow-y-auto pr-1">
+                        {ALL_JOB_SECTORS.map((sectorName) => {
+                          const activeDomains = submittedCandidateData.domains || candidateDomains;
+                          const isSelected = activeDomains.some(d => d.toLowerCase() === sectorName.toLowerCase());
 
-                {/* Save Updated Criteria Action Button */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-200 dark:border-white/10">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Saving syncs your updated target domains and criteria with your candidate profile in the recruiter resume dump.
-                  </p>
-                  <button
-                    type="button"
-                    disabled={isSavingCriteria}
-                    onClick={handleSaveUpdatedCriteriaToResumeDump}
-                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/30 shrink-0 cursor-pointer disabled:opacity-50"
-                  >
-                    {isSavingCriteria ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Saving to Resume Dump...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        <span>Save Updated Domains & Criteria</span>
-                      </>
-                    )}
-                  </button>
+                          const handleToggleSectorLive = () => {
+                            let updated: string[];
+                            if (isSelected) {
+                              updated = activeDomains.filter(d => d.toLowerCase() !== sectorName.toLowerCase());
+                            } else {
+                              updated = [...activeDomains, sectorName];
+                            }
+                            setCandidateDomains(updated);
+                            setCandidateDomain(updated.join(', '));
+                            handleUpdateCandidateCriteria('domains', updated);
+                          };
+
+                          return (
+                            <button
+                              key={sectorName}
+                              type="button"
+                              onClick={handleToggleSectorLive}
+                              className={`flex items-center justify-between p-2 rounded-lg border text-[11px] transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm font-bold'
+                                  : isDark
+                                  ? 'bg-[#141414] border-white/10 text-slate-300 hover:border-emerald-500/40 hover:bg-[#1a1a1a] font-semibold'
+                                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50/50 font-semibold'
+                              }`}
+                            >
+                              <span className="truncate pr-1">{sectorName}</span>
+                              <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-all ${
+                                isSelected
+                                  ? 'bg-white text-emerald-600 border-white'
+                                  : isDark
+                                  ? 'border-white/20 bg-white/5'
+                                  : 'border-slate-300 bg-white'
+                              }`}>
+                                {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Departments Live */}
+                    <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-white/10">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">
+                          Target Functional Departments ({ALL_JOB_DEPARTMENTS.length})
+                        </label>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5 max-h-44 overflow-y-auto pr-1">
+                        {ALL_JOB_DEPARTMENTS.map((deptName) => {
+                          const activeDomains = submittedCandidateData.domains || candidateDomains;
+                          const isSelected = activeDomains.some(d => d.toLowerCase() === deptName.toLowerCase());
+
+                          const handleToggleDeptLive = () => {
+                            let updated: string[];
+                            if (isSelected) {
+                              updated = activeDomains.filter(d => d.toLowerCase() !== deptName.toLowerCase());
+                            } else {
+                              updated = [...activeDomains, deptName];
+                            }
+                            setCandidateDomains(updated);
+                            setCandidateDomain(updated.join(', '));
+                            handleUpdateCandidateCriteria('domains', updated);
+                          };
+
+                          return (
+                            <button
+                              key={deptName}
+                              type="button"
+                              onClick={handleToggleDeptLive}
+                              className={`flex items-center justify-between p-2 rounded-lg border text-[11px] transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-teal-600 text-white border-teal-500 shadow-sm font-bold'
+                                  : isDark
+                                  ? 'bg-[#141414] border-white/10 text-slate-300 hover:border-teal-500/40 hover:bg-[#1a1a1a] font-semibold'
+                                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-teal-400 hover:bg-teal-50/50 font-semibold'
+                              }`}
+                            >
+                              <span className="truncate pr-1">{deptName}</span>
+                              <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border transition-all ${
+                                isSelected
+                                  ? 'bg-white text-teal-600 border-white'
+                                  : isDark
+                                  ? 'border-white/20 bg-white/5'
+                                  : 'border-slate-300 bg-white'
+                              }`}>
+                                {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+
+                    {/* Location Selector */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
+                        Target City / Location
+                      </label>
+                      <LocationCityInput
+                        value={submittedCandidateData.location || ''}
+                        onChange={(val) => handleUpdateCandidateCriteria('location', val)}
+                        placeholder="e.g. Nashik, Pune, Mumbai..."
+                        className={`w-full rounded-xl border p-2.5 text-xs outline-none focus:border-emerald-500 font-semibold ${
+                          isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                        }`}
+                      />
+                    </div>
+
+                    {/* Experience Selector */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
+                        Experience (Years)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max="60"
+                        value={submittedCandidateData.experience || 0}
+                        onChange={(e) => handleUpdateCandidateCriteria('experience', parseFloat(e.target.value) || 0)}
+                        className={`w-full p-2.5 rounded-xl border text-xs font-semibold outline-none focus:border-emerald-500 ${
+                          isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                        }`}
+                      />
+                    </div>
+
+                    {/* Gender Selector */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
+                        Gender
+                      </label>
+                      <select
+                        value={submittedCandidateData.gender || 'Any'}
+                        onChange={(e) => handleUpdateCandidateCriteria('gender', e.target.value)}
+                        className={`w-full px-3 py-2.5 rounded-xl border text-xs font-semibold outline-none focus:border-emerald-500 cursor-pointer ${
+                          isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                        }`}
+                      >
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Any">Prefer Not To Say / Any</option>
+                      </select>
+                    </div>
+
+                    {/* Highest Qualification */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider mb-1">
+                        Highest Education
+                      </label>
+                      <EducationInput
+                        value={submittedCandidateData.highestEducation || submittedCandidateData.education || ''}
+                        onChange={(val) => handleUpdateCandidateCriteria('education', val)}
+                        placeholder="Select degree..."
+                        className={`w-full rounded-xl border p-2.5 text-xs outline-none focus:border-emerald-500 font-semibold ${
+                          isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick City Presets */}
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {['Nashik', 'Pune', 'Mumbai', 'Thane', 'Nagpur', 'Chhatrapati Sambhajinagar', 'Remote'].map((city) => (
+                      <button
+                        key={city}
+                        type="button"
+                        onClick={() => handleUpdateCandidateCriteria('location', city)}
+                        className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer inline-flex items-center gap-1 ${
+                          (submittedCandidateData.location || '').toLowerCase().includes(city.toLowerCase())
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : isDark ? 'bg-white/10 text-slate-300 border-white/10' : 'bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        <MapPin className="w-3 h-3" />
+                        <span>{city}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Add Custom Skill Filter */}
+                  <div className="flex items-center gap-2 pt-1 border-t border-slate-200 dark:border-white/10">
+                    <input
+                      type="text"
+                      value={resultSkillInput}
+                      onChange={(e) => setResultSkillInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddSkillToResults();
+                        }
+                      }}
+                      placeholder="Add target skill (e.g. AutoCAD, Python, Java, Tally)..."
+                      className={`flex-1 px-3 py-2 rounded-xl text-xs outline-none focus:border-emerald-500 border ${
+                        isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddSkillToResults}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add</span>
+                    </button>
+                  </div>
+
+                  {/* Modal Action Footer */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-200 dark:border-white/10">
+                    <button
+                      type="button"
+                      disabled={isSavingCriteria}
+                      onClick={handleSaveUpdatedCriteriaToResumeDump}
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 text-slate-800 dark:text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 border border-slate-200 dark:border-white/10"
+                    >
+                      {isSavingCriteria ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Saving to Resume Dump...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Save to Resume Dump</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowCriteriaEditor(false)}
+                      className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-emerald-600/30 cursor-pointer active:scale-[0.98]"
+                    >
+                      <span>Done & View Matches</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -2274,57 +2408,63 @@ export default function PublicJobSeekerUpload() {
             {/* Recommended Jobs Header & Filter Tabs */}
             <div className="space-y-3">
               <div>
-                <div className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-1 border ${
-                  isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-100 border-emerald-200 text-emerald-800'
+                <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider mb-1.5 border shadow-sm ${
+                  isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-800'
                 }`}>
-                  <Sparkles className="w-3 h-3 text-emerald-500" />
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
                   <span>AI Job Recommendations</span>
                 </div>
-                <h3 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-                  Best Matched Job Openings ({matchedJobsList.length})
+                <h3 className="text-xl sm:text-2xl font-black tracking-tight flex items-center gap-2">
+                  <span>Best Matched Job Openings</span>
+                  <span className="text-sm font-bold text-slate-400">({matchedJobsList.length})</span>
                 </h3>
               </div>
 
-              {/* Filter Tabs */}
+              {/* Segmented Filter Tabs */}
               <div className={`flex items-center gap-1 p-1 rounded-2xl shadow-sm border overflow-x-auto ${
-                isDark ? 'bg-[#0d0d0d] border-white/10' : 'bg-white border-slate-200'
+                isDark ? 'bg-[#0f0f10] border-white/10' : 'bg-slate-100/90 border-slate-200'
               }`}>
                 <button
+                  type="button"
                   onClick={() => setMatchFilter('EligibleOnly')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                  className={`px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
                     matchFilter === 'EligibleOnly' 
-                      ? 'bg-emerald-600 text-white shadow-sm' 
-                      : isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-semibold'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25 scale-[1.02]' 
+                      : isDark ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-600 hover:text-slate-900 hover:bg-white/70 font-semibold'
                   }`}
                 >
                   Eligible
                 </button>
                 <button
+                  type="button"
                   onClick={() => setMatchFilter('HighMatch')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                  className={`px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
                     matchFilter === 'HighMatch' 
-                      ? 'bg-emerald-600 text-white shadow-sm' 
-                      : isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-semibold'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25 scale-[1.02]' 
+                      : isDark ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-600 hover:text-slate-900 hover:bg-white/70 font-semibold'
                   }`}
                 >
                   High Match (&ge; 75%)
                 </button>
                 <button
+                  type="button"
                   onClick={() => setMatchFilter('LocalCity')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                  className={`px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer inline-flex items-center gap-1.5 ${
                     matchFilter === 'LocalCity' 
-                      ? 'bg-emerald-600 text-white shadow-sm' 
-                      : isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-semibold'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25 scale-[1.02]' 
+                      : isDark ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-600 hover:text-slate-900 hover:bg-white/70 font-semibold'
                   }`}
                 >
-                  📍 {submittedCandidateData?.location || 'Location'}
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span>{submittedCandidateData?.location || 'Location'}</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => setMatchFilter('All')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                  className={`px-4 py-2 rounded-xl text-xs font-black transition-all shrink-0 cursor-pointer ${
                     matchFilter === 'All' 
-                      ? 'bg-emerald-600 text-white shadow-sm' 
-                      : isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-semibold'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/25 scale-[1.02]' 
+                      : isDark ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-600 hover:text-slate-900 hover:bg-white/70 font-semibold'
                   }`}
                 >
                   All ({matchedJobsList.length})
@@ -2350,6 +2490,7 @@ export default function PublicJobSeekerUpload() {
                   Switch filter to "All" or edit your preferences to view more openings.
                 </p>
                 <button
+                  type="button"
                   onClick={() => setMatchFilter('All')}
                   className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold cursor-pointer"
                 >
@@ -2357,7 +2498,7 @@ export default function PublicJobSeekerUpload() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
                 {matchedJobsList.map((matchItem) => {
                   const { job, overallScore, matchGrade, badgeColor, skillMatch, locationMatch, genderMatch, expMatch, eduMatch, failReasons } = matchItem;
                   const isDisqualified = !expMatch.isMatch || !genderMatch.isMatch || overallScore === 0;
@@ -2365,65 +2506,76 @@ export default function PublicJobSeekerUpload() {
                   return (
                     <div
                       key={job.id}
-                      className={`group relative flex flex-col justify-between rounded-3xl border p-5 transition-all duration-300 shadow-xl overflow-hidden ${
+                      className={`group relative flex flex-col justify-between rounded-3xl border p-5 sm:p-6 transition-all duration-300 shadow-lg overflow-hidden backdrop-blur-xl ${
                         isDark 
-                          ? 'bg-[#0d0d0d] border-white/[0.1] hover:border-emerald-500/40 hover:bg-[#111111]' 
-                          : 'bg-white border-slate-200 hover:border-emerald-500/50 hover:shadow-2xl hover:shadow-emerald-500/10'
+                          ? 'bg-[#0d0d0f] border-white/[0.09] hover:border-emerald-500/50 hover:bg-[#121215] hover:shadow-2xl hover:shadow-emerald-950/40' 
+                          : 'bg-white border-slate-200/90 hover:border-emerald-500/50 hover:shadow-2xl hover:shadow-emerald-500/10'
                       } ${isDisqualified ? 'opacity-85' : ''}`}
                     >
-                      <div className="space-y-3 relative z-10">
+                      {/* Ambient hover glow gradient */}
+                      <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/[0.04] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+
+                      <div className="space-y-3.5 relative z-10">
                         {/* Top Header Badge Row */}
                         <div className="flex items-start justify-between gap-2">
-                          <span className={`px-3 py-1 rounded-full text-[11px] sm:text-xs font-extrabold shadow-sm flex items-center gap-1 ${badgeColor}`}>
+                          <span className={`px-3 py-1 rounded-full text-xs font-black shadow-md flex items-center gap-1.5 ${
+                            isDisqualified 
+                              ? badgeColor 
+                              : 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-500/20'
+                          }`}>
                             {isDisqualified ? <Ban className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
                             <span>{overallScore}% Match • {matchGrade}</span>
                           </span>
 
-                          <span className={`text-[10px] font-mono font-extrabold px-2 py-0.5 rounded-lg border ${
-                            isDark ? 'bg-white/10 border-white/15 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-600'
+                          <span className={`text-[11px] font-mono font-extrabold px-2.5 py-1 rounded-xl border ${
+                            isDark ? 'bg-white/[0.06] border-white/10 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-600'
                           }`}>
                             Code: {job.accessCode}
                           </span>
                         </div>
 
-                        {/* Title & Department */}
+                        {/* Title & Recruiter / Department */}
                         <div>
-                          <h4 className={`text-base sm:text-lg font-extrabold transition-colors tracking-tight line-clamp-1 ${
+                          <h4 className={`text-lg sm:text-xl font-black transition-colors tracking-tight line-clamp-1 ${
                             isDark ? 'text-white group-hover:text-emerald-400' : 'text-slate-900 group-hover:text-emerald-600'
                           }`}>
                             {job.title}
                           </h4>
-                          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-semibold mt-0.5">
-                            <span className="text-slate-300">{job.recruiterName}</span>
-                            <span>•</span>
-                            <span className="text-emerald-400">{job.department}</span>
+                          <div className="flex items-center gap-2 text-xs font-semibold mt-1">
+                            <span className="text-slate-400 font-medium inline-flex items-center gap-1">
+                              <User className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{job.entryBy || job.recruiterName || 'Recruiter'}</span>
+                            </span>
+                            <span className="text-slate-400 select-none">•</span>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold inline-flex items-center gap-1">
+                              <Briefcase className="w-3.5 h-3.5 text-emerald-500" />
+                              <span>{job.department}</span>
+                            </span>
                           </div>
                         </div>
 
-                        {/* Attribute Badges */}
+                        {/* 3-Column Attribute Badges */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-0.5">
                           {/* Location Badge */}
-                          <div className={`p-2 rounded-xl border text-[11px] flex items-center justify-between gap-1 ${
+                          <div className={`p-2.5 rounded-2xl border text-[11px] flex items-center gap-2 ${
                             locationMatch.isMatch 
-                              ? isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                              : isDark ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-900'
+                              ? isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-emerald-50/70 border-emerald-200 text-emerald-900 font-bold'
+                              : isDark ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-amber-50/70 border-amber-200 text-amber-900 font-bold'
                           }`}>
-                            <div className="flex items-center gap-1 truncate">
-                              <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
-                              <span className="font-bold truncate">{job.location}</span>
-                            </div>
+                            <MapPin className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                            <span className="truncate">{job.location}</span>
                           </div>
 
                           {/* Experience Badge */}
-                          <div className={`p-2 rounded-xl border text-[11px] flex items-center gap-1 ${
+                          <div className={`p-2.5 rounded-2xl border text-[11px] flex items-center gap-2 ${
                             expMatch.isMatch 
-                              ? isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 font-bold' : 'bg-emerald-50 border-emerald-200 text-emerald-900 font-bold'
+                              ? isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 font-bold' : 'bg-emerald-50/70 border-emerald-200 text-emerald-900 font-bold'
                               : isDark ? 'bg-rose-500/20 border-rose-500/40 text-rose-300 font-extrabold' : 'bg-rose-100 border-rose-300 text-rose-900 font-extrabold'
                           }`}>
                             {expMatch.isMatch ? (
-                              <Briefcase className="w-3 h-3 text-emerald-500 shrink-0" />
+                              <Briefcase className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                             ) : (
-                              <Ban className="w-3 h-3 text-rose-500 shrink-0" />
+                              <Ban className="w-3.5 h-3.5 text-rose-500 shrink-0" />
                             )}
                             <span className="truncate">
                               {expMatch.isMatch ? `Req: ${expMatch.requiredExp}` : `Min ${expMatch.requiredExp} Req`}
@@ -2431,36 +2583,37 @@ export default function PublicJobSeekerUpload() {
                           </div>
 
                           {/* Gender Badge */}
-                          <div className={`p-2 rounded-xl border text-[11px] flex items-center gap-1 ${
+                          <div className={`p-2.5 rounded-2xl border text-[11px] flex items-center gap-2 ${
                             genderMatch.isMatch 
-                              ? isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                              ? isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 font-bold' : 'bg-emerald-50/70 border-emerald-200 text-emerald-900 font-bold'
                               : isDark ? 'bg-rose-500/20 border-rose-500/40 text-rose-300 font-extrabold' : 'bg-rose-100 border-rose-300 text-rose-900 font-extrabold'
                           }`}>
-                            <User className="w-3 h-3 text-emerald-500 shrink-0" />
-                            <span className="font-semibold truncate">
+                            <User className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                            <span className="truncate font-semibold">
                               {genderMatch.requiredGender === 'Any' ? 'Gender: Any' : `${genderMatch.requiredGender}`}
                             </span>
                           </div>
                         </div>
 
                         {/* Education Qualification with Differentiators and Green Highlight for Matches */}
-                        <div className={`p-2 sm:p-2.5 rounded-xl border text-[11px] space-y-1.5 ${
-                          isDark ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'
+                        <div className={`p-3 rounded-2xl border text-[11px] space-y-2 ${
+                          isDark ? 'bg-white/[0.03] border-white/[0.08]' : 'bg-slate-50/80 border-slate-200/90'
                         }`}>
                           <div className="flex items-center justify-between gap-1.5">
-                            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-bold text-[10px] uppercase tracking-wider">
+                            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-extrabold text-[10px] uppercase tracking-wider">
                               <GraduationCap className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                               <span>Required Qualification</span>
                             </div>
                             {eduMatch.isMatch ? (
-                              <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${
-                                isDark ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' : 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                              <span className={`text-[9px] font-black px-2.5 py-0.5 rounded-full border shadow-sm shrink-0 inline-flex items-center gap-1 ${
+                                isDark ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-emerald-100 border-emerald-300 text-emerald-800'
                               }`}>
-                                ✓ Fit
+                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                <span>Fit</span>
                               </span>
                             ) : (
-                              <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${
-                                isDark ? 'bg-amber-500/20 border-amber-500/30 text-amber-300' : 'bg-amber-100 border-amber-300 text-amber-800'
+                              <span className={`text-[9px] font-black px-2.5 py-0.5 rounded-full border shadow-sm shrink-0 ${
+                                isDark ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'bg-amber-100 border-amber-300 text-amber-800'
                               }`}>
                                 Mismatch
                               </span>
@@ -2477,20 +2630,20 @@ export default function PublicJobSeekerUpload() {
                               
                               return (
                                 <React.Fragment key={option + idx}>
-                                  <span className={`px-2 py-0.5 rounded-lg text-[10px] sm:text-[11px] font-semibold border transition-all inline-flex items-center gap-1 ${
+                                  <span className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold border transition-all inline-flex items-center gap-1.5 ${
                                     isOptionMatched
                                       ? isDark
-                                        ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 font-bold shadow-sm ring-1 ring-emerald-500/30'
-                                        : 'bg-emerald-100 border-emerald-400 text-emerald-900 font-bold shadow-sm ring-1 ring-emerald-300'
+                                        ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 font-black shadow-sm ring-1 ring-emerald-500/30'
+                                        : 'bg-emerald-100/90 border-emerald-400 text-emerald-950 font-black shadow-sm ring-1 ring-emerald-300'
                                       : isDark
-                                      ? 'bg-white/5 border-white/10 text-slate-400'
+                                      ? 'bg-white/[0.04] border-white/10 text-slate-400'
                                       : 'bg-white border-slate-200 text-slate-600'
                                   }`}>
-                                    {isOptionMatched && <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400 stroke-[3]" />}
+                                    {isOptionMatched && <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 stroke-[3]" />}
                                     <span>{option}</span>
                                   </span>
                                   {idx < arr.length - 1 && (
-                                    <span className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 select-none px-0.5">
+                                    <span className="text-[11px] font-extrabold text-slate-400 dark:text-slate-500 select-none px-0.5">
                                       •
                                     </span>
                                   )}
@@ -2500,33 +2653,34 @@ export default function PublicJobSeekerUpload() {
                           </div>
                         </div>
 
-                        {/* Skills Display (Ratio count text like '0/4 matched' removed) */}
+                        {/* Skills Display */}
                         {skillMatch.matchedSkills.length > 0 ? (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1 text-[11px] font-bold">
+                          <div className="space-y-1.5 pt-0.5">
+                            <div className="flex items-center gap-1.5 text-[11px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-wider">
                               <Tag className="w-3 h-3 text-emerald-500" />
                               <span>Matched Skills</span>
                             </div>
-                            <div className="flex flex-wrap gap-1">
+                            <div className="flex flex-wrap gap-1.5">
                               {skillMatch.matchedSkills.map(s => (
-                                <span key={s} className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
-                                  isDark ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' : 'bg-emerald-100 border-emerald-300 text-emerald-900'
+                                <span key={s} className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black border flex items-center gap-1 ${
+                                  isDark ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : 'bg-emerald-100/80 border-emerald-300 text-emerald-900'
                                 }`}>
-                                  ✓ {s}
+                                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                  <span>{s}</span>
                                 </span>
                               ))}
                             </div>
                           </div>
                         ) : skillMatch.missingSkills.length > 0 && (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1 text-[11px] font-bold text-slate-400">
+                          <div className="space-y-1.5 pt-0.5">
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                               <Tag className="w-3 h-3 text-slate-400" />
                               <span>Key Job Skills</span>
                             </div>
-                            <div className="flex flex-wrap gap-1">
+                            <div className="flex flex-wrap gap-1.5">
                               {skillMatch.missingSkills.slice(0, 3).map(s => (
-                                <span key={s} className={`px-2 py-0.5 rounded text-[9px] border ${
-                                  isDark ? 'bg-white/5 border-white/10 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-500'
+                                <span key={s} className={`px-2.5 py-0.5 rounded-lg text-[10px] border font-medium ${
+                                  isDark ? 'bg-white/[0.04] border-white/10 text-slate-400' : 'bg-slate-100 border-slate-200 text-slate-500'
                                 }`}>
                                   {s}
                                 </span>
@@ -2537,24 +2691,26 @@ export default function PublicJobSeekerUpload() {
 
                         {/* Fail Reasons if strict criteria fail */}
                         {failReasons.length > 0 && (
-                          <div className={`p-2 rounded-xl border text-[10px] space-y-0.5 ${
+                          <div className={`p-2.5 rounded-xl border text-[11px] space-y-0.5 ${
                             isDisqualified 
                               ? isDark ? 'bg-rose-950/40 border-rose-800/60 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-950' 
                               : isDark ? 'bg-amber-950/40 border-amber-800/60 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-900'
                           }`}>
-                            <span className="font-bold block">
-                              {isDisqualificationReason(failReasons[0]) ? '🚫 Reason: ' : '⚠️ Note: '} {failReasons[0]}
+                            <span className="font-bold block flex items-center gap-1">
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                              <span>{isDisqualificationReason(failReasons[0]) ? 'Reason: ' : 'Note: '} {failReasons[0]}</span>
                             </span>
                           </div>
                         )}
                       </div>
 
                       {/* Card Action Footer */}
-                      <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between gap-2 relative z-10">
+                      <div className="pt-4 border-t border-slate-200 dark:border-white/10 flex items-center justify-between gap-2.5 relative z-10">
                         <button
+                          type="button"
                           onClick={() => setSelectedJobForModal(matchItem)}
-                          className={`flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer border ${
-                            isDark ? 'bg-white/10 border-white/10 text-white hover:bg-white/15' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
+                          className={`flex-1 py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                            isDark ? 'bg-white/[0.06] border-white/10 text-white hover:bg-white/[0.12]' : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-slate-200'
                           }`}
                         >
                           <Eye className="w-3.5 h-3.5 text-slate-400" />
@@ -2562,12 +2718,13 @@ export default function PublicJobSeekerUpload() {
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => handleOpenApplyModal(matchItem)}
                           disabled={isDisqualified}
-                          className={`flex-1 py-2.5 px-3 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                          className={`flex-1 py-2.5 px-4 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                             isDisqualified 
                               ? 'bg-slate-200 dark:bg-white/5 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-300 dark:border-white/10' 
-                              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20'
+                              : 'bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-600/30 hover:shadow-emerald-500/40 active:scale-[0.98]'
                           }`}
                         >
                           <span>{isDisqualified ? 'Criteria Unmet' : 'Apply & Start'}</span>

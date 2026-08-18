@@ -1146,19 +1146,31 @@ export function checkMandatoryCriteriaMatch(
     }
   }
 
-  // 4. Experience Check
+  // 4. Experience Check (Candidates with experience >= minExp always match, no max cap disqualification)
   const isStrictExp = Boolean(job.strictExperienceMatch);
   if (isStrictExp) {
-    const minExp = Math.max(0, Number(job.minExperience) || Number(job.experience) || 0);
-    const maxExp = Math.max(0, Number(job.maxExperience) || 0);
+    let minExp = 0;
+    if (job.minExperience !== undefined && job.minExperience !== null && !isNaN(Number(job.minExperience))) {
+      minExp = Math.max(0, Number(job.minExperience));
+    }
+    const rawExpStr = String(job.experience || job.minExperience || '').trim();
+    if (minExp === 0 && rawExpStr) {
+      const rangeMatch = rawExpStr.match(/(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)/i);
+      if (rangeMatch) {
+        minExp = parseFloat(rangeMatch[1]) || 0;
+      } else {
+        const singleMatch = rawExpStr.match(/(\d+(?:\.\d+)?)/);
+        if (singleMatch && !/fresher|0\s*yr/i.test(rawExpStr)) {
+          minExp = parseFloat(singleMatch[1]) || 0;
+        }
+      }
+    }
+
     const rawCandExp = candidate.totalExperienceYears ?? candidate.experience ?? 0;
     const candExp = Math.max(0, parseFloat(String(rawCandExp).replace(/[^0-9.]/g, '')) || 0);
 
     if (minExp > 0 && candExp < minExp) {
       failReasons.push(`Experience Mismatch: Min ${minExp} yrs required (candidate has ${candExp} yrs).`);
-    }
-    if (maxExp > 0 && maxExp >= minExp && candExp > maxExp) {
-      failReasons.push(`Experience Mismatch: Max ${maxExp} yrs required (candidate has ${candExp} yrs).`);
     }
   }
 

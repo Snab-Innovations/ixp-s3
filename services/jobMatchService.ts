@@ -350,31 +350,55 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
   }
 
   // 6. Experience Matching (Weight: 15 points)
-  const minExp = Math.max(0, Number(job.minExperience) || (typeof job.experience === 'number' ? job.experience : 0));
-  const maxExp = Math.max(0, Number(job.maxExperience) || 0);
+  let minExp = 0;
+  let maxExp = 0;
+
+  if (job.minExperience !== undefined && job.minExperience !== null && !isNaN(Number(job.minExperience))) {
+    minExp = Math.max(0, Number(job.minExperience));
+  }
+  if (job.maxExperience !== undefined && job.maxExperience !== null && !isNaN(Number(job.maxExperience))) {
+    maxExp = Math.max(0, Number(job.maxExperience));
+  }
+
+  // Parse string ranges like "2 - 3 Yrs", "2-3 Years", "2 to 3", "2+ Yrs"
+  const rawJobExpStr = String(job.experience || job.minExperience || '').trim();
+  if (minExp === 0 && rawJobExpStr) {
+    const rangeMatch = rawJobExpStr.match(/(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)/i);
+    if (rangeMatch) {
+      minExp = parseFloat(rangeMatch[1]) || 0;
+      maxExp = parseFloat(rangeMatch[2]) || 0;
+    } else {
+      const singleMatch = rawJobExpStr.match(/(\d+(?:\.\d+)?)/);
+      if (singleMatch && !/fresher|0\s*yr/i.test(rawJobExpStr)) {
+        minExp = parseFloat(singleMatch[1]) || 0;
+      }
+    }
+  }
+
   const rawCandExp = candidate.totalExperienceYears ?? candidate.experience ?? 0;
   const candExpNum = Math.max(0, parseFloat(String(rawCandExp).replace(/[^0-9.]/g, '')) || 0);
 
   let expMatch = true;
-  let expLabel = `Experience Fits (${candExpNum} Yrs)`;
-  let reqExpText = minExp > 0 ? (maxExp > minExp ? `${minExp} - ${maxExp} Yrs` : `${minExp}+ Yrs`) : 'Fresher / Any Experience';
-
   let expScore = 15;
+  let expLabel = `Experience Fits (${candExpNum} Yrs)`;
+  const reqExpText = minExp > 0 ? (maxExp > minExp ? `${minExp} - ${maxExp} Yrs` : `${minExp}+ Yrs`) : 'Fresher / Any Experience';
+
   if (minExp > 0) {
     if (candExpNum >= minExp) {
+      expMatch = true;
       expScore = 15;
       expLabel = `Meets Experience (${candExpNum} Yrs vs ${minExp}+ Yrs required)`;
       matchReasons.push(`Meets experience criteria (${candExpNum} Yrs)`);
-    } else if (candExpNum > 0 && candExpNum >= minExp - 1) {
-      expScore = 9;
-      expLabel = `Close Experience (${candExpNum} Yrs vs ${minExp} Yrs required)`;
     } else {
-      expMatch = candExpNum >= minExp;
+      // Candidate experience is strictly below the required minimum (e.g. 1 yr vs 2-3 yrs required)
+      expMatch = false;
       expScore = 0;
-      expLabel = `Requires min ${minExp} Yrs (Candidate has ${candExpNum} Yrs)`;
+      expLabel = `Requires minimum ${minExp} Yrs (Candidate has ${candExpNum} Yrs)`;
       failReasons.push(expLabel);
     }
   } else {
+    expMatch = true;
+    expScore = 15;
     matchReasons.push(`Experience eligible (${candExpNum} Yrs)`);
   }
 
