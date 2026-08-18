@@ -785,17 +785,6 @@ export default function PublicJobSeekerUpload() {
 
         if (ingested.profile.phone && !candidatePhone.trim()) setCandidatePhone(ingested.profile.phone);
 
-        if (ingested.profile.location) {
-          const matchedCity = matchExtractedLocationToPresentCity(ingested.profile.location);
-          if (matchedCity && !candidateLocation.trim()) {
-            setCandidateLocation(matchedCity);
-          }
-        }
-
-        if (ingested.profile.totalExperienceYears) {
-          setCandidateExp(ingested.profile.totalExperienceYears);
-        }
-
         if (ingested.profile.education && ingested.profile.education.length > 0) {
           const degree = ingested.profile.education[0]?.degree;
           if (degree && !candidateEducation.trim()) {
@@ -803,28 +792,18 @@ export default function PublicJobSeekerUpload() {
           }
         }
 
-        const autoSecs = detectSectorsFromText(ingested.resumeText || '');
-        const autoDepts = detectDepartmentsFromText(ingested.resumeText || '');
-
-        if (autoSecs.length > 0) setCandidateSectors(autoSecs.slice(0, 5));
-        if (autoDepts.length > 0) setCandidateDepartments(autoDepts.slice(0, 5));
-
-        const combinedAuto = Array.from(new Set([...autoSecs, ...autoDepts]));
-        if (combinedAuto.length > 0) {
-          setCandidateDomains(combinedAuto);
-          setCandidateDomain(combinedAuto.join(', '));
-        }
+        // Note: Location, Experience, Industry Sectors, and Functional Departments are intentionally NOT autofilled so that candidate must fill/select them manually.
 
         if (Array.isArray(ingested.profile.skills) && ingested.profile.skills.length > 0) {
           setExtractedSkills(ingested.profile.skills);
-          messageBox.showSuccess(`Resume parsed instantly & auto-fetched ${ingested.profile.skills.length} skills!`);
+          messageBox.showSuccess(`Resume attached! Skills auto-detected. Please fill in your Location, Experience, Industry Sectors, and Departments below.`);
         } else {
-          messageBox.showSuccess("Resume parsed. Please verify your details below.");
+          messageBox.showSuccess("Resume attached. Please fill in your Location, Experience, Industry Sectors, and Departments below.");
         }
       }
     } catch (err: any) {
       console.error("Resume Local Parsing Error:", err);
-      messageBox.showInfo("Resume attached. You can fill or verify your details below.");
+      messageBox.showInfo("Resume attached. Please fill in your mandatory Location, Experience, Industry Sectors, and Departments below.");
     } finally {
       setIsParsingResume(false);
     }
@@ -912,11 +891,11 @@ export default function PublicJobSeekerUpload() {
       return;
     }
     if (!candidateLocation.trim()) {
-      messageBox.showError("Please select or type your Location / City.");
+      messageBox.showError("Please select or type your Location / Target City.");
       return;
     }
     if (!candidateExp.trim()) {
-      messageBox.showError("Please specify your Experience in Years.");
+      messageBox.showError("Please enter your Experience in Years (Enter 0 if you are a Fresher).");
       return;
     }
     if (!candidateEducation.trim()) {
