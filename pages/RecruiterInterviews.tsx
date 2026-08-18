@@ -1121,12 +1121,23 @@ const RecruiterInterviews: React.FC = () => {
   const departments = ['All', ...Array.from(new Set(interviews.map(i => i.department).filter(Boolean)))];
 
   const filteredInterviews = interviews.filter(interview => {
-    // 1. Search Query filter (title, department, description)
+    // 1. Search Query filter (title, department, description, job number, access code)
+    const cleanSearch = searchQuery.toLowerCase().trim();
+    const searchDigits = cleanSearch.replace(/\D/g, '');
+    const rawJobNo = String((interview as any).jobNo || '').toLowerCase().trim();
+    const rawCode = String(interview.accessCode || '').toLowerCase().trim();
+    const rawId = String(interview.id || '').toLowerCase().trim();
+
+    const matchesJobNo = (rawJobNo && (rawJobNo.includes(cleanSearch) || (searchDigits && rawJobNo.includes(searchDigits)))) ||
+      (rawCode && (rawCode.includes(cleanSearch) || (searchDigits && rawCode.includes(searchDigits)))) ||
+      rawId.includes(cleanSearch);
+
     const matchesSearch = 
-      !searchQuery ||
-      interview.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      interview.department?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      interview.description?.toLowerCase().includes(searchQuery.toLowerCase());
+      !cleanSearch ||
+      matchesJobNo ||
+      interview.title?.toLowerCase().includes(cleanSearch) ||
+      interview.department?.toLowerCase().includes(cleanSearch) ||
+      interview.description?.toLowerCase().includes(cleanSearch);
       
     // 2. Active / Expired filter
     const interviewStatus = getInterviewStatus(interview).label;

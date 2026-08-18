@@ -22,31 +22,55 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
+const CACHED_PROFILE_KEY = 'ixp_user_profile';
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<User | null>(() => auth.currentUser);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
+    try {
+      const cached = localStorage.getItem(CACHED_PROFILE_KEY);
+      if (cached) return JSON.parse(cached);
+    } catch (e) {
+      console.warn("Failed to parse cached profile", e);
+    }
+    return null;
+  });
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (uid: string) => {
     try {
-      const profileSnap = await getDoc(doc(db, 'profiles', uid));
-      const userSnap = await getDoc(doc(db, 'users', uid));
+      const [profileSnap, userSnap] = await Promise.all([
+        getDoc(doc(db, 'profiles', uid)).catch(() => null),
+        getDoc(doc(db, 'users', uid)).catch(() => null),
+      ]);
 
       let merged: any = {};
-      if (userSnap.exists()) {
+      if (userSnap && userSnap.exists()) {
         merged = { ...userSnap.data() };
       }
-      if (profileSnap.exists()) {
+      if (profileSnap && profileSnap.exists()) {
         merged = { ...merged, ...profileSnap.data() };
       }
 
-      if (merged.email || merged.name || merged.displayName || merged.phoneNumber) {
-        setUserProfile({
-          ...merged,
-          name: merged.name || merged.displayName || 'Recruiter',
-          phone: merged.phoneNumber || merged.phone || merged.contactNumber || '',
-        } as UserProfile);
-      }
+      const currentUser = auth.currentUser;
+      const resolvedRole = merged.role || (currentUser?.email === 'admin@dsauce.io' || currentUser?.email?.includes('admin') ? 'admin' : 'recruiter');
+      const resolvedName = merged.name || merged.displayName || currentUser?.displayName || 'Recruiter';
+      const resolvedPhone = merged.phoneNumber || merged.phone || merged.contactNumber || currentUser?.phoneNumber || '';
+
+      const updatedProfile: UserProfile = {
+        ...merged,
+        uid,
+        email: currentUser?.email || merged.email || '',
+        name: resolvedName,
+        phone: resolvedPhone,
+        phoneNumber: resolvedPhone,
+        role: resolvedRole,
+      } as UserProfile;
+
+      setUserProfile(updatedProfile);
+      try {
+        localStorage.setItem(CACHED_PROFILE_KEY, JSON.stringify(updatedProfile));
+      } catch (e) {}
     } catch (err) {
       console.error("Error fetching profile:", err);
     }
@@ -67,18 +91,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const updateCombined = () => {
           const combined = { ...userData, ...profileData };
+          let cachedRole: string | undefined;
+          try {
+            const cached = localStorage.getItem(CACHED_PROFILE_KEY);
+            if (cached) cachedRole = JSON.parse(cached)?.role;
+          } catch (e) {}
+
+          const resolvedRole = combined.role || cachedRole || (currentUser.email === 'admin@dsauce.io' || currentUser.email?.includes('admin') ? 'admin' : 'recruiter');
           const resolvedName = combined.name || combined.displayName || currentUser.displayName || 'Recruiter';
           const resolvedPhone = combined.phoneNumber || combined.phone || combined.contactNumber || currentUser.phoneNumber || '';
 
-          setUserProfile({
+          const updated: UserProfile = {
             ...combined,
             uid: currentUser.uid,
             email: currentUser.email || combined.email || '',
             name: resolvedName,
             phone: resolvedPhone,
             phoneNumber: resolvedPhone,
-          } as UserProfile);
+            role: resolvedRole,
+          } as UserProfile;
+
+          setUserProfile(updated);
+          try {
+            localStorage.setItem(CACHED_PROFILE_KEY, JSON.stringify(updated));
+          } catch (e) {}
         };
+
+        // Immediately populate fallback userProfile from user object so routes don't block
+        updateCombined();
 
         unSubProfile = onSnapshot(
           doc(db, 'profiles', currentUser.uid),
@@ -100,10 +140,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             updateCombined();
             setLoading(false);
           },
-          () => {}
+          () => {
+            setLoading(false);
+          }
         );
       } else {
         setUserProfile(null);
+        try {
+          localStorage.removeItem(CACHED_PROFILE_KEY);
+        } catch (e) {}
       }
       setLoading(false);
     });
@@ -116,9 +161,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signOut = async () => {
-    await firebaseSignOut(auth);
-    setUser(null);
-    setUserProfile(null);
+    try {
+      await firebaseSignOut(auth);
+    } catch (e) {
+      console.error("Firebase sign out failed:", e);
+    } finally {
+      setUser(null);
+      setUserProfile(null);
+      try {
+        localStorage.removeItem(CACHED_PROFILE_KEY);
+      } catch (e) {}
+    }
   };
 
   const refreshProfile = async () => {

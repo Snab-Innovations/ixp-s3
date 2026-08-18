@@ -13,7 +13,7 @@ import { EducationInput } from '../components/EducationInput';
 import { isEducationMatching } from '../utils/educationMatcher';
 
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
-import { ALL_JOB_DOMAINS, ALL_JOB_SECTORS, ALL_JOB_DEPARTMENTS } from '../data/jobDomains';
+import { ALL_JOB_DOMAINS, ALL_JOB_SECTORS, ALL_JOB_DEPARTMENTS, resolveCandidateSectorsAndDepartments } from '../data/jobDomains';
 import { SKILL_OPTIONS } from './Profile';
 import { analyzeResumeText, ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
 import { sendBulkWhatsAppInvites } from '../services/waSenderService';
@@ -1762,20 +1762,20 @@ const ResumeDump: React.FC = () => {
         </section>
 
       {/* Interactive Naukri-Style Filter Bar */}
-      <section className="border-b border-white/[0.11] bg-[#050505] px-4 py-3 sm:px-6 lg:px-7 space-y-3">
+      <section className="border-b border-gray-200 dark:border-white/[0.11] bg-slate-50 dark:bg-[#050505] px-4 py-3 sm:px-6 lg:px-7 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
             {/* Select Job Role (Ranks candidates by Highest Match Score) */}
             <div className="flex items-center gap-1.5 shrink-0">
-              <Briefcase size={14} className="text-[#8f8f8f] shrink-0" />
+              <Briefcase size={14} className="text-gray-500 dark:text-[#8f8f8f] shrink-0" />
               <select
                 value={selectedJobId}
                 onChange={(e) => setSelectedJobId(e.target.value)}
-                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[200px]"
+                className="geist-caption h-8 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs text-slate-800 dark:text-white outline-none focus:border-black dark:focus:border-white/30 cursor-pointer max-w-[200px]"
               >
-                <option value="all" className="bg-[#111] text-white">Select Job Role ({jobs.length} Jobs)</option>
+                <option value="all">Select Job Role ({jobs.length} Jobs)</option>
                 {jobs.map(j => (
-                  <option key={j.id} value={j.id} className="bg-[#111] text-white">
+                  <option key={j.id} value={j.id}>
                     {j.title || j.jobRole || 'Job'} {j.accessCode ? `(${j.accessCode})` : ''}
                   </option>
                 ))}
@@ -1783,25 +1783,25 @@ const ResumeDump: React.FC = () => {
             </div>
 
             {/* Status Filter */}
-            <div className="flex items-center gap-1 bg-[#111] border border-white/[0.11] rounded-[6px] p-0.5 text-xs">
+            <div className="flex items-center gap-1 bg-gray-200/70 dark:bg-[#111] border border-gray-300 dark:border-white/[0.11] rounded-[6px] p-0.5 text-xs">
               <button
                 type="button"
                 onClick={() => setStatusFilter('all')}
-                className={`px-2 py-1 rounded-[4px] font-medium transition-colors ${statusFilter === 'all' ? 'bg-white text-black font-semibold' : 'text-[#8f8f8f] hover:text-white'}`}
+                className={`px-2 py-1 rounded-[4px] font-medium transition-colors ${statusFilter === 'all' ? 'bg-white dark:bg-white text-black font-semibold shadow-xs' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-black dark:hover:text-white'}`}
               >
                 All Status
               </button>
               <button
                 type="button"
                 onClick={() => setStatusFilter('available')}
-                className={`px-2 py-1 rounded-[4px] font-medium transition-colors ${statusFilter === 'available' ? 'bg-white text-black font-semibold' : 'text-[#8f8f8f] hover:text-white'}`}
+                className={`px-2 py-1 rounded-[4px] font-medium transition-colors ${statusFilter === 'available' ? 'bg-white dark:bg-white text-black font-semibold shadow-xs' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-black dark:hover:text-white'}`}
               >
                 Available
               </button>
               <button
                 type="button"
                 onClick={() => setStatusFilter('hired')}
-                className={`px-2 py-1 rounded-[4px] font-medium transition-colors ${statusFilter === 'hired' ? 'bg-emerald-500 text-white font-semibold' : 'text-[#8f8f8f] hover:text-white'}`}
+                className={`px-2 py-1 rounded-[4px] font-medium transition-colors ${statusFilter === 'hired' ? 'bg-emerald-600 dark:bg-emerald-500 text-white font-semibold shadow-xs' : 'text-gray-600 dark:text-[#8f8f8f] hover:text-black dark:hover:text-white'}`}
               >
                 Hired
               </button>
@@ -1809,7 +1809,7 @@ const ResumeDump: React.FC = () => {
 
             {/* Skill Rec Box Filter (Multi-Select Checkmarks) */}
             <div className="flex items-center gap-1 shrink-0 relative">
-              <Filter size={13} className="text-[#8f8f8f] shrink-0" />
+              <Filter size={13} className="text-gray-500 dark:text-[#8f8f8f] shrink-0" />
               <button
                 type="button"
                 onClick={() => setIsSkillRecBoxOpen(prev => !prev)}
@@ -1821,7 +1821,7 @@ const ResumeDump: React.FC = () => {
                     ? `Skills (${selectedSkills.length})`
                     : `All Skills (${uniqueSkillsList.length})`}
                 </span>
-                <ChevronDown size={12} className="text-[#8f8f8f] shrink-0 ml-1" />
+                <ChevronDown size={12} className="text-gray-500 dark:text-[#8f8f8f] shrink-0 ml-1" />
               </button>
 
               {/* Floating Recommended Skills Box (Rec Box) */}
@@ -1917,7 +1917,7 @@ const ResumeDump: React.FC = () => {
             <select
               value={titleFilter}
               onChange={(e) => setTitleFilter(e.target.value)}
-              className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[180px]"
+              className="geist-caption h-8 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs text-slate-800 dark:text-white outline-none focus:border-black dark:focus:border-white/30 cursor-pointer max-w-[180px]"
             >
               <option value="all">All Roles / Industry ({uniqueTitlesList.length})</option>
               {uniqueTitlesList.map(title => (
@@ -1932,11 +1932,11 @@ const ResumeDump: React.FC = () => {
                 onClick={() => setIsDomainRecBoxOpen(true)}
                 className={`geist-caption h-8 rounded-[6px] border px-3 text-xs outline-none transition-colors flex items-center gap-2 cursor-pointer ${
                   selectedDomains.length > 0 || domainFilter !== 'all'
-                    ? 'border-emerald-500 bg-emerald-950/40 text-emerald-300 font-bold'
-                    : 'border-white/[0.11] bg-[#111] text-white hover:border-white/30'
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold'
+                    : 'border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] text-slate-800 dark:text-white hover:border-gray-400 dark:hover:border-white/30'
                 }`}
               >
-                <Briefcase size={13} className={selectedDomains.length > 0 ? 'text-emerald-400' : 'text-[#8f8f8f]'} />
+                <Briefcase size={13} className={selectedDomains.length > 0 || domainFilter !== 'all' ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-500 dark:text-[#8f8f8f]'} />
                 <span>
                   {selectedDomains.length > 0
                     ? `${selectedDomains.length} Sector/Dept Selected`
@@ -1945,17 +1945,17 @@ const ResumeDump: React.FC = () => {
                     : 'All Domains & Sectors (Checkmarks)'}
                 </span>
                 {selectedDomains.length > 0 && (
-                  <span className="w-4 h-4 rounded-full bg-emerald-500 text-black text-[10px] font-black flex items-center justify-center">
+                  <span className="w-4 h-4 rounded-full bg-emerald-500 text-white dark:text-black text-[10px] font-black flex items-center justify-center">
                     {selectedDomains.length}
                   </span>
                 )}
-                <ChevronDown size={12} className="text-[#8f8f8f]" />
+                <ChevronDown size={12} className="text-gray-500 dark:text-[#8f8f8f]" />
               </button>
             </div>
 
                 {isDomainRecBoxOpen && createPortal(
                   <div 
-                    className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200"
+                    className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
                     onClick={() => setIsDomainRecBoxOpen(false)}
                   >
                     <div 
@@ -1965,19 +1965,19 @@ const ResumeDump: React.FC = () => {
                       {/* Header */}
                       <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-white/10 flex items-center justify-between gap-4 bg-slate-50 dark:bg-white/[0.02]">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 shrink-0">
+                          <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-500 shrink-0">
                             <Briefcase className="w-5 h-5" />
                           </div>
                           <div>
-                            <h3 className="text-base sm:text-lg font-extrabold flex items-center gap-2">
+                            <h3 className="text-base sm:text-lg font-extrabold flex items-center gap-2 text-slate-900 dark:text-white">
                               <span>Filter Sectors & Departments</span>
                               {selectedDomains.length > 0 && (
-                                <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
                                   {selectedDomains.length} Active
                                 </span>
                               )}
                             </h3>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                            <p className="text-xs text-slate-600 dark:text-slate-400">
                               Checkmark options to filter candidate resumes live by industry sectors and functional departments.
                             </p>
                           </div>
@@ -1985,7 +1985,7 @@ const ResumeDump: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setIsDomainRecBoxOpen(false)}
-                          className="w-8 h-8 rounded-full bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 flex items-center justify-center text-slate-600 dark:text-slate-300 transition-colors cursor-pointer shrink-0"
+                          className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 dark:bg-white/10 dark:hover:bg-white/20 flex items-center justify-center text-slate-700 dark:text-slate-300 transition-colors cursor-pointer shrink-0"
                         >
                           <XCircle className="w-5 h-5" />
                         </button>
@@ -2000,13 +2000,13 @@ const ResumeDump: React.FC = () => {
                             value={domainRecSearch}
                             onChange={(e) => setDomainRecSearch(e.target.value)}
                             placeholder="Search sector or department..."
-                            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs text-slate-900 dark:text-white outline-none focus:border-emerald-500"
+                            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-300 dark:border-white/10 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                           />
                           {domainRecSearch && (
                             <button
                               type="button"
                               onClick={() => setDomainRecSearch('')}
-                              className="absolute right-2.5 top-2 text-xs text-slate-400 hover:text-slate-200"
+                              className="absolute right-2.5 top-2 text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                             >
                               Clear
                             </button>
@@ -2018,7 +2018,7 @@ const ResumeDump: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => setSelectedDomains([])}
-                              className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 font-bold text-xs border border-red-500/20 transition-all cursor-pointer"
+                              className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-bold text-xs border border-red-200 dark:border-red-500/20 transition-all cursor-pointer"
                             >
                               Clear All Checkmarks ({selectedDomains.length})
                             </button>
@@ -2027,11 +2027,11 @@ const ResumeDump: React.FC = () => {
                       </div>
 
                       {/* Scrollable Checkmarks Grid Container */}
-                      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 bg-slate-50/50 dark:bg-transparent">
                         {/* 1. Industry Sectors Grid */}
                         <div className="space-y-3">
                           <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
-                            <label className="text-xs font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                            <label className="text-xs font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
                               Industry Sectors ({ALL_JOB_SECTORS.length})
                             </label>
                           </div>
@@ -2049,17 +2049,17 @@ const ResumeDump: React.FC = () => {
                                         : [...prev, sectorName]
                                     );
                                   }}
-                                  className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border text-xs transition-all text-left cursor-pointer ${
+                                  className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border text-xs transition-all text-left cursor-pointer shadow-2xs ${
                                     isChecked
-                                      ? 'bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-600/20 ring-1 ring-emerald-400 font-bold'
-                                      : 'bg-slate-50 dark:bg-[#181818] border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-emerald-500/40 font-semibold'
+                                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20 ring-2 ring-emerald-500/30 font-bold'
+                                      : 'bg-white dark:bg-[#181818] border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-300 hover:border-emerald-500/40 hover:bg-emerald-50/40 dark:hover:bg-white/5 font-semibold'
                                   }`}
                                 >
                                   <span className="break-words font-semibold text-[11px] sm:text-xs min-w-0 flex-1 pr-1">{sectorName}</span>
                                   <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-all ${
                                     isChecked
-                                      ? 'bg-white text-emerald-600 border-white'
-                                      : 'border-slate-300 dark:border-white/20 bg-white dark:bg-white/5'
+                                      ? 'bg-white text-emerald-600 border-white shadow-xs'
+                                      : 'border-slate-300 dark:border-white/20 bg-slate-50 dark:bg-white/5'
                                   }`}>
                                     {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
                                   </div>
@@ -2072,7 +2072,7 @@ const ResumeDump: React.FC = () => {
                         {/* 2. Functional Departments Grid */}
                         <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-white/10">
                           <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
-                            <label className="text-xs font-extrabold uppercase tracking-wider text-teal-600 dark:text-teal-400">
+                            <label className="text-xs font-extrabold uppercase tracking-wider text-teal-700 dark:text-teal-400">
                               Functional Departments ({ALL_JOB_DEPARTMENTS.length})
                             </label>
                           </div>
@@ -2090,17 +2090,17 @@ const ResumeDump: React.FC = () => {
                                         : [...prev, deptName]
                                     );
                                   }}
-                                  className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border text-xs transition-all text-left cursor-pointer ${
+                                  className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border text-xs transition-all text-left cursor-pointer shadow-2xs ${
                                     isChecked
-                                      ? 'bg-teal-600 text-white border-teal-500 shadow-md shadow-teal-600/20 ring-1 ring-teal-400 font-bold'
-                                      : 'bg-slate-50 dark:bg-[#181818] border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-teal-500/40 font-semibold'
+                                      ? 'bg-teal-600 text-white border-teal-600 shadow-md shadow-teal-600/20 ring-2 ring-teal-500/30 font-bold'
+                                      : 'bg-white dark:bg-[#181818] border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-300 hover:border-teal-500/40 hover:bg-teal-50/40 dark:hover:bg-white/5 font-semibold'
                                   }`}
                                 >
                                   <span className="break-words font-semibold text-[11px] sm:text-xs min-w-0 flex-1 pr-1">{deptName}</span>
                                   <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-all ${
                                     isChecked
-                                      ? 'bg-white text-teal-600 border-white'
-                                      : 'border-slate-300 dark:border-white/20 bg-white dark:bg-white/5'
+                                      ? 'bg-white text-teal-600 border-white shadow-xs'
+                                      : 'border-slate-300 dark:border-white/20 bg-slate-50 dark:bg-white/5'
                                   }`}>
                                     {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
                                   </div>
@@ -2113,7 +2113,7 @@ const ResumeDump: React.FC = () => {
                         {allAvailableDomains.length > 0 && (
                           <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-white/10">
                             <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
-                              <label className="text-xs font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                              <label className="text-xs font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400">
                                 Active Database Candidate Domains ({allAvailableDomains.length})
                               </label>
                             </div>
@@ -2132,17 +2132,17 @@ const ResumeDump: React.FC = () => {
                                           : [...prev, domName]
                                       );
                                     }}
-                                    className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border text-xs transition-all text-left cursor-pointer ${
+                                    className={`flex items-center justify-between p-2.5 sm:p-3 rounded-xl border text-xs transition-all text-left cursor-pointer shadow-2xs ${
                                       isChecked
-                                        ? 'bg-blue-600 text-white border-blue-500 shadow-md shadow-blue-600/20 ring-1 ring-blue-400 font-bold'
-                                        : 'bg-slate-50 dark:bg-[#181818] border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-blue-500/40 font-semibold'
+                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20 ring-2 ring-blue-500/30 font-bold'
+                                        : 'bg-white dark:bg-[#181818] border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-300 hover:border-blue-500/40 hover:bg-blue-50/40 dark:hover:bg-white/5 font-semibold'
                                     }`}
                                   >
                                     <span className="break-words font-semibold text-[11px] sm:text-xs min-w-0 flex-1 pr-1">{domName}</span>
                                     <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-all ${
                                       isChecked
-                                        ? 'bg-white text-blue-600 border-white'
-                                        : 'border-slate-300 dark:border-white/20 bg-white dark:bg-white/5'
+                                        ? 'bg-white text-blue-600 border-white shadow-xs'
+                                        : 'border-slate-300 dark:border-white/20 bg-slate-50 dark:bg-white/5'
                                     }`}>
                                       {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
                                     </div>
@@ -2156,7 +2156,7 @@ const ResumeDump: React.FC = () => {
 
                       {/* Modal Footer */}
                       <div className="p-4 border-t border-gray-200 dark:border-white/10 flex items-center justify-between gap-3 bg-slate-50 dark:bg-white/[0.02]">
-                        <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                        <span className="text-xs text-slate-600 dark:text-slate-400 font-semibold">
                           {selectedDomains.length} Checkmark Filters Active
                         </span>
                         <div className="flex items-center gap-2">
@@ -2177,11 +2177,11 @@ const ResumeDump: React.FC = () => {
 
             {/* Experience Range Filter */}
             <div className="flex items-center gap-1 shrink-0">
-              <Award size={13} className="text-[#8f8f8f] shrink-0" />
+              <Award size={13} className="text-gray-500 dark:text-[#8f8f8f] shrink-0" />
               <select
                 value={expFilter}
                 onChange={(e) => setExpFilter(e.target.value)}
-                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[170px]"
+                className="geist-caption h-8 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs text-slate-800 dark:text-white outline-none focus:border-black dark:focus:border-white/30 cursor-pointer max-w-[170px]"
               >
                 <option value="all">All Experience</option>
                 <option value="0-1">0 - 1 Yrs (Freshers)</option>
@@ -2194,11 +2194,11 @@ const ResumeDump: React.FC = () => {
 
             {/* Location / City Filter Dropdown */}
             <div className="flex items-center gap-1 shrink-0">
-              <MapPin size={13} className="text-[#8f8f8f] shrink-0" />
+              <MapPin size={13} className="text-gray-500 dark:text-[#8f8f8f] shrink-0" />
               <select
                 value={locationFilter}
                 onChange={(e) => setLocationFilter(e.target.value)}
-                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[160px]"
+                className="geist-caption h-8 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs text-slate-800 dark:text-white outline-none focus:border-black dark:focus:border-white/30 cursor-pointer max-w-[160px]"
               >
                 <option value="all">All Locations ({uniqueLocationsList.length})</option>
                 {uniqueLocationsList.map(loc => (
@@ -2228,18 +2228,18 @@ const ResumeDump: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsInviteModalOpen(true)}
-                className="geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-white text-black hover:bg-neutral-200 px-3 font-semibold text-xs transition-colors shrink-0"
+                className="geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 px-3 font-semibold text-xs transition-colors shrink-0 shadow-sm"
               >
                 <Send size={13} strokeWidth={2} />
                 <span>Send Invite ({selectedCandidateIds.length})</span>
               </button>
             )}
 
-            <span className="text-xs text-[#8f8f8f] font-medium">
+            <span className="text-xs text-slate-500 dark:text-[#8f8f8f] font-medium">
               {isSearchOrFilterActive ? (
-                <>Showing all <strong className="text-white">{filteredCandidates.length}</strong> matching candidates</>
+                <>Showing all <strong className="text-slate-900 dark:text-white">{filteredCandidates.length}</strong> matching candidates</>
               ) : (
-                <>Showing <strong className="text-white">{paginatedCandidates.length}</strong> of {filteredCandidates.length} candidates {totalPages > 1 ? `(Page ${currentPage} of ${totalPages})` : ''}</>
+                <>Showing <strong className="text-slate-900 dark:text-white">{paginatedCandidates.length}</strong> of {filteredCandidates.length} candidates {totalPages > 1 ? `(Page ${currentPage} of ${totalPages})` : ''}</>
               )}
             </span>
 
@@ -2247,7 +2247,7 @@ const ResumeDump: React.FC = () => {
               <button
                 type="button"
                 onClick={handleClearAllFilters}
-                className="geist-caption inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 font-semibold underline"
+                className="geist-caption inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 dark:hover:text-emerald-300 font-semibold underline"
               >
                 <RotateCcw size={12} />
                 <span>Reset All</span>
@@ -2371,14 +2371,14 @@ const ResumeDump: React.FC = () => {
 
         {/* Row 2: Secondary / Advanced Naukri Recruiter Filters */}
         {showMoreFilters && (
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/[0.08] animate-in fade-in duration-150">
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-200 dark:border-white/[0.08] animate-in fade-in duration-150">
             {/* Match Score Filter */}
             <div className="flex items-center gap-1 shrink-0">
-              <Sparkles size={13} className="text-emerald-400 shrink-0" />
+              <Sparkles size={13} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
               <select
                 value={matchScoreFilter}
                 onChange={(e) => setMatchScoreFilter(e.target.value)}
-                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[170px]"
+                className="geist-caption h-8 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs text-slate-800 dark:text-white outline-none focus:border-black dark:focus:border-white/30 cursor-pointer max-w-[170px]"
               >
                 <option value="all">Match Score: All</option>
                 <option value="75+">🔥 High Match (75%+)</option>
@@ -2488,11 +2488,11 @@ const ResumeDump: React.FC = () => {
 
             {/* Candidate Source Filter */}
             <div className="flex items-center gap-1 shrink-0">
-              <FileText size={13} className="text-[#8f8f8f] shrink-0" />
+              <FileText size={13} className="text-gray-500 dark:text-[#8f8f8f] shrink-0" />
               <select
                 value={sourceFilter}
                 onChange={(e) => setSourceFilter(e.target.value)}
-                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[160px]"
+                className="geist-caption h-8 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs text-slate-800 dark:text-white outline-none focus:border-black dark:focus:border-white/30 cursor-pointer max-w-[160px]"
               >
                 <option value="all">Source: All</option>
                 <option value="upload">Direct Upload</option>
@@ -2503,11 +2503,11 @@ const ResumeDump: React.FC = () => {
 
             {/* Freshness / Added Date Filter */}
             <div className="flex items-center gap-1 shrink-0">
-              <Clock size={13} className="text-[#8f8f8f] shrink-0" />
+              <Clock size={13} className="text-gray-500 dark:text-[#8f8f8f] shrink-0" />
               <select
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="geist-caption h-8 rounded-[6px] border border-white/[0.11] bg-[#111] px-2.5 text-xs text-white outline-none focus:border-white/30 cursor-pointer max-w-[160px]"
+                className="geist-caption h-8 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs text-slate-800 dark:text-white outline-none focus:border-black dark:focus:border-white/30 cursor-pointer max-w-[160px]"
               >
                 <option value="all">Added: Any time</option>
                 <option value="7d">Last 7 Days</option>
@@ -2674,39 +2674,6 @@ const ResumeDump: React.FC = () => {
                       <div className="geist-small mt-0.5 max-w-[280px] truncate text-[11px] text-gray-600 dark:text-[#9ca3af]" title={candidate.currentTitle}>
                         {candidate.currentTitle || 'Candidate Profile'}
                       </div>
-                      {/* Candidate Industry Sector Badges */}
-                      {(candidate.sectors && candidate.sectors.length > 0) ? (
-                        <div className="geist-small mt-1 flex flex-wrap gap-1 max-w-[280px]">
-                          {candidate.sectors.slice(0, 2).map(sec => (
-                            <span key={sec} className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/30 truncate max-w-[240px]">
-                              Sector: {sec}
-                            </span>
-                          ))}
-                        </div>
-                      ) : candidate.sector ? (
-                        <div className="geist-small mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/30 max-w-[280px] truncate">
-                          <span>Sector: {candidate.sector}</span>
-                        </div>
-                      ) : null}
-
-                      {/* Candidate Functional Department / Domain Badges */}
-                      {(candidate.departments && candidate.departments.length > 0) ? (
-                        <div className="geist-small mt-0.5 flex flex-wrap gap-1 max-w-[280px]">
-                          {candidate.departments.slice(0, 2).map(dept => (
-                            <span key={dept} className="text-[10px] font-bold text-teal-700 dark:text-teal-300 bg-teal-500/15 px-2 py-0.5 rounded border border-teal-500/30 truncate max-w-[240px]">
-                              Dept: {dept}
-                            </span>
-                          ))}
-                        </div>
-                      ) : candidate.department ? (
-                        <div className="geist-small mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold text-teal-700 dark:text-teal-300 bg-teal-500/15 px-2 py-0.5 rounded border border-teal-500/30 max-w-[280px] truncate">
-                          <span>Dept: {candidate.department}</span>
-                        </div>
-                      ) : candidate.domain ? (
-                        <div className="geist-small mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold text-teal-700 dark:text-teal-300 bg-teal-500/15 px-2 py-0.5 rounded border border-teal-500/30 max-w-[280px] truncate">
-                          <span>Domain: {candidate.domain}</span>
-                        </div>
-                      ) : null}
                       {candidate.location && (
                         <div className="geist-small mt-0.5 text-[10px] text-gray-500 dark:text-[#6b7280]">📍 {candidate.location}</div>
                       )}
@@ -3043,53 +3010,48 @@ const ResumeDump: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    {/* Industry Sectors */}
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 block mb-1">
-                        Industry Sectors
-                      </span>
-                      {((skillsPanelCandidate.sectors && skillsPanelCandidate.sectors.length > 0) || skillsPanelCandidate.sector) ? (
-                        <div className="flex flex-wrap gap-1">
-                          {(skillsPanelCandidate.sectors && skillsPanelCandidate.sectors.length > 0
-                            ? skillsPanelCandidate.sectors
-                            : [skillsPanelCandidate.sector!]
-                          ).map(sec => (
-                            <span key={sec} className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-[11px] font-bold">
-                              {sec}
-                            </span>
-                          ))}
+                  {(() => {
+                    const { sectors: modalSecs, departments: modalDepts } = resolveCandidateSectorsAndDepartments(skillsPanelCandidate);
+                    return (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        {/* Industry Sectors */}
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 block mb-1">
+                            Industry Sectors {modalSecs.length > 0 ? `(${modalSecs.length})` : ''}
+                          </span>
+                          {modalSecs.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {modalSecs.map(sec => (
+                                <span key={sec} className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-[11px] font-bold">
+                                  {sec}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-[11px]">Not specified</span>
+                          )}
                         </div>
-                      ) : (
-                        <span className="text-gray-400 text-[11px]">Not specified</span>
-                      )}
-                    </div>
 
-                    {/* Functional Departments / Domain */}
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-teal-600 dark:text-teal-400 block mb-1">
-                        Functional Departments / Domain
-                      </span>
-                      {((skillsPanelCandidate.departments && skillsPanelCandidate.departments.length > 0) || skillsPanelCandidate.department || skillsPanelCandidate.domain || (skillsPanelCandidate.domains && skillsPanelCandidate.domains.length > 0)) ? (
-                        <div className="flex flex-wrap gap-1">
-                          {(skillsPanelCandidate.departments && skillsPanelCandidate.departments.length > 0
-                            ? skillsPanelCandidate.departments
-                            : skillsPanelCandidate.department
-                            ? [skillsPanelCandidate.department]
-                            : skillsPanelCandidate.domains && skillsPanelCandidate.domains.length > 0
-                            ? skillsPanelCandidate.domains
-                            : [skillsPanelCandidate.domain!]
-                          ).map(dept => (
-                            <span key={dept} className="px-2.5 py-0.5 rounded-full bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30 text-[11px] font-bold">
-                              {dept}
-                            </span>
-                          ))}
+                        {/* Functional Departments / Domain */}
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-teal-600 dark:text-teal-400 block mb-1">
+                            Functional Departments / Domain {modalDepts.length > 0 ? `(${modalDepts.length})` : ''}
+                          </span>
+                          {modalDepts.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {modalDepts.map(dept => (
+                                <span key={dept} className="px-2.5 py-0.5 rounded-full bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30 text-[11px] font-bold">
+                                  {dept}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-[11px]">Not specified</span>
+                          )}
                         </div>
-                      ) : (
-                        <span className="text-gray-400 text-[11px]">Not specified</span>
-                      )}
-                    </div>
-                  </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {skillsPanelCandidate.summary && (

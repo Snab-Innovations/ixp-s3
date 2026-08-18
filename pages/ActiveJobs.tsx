@@ -10,6 +10,7 @@ import {
   Search, Filter, ChevronRight, ArrowRight, ShieldCheck, 
   GraduationCap, CheckCircle2, User, Eye, X, Send, Copy, Check, MessageSquare, Phone, Mail, Upload
 } from 'lucide-react';
+import { getJobDescriptionSnippet, FormattedJobDescription } from '../utils/jobDescriptionFormatter';
 
 export interface ActiveJobItem {
   id: string;
@@ -214,11 +215,20 @@ const ActiveJobsPage: React.FC = () => {
   const filteredJobs = useMemo(() => {
     return jobs.filter((job) => {
       const q = searchQuery.toLowerCase().trim();
+      const qDigits = q.replace(/\D/g, '');
+      const rawJobNo = String(job.jobNo || '').toLowerCase().trim();
+      const rawCode = String(job.accessCode || '').toLowerCase().trim();
+      const rawId = String(job.id || '').toLowerCase().trim();
+
+      const matchesJobNo = (rawJobNo && (rawJobNo.includes(q) || (qDigits && rawJobNo.includes(qDigits)))) ||
+        (rawCode && (rawCode.includes(q) || (qDigits && rawCode.includes(qDigits)))) ||
+        rawId.includes(q);
+
       const matchesSearch = !q || 
+        matchesJobNo ||
         job.title.toLowerCase().includes(q) ||
         (job.location && job.location.toLowerCase().includes(q)) ||
         (job.description && job.description.toLowerCase().includes(q)) ||
-        (job.accessCode && job.accessCode.toLowerCase().includes(q)) ||
         (typeof job.skills === 'string' && job.skills.toLowerCase().includes(q)) ||
         (Array.isArray(job.skills) && job.skills.some((s) => s.toLowerCase().includes(q)));
 
@@ -522,7 +532,7 @@ const ActiveJobsPage: React.FC = () => {
                     {/* Description Snippet */}
                     {job.description && (
                       <p className={`text-xs line-clamp-2 leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                        {job.description}
+                        {getJobDescriptionSnippet(job.description, 160)}
                       </p>
                     )}
 

@@ -6,7 +6,7 @@ import { uploadToCloudinary } from './api';
 import { grokGenerateJson } from './grokService';
 import { geminiGenerateJson } from './geminiService';
 import { isEducationMatching } from '../utils/educationMatcher';
-import { detectDomainFromText } from '../data/jobDomains';
+import { detectDomainFromText, resolveCandidateSectorsAndDepartments } from '../data/jobDomains';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
@@ -416,7 +416,7 @@ const extractSimpleListSection = (text: string, headings: RegExp, limit = 8) => 
   return uniqueStrings(section.split(/\r?\n|[,;|•·▪●]+/), limit);
 };
 
-const deterministicParse = (text: string, fallbackFileName: string): ParsedResumeProfile => {
+export const deterministicParse = (text: string, fallbackFileName: string): ParsedResumeProfile => {
   const cleanText = normalizeWhitespace(text.replace(/[•·▪●]/g, '\n• '));
   const name = extractName(cleanText, fallbackFileName);
   const urls = cleanText.match(URL_REGEX) || [];
@@ -667,6 +667,58 @@ export const parseResumeFileLocally = async (
   return { profile, resumeText: resumeText.slice(0, MAX_RESUME_TEXT_CHARS) };
 };
 
+export const fastParseResumeFileLocally = async (
+  file: File,
+  overrides: Partial<Pick<ParsedResumeProfile, 'name' | 'email' | 'phone'>> = {},
+  additionalText = ''
+): Promise<{ profile: ParsedResumeProfile; resumeText: string }> => {
+  const resumeText = await readResumeText(file, file.name);
+  if (!resumeText) throw new Error('No readable text was found in this resume.');
+
+  const textToAnalyze = additionalText.trim()
+    ? `${resumeText}\n\n[Additional Candidate Details & Recruiter Notes]:\n${additionalText.trim()}`
+    : resumeText;
+
+  // 1. Instant deterministic parsing (< 20ms)
+  const profile = deterministicParse(textToAnalyze, file.name);
+  if (additionalText.trim()) {
+    profile.additionalText = additionalText.trim();
+  }
+
+  // 2. If deterministic parse found plenty of skills (>= 6), return immediately!
+  if (profile.skills && profile.skills.length >= 6) {
+    return { profile: { ...profile, ...overrides }, resumeText: resumeText.slice(0, MAX_RESUME_TEXT_CHARS) };
+  }
+
+  // 3. Otherwise, run lightweight fast skill extraction with low token budget and quick timeout
+  try {
+    const compactPrompt = `Extract up to 25 key technical skills, tools, programming languages, and industry competencies from this resume text as a JSON array of strings:
+${textToAnalyze.slice(0, 4000)}
+
+Return ONLY valid JSON: {"skills": ["Skill1", "Skill2"]}`;
+
+    const aiRes = await Promise.race([
+      geminiGenerateJson<{ skills?: string[] }>(
+        'You are a high-speed technical skill parser. Return valid JSON only.',
+        compactPrompt,
+        0.1
+      ),
+      new Promise<{ skills?: string[] }>((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2500))
+    ]);
+
+    if (aiRes?.skills && Array.isArray(aiRes.skills) && aiRes.skills.length > 0) {
+      const mergedSkills = sanitizeDomainSkills([...aiRes.skills, ...(profile.skills || [])]);
+      if (mergedSkills.length > 0) {
+        profile.skills = mergedSkills;
+      }
+    }
+  } catch (err) {
+    // Graceful fallback to deterministic signals
+  }
+
+  return { profile: { ...profile, ...overrides }, resumeText: resumeText.slice(0, MAX_RESUME_TEXT_CHARS) };
+};
+
 export const ingestResumeFile = async (
   file: File,
   overrides: Partial<Pick<ParsedResumeProfile, 'name' | 'email' | 'phone'>> = {},
@@ -855,10 +907,18 @@ export const saveResumeDumpCandidate = async ({
   const isPublic = source === 'public_job_seeker_upload' || recruiterUID === 'DSOURCE_PUBLIC_JOB_SEEKER_POOL' || Boolean((normalizedProfile as any).isPublicUpload || (normalizedProfile as any).isGlobalPublicCandidate);
 
   const resolvedDomain = normalizedProfile.domain || detectDomainFromText(`${normalizedProfile.currentTitle || ''} ${skillsArray.join(' ')} ${resumeText}`);
+  const { sectors: resolvedSectors, departments: resolvedDepartments } = resolveCandidateSectorsAndDepartments({
+    ...normalizedProfile,
+    resumeText: `${normalizedProfile.currentTitle || ''} ${summaryText} ${skillsArray.join(' ')} ${resumeText}`
+  });
 
   const payload = {
     ...normalizedProfile,
     domain: resolvedDomain,
+    sectors: resolvedSectors,
+    sector: resolvedSectors[0] || '',
+    departments: resolvedDepartments,
+    department: resolvedDepartments[0] || '',
     summary: summaryText,
     professionalSummary: summaryText,
     skills: skillsArray,

@@ -3,6 +3,7 @@ import {
   ClipboardList,
   LayoutDashboard,
   Archive,
+  PlusCircle,
   Users,
   Video,
   MessageSquare,
@@ -35,6 +36,13 @@ const recruiterNavGroups: NavGroupData[] = [
         match: (path) => path === '/recruiter/jobs',
       },
       {
+        id: 'post-job',
+        title: 'Post Job',
+        icon: PlusCircle,
+        href: '/recruiter/interview/create',
+        match: (path) => path === '/recruiter/interview/create',
+      },
+      {
         id: 'all-jobs',
         title: 'All Jobs',
         icon: BriefcaseBusiness,
@@ -51,13 +59,6 @@ const recruiterNavGroups: NavGroupData[] = [
         icon: Archive,
         href: '/recruiter/resume-dump',
         match: (path) => path === '/recruiter/resume-dump',
-      },
-      {
-        id: 'create-job',
-        title: 'Create Job',
-        icon: BriefcaseBusiness,
-        href: '/recruiter/interview/create',
-        match: (path) => path === '/recruiter/interview/create',
       },
       {
         id: 'assessments',

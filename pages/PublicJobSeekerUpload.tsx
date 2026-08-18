@@ -10,7 +10,7 @@ import { collection, query, where, getDocs, onSnapshot, doc, updateDoc, arrayUni
 import { db } from '../services/firebase';
 import { LocationCityInput } from '../components/LocationCityInput';
 import { EducationInput } from '../components/EducationInput';
-import { parseResumeFileLocally, saveResumeDumpCandidate } from '../services/resumeService';
+import { parseResumeFileLocally, fastParseResumeFileLocally, readResumeText, saveResumeDumpCandidate } from '../services/resumeService';
 import { uploadToCloudinary } from '../services/api';
 import { ALL_EDUCATION_DEGREES } from '../data/allEducationDegrees';
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
@@ -20,6 +20,7 @@ import { useTheme } from '../context/ThemeContext';
 import { Link, useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo';
 import { calculateJobMatchScore, JobMatchResult, CandidateMatchProfile } from '../services/jobMatchService';
+import { FormattedJobDescription } from '../utils/jobDescriptionFormatter';
 
 const matchExtractedLocationToPresentCity = (rawLocation: string): string => {
   if (!rawLocation || typeof rawLocation !== 'string') return '';
@@ -407,11 +408,36 @@ export default function PublicJobSeekerUpload() {
     messageBox.showSuccess(`Welcome back, ${profileObj.name}! Your existing profile has been loaded and matched with active job openings.`);
   };
 
-  // Fetch active jobs from Firestore interviews collection
+  // Fetch active jobs from Firestore interviews and jobs collection
   useEffect(() => {
-    const q = query(collection(db, 'interviews'));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const fetched = snapshot.docs.map((doc) => {
+    let activeInterviewsList: any[] = [];
+    let activeJobsList: any[] = [];
+
+    const mergeJobs = () => {
+      const allRaw = [...activeInterviewsList, ...activeJobsList];
+      const seenIds = new Set<string>();
+      const combined: any[] = [];
+
+      for (const item of allRaw) {
+        if (!item || !item.id || seenIds.has(item.id)) continue;
+        seenIds.add(item.id);
+
+        const statusLower = String(item.status || '').trim().toLowerCase();
+        if (['inactive', 'expired', 'closed', 'disabled', 'deactivated', 'draft'].includes(statusLower)) {
+          continue;
+        }
+        if (item.isMock) continue;
+
+        combined.push(item);
+      }
+
+      setActiveJobs(combined);
+      setJobsLoading(false);
+    };
+
+    const qInterviews = query(collection(db, 'interviews'));
+    const unsubInterviews = onSnapshot(qInterviews, (snapshot) => {
+      activeInterviewsList = snapshot.docs.map((doc) => {
         const data = doc.data();
         const jobNo = data.jobNo ? String(data.jobNo).trim() : '';
         const accessCode = jobNo || data.accessCode || doc.id.slice(0, 6).toUpperCase();
@@ -419,20 +445,26 @@ export default function PublicJobSeekerUpload() {
           id: doc.id,
           jobNo,
           title: data.title || 'Untitled Job Role',
+          company: data.company || data.companyName || 'DSource Partner',
           recruiterName: data.contactPerson || data.createdBy?.name || data.recruiterName || 'DSource Hiring Team',
           description: data.description || data.jobDescription || '',
+          industrySector: data.industrySector || data.sector || data.industryName || data.industry || '',
+          sector: data.sector || data.industrySector || data.industryName || '',
           department: data.department || data.roleCategory || data.category || 'General',
+          departments: data.departments || [data.department || data.roleCategory || data.category || 'General'],
+          roleCategory: data.roleCategory || data.roleName || '',
           location: data.location || (data.city && data.state ? `${data.city}, ${data.state}` : data.city || 'Nashik, Maharashtra'),
           city: data.city || data.location || 'Nashik',
           genderRequirement: data.genderRequirement || data.gender || data.genderPreference || 'Any',
+          gender: data.gender || data.genderRequirement || 'Any',
           employmentType: data.employmentType || data.jobType || 'Full-Time',
           salary: data.salary || data.salaryRange || (data.minSalary && data.maxSalary ? `₹${data.minSalary} - ₹${data.maxSalary} / month` : 'Competitive CTC'),
           minSalary: data.minSalary,
           maxSalary: data.maxSalary,
           minExperience: data.minExperience || data.experience || 0,
           maxExperience: data.maxExperience || 0,
-          qualification: data.qualification || data.education || 'Diploma / Graduate',
-          education: data.education || data.qualification || 'Diploma / Graduate',
+          qualification: data.qualification || data.education || data.qualifications || 'Diploma / Graduate',
+          education: data.education || data.qualification || data.qualifications || 'Diploma / Graduate',
           skills: data.skills || [],
           accessCode,
           status: data.status || 'Active',
@@ -440,23 +472,58 @@ export default function PublicJobSeekerUpload() {
           isMock: Boolean(data.isMock)
         };
       });
-
-      const realJobs = fetched.filter(j => {
-        if (j.isMock) return false;
-        const statusLower = String((j as any).status || '').trim().toLowerCase();
-        if (['inactive', 'expired', 'closed', 'disabled', 'deactivated', 'draft'].includes(statusLower)) {
-          return false;
-        }
-        return true;
-      });
-      setActiveJobs(realJobs);
-      setJobsLoading(false);
+      mergeJobs();
     }, (error) => {
-      console.error('Error fetching jobs for matching:', error);
+      console.error('Error fetching interviews for matching:', error);
       setJobsLoading(false);
     });
 
-    return () => unsub();
+    const qJobs = query(collection(db, 'jobs'));
+    const unsubJobs = onSnapshot(qJobs, (snapshot) => {
+      activeJobsList = snapshot.docs.map((doc) => {
+        const data = doc.data();
+        const jobNo = data.jobNo ? String(data.jobNo).trim() : '';
+        const accessCode = jobNo || data.accessCode || doc.id.slice(0, 6).toUpperCase();
+        return {
+          id: doc.id,
+          jobNo,
+          title: data.title || 'Untitled Job Role',
+          company: data.company || data.companyName || 'DSource Partner',
+          recruiterName: data.contactPerson || data.createdBy?.name || data.recruiterName || 'DSource Hiring Team',
+          description: data.description || data.jobDescription || '',
+          industrySector: data.industrySector || data.sector || data.industryName || data.industry || '',
+          sector: data.sector || data.industrySector || data.industryName || '',
+          department: data.department || data.roleCategory || data.category || 'General',
+          departments: data.departments || [data.department || data.roleCategory || data.category || 'General'],
+          roleCategory: data.roleCategory || data.roleName || '',
+          location: data.location || (data.city && data.state ? `${data.city}, ${data.state}` : data.city || 'Nashik, Maharashtra'),
+          city: data.city || data.location || 'Nashik',
+          genderRequirement: data.genderRequirement || data.gender || data.genderPreference || 'Any',
+          gender: data.gender || data.genderRequirement || 'Any',
+          employmentType: data.employmentType || data.jobType || 'Full-Time',
+          salary: data.salary || data.salaryRange || (data.minSalary && data.maxSalary ? `₹${data.minSalary} - ₹${data.maxSalary} / month` : 'Competitive CTC'),
+          minSalary: data.minSalary,
+          maxSalary: data.maxSalary,
+          minExperience: data.minExperience || data.experience || 0,
+          maxExperience: data.maxExperience || 0,
+          qualification: data.qualification || data.education || data.qualifications || 'Diploma / Graduate',
+          education: data.education || data.qualification || data.qualifications || 'Diploma / Graduate',
+          skills: data.skills || [],
+          accessCode,
+          status: data.status || 'Active',
+          deadline: data.deadline || data.applyDeadline,
+          isMock: Boolean(data.isMock)
+        };
+      });
+      mergeJobs();
+    }, (error) => {
+      console.warn('Jobs collection fetch note:', error);
+    });
+
+    return () => {
+      unsubInterviews();
+      unsubJobs();
+    };
   }, []);
 
   // Compute matched jobs dynamically whenever submittedCandidateData changes
@@ -465,20 +532,29 @@ export default function PublicJobSeekerUpload() {
     
     const results = activeJobs.map(job => calculateJobMatchScore(job, submittedCandidateData));
     
-    results.sort((a, b) => b.overallScore - a.overallScore);
+    // STRICT ELIGIBILITY: Filter out any job where candidate criteria is unmet (experience mismatch, gender mismatch, etc.)
+    const eligibleResults = results.filter(r => r.expMatch.isMatch && r.genderMatch.isMatch && r.overallScore > 0);
+
+    eligibleResults.sort((a, b) => b.overallScore - a.overallScore);
 
     if (matchFilter === 'EligibleOnly') {
-      return results.filter(r => r.expMatch.isMatch && r.genderMatch.isMatch && r.overallScore > 0);
+      return eligibleResults;
     }
     if (matchFilter === 'HighMatch') {
-      return results.filter(r => r.expMatch.isMatch && r.genderMatch.isMatch && r.overallScore >= 75);
+      const high = eligibleResults.filter(r => r.overallScore >= 60);
+      return high.length > 0 ? high : eligibleResults;
     }
     if (matchFilter === 'LocalCity' && submittedCandidateData.location) {
       const candCity = submittedCandidateData.location.toLowerCase();
-      return results.filter(r => r.expMatch.isMatch && r.genderMatch.isMatch && (r.locationMatch.isMatch || (r.job.location && r.job.location.toLowerCase().includes(candCity))));
+      const local = eligibleResults.filter(r => 
+        r.locationMatch.isMatch || 
+        (r.job.location && r.job.location.toLowerCase().includes(candCity)) ||
+        (r.job.city && r.job.city.toLowerCase().includes(candCity))
+      );
+      return local.length > 0 ? local : eligibleResults;
     }
 
-    return results;
+    return eligibleResults;
   }, [submittedCandidateData, activeJobs, matchFilter]);
 
   // Combine domains: Domains present in active posted jobs appear FIRST, remaining domains follow afterwards
@@ -661,43 +737,69 @@ export default function PublicJobSeekerUpload() {
     }
   };
 
-  // Handle file selection & local text analysis
+  // Handle file selection & fast local text analysis with email-first lookup
   const handleFileSelection = async (file: File) => {
     setSelectedFile(file);
     setIsParsingResume(true);
     try {
-      const ingested = await parseResumeFileLocally(file, {}, extraBioText);
+      // 1. Fast read raw text from resume (< 100ms)
+      const rawResumeText = await readResumeText(file, file.name);
+      if (!rawResumeText) throw new Error('No readable text was found in this resume.');
+
+      // 2. Extract email immediately via regex to perform instant returning candidate check
+      const rawEmailMatch = rawResumeText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+      const cleanExtractedEmail = rawEmailMatch ? rawEmailMatch[1].trim().toLowerCase() : '';
+
+      // 3. If email is already present in database, SKIP ALL AI PARSING and load existing profile instantly!
+      if (cleanExtractedEmail) {
+        try {
+          const q = query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanExtractedEmail));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const matchedCand: any = { id: snap.docs[0].id, ...snap.docs[0].data() };
+            setCandidateEmail(cleanExtractedEmail);
+            handleLoadExistingProfile(matchedCand);
+            messageBox.showSuccess(`Welcome back, ${matchedCand.name || matchedCand.profile?.name || 'Job Seeker'}! We found your existing profile registered under ${cleanExtractedEmail}. Showing your best matched job openings.`);
+            setIsParsingResume(false);
+            return;
+          }
+        } catch (lookupErr) {
+          console.warn("Fast email registration check error:", lookupErr);
+        }
+      }
+
+      // 4. For new candidates, perform high-speed skill & profile parsing
+      const ingested = await fastParseResumeFileLocally(file, {}, extraBioText);
       setParsedProfileData(ingested);
 
       if (ingested.profile) {
         if (ingested.profile.name && !candidateName.trim()) setCandidateName(ingested.profile.name);
-        if (ingested.profile.email && !candidateEmail.trim()) {
-          const cleanExtractedEmail = ingested.profile.email.trim().toLowerCase();
+        if (cleanExtractedEmail && !candidateEmail.trim()) {
           setCandidateEmail(cleanExtractedEmail);
-
-          // Check if candidate email is ALREADY REGISTERED in Firestore
-          try {
-            const q = query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanExtractedEmail));
-            const snap = await getDocs(q);
-            if (!snap.empty) {
-              const matchedCand: any = { id: snap.docs[0].id, ...snap.docs[0].data() };
-              messageBox.showSuccess(`Welcome back, ${matchedCand.name || matchedCand.profile?.name || 'Job Seeker'}! We found your existing profile registered under ${cleanExtractedEmail}. Showing your best matched job openings.`);
-              handleLoadExistingProfile(matchedCand);
-              setIsParsingResume(false);
-              return;
-            }
-          } catch (lookupErr) {
-            console.warn("Auto email registration check error:", lookupErr);
-          }
-
           handleCheckEmailExists(cleanExtractedEmail);
+        } else if (ingested.profile.email && !candidateEmail.trim()) {
+          const emailVal = ingested.profile.email.trim().toLowerCase();
+          setCandidateEmail(emailVal);
+          handleCheckEmailExists(emailVal);
         }
+
         if (ingested.profile.phone && !candidatePhone.trim()) setCandidatePhone(ingested.profile.phone);
 
         if (ingested.profile.location) {
           const matchedCity = matchExtractedLocationToPresentCity(ingested.profile.location);
           if (matchedCity && !candidateLocation.trim()) {
             setCandidateLocation(matchedCity);
+          }
+        }
+
+        if (ingested.profile.totalExperienceYears) {
+          setCandidateExp(ingested.profile.totalExperienceYears);
+        }
+
+        if (ingested.profile.education && ingested.profile.education.length > 0) {
+          const degree = ingested.profile.education[0]?.degree;
+          if (degree && !candidateEducation.trim()) {
+            setCandidateEducation(degree);
           }
         }
 
@@ -715,9 +817,9 @@ export default function PublicJobSeekerUpload() {
 
         if (Array.isArray(ingested.profile.skills) && ingested.profile.skills.length > 0) {
           setExtractedSkills(ingested.profile.skills);
-          messageBox.showSuccess(`AI analyzed resume & auto-fetched ${ingested.profile.skills.length} skills!`);
+          messageBox.showSuccess(`Resume parsed instantly & auto-fetched ${ingested.profile.skills.length} skills!`);
         } else {
-          messageBox.showSuccess("Resume parsed locally. Please verify your details below.");
+          messageBox.showSuccess("Resume parsed. Please verify your details below.");
         }
       }
     } catch (err: any) {
@@ -2219,7 +2321,7 @@ export default function PublicJobSeekerUpload() {
                       : isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-semibold'
                   }`}
                 >
-                  All ({activeJobs.length})
+                  All ({matchedJobsList.length})
                 </button>
               </div>
             </div>
@@ -2293,7 +2395,7 @@ export default function PublicJobSeekerUpload() {
                         </div>
 
                         {/* Attribute Badges */}
-                        <div className="grid grid-cols-2 gap-2 pt-0.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-0.5">
                           {/* Location Badge */}
                           <div className={`p-2 rounded-xl border text-[11px] flex items-center justify-between gap-1 ${
                             locationMatch.isMatch 
@@ -2304,14 +2406,6 @@ export default function PublicJobSeekerUpload() {
                               <MapPin className="w-3 h-3 text-emerald-500 shrink-0" />
                               <span className="font-bold truncate">{job.location}</span>
                             </div>
-                          </div>
-
-                          {/* Salary Badge */}
-                          <div className={`p-2 rounded-xl border text-[11px] flex items-center gap-1 ${
-                            isDark ? 'bg-white/5 border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'
-                          }`}>
-                            <IndianRupee className="w-3 h-3 text-emerald-500 shrink-0" />
-                            <span className="font-semibold truncate">{job.salary}</span>
                           </div>
 
                           {/* Experience Badge */}
@@ -2485,7 +2579,7 @@ export default function PublicJobSeekerUpload() {
             </div>
 
             {/* Breakdown Highlights */}
-            <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl text-xs border ${
+            <div className={`grid grid-cols-3 gap-2.5 p-3 rounded-2xl text-xs border ${
               isDark ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'
             }`}>
               <div>
@@ -2493,15 +2587,11 @@ export default function PublicJobSeekerUpload() {
                 <strong className="block truncate">{selectedJobForModal.job.location}</strong>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px]">Salary</span>
-                <strong className="block truncate">{selectedJobForModal.job.salary}</strong>
-              </div>
-              <div>
                 <span className="text-slate-400 block text-[11px]">Experience</span>
                 <strong className="block truncate">{selectedJobForModal.expMatch.requiredExp}</strong>
               </div>
               <div>
-                <span className="text-slate-400 block text-[11px]">Gender</span>
+                <span className="text-slate-400 block text-[11px]">Gender Req.</span>
                 <strong className="block truncate">{selectedJobForModal.genderMatch.requiredGender}</strong>
               </div>
             </div>
@@ -2529,11 +2619,14 @@ export default function PublicJobSeekerUpload() {
             {/* Full Job Description */}
             <div className="space-y-1.5">
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Job Description & Responsibilities</h4>
-              <p className={`text-xs leading-relaxed whitespace-pre-line p-3 rounded-2xl border max-h-44 overflow-y-auto ${
-                isDark ? 'bg-white/5 border-white/10 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-600'
+              <div className={`p-3 rounded-2xl border max-h-56 overflow-y-auto ${
+                isDark ? 'bg-white/5 border-white/10 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'
               }`}>
-                {selectedJobForModal.job.description || 'No detailed job description provided.'}
-              </p>
+                <FormattedJobDescription
+                  description={selectedJobForModal.job.description}
+                  className="max-w-full text-xs"
+                />
+              </div>
             </div>
 
             {/* Education & Qualification */}

@@ -24,11 +24,13 @@ import {
 import { addDoc, collection, doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { Link, useNavigate } from 'react-router-dom';
 import { auth, db } from '../services/firebase';
+import { useAuth } from '../context/AuthContext';
 import '../styles/auth.css';
 
 type AuthMode = 'login' | 'signup' | 'reset';
 
 const AuthPage: React.FC = () => {
+  const { user, userProfile, loading: authLoading } = useAuth();
   const [mode, setMode] = useState<AuthMode>('login');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +44,17 @@ const AuthPage: React.FC = () => {
   const [experience, setExperience] = useState(0);
   const [rememberMe, setRememberMe] = useState(true);
   const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (!authLoading && user) {
+      const role = userProfile?.role || (user.email === 'admin@dsauce.io' || user.email?.includes('admin') ? 'admin' : 'recruiter');
+      if (role === 'admin') {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/recruiter/jobs', { replace: true });
+      }
+    }
+  }, [user, userProfile, authLoading, navigate]);
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);

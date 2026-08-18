@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, useScroll, useMotionValueEvent, AnimatePresence } from 'framer-motion';
-import { Menu, X, Sun, Moon } from 'lucide-react';
+import { Menu, X, Sun, Moon, LayoutDashboard } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import Logo from '../Logo';
 import MagnetButton from './MagnetButton';
 
 const Navbar: React.FC = () => {
+  const { user, userProfile } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { scrollY } = useScroll();
@@ -14,6 +16,8 @@ const Navbar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isHomePage = location.pathname === '/';
+
+  const userDashboardPath = userProfile?.role === 'admin' ? '/admin' : '/recruiter/jobs';
 
   useMotionValueEvent(scrollY, "change", (latest) => {
     setIsScrolled(latest > 50);
@@ -114,12 +118,23 @@ const Navbar: React.FC = () => {
                 {isDark ? <Sun size={18} /> : <Moon size={18} />}
               </motion.div>
             </button>
-            <Link to="/auth" className={`text-sm font-medium ${isDark ? 'text-slate-300 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}>Log in</Link>
-            <Link to="/auth">
-              <MagnetButton variant="primary" className="!px-4 !py-2 !text-sm">
-                Get Started
-              </MagnetButton>
-            </Link>
+            {user ? (
+              <Link to={userDashboardPath}>
+                <MagnetButton variant="primary" className="!px-4 !py-2 !text-sm flex items-center gap-1.5">
+                  <LayoutDashboard size={15} />
+                  <span>Dashboard</span>
+                </MagnetButton>
+              </Link>
+            ) : (
+              <>
+                <Link to="/auth" className={`text-sm font-medium ${isDark ? 'text-slate-300 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}>Log in</Link>
+                <Link to="/auth">
+                  <MagnetButton variant="primary" className="!px-4 !py-2 !text-sm">
+                    Get Started
+                  </MagnetButton>
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Toggle */}
@@ -177,12 +192,23 @@ const Navbar: React.FC = () => {
               )
             ))}
             <div className={`h-px my-4 ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
-            <Link to="/auth" className={`text-xl font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Log in</Link>
-            <Link to="/auth">
-              <MagnetButton variant="primary" className="w-full justify-center py-3">
-                Get Started
-              </MagnetButton>
-            </Link>
+            {user ? (
+              <Link to={userDashboardPath} onClick={() => setIsMobileMenuOpen(false)}>
+                <MagnetButton variant="primary" className="w-full justify-center py-3 flex items-center gap-2">
+                  <LayoutDashboard size={18} />
+                  <span>Go to Dashboard</span>
+                </MagnetButton>
+              </Link>
+            ) : (
+              <>
+                <Link to="/auth" onClick={() => setIsMobileMenuOpen(false)} className={`text-xl font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Log in</Link>
+                <Link to="/auth" onClick={() => setIsMobileMenuOpen(false)}>
+                  <MagnetButton variant="primary" className="w-full justify-center py-3">
+                    Get Started
+                  </MagnetButton>
+                </Link>
+              </>
+            )}
           </div>
         </motion.div>
       )}

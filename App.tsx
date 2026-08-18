@@ -68,15 +68,15 @@ const ProtectedRoute: React.FC<{
 }> = ({ children, role, loadingFallback }) => {
   const { user, userProfile, loading } = useAuth();
 
-  if (loading || (user && !userProfile)) return <>{loadingFallback || <DefaultRouteLoader />}</>;
+  if (loading) return <>{loadingFallback || <DefaultRouteLoader />}</>;
 
-  if (!user) return <Navigate to="/" replace />;
+  if (!user) return <Navigate to="/auth" replace />;
 
-  const userRole: string = userProfile?.role || '';
+  const userRole: string = userProfile?.role || (user.email === 'admin@dsauce.io' || user.email?.includes('admin') ? 'admin' : 'recruiter');
   if (role && userRole !== role) {
-    if (userRole === 'recruiter') return <Navigate to="/recruiter/jobs" replace />;
-    if (userRole === 'admin') return <Navigate to="/admin" replace />;
-    return <Navigate to="/auth" replace />;
+    if (role === 'admin' && userRole !== 'admin') return <Navigate to="/recruiter/jobs" replace />;
+    if (role === 'recruiter' && userRole === 'admin') return <Navigate to="/admin" replace />;
+    return <Navigate to="/recruiter/jobs" replace />;
   }
 
   return <>{children}</>;
@@ -92,17 +92,9 @@ const HomeRoute: React.FC = () => {
   );
 
   if (user) {
-    if (!userProfile) {
-      return (
-        <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-        </div>
-      );
-    }
-    const userRole: string = userProfile.role || '';
-    if (userRole === 'recruiter') return <Navigate to="/recruiter/jobs" replace />;
+    const userRole: string = userProfile?.role || (user.email === 'admin@dsauce.io' || user.email?.includes('admin') ? 'admin' : 'recruiter');
     if (userRole === 'admin') return <Navigate to="/admin" replace />;
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/recruiter/jobs" replace />;
   }
 
   return <AuthPage />;

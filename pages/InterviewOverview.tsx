@@ -9,6 +9,7 @@ import { useMessageBox } from '../components/MessageBox';
 import { InterviewOverviewSkeleton } from '../components/ui/interview-loading-skeleton';
 import { Interview } from '../types';
 import EditJobModal from './EditJob';
+import { FormattedJobDescription } from '../utils/jobDescriptionFormatter';
 
 const formatDate = (value: any) => {
   if (!value) return 'N/A';
@@ -54,9 +55,9 @@ const ActionLink = ({
   </Link>
 );
 
-const StatCell = ({ label, value, tone = 'text-white' }: { label: string; value: React.ReactNode; tone?: string }) => (
+const StatCell = ({ label, value, tone = 'text-slate-900 dark:text-white' }: { label: string; value: React.ReactNode; tone?: string }) => (
   <div className="min-h-[76px] px-4 py-4 sm:px-6 lg:px-7">
-    <p className="geist-label uppercase text-[#6b7280]">{label}</p>
+    <p className="geist-label uppercase text-slate-500 dark:text-[#6b7280]">{label}</p>
     <div className="mt-2 flex items-baseline gap-2.5">
       <span className={`geist-metric tabular-nums ${tone}`}>{value}</span>
     </div>
@@ -64,40 +65,40 @@ const StatCell = ({ label, value, tone = 'text-white' }: { label: string; value:
 );
 
 const InfoLine = ({ label, value, mono = false }: { label: string; value: any; mono?: boolean }) => (
-  <div className="grid grid-cols-1 gap-1 border-b border-white/[0.08] px-4 py-3 last:border-b-0 sm:grid-cols-[132px_minmax(0,1fr)]">
-    <dt className="geist-label uppercase text-[#6b7280]">{label}</dt>
-    <dd className={`${mono ? 'geist-label tabular-nums' : 'geist-caption'} min-w-0 break-words text-[#d4d4d4]`}>
+  <div className="grid grid-cols-1 gap-1 border-b border-slate-200 dark:border-white/[0.08] px-4 py-3 last:border-b-0 sm:grid-cols-[132px_minmax(0,1fr)]">
+    <dt className="geist-label uppercase text-slate-500 dark:text-[#6b7280]">{label}</dt>
+    <dd className={`${mono ? 'geist-label tabular-nums' : 'geist-caption'} min-w-0 break-words text-slate-900 dark:text-[#d4d4d4]`}>
       {formatValue(value)}
     </dd>
   </div>
 );
 
 const ConfigTile = ({ label, value, mono = false }: { label: string; value: any; mono?: boolean }) => (
-  <div className="min-h-[88px] border-b border-white/[0.08] px-4 py-3 sm:px-6 lg:px-7 xl:border-r xl:last:border-r-0">
-    <dt className="geist-label uppercase text-[#6b7280]">{label}</dt>
-    <dd className={`${mono ? 'geist-label tabular-nums' : 'geist-caption'} mt-2 break-words text-[#d4d4d4]`}>
+  <div className="min-h-[88px] border-b border-slate-200 dark:border-white/[0.08] px-4 py-3 sm:px-6 lg:px-7 xl:border-r xl:border-slate-200 dark:xl:border-white/[0.08] xl:last:border-r-0">
+    <dt className="geist-label uppercase text-slate-500 dark:text-[#6b7280]">{label}</dt>
+    <dd className={`${mono ? 'geist-label tabular-nums' : 'geist-caption'} mt-2 break-words text-slate-900 dark:text-[#d4d4d4]`}>
       {formatValue(value)}
     </dd>
   </div>
 );
 
 const SectionHeader = ({ title, description }: { title: string; description?: string }) => (
-  <div className="border-b border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
-    <h2 className="geist-section-title text-white">{title}</h2>
-    {description && <p className="geist-small mt-0.5 text-[#8f8f8f]">{description}</p>}
+  <div className="border-b border-slate-200 dark:border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
+    <h2 className="geist-section-title text-slate-900 dark:text-white">{title}</h2>
+    {description && <p className="geist-small mt-0.5 text-slate-500 dark:text-[#8f8f8f]">{description}</p>}
   </div>
 );
 
 const ListBlock = ({ label, items }: { label: string; items: any[] }) => (
-  <div className="border-b border-white/[0.11] last:border-b-0">
+  <div className="border-b border-slate-200 dark:border-white/[0.11] last:border-b-0">
     <SectionHeader title={label} />
     {items.length === 0 ? (
-      <p className="geist-caption px-4 py-5 text-[#6b7280] sm:px-6 lg:px-7">No records added.</p>
+      <p className="geist-caption px-4 py-5 text-slate-400 dark:text-[#6b7280] sm:px-6 lg:px-7">No records added.</p>
     ) : (
-      <div className="divide-y divide-white/[0.08]">
+      <div className="divide-y divide-slate-200 dark:divide-white/[0.08]">
         {items.map((item, index) => (
           <div key={`${label}-${index}`} className="px-4 py-3 sm:px-6 lg:px-7">
-            <p className="geist-caption break-words text-[#d4d4d4]">{formatValue(item)}</p>
+            <p className="geist-caption break-words text-slate-800 dark:text-[#d4d4d4]">{formatValue(item)}</p>
           </div>
         ))}
       </div>
@@ -220,10 +221,6 @@ const InterviewOverview: React.FC = () => {
       ['Qualifications / Education', anyInterview.qualifications || anyInterview.education || 'N/A'],
       ['Skills Required', Array.isArray(anyInterview.skills) ? anyInterview.skills.join(', ') : (anyInterview.skills || 'N/A')],
       ['Gender Requirement', anyInterview.genderRequirement || anyInterview.gender || 'Any'],
-      ['Strict Gender Match', anyInterview.strictGenderMatch ? 'Yes (Strict)' : 'No'],
-      ['Strict Location Match', anyInterview.strictLocationMatch ? 'Yes (Strict)' : 'No'],
-      ['Strict Education Match', anyInterview.strictEducationMatch ? 'Yes (Strict)' : 'No'],
-      ['Strict Experience Match', anyInterview.strictExperienceMatch ? 'Yes (Strict)' : 'No'],
       ['AI Strictness Level', interview.strictness || 'Medium'],
       ['Difficulty Level', interview.difficulty || 'Easy'],
       ['Duration', interview.duration ? `${interview.duration} minutes` : 'N/A'],
@@ -350,62 +347,62 @@ const InterviewOverview: React.FC = () => {
   const displayEnteredDate = uploadedOnCf || formatDate(interview.createdAt || anyInterview.postedAt || anyInterview.updatedAt) || 'N/A';
 
   return (
-    <div className="w-full min-h-[calc(100vh-3.5rem)] bg-[#000] text-white">
+    <div className="w-full min-h-[calc(100vh-3.5rem)] bg-slate-50 dark:bg-[#000] text-slate-900 dark:text-white transition-colors">
 
-      <section className="sticky top-14 z-20 border-b border-white/[0.11] bg-[#000]">
+      <section className="sticky top-14 z-20 border-b border-slate-200 dark:border-white/[0.11] bg-white/95 dark:bg-[#000]/95 backdrop-blur-md">
         <div className="px-4 py-5 sm:px-6 lg:px-7">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="min-w-0">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <Link
                   to="/recruiter/all-jobs"
-                  className="geist-caption inline-flex h-8 items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
+                  className="geist-caption inline-flex h-8 items-center gap-2 rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-white/[0.03] px-3 font-medium text-slate-700 dark:text-[#d4d4d4] transition-colors hover:bg-slate-200 dark:hover:bg-white/[0.06] hover:text-slate-900 dark:hover:text-white"
                 >
                   <i className="fas fa-arrow-left text-[11px]"></i>
                   <span>Back to jobs</span>
                 </Link>
-                <span className="geist-label uppercase text-[#9ca3af]">Overview</span>
+                <span className="geist-label uppercase text-slate-500 dark:text-[#9ca3af]">Overview</span>
                 {anyInterview.jobNo && (
-                  <span className="geist-caption rounded-[6px] border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 font-mono font-bold text-indigo-300">
+                  <span className="geist-caption rounded-[6px] border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 font-mono font-bold text-indigo-700 dark:text-indigo-300">
                     Job #{anyInterview.jobNo}
                   </span>
                 )}
                 {anyInterview.status && (
                   <span className={`geist-caption rounded-[6px] border px-2 py-0.5 font-bold uppercase ${
                     String(anyInterview.status).toLowerCase() === 'active'
-                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
-                      : 'border-red-500/30 bg-red-500/10 text-red-400'
+                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                      : 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400'
                   }`}>
                     {anyInterview.status}
                   </span>
                 )}
               </div>
-              <h1 className="geist-page-title mt-2 max-w-5xl truncate text-white">{interview.title}</h1>
+              <h1 className="geist-page-title mt-2 max-w-5xl truncate text-slate-900 dark:text-white">{interview.title}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {displayCompany && (
-                  <span className="geist-small rounded-[6px] border border-white/[0.11] bg-white/[0.05] px-2.5 py-1 font-bold text-white">
-                    <i className="fas fa-building mr-1.5 text-indigo-400"></i>
+                  <span className="geist-small rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-white/[0.05] px-2.5 py-1 font-bold text-slate-900 dark:text-white">
+                    <i className="fas fa-building mr-1.5 text-indigo-600 dark:text-indigo-400"></i>
                     {displayCompany}
                   </span>
                 )}
-                <span className="geist-small rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1 font-medium text-[#d4d4d4]">
+                <span className="geist-small rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-white/[0.03] px-2 py-1 font-medium text-slate-700 dark:text-[#d4d4d4]">
                   {interview.department || anyInterview.roleName || 'General'}
                 </span>
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.writeText(interview.accessCode || anyInterview.jobNo || '').then(() => messageBox.showSuccess('Access code copied'))}
-                  className="geist-small inline-flex items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
+                  className="geist-small inline-flex items-center gap-2 rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-white/[0.03] px-2 py-1 font-medium text-slate-700 dark:text-[#d4d4d4] transition-colors hover:bg-slate-200 dark:hover:bg-white/[0.06] hover:text-slate-900 dark:hover:text-white"
                 >
-                  <span className="text-[#8f8f8f]">Code</span>
+                  <span className="text-slate-500 dark:text-[#8f8f8f]">Code</span>
                   <span className="font-mono tracking-wider">{interview.accessCode || anyInterview.jobNo || 'N/A'}</span>
-                  <i className="fas fa-copy text-[10px] text-[#6b7280]"></i>
+                  <i className="fas fa-copy text-[10px] text-slate-400 dark:text-[#6b7280]"></i>
                 </button>
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.writeText(interviewLink).then(() => messageBox.showSuccess('Interview link copied'))}
-                  className="geist-small inline-flex items-center gap-2 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-1 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
+                  className="geist-small inline-flex items-center gap-2 rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-white/[0.03] px-2 py-1 font-medium text-slate-700 dark:text-[#d4d4d4] transition-colors hover:bg-slate-200 dark:hover:bg-white/[0.06] hover:text-slate-900 dark:hover:text-white"
                 >
-                  <i className="fas fa-link text-[10px] text-[#8f8f8f]"></i>
+                  <i className="fas fa-link text-[10px] text-slate-400 dark:text-[#8f8f8f]"></i>
                   <span>Copy link</span>
                 </button>
               </div>
@@ -415,7 +412,7 @@ const InterviewOverview: React.FC = () => {
               <ActionLink
                 to={`/interview/${interview.id}`}
                 target="_blank"
-                className="border-white bg-white text-black hover:bg-[#ededed]"
+                className="border-slate-900 bg-slate-900 text-white hover:bg-slate-800 dark:border-white dark:bg-white dark:text-black dark:hover:bg-[#ededed]"
               >
                 <i className="fas fa-external-link-alt text-[11px]"></i>
                 <span>Open link</span>
@@ -423,7 +420,7 @@ const InterviewOverview: React.FC = () => {
               <ActionButton
                 type="button"
                 onClick={() => setEditingJobId(interview.id)}
-                className="border-white/[0.11] bg-transparent text-[#d4d4d4] hover:bg-white/[0.05] hover:text-white"
+                className="border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-transparent text-slate-700 dark:text-[#d4d4d4] hover:bg-slate-200 dark:hover:bg-white/[0.05] hover:text-slate-900 dark:hover:text-white"
               >
                 <i className="fas fa-pencil-alt text-[11px]"></i>
                 <span>Edit</span>
@@ -444,180 +441,111 @@ const InterviewOverview: React.FC = () => {
 
       </section>
 
-      <div className="border-b border-white/[0.11]">
-        <div className="grid grid-cols-1 divide-y divide-white/[0.11] sm:grid-cols-2 xl:grid-cols-5 xl:divide-x xl:divide-y-0">
-          <StatCell label="Responses" value={responsesCount} tone="text-[#83d0a3]" />
+      <div className="border-b border-slate-200 dark:border-white/[0.11]">
+        <div className="grid grid-cols-1 divide-y divide-slate-200 dark:divide-white/[0.11] sm:grid-cols-2 xl:grid-cols-5 xl:divide-x xl:divide-y-0">
+          <StatCell label="Responses" value={responsesCount} tone="text-emerald-600 dark:text-[#83d0a3]" />
           <StatCell label="Candidates" value={candidateCount} />
-          <StatCell label="Pending" value={pendingCount} tone="text-[#f5c76b]" />
+          <StatCell label="Pending" value={pendingCount} tone="text-amber-600 dark:text-[#f5c76b]" />
           <StatCell label="Questions" value={getQuestionsCount(interview)} />
-          <StatCell label="Difficulty" value={interview.difficulty || 'Medium'} tone="text-[#8bbde8]" />
+          <StatCell label="Difficulty" value={interview.difficulty || 'Medium'} tone="text-blue-600 dark:text-[#8bbde8]" />
         </div>
       </div>
 
-      <div>
-        <section className="grid grid-cols-1 items-stretch border-b border-white/[0.11] xl:grid-cols-[minmax(0,1.8fr)_1px_minmax(340px,1fr)]">
-          <div className="flex flex-col">
-            <div className="flex flex-col gap-3 border-b border-white/[0.11] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-7">
-              <div>
-                <h2 className="geist-section-title text-white">Job description</h2>
-                <p className="geist-small mt-0.5 text-[#8f8f8f]">Preview from the JD.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowFullDescription(true)}
-                className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-white/[0.11] bg-transparent px-3 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
-              >
-                <i className="fas fa-expand-alt text-[11px]"></i>
-                <span>Full view</span>
-              </button>
-            </div>
-            <div className="flex flex-1 items-start overflow-hidden px-4 py-4 sm:px-6 lg:px-7">
-              <p
-                className="geist-caption max-w-full leading-6 text-[#d4d4d4]"
-                style={{
-                  display: '-webkit-box',
-                  WebkitBoxOrient: 'vertical',
-                  WebkitLineClamp: 8,
-                  overflow: 'hidden',
-                  overflowWrap: 'anywhere',
-                  wordBreak: 'break-word',
-                }}
-              >
-                {description}
-              </p>
-            </div>
-          </div>
-
-          <div className="h-px bg-white/[0.11] xl:h-auto xl:w-px" />
-
-          {/* Extended Role Snapshot Grid - All Job Fields Visible */}
-          <div className="flex flex-col">
-            <div className="border-b border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
-              <h2 className="geist-section-title text-white">Role snapshot</h2>
-              <p className="geist-small mt-0.5 text-[#8f8f8f]">All job specifications at a glance.</p>
-            </div>
-            <div className="divide-y divide-white/[0.08]">
-              <InfoLine label="Job Number" value={anyInterview.jobNo || interview.accessCode} mono />
-              <InfoLine label="Company" value={displayCompany} />
-              <InfoLine label="Industry Sector" value={anyInterview.industryName || anyInterview.sector} />
-              <InfoLine label="Role Category" value={anyInterview.roleName || anyInterview.roleCategory} />
-              <InfoLine label="Department" value={interview.department || anyInterview.category} />
-              <InfoLine label="Employment" value={anyInterview.employmentType} />
-              <InfoLine label="Location" value={anyInterview.location} />
-              <InfoLine label="City" value={anyInterview.city} />
-              <InfoLine label="Salary / CTC" value={anyInterview.salaryRange || anyInterview.salary} />
-              <InfoLine label="Experience" value={anyInterview.minExperience !== undefined || anyInterview.maxExperience !== undefined ? `${anyInterview.minExperience || 0} - ${anyInterview.maxExperience || 0} Years` : anyInterview.experience} />
-              <InfoLine label="Qualifications" value={anyInterview.qualifications || anyInterview.education} />
-              <InfoLine label="Gender Req." value={anyInterview.genderRequirement || anyInterview.gender} />
-              <InfoLine label="Entered By" value={displayEntryBy} />
-              <InfoLine label="Entered Date" value={displayEnteredDate} mono />
-              <InfoLine label="Deadline" value={formatDate(anyInterview.deadline)} mono />
-            </div>
-          </div>
-        </section>
-
-        {/* Skills & Mandatory Criteria Badges Section */}
-        <section className="border-b border-white/[0.11] p-4 sm:p-6 lg:p-7 space-y-4">
+      {/* Full-width Job Description */}
+      <section className="border-b border-slate-200 dark:border-white/[0.11]">
+        <div className="flex flex-col gap-3 border-b border-slate-200 dark:border-white/[0.11] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-7">
           <div>
-            <h2 className="geist-section-title text-white flex items-center gap-2">
-              <i className="fas fa-code text-purple-400"></i> Required Skills ({skillsList.length})
-            </h2>
-            <div className="mt-2.5 flex flex-wrap gap-2">
-              {skillsList.length > 0 ? (
-                skillsList.map((skill: string, idx: number) => (
-                  <span key={idx} className="geist-caption rounded-[6px] border border-purple-500/30 bg-purple-500/10 px-3 py-1 font-semibold text-purple-200">
-                    {skill}
-                  </span>
-                ))
-              ) : (
-                <span className="geist-caption italic text-[#6b7280]">No skills specified.</span>
-              )}
-            </div>
+            <h2 className="geist-section-title text-slate-900 dark:text-white">Job description</h2>
+            <p className="geist-small mt-0.5 text-slate-500 dark:text-[#8f8f8f]">Preview and overview of role requirements.</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowFullDescription(true)}
+            className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-transparent px-3 font-medium text-slate-700 dark:text-[#d4d4d4] transition-colors hover:bg-slate-200 dark:hover:bg-white/[0.06] hover:text-slate-900 dark:hover:text-white"
+          >
+            <i className="fas fa-expand-alt text-[11px]"></i>
+            <span>Full view</span>
+          </button>
+        </div>
+        <div className="px-4 py-5 sm:px-6 lg:px-7">
+          <FormattedJobDescription
+            description={description}
+            maxLines={10}
+            className="max-w-full"
+          />
+        </div>
+      </section>
 
-          <div className="pt-2 border-t border-white/[0.08]">
-            <h3 className="geist-caption font-bold uppercase text-[#9ca3af] tracking-wider mb-2">
-              AI Strict Criteria Checkmarks
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 rounded-[6px] border border-white/[0.1] bg-white/[0.02]">
-                <span className="geist-label block text-[#8f8f8f] uppercase">Strict Gender</span>
-                <span className={`geist-caption font-bold mt-1 block ${anyInterview.strictGenderMatch ? 'text-amber-400' : 'text-[#6b7280]'}`}>
-                  {anyInterview.strictGenderMatch ? '✓ Strict Match' : 'Off'}
-                </span>
-              </div>
-              <div className="p-3 rounded-[6px] border border-white/[0.1] bg-white/[0.02]">
-                <span className="geist-label block text-[#8f8f8f] uppercase">Strict Location</span>
-                <span className={`geist-caption font-bold mt-1 block ${anyInterview.strictLocationMatch ? 'text-amber-400' : 'text-[#6b7280]'}`}>
-                  {anyInterview.strictLocationMatch ? '✓ Strict Match' : 'Off'}
-                </span>
-              </div>
-              <div className="p-3 rounded-[6px] border border-white/[0.1] bg-white/[0.02]">
-                <span className="geist-label block text-[#8f8f8f] uppercase">Strict Education</span>
-                <span className={`geist-caption font-bold mt-1 block ${anyInterview.strictEducationMatch ? 'text-amber-400' : 'text-[#6b7280]'}`}>
-                  {anyInterview.strictEducationMatch ? '✓ Strict Match' : 'Off'}
-                </span>
-              </div>
-              <div className="p-3 rounded-[6px] border border-white/[0.1] bg-white/[0.02]">
-                <span className="geist-label block text-[#8f8f8f] uppercase">Strict Experience</span>
-                <span className={`geist-caption font-bold mt-1 block ${anyInterview.strictExperienceMatch ? 'text-amber-400' : 'text-[#6b7280]'}`}>
-                  {anyInterview.strictExperienceMatch ? '✓ Strict Match' : 'Off'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
+      {/* Skills Section */}
+      <section className="border-b border-slate-200 dark:border-white/[0.11] p-4 sm:p-6 lg:p-7">
+        <h2 className="geist-section-title text-slate-900 dark:text-white flex items-center gap-2">
+          <i className="fas fa-code text-purple-600 dark:text-purple-400"></i> Required Skills ({skillsList.length})
+        </h2>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {skillsList.length > 0 ? (
+            skillsList.map((skill: string, idx: number) => (
+              <span key={idx} className="geist-caption rounded-[6px] border border-purple-300 dark:border-purple-500/30 bg-purple-50 dark:bg-purple-500/10 px-3 py-1 font-semibold text-purple-700 dark:text-purple-300">
+                {skill}
+              </span>
+            ))
+          ) : (
+            <span className="geist-caption italic text-slate-400 dark:text-[#6b7280]">No skills specified.</span>
+          )}
+        </div>
+      </section>
 
-        {/* Complete Configuration Data Grid */}
-        <section className="border-b border-white/[0.11]">
-          <SectionHeader title="Full Configuration & Identifiers" description="Complete database record properties." />
-          <dl className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-            {details.map(([label, value]) => (
-              <ConfigTile key={label} label={label} value={value} mono={label.includes('At') || label.includes('ID') || label.includes('Code') || label.includes('Number') || label.includes('UID')} />
+      {/* Complete Configuration Data Grid */}
+      <section className="border-b border-slate-200 dark:border-white/[0.11]">
+        <SectionHeader title="Full Configuration & Identifiers" description="Complete database record properties." />
+        <dl className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+          {details.map(([label, value]) => (
+            <ConfigTile key={label} label={label} value={value} mono={label.includes('At') || label.includes('ID') || label.includes('Code') || label.includes('Number') || label.includes('UID')} />
+          ))}
+        </dl>
+      </section>
+
+      <section className="grid grid-cols-1 border-b border-slate-200 dark:border-white/[0.11] xl:grid-cols-3 xl:divide-x xl:divide-slate-200 dark:xl:divide-white/[0.11]">
+        <ListBlock label="Manual questions" items={manualQuestions} />
+        <ListBlock label="Generated questions" items={generatedQuestions} />
+        <ListBlock label="Candidate emails" items={candidateEmails} />
+      </section>
+
+      <section>
+        <SectionHeader title="Custom fields" description="Additional key-value fields attached to this job." />
+        {customFields.length === 0 ? (
+          <p className="geist-caption px-4 py-5 text-slate-400 dark:text-[#6b7280] sm:px-6 lg:px-7">No custom fields added.</p>
+        ) : (
+          <dl className="divide-y divide-slate-200 dark:divide-white/[0.08]">
+            {customFields.map((field: any, index: number) => (
+              <InfoLine key={field.id || index} label={field.key || `Field ${index + 1}`} value={field.value || field} />
             ))}
           </dl>
-        </section>
-
-        <section className="grid grid-cols-1 border-b border-white/[0.11] xl:grid-cols-3 xl:divide-x xl:divide-white/[0.11]">
-          <ListBlock label="Manual questions" items={manualQuestions} />
-          <ListBlock label="Generated questions" items={generatedQuestions} />
-          <ListBlock label="Candidate emails" items={candidateEmails} />
-        </section>
-
-        <section>
-          <SectionHeader title="Custom fields" description="Additional key-value fields attached to this job." />
-          {customFields.length === 0 ? (
-            <p className="geist-caption px-4 py-5 text-[#6b7280] sm:px-6 lg:px-7">No custom fields added.</p>
-          ) : (
-            <dl className="divide-y divide-white/[0.08]">
-              {customFields.map((field: any, index: number) => (
-                <InfoLine key={field.id || index} label={field.key || `Field ${index + 1}`} value={field.value || field} />
-              ))}
-            </dl>
-          )}
-        </section>
-      </div>
+        )}
+      </section>
 
       {editingJobId && <EditJobModal jobId={editingJobId} onClose={() => setEditingJobId(null)} />}
       {showFullDescription && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="flex max-h-[84vh] w-full max-w-3xl flex-col border border-white/[0.14] bg-[#050505] text-white shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-white/[0.11] px-5 py-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setShowFullDescription(false)}>
+          <div 
+            className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-2xl border border-slate-200 dark:border-white/[0.14] bg-white dark:bg-[#0f0f0f] text-slate-900 dark:text-white shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 dark:border-white/[0.11] bg-slate-50 dark:bg-white/[0.02] px-6 py-4">
               <div className="min-w-0">
-                <p className="geist-label uppercase text-[#6b7280]">Full job description</p>
-                <h3 className="geist-section-title mt-1 truncate text-white">{interview.title}</h3>
+                <p className="geist-label uppercase text-slate-500 dark:text-[#6b7280]">Full Job Description</p>
+                <h3 className="geist-section-title mt-1 truncate text-slate-900 dark:text-white">{interview.title}</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setShowFullDescription(false)}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] border border-white/[0.11] text-[#8f8f8f] transition-colors hover:bg-white/[0.06] hover:text-white"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 dark:border-white/[0.11] bg-white dark:bg-transparent text-slate-600 dark:text-[#8f8f8f] transition-colors hover:bg-slate-100 dark:hover:bg-white/[0.06] hover:text-slate-900 dark:hover:text-white"
                 title="Close"
               >
                 <i className="fas fa-times text-xs"></i>
               </button>
             </div>
-            <div className="overflow-y-auto px-5 py-5">
-              <p className="geist-caption whitespace-pre-wrap leading-6 text-[#d4d4d4]">{description}</p>
+            <div className="overflow-y-auto px-6 py-6 max-h-[72vh] bg-white dark:bg-[#0f0f0f]">
+              <FormattedJobDescription description={description} />
             </div>
           </div>
         </div>,

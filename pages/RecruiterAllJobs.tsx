@@ -18,6 +18,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useBackgroundSend } from '../context/BackgroundSendContext';
 import { LocationCityInput } from '../components/LocationCityInput';
 import { EducationInput } from '../components/EducationInput';
+import { getJobDescriptionSnippet, FormattedJobDescription } from '../utils/jobDescriptionFormatter';
 import {
   Briefcase,
   Search,
@@ -859,12 +860,26 @@ const RecruiterAllJobs: React.FC = () => {
     return jobs.filter(job => {
       const search = searchQuery.toLowerCase().trim();
       const skillsStr = formatSkillsList(job.skills).join(' ').toLowerCase();
+      const rawJobNo = String(job.jobNo || '').toLowerCase().trim();
+      const rawAccessCode = String(job.accessCode || '').toLowerCase().trim();
+      const rawId = String(job.id || '').toLowerCase().trim();
+      const searchDigits = search.replace(/\D/g, '');
+
+      const matchesJobNo = (rawJobNo && (rawJobNo.includes(search) || (searchDigits && rawJobNo.includes(searchDigits)))) ||
+        (rawAccessCode && (rawAccessCode.includes(search) || (searchDigits && rawAccessCode.includes(searchDigits)))) ||
+        rawId.includes(search);
+
       const matchesSearch = !search ||
+        matchesJobNo ||
         job.title.toLowerCase().includes(search) ||
         (job.companyName && job.companyName.toLowerCase().includes(search)) ||
         (job.description && job.description.toLowerCase().includes(search)) ||
         (job.location && job.location.toLowerCase().includes(search)) ||
         (job.category && job.category.toLowerCase().includes(search)) ||
+        (job.department && job.department.toLowerCase().includes(search)) ||
+        (job.roleCategory && job.roleCategory.toLowerCase().includes(search)) ||
+        (job.industry && job.industry.toLowerCase().includes(search)) ||
+        (job.sector && job.sector.toLowerCase().includes(search)) ||
         skillsStr.includes(search);
 
       const matchesCategory = selectedCategory === 'All' ||
@@ -1374,7 +1389,7 @@ const RecruiterAllJobs: React.FC = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search jobs by title, skills, location..."
+                placeholder="Search jobs by Job No, title, skills, location..."
                 className="geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] pl-9 pr-8 text-white outline-none transition-colors placeholder:text-[#6b7280] focus:border-white/[0.28] focus:bg-white/[0.05]"
               />
               {searchQuery && (
@@ -1554,8 +1569,8 @@ const RecruiterAllJobs: React.FC = () => {
                     </div>
 
                     {/* Short Description */}
-                    <p className="geist-small mt-2 text-[#8f8f8f] line-clamp-2 hover:text-[#d4d4d4] transition-colors">
-                      {job.description || 'No description provided.'}
+                    <p className="geist-small mt-2 text-[#8f8f8f] line-clamp-2 hover:text-[#d4d4d4] transition-colors leading-relaxed">
+                      {getJobDescriptionSnippet(job.description, 160)}
                     </p>
 
                     {/* Specifications */}
