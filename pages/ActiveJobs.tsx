@@ -145,7 +145,9 @@ const ActiveJobsPage: React.FC = () => {
         const data = doc.data();
         const jobNo = data.jobNo ? String(data.jobNo).trim() : '';
         const accessCode = jobNo || data.accessCode || doc.id.slice(0, 6).toUpperCase();
-        const contactPerson = data.contactPerson || 
+        const contactPerson = data.entryBy ||
+                              data.entry_by ||
+                              data.contactPerson || 
                               data.contactPersonName || 
                               data.uploadedBy || 
                               data.createdBy?.name || 

@@ -442,12 +442,25 @@ export default function PublicJobSeekerUpload() {
         const data = doc.data();
         const jobNo = data.jobNo ? String(data.jobNo).trim() : '';
         const accessCode = jobNo || data.accessCode || doc.id.slice(0, 6).toUpperCase();
+        const resolvedEntryBy = (
+          data.entryBy ||
+          data.entry_by ||
+          data.uploadedBy ||
+          data.uploaded_by ||
+          data.contactPerson ||
+          data.contactPersonName ||
+          (typeof data.createdBy === 'string' ? data.createdBy : data.createdBy?.name) ||
+          data.recruiterName ||
+          'Recruiter'
+        ).toString().trim();
+
         return {
           id: doc.id,
           jobNo,
           title: data.title || 'Untitled Job Role',
           company: data.company || data.companyName || 'DSource Partner',
-          recruiterName: data.contactPerson || data.createdBy?.name || data.recruiterName || 'DSource Hiring Team',
+          recruiterName: resolvedEntryBy,
+          entryBy: resolvedEntryBy,
           description: data.description || data.jobDescription || '',
           industrySector: data.industrySector || data.sector || data.industryName || data.industry || '',
           sector: data.sector || data.industrySector || data.industryName || '',
@@ -485,12 +498,25 @@ export default function PublicJobSeekerUpload() {
         const data = doc.data();
         const jobNo = data.jobNo ? String(data.jobNo).trim() : '';
         const accessCode = jobNo || data.accessCode || doc.id.slice(0, 6).toUpperCase();
+        const resolvedEntryBy = (
+          data.entryBy ||
+          data.entry_by ||
+          data.uploadedBy ||
+          data.uploaded_by ||
+          data.contactPerson ||
+          data.contactPersonName ||
+          (typeof data.createdBy === 'string' ? data.createdBy : data.createdBy?.name) ||
+          data.recruiterName ||
+          'Recruiter'
+        ).toString().trim();
+
         return {
           id: doc.id,
           jobNo,
           title: data.title || 'Untitled Job Role',
           company: data.company || data.companyName || 'DSource Partner',
-          recruiterName: data.contactPerson || data.createdBy?.name || data.recruiterName || 'DSource Hiring Team',
+          recruiterName: resolvedEntryBy,
+          entryBy: resolvedEntryBy,
           description: data.description || data.jobDescription || '',
           industrySector: data.industrySector || data.sector || data.industryName || data.industry || '',
           sector: data.sector || data.industrySector || data.industryName || '',

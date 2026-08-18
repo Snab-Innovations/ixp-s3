@@ -1,15 +1,29 @@
 /**
- * Education & Qualification Matching Engine
- *
- * Handles intelligent matching between job education requirements and candidate qualifications.
+ * Precision Education & Qualification Matching Engine
  *
  * Core Rules:
- * 1. Multi-Option JDs (e.g. "BE Computer, Diploma Computers, MCA" or "BE Civil / Diploma Civil"):
- *    - If candidate satisfies ANY ONE of the options, it is a 100% match!
- * 2. Specific Specialization Requirements (e.g. "BE Computers", "Diploma Mechanical", "MBA HR", "ITI Electrician"):
- *    - Recommends ONLY to candidates having that branch/specialization (e.g. "BE Computers" will NOT match "BE Civil" or "BE Mechanical").
- * 3. Generic Degree / Any Requirements (e.g. "BE", "B.E/B.Tech", "BE - Any", "Diploma", "Diploma - Any", "ITI", "ITI - All Trade", "MBA", "Any Graduate", "Post-Graduate", "HSC - Any"):
- *    - Recommends to ALL candidates under that degree family (e.g. "BE" matches BE Computers, BE Civil, BE Mech, BE Electrical, etc.)!
+ * 1. Specific Specializations:
+ *    - "Graduate - B.Sc" / "B.Sc" / "B.Sc - Agriculture" -> Matches ONLY B.Sc candidates (NOT BE Computers, NOT B.A, NOT B.Com).
+ *    - "Graduate - B.A" / "B.A" -> Matches ONLY B.A candidates.
+ *    - "Graduate - B.Com" / "B.Com" -> Matches ONLY B.Com / Commerce candidates.
+ *    - "BE Computers" / "BSc Computer Science" / "BCA" -> Matches ONLY Computer/IT candidates (NOT BE Civil, NOT BE Mechanical).
+ *    - "BE Civil" -> Matches ONLY Civil candidates (NOT BE Mech, NOT BE Comp).
+ *    - "BE Mechanical" -> Matches ONLY Mechanical/Automobile candidates.
+ *    - "Diploma Mechanical" -> Matches ONLY Diploma Mechanical candidates.
+ *    - "Diploma Civil" -> Matches ONLY Diploma Civil candidates.
+ *    - "ITI Electrician" -> Matches ONLY ITI Electrician candidates.
+ *
+ * 2. Generic Degree Families:
+ *    - "Graduate - Any" / "Any Graduate" / "Graduate" -> Matches ALL Graduate candidates (B.Sc, B.A, B.Com, BE, BCA, BBA, etc.).
+ *    - "BE" / "B.E/B.Tech" / "BE - Any" / "BTech" -> Matches ALL BE specializations (BE Comp, BE Civil, BE Mech, BE Electrical, etc.).
+ *    - "Diploma" / "Diploma - Any" -> Matches ALL Diploma specializations.
+ *    - "ITI" / "ITI - All Trade" -> Matches ALL ITI trades.
+ *    - "Post-Graduate" / "Post Graduate - Any" -> Matches ALL Post-Graduate candidates.
+ *    - "MBA" / "MBA Other" -> Matches ALL MBA candidates.
+ *    - "HSC" / "HSC - Any" -> Matches ALL HSC candidates.
+ *
+ * 3. Multi-Education JDs (e.g. "BE Computer, Diploma Computers, MCA"):
+ *    - If candidate satisfies ANY ONE of the required options -> 100% Match!
  */
 
 export const normalizeEducationString = (str: string): string => {
@@ -21,401 +35,323 @@ export const normalizeEducationString = (str: string): string => {
     .trim();
 };
 
-export type DegreeLevel =
-  | 'BE_BTECH'
-  | 'DIPLOMA'
-  | 'ITI'
-  | 'MBA'
-  | 'ME_MTECH'
-  | 'MCA'
-  | 'BCA'
-  | 'BCOM'
-  | 'MCOM'
+export type EduFamily =
+  | 'GRADUATE_ANY'
+  | 'BE_ANY'
+  | 'BE_COMPUTERS'
+  | 'BE_CIVIL'
+  | 'BE_MECHANICAL'
+  | 'BE_ELECTRICAL'
+  | 'BE_ELECTRONICS'
+  | 'BE_CHEMICAL'
+  | 'BE_METALLURGY'
+  | 'BE_TEXTILE'
+  | 'BE_OTHER'
   | 'BSC'
-  | 'MSC'
+  | 'BSC_COMPUTERS'
+  | 'BSC_MICROBIOLOGY'
   | 'BA'
-  | 'MA'
+  | 'BCOM'
   | 'BBA'
+  | 'BCA'
+  | 'BARCH'
   | 'BED'
-  | 'MED'
-  | 'PHARMA'
+  | 'BPHARM'
   | 'MEDICAL'
   | 'LAW'
-  | 'HSC'
-  | 'SSC'
-  | 'GRADUATE_GENERIC'
-  | 'POST_GRADUATE_GENERIC';
-
-export type BranchCategory =
-  | 'COMPUTER_IT'
-  | 'MECHANICAL'
-  | 'CIVIL'
-  | 'ELECTRICAL'
-  | 'ELECTRONICS'
-  | 'CHEMICAL'
-  | 'METALLURGY'
-  | 'TEXTILE'
-  | 'COMMERCE_FINANCE'
-  | 'HR_MANAGEMENT'
-  | 'MARKETING'
-  | 'SCIENCE_BIO'
-  | 'ARTS_HUMANITIES'
-  | 'PHARMA_MEDICAL'
-  | 'LAW'
-  | 'SAFETY'
-  | 'HOSPITALITY'
-  | 'DESIGN'
-  | 'FITTER'
-  | 'ELECTRICIAN_TRADE'
-  | 'WELDER'
-  | 'TURNER'
-  | 'MACHINIST'
-  | 'PLUMBER'
-  | 'CARPENTER'
-  | 'DRAUGHTSMAN'
+  | 'DIPLOMA_ANY'
+  | 'DIPLOMA_MECHANICAL'
+  | 'DIPLOMA_CIVIL'
+  | 'DIPLOMA_COMPUTERS'
+  | 'DIPLOMA_ELECTRICAL'
+  | 'DIPLOMA_ELECTRONICS'
+  | 'DIPLOMA_CHEMICAL'
+  | 'DIPLOMA_OTHER'
+  | 'ITI_ANY'
+  | 'ITI_ELECTRICIAN'
+  | 'ITI_FITTER'
+  | 'ITI_WELDER'
+  | 'ITI_MACHINIST'
+  | 'ITI_AUTOMOBILE'
+  | 'ITI_OTHER'
+  | 'POST_GRADUATE_ANY'
+  | 'MBA_ANY'
+  | 'MBA_FINANCE'
+  | 'MBA_HR'
+  | 'MBA_MARKETING'
+  | 'MBA_OPERATIONS'
+  | 'MCA'
+  | 'ME_MTECH'
+  | 'MCOM'
+  | 'MSC'
+  | 'MA'
+  | 'HSC_ANY'
   | 'HSC_SCIENCE'
   | 'HSC_COMMERCE'
   | 'HSC_ARTS'
-  | 'HSC_MCVC';
+  | 'HSC_MCVC'
+  | 'SSC_ANY'
+  | 'OPEN_ANY';
 
-// Mapping of degree levels
-const DEGREE_PATTERNS: { level: DegreeLevel; patterns: RegExp[] }[] = [
-  {
-    level: 'BE_BTECH',
-    patterns: [
-      /\b(b\.?tech|btech|b\.?e\.?|be|bachelor of technology|bachelor of engineering|graduate engineer)\b/i
-    ]
-  },
-  {
-    level: 'DIPLOMA',
-    patterns: [
-      /\b(diploma|polytechnic|d\.?pharm|dpharm)\b/i
-    ]
-  },
-  {
-    level: 'ITI',
-    patterns: [
-      /\b(iti|fitter|machinist|turner|welder|wireman|diesel mechanic|draughtsman|plumber|carpenter)\b/i
-    ]
-  },
-  {
-    level: 'ME_MTECH',
-    patterns: [
-      /\b(m\.?tech|mtech|m\.?e\.?|me|master of technology|master of engineering)\b/i
-    ]
-  },
-  {
-    level: 'MBA',
-    patterns: [
-      /\b(mba|pgdm|master of business administration|post graduate diploma in management|mpm)\b/i
-    ]
-  },
-  {
-    level: 'MCA',
-    patterns: [
-      /\b(mca|mcs|mcm|master of computer applications)\b/i
-    ]
-  },
-  {
-    level: 'BCA',
-    patterns: [
-      /\b(bca|bcs|bachelor of computer applications)\b/i
-    ]
-  },
-  {
-    level: 'BCOM',
-    patterns: [
-      /\b(b\.?com|bcom|bachelor of commerce)\b/i
-    ]
-  },
-  {
-    level: 'MCOM',
-    patterns: [
-      /\b(m\.?com|mcom|master of commerce)\b/i
-    ]
-  },
-  {
-    level: 'BSC',
-    patterns: [
-      /\b(b\.?sc|bsc|bachelor of science|bsw)\b/i
-    ]
-  },
-  {
-    level: 'MSC',
-    patterns: [
-      /\b(m\.?sc|msc|master of science|msw)\b/i
-    ]
-  },
-  {
-    level: 'BA',
-    patterns: [
-      /\b(b\.?a\.?|ba|bachelor of arts)\b/i
-    ]
-  },
-  {
-    level: 'MA',
-    patterns: [
-      /\b(m\.?a\.?|ma|master of arts)\b/i
-    ]
-  },
-  {
-    level: 'BBA',
-    patterns: [
-      /\b(bba|bbm|bachelor of business administration)\b/i
-    ]
-  },
-  {
-    level: 'BED',
-    patterns: [
-      /\b(b\.?ed|bed)\b/i
-    ]
-  },
-  {
-    level: 'MED',
-    patterns: [
-      /\b(m\.?ed|med)\b/i
-    ]
-  },
-  {
-    level: 'PHARMA',
-    patterns: [
-      /\b(b\.?pharm|bpharm|m\.?pharm|mpharm|d\.?pharm|pharmacy)\b/i
-    ]
-  },
-  {
-    level: 'MEDICAL',
-    patterns: [
-      /\b(bams|bhms|bds|mbbs|medical|doctor)\b/i
-    ]
-  },
-  {
-    level: 'LAW',
-    patterns: [
-      /\b(llb|bl\/?llb|llm|law)\b/i
-    ]
-  },
-  {
-    level: 'HSC',
-    patterns: [
-      /\b(hsc|12th|12th pass|higher secondary|mcvc)\b/i
-    ]
-  },
-  {
-    level: 'SSC',
-    patterns: [
-      /\b(ssc|10th|10th pass|secondary certificate|matric)\b/i
-    ]
-  },
-  {
-    level: 'POST_GRADUATE_GENERIC',
-    patterns: [
-      /\b(post[\s-]?graduate|postgraduate|pg|master|masters)\b/i
-    ]
-  },
-  {
-    level: 'GRADUATE_GENERIC',
-    patterns: [
-      /\b(graduate|any graduate|bachelor|bachelors|degree)\b/i
-    ]
+/**
+ * Classifies an education string into a specific canonical EduFamily.
+ */
+export function classifyEducationString(raw: string): EduFamily {
+  if (!raw || !raw.trim()) return 'OPEN_ANY';
+  const text = raw.toLowerCase().trim();
+
+  // Strip qualification prefixes like "Graduate - ", "Diploma - ", "ITI - ", "Post-Graduate - ", "HSC - "
+  const stripped = text
+    .replace(/^(graduate|diploma|iti|post[\s-]?graduate|hsc|ssc)\s*-\s*/i, '')
+    .trim();
+
+  // 1. Open / Universal Any
+  if (/^(any|all|open|n\/a|none|not specified|as per job description|as per jd|any qualification)$/i.test(stripped) ||
+      /^(any|all|open|n\/a|none|not specified)$/i.test(text)) {
+    return 'OPEN_ANY';
   }
-];
 
-// Mapping of branch/discipline categories
-const BRANCH_PATTERNS: { branch: BranchCategory; patterns: RegExp[] }[] = [
-  {
-    branch: 'COMPUTER_IT',
-    patterns: [
-      /\b(computer|computers|cse|cs|it|information technology|software|data science|bca|mca|bcs|mcs|web designing)\b/i
-    ]
-  },
-  {
-    branch: 'MECHANICAL',
-    patterns: [
-      /\b(mechanical|mech|automobile|automotive|tool\s*(&|and)?\s*die|production|industrial engineering|mechatronics)\b/i
-    ]
-  },
-  {
-    branch: 'CIVIL',
-    patterns: [
-      /\b(civil|construction|structural|architecture|b\.?arch|interior design|site)\b/i
-    ]
-  },
-  {
-    branch: 'ELECTRICAL',
-    patterns: [
-      /\b(electrical|eee|power systems?)\b/i
-    ]
-  },
-  {
-    branch: 'ELECTRONICS',
-    patterns: [
-      /\b(electronics|e&tc|etc|ece|telecommunication|telecommunications|instrumentation|vlsi|embedded)\b/i
-    ]
-  },
-  {
-    branch: 'CHEMICAL',
-    patterns: [
-      /\b(chemical|plastic|polymer|petrochemical)\b/i
-    ]
-  },
-  {
-    branch: 'METALLURGY',
-    patterns: [
-      /\b(metallurgy|mining)\b/i
-    ]
-  },
-  {
-    branch: 'TEXTILE',
-    patterns: [
-      /\b(textile)\b/i
-    ]
-  },
-  {
-    branch: 'COMMERCE_FINANCE',
-    patterns: [
-      /\b(commerce|b\.?com|m\.?com|finance|accounting|accounts|tax|taxation|ca|icwa|cma|auditing|banking|insurance)\b/i
-    ]
-  },
-  {
-    branch: 'HR_MANAGEMENT',
-    patterns: [
-      /\b(hr|human resource|human resources|personnel|mpm|operations|logistics|supply chain|bba|bbm|msw|management)\b/i
-    ]
-  },
-  {
-    branch: 'MARKETING',
-    patterns: [
-      /\b(marketing|sales|digital marketing)\b/i
-    ]
-  },
-  {
-    branch: 'SCIENCE_BIO',
-    patterns: [
-      /\b(microbiology|biotech|biotechnology|physics|chemistry|biology|botany|zoology)\b/i
-    ]
-  },
-  {
-    branch: 'ARTS_HUMANITIES',
-    patterns: [
-      /\b(arts|economics|literature|sociology|history|psychology|political)\b/i
-    ]
-  },
-  {
-    branch: 'SAFETY',
-    patterns: [
-      /\b(fire\s*(&|and)?\s*safety|safety|environmental health)\b/i
-    ]
-  },
-  {
-    branch: 'HOSPITALITY',
-    patterns: [
-      /\b(hotel management|hospitality|tourism|travel)\b/i
-    ]
-  },
-  {
-    branch: 'DESIGN',
-    patterns: [
-      /\b(fashion design|graphic design|visual arts)\b/i
-    ]
-  },
-  {
-    branch: 'FITTER',
-    patterns: [
-      /\b(fitter)\b/i
-    ]
-  },
-  {
-    branch: 'ELECTRICIAN_TRADE',
-    patterns: [
-      /\b(electrician|wireman)\b/i
-    ]
-  },
-  {
-    branch: 'WELDER',
-    patterns: [
-      /\b(welder)\b/i
-    ]
-  },
-  {
-    branch: 'TURNER',
-    patterns: [
-      /\b(turner)\b/i
-    ]
-  },
-  {
-    branch: 'MACHINIST',
-    patterns: [
-      /\b(machinist)\b/i
-    ]
-  },
-  {
-    branch: 'PLUMBER',
-    patterns: [
-      /\b(plumber)\b/i
-    ]
-  },
-  {
-    branch: 'CARPENTER',
-    patterns: [
-      /\b(carpenter)\b/i
-    ]
-  },
-  {
-    branch: 'DRAUGHTSMAN',
-    patterns: [
-      /\b(draughtsman)\b/i
-    ]
-  },
-  {
-    branch: 'HSC_SCIENCE',
-    patterns: [
-      /\b(hsc science|12th science)\b/i
-    ]
-  },
-  {
-    branch: 'HSC_COMMERCE',
-    patterns: [
-      /\b(hsc commerce|12th commerce)\b/i
-    ]
-  },
-  {
-    branch: 'HSC_ARTS',
-    patterns: [
-      /\b(hsc arts|12th arts)\b/i
-    ]
-  },
-  {
-    branch: 'HSC_MCVC',
-    patterns: [
-      /\b(mcvc)\b/i
-    ]
+  // 2. Generic Graduate (Any Graduate)
+  if (/^(any graduate|graduate|graduate - any|graduate any|any degree|bachelor|bachelors)$/i.test(stripped) ||
+      /^(any graduate|graduate|graduate - any|graduate any|any degree)$/i.test(text)) {
+    return 'GRADUATE_ANY';
   }
-];
 
-export function detectDegreeLevels(text: string): DegreeLevel[] {
-  const norm = normalizeEducationString(text);
-  const found: DegreeLevel[] = [];
+  // 3. Generic Post-Graduate
+  if (/^(post[\s-]?graduate|post graduate - any|post graduate any|pg|master|masters)$/i.test(stripped) ||
+      /^(post[\s-]?graduate|post graduate - any|post graduate any)$/i.test(text)) {
+    return 'POST_GRADUATE_ANY';
+  }
 
-  for (const { level, patterns } of DEGREE_PATTERNS) {
-    if (patterns.some(p => p.test(norm) || p.test(text))) {
-      if (!found.includes(level)) found.push(level);
+  // 4. BE / B.Tech Family
+  if (/\b(b\.?tech|btech|b\.?e\.?|be|bachelor of engineering|bachelor of technology)\b/i.test(stripped) ||
+      /\b(b\.?tech|btech|b\.?e\.?|be)\b/i.test(text)) {
+    // Specific BE branches:
+    if (/\b(computer|computers|cse|cs|it|information technology|software)\b/i.test(stripped)) return 'BE_COMPUTERS';
+    if (/\b(civil|construction|structural)\b/i.test(stripped)) return 'BE_CIVIL';
+    if (/\b(mechanical|mech|automobile|automotive|tool\s*(&|and)?\s*die|production|industrial)\b/i.test(stripped)) return 'BE_MECHANICAL';
+    if (/\b(electrical|eee|power)\b/i.test(stripped)) return 'BE_ELECTRICAL';
+    if (/\b(electronics|e&tc|etc|ece|telecommunication|telecommunications|instrumentation)\b/i.test(stripped)) return 'BE_ELECTRONICS';
+    if (/\b(chemical|plastic|polymer)\b/i.test(stripped)) return 'BE_CHEMICAL';
+    if (/\b(metallurgy|mining)\b/i.test(stripped)) return 'BE_METALLURGY';
+    if (/\b(textile)\b/i.test(stripped)) return 'BE_TEXTILE';
+    // Generic BE:
+    return 'BE_ANY';
+  }
+
+  // 5. Diploma Family
+  if (/\b(diploma|polytechnic)\b/i.test(stripped) || /\b(diploma|polytechnic)\b/i.test(text)) {
+    if (/^(diploma - any|diploma any|diploma)$/i.test(stripped) || /^(diploma - any|diploma any|diploma)$/i.test(text)) {
+      return 'DIPLOMA_ANY';
     }
+    if (/\b(mechanical|mech|automobile|automotive|tool\s*(&|and)?\s*die|production|industrial)\b/i.test(stripped)) return 'DIPLOMA_MECHANICAL';
+    if (/\b(civil|construction|structural|architecture)\b/i.test(stripped)) return 'DIPLOMA_CIVIL';
+    if (/\b(computer|computers|cse|cs|it|information technology|web designing)\b/i.test(stripped)) return 'DIPLOMA_COMPUTERS';
+    if (/\b(electrical|eee)\b/i.test(stripped)) return 'DIPLOMA_ELECTRICAL';
+    if (/\b(electronics|e&tc|etc|ece|telecommunication|telecommunications)\b/i.test(stripped)) return 'DIPLOMA_ELECTRONICS';
+    if (/\b(chemical|plastic|polymer)\b/i.test(stripped)) return 'DIPLOMA_CHEMICAL';
+    return 'DIPLOMA_ANY';
   }
 
-  return found;
+  // 6. ITI Family
+  if (/\b(iti|fitter|machinist|turner|welder|wireman|electrician|plumber|carpenter|diesel mechanic)\b/i.test(stripped) ||
+      /\b(iti)\b/i.test(text)) {
+    if (/^(iti - all trade|iti all trade|iti any|iti)$/i.test(stripped) || /^(iti - all trade|iti all trade|iti any|iti)$/i.test(text)) {
+      return 'ITI_ANY';
+    }
+    if (/\b(electrician|wireman)\b/i.test(stripped)) return 'ITI_ELECTRICIAN';
+    if (/\b(fitter)\b/i.test(stripped)) return 'ITI_FITTER';
+    if (/\b(welder)\b/i.test(stripped)) return 'ITI_WELDER';
+    if (/\b(machinist|turner)\b/i.test(stripped)) return 'ITI_MACHINIST';
+    if (/\b(automobile|diesel mechanic|mechanic)\b/i.test(stripped)) return 'ITI_AUTOMOBILE';
+    return 'ITI_ANY';
+  }
+
+  // 7. Post-Graduate / MBA Family
+  if (/\b(mba|pgdm|mpm)\b/i.test(stripped)) {
+    if (/\b(finance|accounting)\b/i.test(stripped)) return 'MBA_FINANCE';
+    if (/\b(hr|human resource|human resources|personnel)\b/i.test(stripped)) return 'MBA_HR';
+    if (/\b(marketing|sales)\b/i.test(stripped)) return 'MBA_MARKETING';
+    if (/\b(operations|logistics|supply chain)\b/i.test(stripped)) return 'MBA_OPERATIONS';
+    return 'MBA_ANY';
+  }
+  if (/\b(mca|mcm|mcs)\b/i.test(stripped)) return 'MCA';
+  if (/\b(m\.?tech|mtech|m\.?e\.?|me)\b/i.test(stripped)) return 'ME_MTECH';
+  if (/\b(m\.?com|mcom)\b/i.test(stripped)) return 'MCOM';
+  if (/\b(m\.?sc|msc)\b/i.test(stripped)) return 'MSC';
+  if (/\b(m\.?a\.?|ma)\b/i.test(stripped)) return 'MA';
+
+  // 8. Individual Graduate Degrees:
+  // BCA / BCS
+  if (/\b(bca|bcs)\b/i.test(stripped)) return 'BCA';
+
+  // B.Sc (Bachelor of Science)
+  if (/\b(b\.?sc|bsc|bachelor of science)\b/i.test(stripped)) {
+    if (/\b(computer|computers|cs|it)\b/i.test(stripped)) return 'BSC_COMPUTERS';
+    if (/\b(microbiology|biotech|biotechnology)\b/i.test(stripped)) return 'BSC_MICROBIOLOGY';
+    return 'BSC';
+  }
+
+  // B.A (Bachelor of Arts)
+  if (/\b(b\.?a\.?|ba|bachelor of arts)\b/i.test(stripped)) return 'BA';
+
+  // B.Com (Bachelor of Commerce)
+  if (/\b(b\.?com|bcom|bachelor of commerce|ca|icwa)\b/i.test(stripped)) return 'BCOM';
+
+  // BBA / BBM
+  if (/\b(bba|bbm|bachelor of business administration)\b/i.test(stripped)) return 'BBA';
+
+  // B.Arch
+  if (/\b(b\.?arch|barch|architecture)\b/i.test(stripped)) return 'BARCH';
+
+  // B.Ed
+  if (/\b(b\.?ed|bed)\b/i.test(stripped)) return 'BED';
+
+  // B.Pharm / Pharmacy
+  if (/\b(b\.?pharm|bpharm|pharmacy)\b/i.test(stripped)) return 'BPHARM';
+
+  // Medical
+  if (/\b(bams|bhms|bds|mbbs|medical)\b/i.test(stripped)) return 'MEDICAL';
+
+  // Law
+  if (/\b(bl\/?llb|llb|law)\b/i.test(stripped)) return 'LAW';
+
+  // 9. HSC (12th)
+  if (/\b(hsc|12th|mcvc)\b/i.test(stripped) || /\b(hsc|12th)\b/i.test(text)) {
+    if (/\b(science)\b/i.test(stripped)) return 'HSC_SCIENCE';
+    if (/\b(commerce)\b/i.test(stripped)) return 'HSC_COMMERCE';
+    if (/\b(arts)\b/i.test(stripped)) return 'HSC_ARTS';
+    if (/\b(mcvc)\b/i.test(stripped)) return 'HSC_MCVC';
+    return 'HSC_ANY';
+  }
+
+  // 10. SSC (10th)
+  if (/\b(ssc|10th|pass|fail)\b/i.test(stripped) || /\b(ssc|10th)\b/i.test(text)) {
+    return 'SSC_ANY';
+  }
+
+  // Fallback: Check if original text had "Computer"
+  if (/\b(computer|computers|software|it)\b/i.test(text)) return 'BE_COMPUTERS';
+
+  return 'OPEN_ANY';
 }
 
-export function detectBranches(text: string): BranchCategory[] {
-  const norm = normalizeEducationString(text);
-  const found: BranchCategory[] = [];
+/**
+ * Evaluates whether a candidate's classified education satisfies the required education option.
+ */
+export function matchesEduFamily(candidateFamily: EduFamily, requiredFamily: EduFamily, rawCand: string, rawReq: string): boolean {
+  // 1. If requirement is completely open/any
+  if (requiredFamily === 'OPEN_ANY') return true;
 
-  for (const { branch, patterns } of BRANCH_PATTERNS) {
-    if (patterns.some(p => p.test(norm) || p.test(text))) {
-      if (!found.includes(branch)) found.push(branch);
+  // 2. Exact family match
+  if (candidateFamily === requiredFamily) return true;
+
+  // 3. Generic Graduate requirement (Any Graduate / Graduate)
+  if (requiredFamily === 'GRADUATE_ANY') {
+    return [
+      'GRADUATE_ANY', 'BE_ANY', 'BE_COMPUTERS', 'BE_CIVIL', 'BE_MECHANICAL',
+      'BE_ELECTRICAL', 'BE_ELECTRONICS', 'BE_CHEMICAL', 'BE_METALLURGY', 'BE_TEXTILE', 'BE_OTHER',
+      'BSC', 'BSC_COMPUTERS', 'BSC_MICROBIOLOGY', 'BA', 'BCOM', 'BBA', 'BCA',
+      'BARCH', 'BED', 'BPHARM', 'MEDICAL', 'LAW'
+    ].includes(candidateFamily);
+  }
+
+  // 4. Generic Post-Graduate requirement
+  if (requiredFamily === 'POST_GRADUATE_ANY') {
+    return [
+      'POST_GRADUATE_ANY', 'MBA_ANY', 'MBA_FINANCE', 'MBA_HR', 'MBA_MARKETING', 'MBA_OPERATIONS',
+      'MCA', 'ME_MTECH', 'MCOM', 'MSC', 'MA'
+    ].includes(candidateFamily);
+  }
+
+  // 5. Generic BE requirement (BE / B.E/B.Tech / BE - Any)
+  if (requiredFamily === 'BE_ANY') {
+    return [
+      'BE_ANY', 'BE_COMPUTERS', 'BE_CIVIL', 'BE_MECHANICAL',
+      'BE_ELECTRICAL', 'BE_ELECTRONICS', 'BE_CHEMICAL', 'BE_METALLURGY', 'BE_TEXTILE', 'BE_OTHER'
+    ].includes(candidateFamily);
+  }
+
+  // 6. Generic Diploma requirement (Diploma / Diploma - Any)
+  if (requiredFamily === 'DIPLOMA_ANY') {
+    return [
+      'DIPLOMA_ANY', 'DIPLOMA_MECHANICAL', 'DIPLOMA_CIVIL',
+      'DIPLOMA_COMPUTERS', 'DIPLOMA_ELECTRICAL', 'DIPLOMA_ELECTRONICS',
+      'DIPLOMA_CHEMICAL', 'DIPLOMA_OTHER'
+    ].includes(candidateFamily);
+  }
+
+  // 7. Generic ITI requirement (ITI / ITI - All Trade)
+  if (requiredFamily === 'ITI_ANY') {
+    return [
+      'ITI_ANY', 'ITI_ELECTRICIAN', 'ITI_FITTER', 'ITI_WELDER',
+      'ITI_MACHINIST', 'ITI_AUTOMOBILE', 'ITI_OTHER'
+    ].includes(candidateFamily);
+  }
+
+  // 8. Generic MBA requirement (MBA / MBA Other)
+  if (requiredFamily === 'MBA_ANY') {
+    return [
+      'MBA_ANY', 'MBA_FINANCE', 'MBA_HR', 'MBA_MARKETING', 'MBA_OPERATIONS'
+    ].includes(candidateFamily);
+  }
+
+  // 9. Generic HSC requirement (HSC / HSC - Any)
+  if (requiredFamily === 'HSC_ANY') {
+    return [
+      'HSC_ANY', 'HSC_SCIENCE', 'HSC_COMMERCE', 'HSC_ARTS', 'HSC_MCVC'
+    ].includes(candidateFamily);
+  }
+
+  // 10. SSC requirement
+  if (requiredFamily === 'SSC_ANY') {
+    return true; // Any candidate with SSC or higher matches SSC
+  }
+
+  // 11. Specific Cross-Discipline Equivalences:
+  // Computer Science / IT cross-equivalences:
+  // BE_COMPUTERS, BCA, BSC_COMPUTERS, MCA
+  if (requiredFamily === 'BE_COMPUTERS') {
+    return ['BE_COMPUTERS', 'BCA', 'BSC_COMPUTERS', 'MCA'].includes(candidateFamily);
+  }
+  if (requiredFamily === 'BCA' || requiredFamily === 'BSC_COMPUTERS' || requiredFamily === 'MCA') {
+    return ['BE_COMPUTERS', 'BCA', 'BSC_COMPUTERS', 'MCA'].includes(candidateFamily);
+  }
+
+  // B.Sc (General) matches B.Sc specializations
+  if (requiredFamily === 'BSC') {
+    return ['BSC', 'BSC_MICROBIOLOGY', 'BSC_COMPUTERS'].includes(candidateFamily);
+  }
+
+  // Mechanical engineering / Automobile cross-equivalence
+  if (requiredFamily === 'BE_MECHANICAL') {
+    return candidateFamily === 'BE_MECHANICAL';
+  }
+  if (requiredFamily === 'DIPLOMA_MECHANICAL') {
+    return candidateFamily === 'DIPLOMA_MECHANICAL';
+  }
+
+  // Electrical & Electronics cross-compatibility where relevant
+  if (requiredFamily === 'BE_ELECTRICAL') {
+    return ['BE_ELECTRICAL', 'BE_ELECTRONICS'].includes(candidateFamily);
+  }
+  if (requiredFamily === 'BE_ELECTRONICS') {
+    return ['BE_ELECTRONICS', 'BE_ELECTRICAL'].includes(candidateFamily);
+  }
+
+  // Text substring fallback for exact degree title match
+  const candNorm = normalizeEducationString(rawCand);
+  const reqNorm = normalizeEducationString(rawReq);
+  if (candNorm && reqNorm && (candNorm === reqNorm || candNorm.includes(reqNorm) || reqNorm.includes(candNorm))) {
+    // Only if not crossing major degree boundaries (e.g. comp vs civil, or b.sc vs be)
+    const isCandComp = candNorm.includes('comp') || candNorm.includes('cse') || candNorm.includes('it');
+    const isReqComp = reqNorm.includes('comp') || reqNorm.includes('cse') || reqNorm.includes('it');
+    if (isCandComp === isReqComp) {
+      return true;
     }
   }
 
-  return found;
+  return false;
 }
 
 /**
@@ -425,187 +361,10 @@ export function checkSingleRequirementMatch(candidateEdu: string, reqOption: str
   if (!reqOption || !reqOption.trim()) return true;
   if (!candidateEdu || !candidateEdu.trim()) return false;
 
-  const candNorm = normalizeEducationString(candidateEdu);
-  const reqNorm = normalizeEducationString(reqOption);
+  const candFamily = classifyEducationString(candidateEdu);
+  const reqFamily = classifyEducationString(reqOption);
 
-  // 1. Exact phrase match
-  if (candNorm === reqNorm || candidateEdu.toLowerCase().trim() === reqOption.toLowerCase().trim()) {
-    return true;
-  }
-
-  // 2. Open / Universal requirement terms
-  if (/^(any|all|no preference|open|n\/a|none|not specified|as per job description|as per jd|other)$/i.test(reqNorm)) {
-    return true;
-  }
-  if (/^(any|other qualification|not applicable)$/i.test(candNorm)) {
-    return true;
-  }
-
-  const candLevels = detectDegreeLevels(candidateEdu);
-  const reqLevels = detectDegreeLevels(reqOption);
-
-  const candBranches = detectBranches(candidateEdu);
-  const reqBranches = detectBranches(reqOption);
-
-  // Check if requirement is completely generic "Any Graduate" or "Graduate"
-  const isReqAnyGraduate = /^(any graduate|graduate|graduate - any|bachelor|bachelors)$/i.test(reqNorm) ||
-    (reqLevels.includes('GRADUATE_GENERIC') && reqBranches.length === 0);
-
-  if (isReqAnyGraduate) {
-    const isGraduateCandidate = candLevels.some(l => [
-      'BE_BTECH', 'BCOM', 'BSC', 'BA', 'BCA', 'BBA', 'BED', 'PHARMA', 'MEDICAL', 'LAW', 'GRADUATE_GENERIC'
-    ].includes(l));
-    if (isGraduateCandidate) return true;
-  }
-
-  // Check if requirement is completely generic "Post-Graduate" or "Post Graduate - Any"
-  const isReqAnyPostGraduate = /^(post[\s-]?graduate|post graduate - any|pg|master|masters)$/i.test(reqNorm) ||
-    (reqLevels.includes('POST_GRADUATE_GENERIC') && reqBranches.length === 0);
-
-  if (isReqAnyPostGraduate) {
-    const isPostGraduateCandidate = candLevels.some(l => [
-      'ME_MTECH', 'MBA', 'MCA', 'MCOM', 'MSC', 'MA', 'MED', 'PHARMA', 'POST_GRADUATE_GENERIC'
-    ].includes(l));
-    if (isPostGraduateCandidate) return true;
-  }
-
-  // Check if requirement is generic "BE" / "B.E/B.Tech" / "BE - Any" / "BTech" without branch
-  const isReqGenericBE = (
-    reqLevels.includes('BE_BTECH') &&
-    (reqBranches.length === 0 || /^(be|b\.?e\.?|b\.?tech|btech|b\.?e\/?b\.?tech|be other|be - any|be any)$/i.test(reqNorm))
-  );
-
-  if (isReqGenericBE) {
-    if (candLevels.includes('BE_BTECH')) {
-      return true; // Matches ALL BE specializations (BE Comp, BE Civil, BE Mech, BE Electrical, etc.)!
-    }
-  }
-
-  // Check if requirement is generic "Diploma" / "Diploma - Any" without branch
-  const isReqGenericDiploma = (
-    reqLevels.includes('DIPLOMA') &&
-    (reqBranches.length === 0 || /^(diploma|diploma - any|diploma any|polytechnic)$/i.test(reqNorm))
-  );
-
-  if (isReqGenericDiploma) {
-    if (candLevels.includes('DIPLOMA')) {
-      return true; // Matches ALL Diploma specializations!
-    }
-  }
-
-  // Check if requirement is generic "ITI" / "ITI - All Trade" without specific trade
-  const isReqGenericITI = (
-    reqLevels.includes('ITI') &&
-    (reqBranches.length === 0 || /^(iti|iti - all trade|iti all trade|iti any)$/i.test(reqNorm))
-  );
-
-  if (isReqGenericITI) {
-    if (candLevels.includes('ITI')) {
-      return true; // Matches ALL ITI trades!
-    }
-  }
-
-  // Check if requirement is generic "MBA" / "MBA Other" without specific specialization
-  const isReqGenericMBA = (
-    reqLevels.includes('MBA') &&
-    (reqBranches.length === 0 || /^(mba|mba other|mba any|pgdm)$/i.test(reqNorm))
-  );
-
-  if (isReqGenericMBA) {
-    if (candLevels.includes('MBA')) {
-      return true; // Matches ALL MBA specializations!
-    }
-  }
-
-  // Check if requirement is generic "HSC" / "HSC - Any" without specific stream
-  const isReqGenericHSC = (
-    reqLevels.includes('HSC') &&
-    (reqBranches.length === 0 || /^(hsc|hsc - any|hsc any|12th|12th pass)$/i.test(reqNorm))
-  );
-
-  if (isReqGenericHSC) {
-    if (candLevels.includes('HSC')) {
-      return true; // Matches ALL HSC streams!
-    }
-  }
-
-  // Check if requirement is "SSC"
-  const isReqSSC = reqLevels.includes('SSC') || /^(ssc|10th|10th pass|pass|fail)$/i.test(reqNorm);
-  if (isReqSSC) {
-    if (candLevels.includes('SSC') || /pass|fail|ssc|10th/i.test(candNorm)) {
-      return true;
-    }
-  }
-
-  // Specific Degree Level compatibility check
-  let levelMatches = false;
-  if (reqLevels.length === 0) {
-    levelMatches = true; // No degree level required, e.g. only branch "Mechanical"
-  } else {
-    for (const rl of reqLevels) {
-      if (candLevels.includes(rl)) {
-        levelMatches = true;
-        break;
-      }
-      // BE/BTech matches Generic Graduate
-      if (rl === 'GRADUATE_GENERIC' && (
-        candLevels.includes('BE_BTECH') || candLevels.includes('BCOM') ||
-        candLevels.includes('BSC') || candLevels.includes('BA') ||
-        candLevels.includes('BCA') || candLevels.includes('BBA')
-      )) {
-        levelMatches = true;
-        break;
-      }
-      // MTech / MBA / MCA matches Generic Post-Graduate
-      if (rl === 'POST_GRADUATE_GENERIC' && (
-        candLevels.includes('ME_MTECH') || candLevels.includes('MBA') ||
-        candLevels.includes('MCA') || candLevels.includes('MCOM') ||
-        candLevels.includes('MSC') || candLevels.includes('MA')
-      )) {
-        levelMatches = true;
-        break;
-      }
-    }
-  }
-
-  if (!levelMatches) {
-    return false;
-  }
-
-  // Specific Branch / Specialization check
-  if (reqBranches.length > 0) {
-    let branchMatches = false;
-    for (const rb of reqBranches) {
-      if (candBranches.includes(rb)) {
-        branchMatches = true;
-        break;
-      }
-      // IT and Computer Science are interchangeable
-      if ((rb === 'COMPUTER_IT') && candBranches.includes('COMPUTER_IT')) {
-        branchMatches = true;
-        break;
-      }
-      // Electrical and Electronics cross-compatibility where relevant
-      if ((rb === 'ELECTRONICS') && (candBranches.includes('ELECTRONICS') || candBranches.includes('ELECTRICAL'))) {
-        branchMatches = true;
-        break;
-      }
-      // Mechanical and Automobile cross-compatibility where relevant
-      if ((rb === 'MECHANICAL') && (candBranches.includes('MECHANICAL'))) {
-        branchMatches = true;
-        break;
-      }
-    }
-
-    if (!branchMatches) {
-      return false; // Candidate is different branch (e.g. BE Civil applying for BE Computers)
-    }
-
-    return true; // Level matches AND branch matches!
-  }
-
-  // If level matched and requirement didn't specify any restrictive branch
-  return true;
+  return matchesEduFamily(candFamily, reqFamily, candidateEdu, reqOption);
 }
 
 /**
@@ -684,4 +443,3 @@ export function isEducationMatching(candidateEdu: string, requiredEdu: string | 
   const { isMatch } = getEducationMatchDetails(candidateEdu, requiredEdu);
   return isMatch;
 }
-
