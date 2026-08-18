@@ -25,7 +25,7 @@ const DEGREE_GROUPS: { name: string; patterns: string[] }[] = [
   {
     name: 'BE_BTECH',
     patterns: [
-      'b.tech', 'btech', 'b.e', 'be', 'bachelor of technology', 'bachelor of engineering',
+      'b.tech', 'btech', 'b.e', 'be', 'b.e/b.tech', 'bachelor of technology', 'bachelor of engineering',
       'graduate be', 'graduate btech', 'graduate engineer', 'engineering degree',
       'b tech', 'b e'
     ]
@@ -37,15 +37,29 @@ const DEGREE_GROUPS: { name: string; patterns: string[] }[] = [
     ]
   },
   {
+    name: 'ITI',
+    patterns: [
+      'iti', 'fitter', 'machinist', 'turner', 'welder', 'wireman', 'diesel mechanic', 'draughtsman', 'carpenter', 'plumber'
+    ]
+  },
+  {
+    name: 'POST_GRADUATE',
+    patterns: [
+      'post graduate', 'post-graduate', 'postgraduate', 'pg', 'm.e/m.tech/ms', 'm.tech', 'mtech', 'm.e', 'me',
+      'master of technology', 'master of engineering', 'mba', 'pgdm', 'mca', 'm.sc', 'msc', 'm.com', 'mcom',
+      'm.a', 'ma', 'm.pharm', 'm.ed', 'm.arch', 'mpm', 'msw', 'mcm', 'mcs'
+    ]
+  },
+  {
     name: 'ME_MTECH',
     patterns: [
-      'm.tech', 'mtech', 'm.e', 'me', 'master of technology', 'master of engineering', 'm tech', 'm e'
+      'm.tech', 'mtech', 'm.e', 'me', 'm.e/m.tech/ms', 'master of technology', 'master of engineering', 'm tech', 'm e'
     ]
   },
   {
     name: 'MBA_PGDM',
     patterns: [
-      'mba', 'pgdm', 'master of business administration', 'post graduate diploma in management'
+      'mba', 'pgdm', 'master of business administration', 'post graduate diploma in management', 'mpm'
     ]
   },
   {
@@ -57,13 +71,13 @@ const DEGREE_GROUPS: { name: string; patterns: string[] }[] = [
   {
     name: 'BCA',
     patterns: [
-      'bca', 'bachelor of computer applications'
+      'bca', 'bcs', 'bachelor of computer applications'
     ]
   },
   {
     name: 'MCA',
     patterns: [
-      'mca', 'master of computer applications'
+      'mca', 'mcs', 'mcm', 'master of computer applications'
     ]
   },
   {
@@ -81,13 +95,13 @@ const DEGREE_GROUPS: { name: string; patterns: string[] }[] = [
   {
     name: 'BSC',
     patterns: [
-      'b.sc', 'bsc', 'bachelor of science'
+      'b.sc', 'bsc', 'bachelor of science', 'bsw'
     ]
   },
   {
     name: 'MSC',
     patterns: [
-      'm.sc', 'msc', 'master of science'
+      'm.sc', 'msc', 'master of science', 'msw'
     ]
   },
   {
@@ -105,13 +119,13 @@ const DEGREE_GROUPS: { name: string; patterns: string[] }[] = [
   {
     name: 'TWELFTH',
     patterns: [
-      '12th', 'hsc', 'higher secondary', '12th pass'
+      '12th', 'hsc', 'mcvc', 'higher secondary', '12th pass'
     ]
   },
   {
     name: 'TENTH',
     patterns: [
-      '10th', 'ssc', 'secondary certificate', '10th pass'
+      '10th', 'ssc', 'secondary certificate', '10th pass', 'matric'
     ]
   },
   {

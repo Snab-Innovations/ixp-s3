@@ -6,6 +6,7 @@ import { useTheme } from '../context/ThemeContext';
 import { createPortal } from 'react-dom';
 import { SKILL_OPTIONS, JOB_CATEGORIES } from './Profile';
 import { ALL_JOB_SECTORS, ALL_JOB_DEPARTMENTS } from '../data/jobDomains';
+import { EDUCATION_QUALIFICATIONS, EDUCATION_SPECIALIZATIONS, EducationQualification } from '../data/allEducationDegrees';
 import { parseJobDescriptionText, ParsedJdResult, compileCompanyProfile } from '../services/geminiService';
 import { resolveStrictListedCity } from '../data/maharashtraCities';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -61,6 +62,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
   const [pastedJdText, setPastedJdText] = useState('');
 
   const [eduInput, setEduInput] = useState('');
+  const [selectedQualForEdu, setSelectedQualForEdu] = useState<string>('Graduate');
   const [skillSearch, setSkillSearch] = useState('');
   const [suggestedRoleSkills, setSuggestedRoleSkills] = useState<string[]>([]);
 
@@ -1032,7 +1034,20 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                   )) : <span className="text-gray-400 dark:text-[#6b7280] text-xs p-1 italic">No qualifications specified</span>}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  {/* 1. Qualification Dropdown */}
+                  <select
+                    className={inputClass}
+                    value={selectedQualForEdu}
+                    onChange={(e) => setSelectedQualForEdu(e.target.value)}
+                  >
+                    <option value="">-- Qualification --</option>
+                    {EDUCATION_QUALIFICATIONS.map(qual => (
+                      <option key={qual} value={qual}>{qual}</option>
+                    ))}
+                  </select>
+
+                  {/* 2. Specialization Dropdown */}
                   <select
                     className={inputClass}
                     value=""
@@ -1043,17 +1058,21 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                       }
                     }}
                   >
-                    <option value="">-- Select Predefined Level --</option>
-                    {["High School", "Diploma", "Bachelor's Degree", "B.E. / B.Tech", "M.E. / M.Tech", "Master's Degree", "MBA", "PhD"].map(edu => (
-                      <option key={edu} value={edu}>{edu}</option>
+                    <option value="">-- Select {selectedQualForEdu || 'Specialization'} --</option>
+                    {(selectedQualForEdu && EDUCATION_SPECIALIZATIONS[selectedQualForEdu as EducationQualification]
+                      ? EDUCATION_SPECIALIZATIONS[selectedQualForEdu as EducationQualification]
+                      : []
+                    ).map(spec => (
+                      <option key={spec} value={spec}>{spec}</option>
                     ))}
                   </select>
 
+                  {/* 3. Custom text */}
                   <div className="flex gap-2">
                     <input
                       type="text"
                       className={inputClass}
-                      placeholder="Or type custom qualification..."
+                      placeholder="Or custom degree..."
                       value={eduInput}
                       onChange={e => setEduInput(e.target.value)}
                       onKeyDown={e => {
@@ -1074,7 +1093,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                           setEduInput('');
                         }
                       }}
-                      className="px-4 py-2 bg-white dark:bg-[#262626] hover:bg-gray-100 dark:hover:bg-[#333333] text-gray-900 dark:text-white border border-gray-300 dark:border-white/20 rounded-[6px] font-bold text-xs transition-colors shrink-0 cursor-pointer shadow-sm"
+                      className="px-3 py-2 bg-white dark:bg-[#262626] hover:bg-gray-100 dark:hover:bg-[#333333] text-gray-900 dark:text-white border border-gray-300 dark:border-white/20 rounded-[6px] font-bold text-xs transition-colors shrink-0 cursor-pointer shadow-sm"
                     >
                       Add
                     </button>

@@ -1,144 +1,205 @@
+export type EducationQualification =
+  | 'Diploma'
+  | 'Graduate'
+  | 'HSC'
+  | 'ITI'
+  | 'Post-Graduate'
+  | 'SSC';
+
+export const EDUCATION_QUALIFICATIONS: EducationQualification[] = [
+  'Diploma',
+  'Graduate',
+  'HSC',
+  'ITI',
+  'Post-Graduate',
+  'SSC'
+];
+
+export const EDUCATION_QUALIFICATION_ICONS: Record<EducationQualification, string> = {
+  'Diploma': '',
+  'Graduate': '',
+  'HSC': '',
+  'ITI': '',
+  'Post-Graduate': '',
+  'SSC': ''
+};
+
+export const EDUCATION_SPECIALIZATIONS: Record<EducationQualification, string[]> = {
+  'Diploma': [
+    'Automobile engineering',
+    'Computer',
+    'Diploma - Any',
+    'Diploma Architecture',
+    'Diploma Automobile',
+    'Diploma Chemical',
+    'Diploma Civil',
+    'Diploma Computers',
+    'Diploma Electrical',
+    'Diploma Electronics/Telecommunications',
+    'Diploma Export/Import',
+    'Diploma Fashion Design/Other Designing',
+    'Diploma Fire & Safety',
+    'Diploma Graphic/Web Designing',
+    'Diploma Hotel Management',
+    'Diploma Insurance',
+    'Diploma IT',
+    'Diploma Management',
+    'Diploma Mechanical',
+    'Diploma Metallurgy',
+    'Diploma Plastic',
+    'Diploma Production/Industrial Engineering',
+    'Not Applicable',
+    'Other',
+    'Textile Engineering',
+    'Tool & Die',
+    'Tourism',
+    'Travel & Tourism',
+    'Visual Arts'
+  ],
+  'Graduate': [
+    'Any Graduate',
+    'B.A',
+    'B.Arch',
+    'B.B.A',
+    'B.Com',
+    'B.E/B.Tech',
+    'B.Ed',
+    'B.Pharm',
+    'B.Sc',
+    'B.Sc Microbiology',
+    'BAMS',
+    'BCA',
+    'BCS',
+    'BDS',
+    'BE Automobile',
+    'BE Chemical',
+    'BE Civil',
+    'BE Computers',
+    'BE E&TC',
+    'BE Electrical',
+    'BE Instrumentation',
+    'BE IT',
+    'BE Mechanical',
+    'BE Metallurgy',
+    'BE Other',
+    'BE Plastic',
+    'BE Polymer',
+    'BE Production/Industrial',
+    'BE Textile',
+    'BE Tool & Die',
+    'BHM',
+    'BHMS',
+    'BL/LLB',
+    'BSc Computer Science',
+    'BSW',
+    'BTech',
+    'CA',
+    'CA Inter',
+    'CS',
+    'Environmental Health & Safety',
+    'Fashion Designing',
+    'Graduate - Any',
+    'Home Science',
+    'ICWA',
+    'ICWA Inter',
+    'Not Applicable'
+  ],
+  'HSC': [
+    'HSC - Any',
+    'HSC Arts',
+    'HSC Commerce',
+    'HSC Fail',
+    'HSC Science',
+    'MCVC',
+    'Not Applicable'
+  ],
+  'ITI': [
+    'Fitter',
+    'ITI',
+    'ITI - All Trade',
+    'ITI Automobile',
+    'ITI Carpenter',
+    'ITI Diesel Mechanic',
+    'ITI Draughtsman',
+    'ITI Electrician',
+    'ITI Machinist',
+    'ITI Mechanic',
+    'ITI Plumber',
+    'ITI Turner',
+    'ITI Welder',
+    'ITI Wireman',
+    'Not Applicable',
+    'Other'
+  ],
+  'Post-Graduate': [
+    'M.A',
+    'M.Arch',
+    'M.Com',
+    'M.E/M.Tech/MS',
+    'M.Ed',
+    'M.Pharm',
+    'M.Sc',
+    'M.Sc Microbiology',
+    'MBA Finance',
+    'MBA HR',
+    'MBA Logistics',
+    'MBA Marketing',
+    'MBA Operations',
+    'MBA Other',
+    'MBA Systems',
+    'MCA',
+    'MCM',
+    'MCS',
+    'MPM',
+    'MSW',
+    'Not Applicable',
+    'Other',
+    'Post Graduate - Any'
+  ],
+  'SSC': [
+    'Fail',
+    'Pass'
+  ]
+};
+
 export interface EducationCategory {
   category: string;
   icon: string;
   degrees: string[];
 }
 
-export const CATEGORIZED_EDUCATION_DEGREES: EducationCategory[] = [
-  {
-    category: "B.Tech / B.E. Engineering Branches",
-    icon: "⚙️",
-    degrees: [
-      "B.Tech / B.E. - Civil Engineering",
-      "B.Tech / B.E. - Computer Science & Engineering (CSE)",
-      "B.Tech / B.E. - Mechanical Engineering",
-      "B.Tech / B.E. - Electrical Engineering",
-      "B.Tech / B.E. - Electronics & Telecommunication (E&TC)",
-      "B.Tech / B.E. - Information Technology (IT)",
-      "B.Tech / B.E. - Chemical Engineering",
-      "B.Tech / B.E. - Automobile Engineering",
-      "B.Tech / B.E. - Instrumentation & Control",
-      "B.Tech / B.E. - Aerospace / Aeronautical Engineering",
-      "B.Tech / B.E. - Biotechnology / Bio-Engineering",
-      "B.Tech / B.E. - Mechatronics & Robotics",
-      "B.Tech / B.E. - Environmental Engineering",
-      "B.Tech / B.E. - Mining & Metallurgy",
-      "B.Tech / B.E. - Structural Engineering"
-    ]
-  },
-  {
-    category: "Diploma Trades (Polytechnic)",
-    icon: "🛠️",
-    degrees: [
-      "Diploma in Civil Engineering",
-      "Diploma in Mechanical Engineering",
-      "Diploma in Electrical Engineering",
-      "Diploma in Computer Engineering / IT",
-      "Diploma in Electronics & Telecommunication",
-      "Diploma in Automobile Engineering",
-      "Diploma in Architecture / Interior Design",
-      "Diploma in Chemical Engineering",
-      "Diploma in Tool & Die Making",
-      "Diploma in Industrial Safety & Environmental Health",
-      "Diploma in Mining Engineering"
-    ]
-  },
-  {
-    category: "M.Tech / M.E. Engineering Masters",
-    icon: "🎓",
-    degrees: [
-      "M.Tech / M.E. - Civil / Structural Engineering",
-      "M.Tech / M.E. - Computer Science / Software Engineering",
-      "M.Tech / M.E. - Mechanical / Thermal Engineering",
-      "M.Tech / M.E. - Electrical & Power Systems",
-      "M.Tech / M.E. - VLSI & Embedded Systems",
-      "M.Tech / M.E. - Construction Management"
-    ]
-  },
-  {
-    category: "Management & Business",
-    icon: "💼",
-    degrees: [
-      "MBA / PGDM - Human Resource (HR)",
-      "MBA / PGDM - Finance & Accounting",
-      "MBA / PGDM - Marketing & Sales",
-      "MBA / PGDM - Operations & Supply Chain",
-      "MBA / PGDM - Business Analytics / IT",
-      "BBA / BBM - Bachelor of Business Administration"
-    ]
-  },
-  {
-    category: "IT & Computer Applications",
-    icon: "💻",
-    degrees: [
-      "BCA - Bachelor of Computer Applications",
-      "MCA - Master of Computer Applications",
-      "B.Sc - Computer Science / Information Technology",
-      "M.Sc - Computer Science / Data Science / IT"
-    ]
-  },
-  {
-    category: "Commerce & Finance",
-    icon: "📊",
-    degrees: [
-      "B.Com - Accounting & Finance",
-      "B.Com - Banking & Insurance",
-      "B.Com - Tax & Auditing",
-      "M.Com - Master of Commerce",
-      "CA - Chartered Accountant / IPCC",
-      "CS - Company Secretary",
-      "CMA - Cost & Management Accountant"
-    ]
-  },
-  {
-    category: "Science & Research",
-    icon: "🔬",
-    degrees: [
-      "B.Sc - Chemistry / Industrial Chemistry",
-      "B.Sc - Physics / Mathematics",
-      "B.Sc - Biotechnology / Microbiology",
-      "B.Sc - Agriculture / Forestry",
-      "M.Sc - Chemistry / Physics / Maths / Biotech"
-    ]
-  },
-  {
-    category: "Arts & Humanities",
-    icon: "🎨",
-    degrees: [
-      "B.A. - Economics",
-      "B.A. - English Literature",
-      "B.A. - Psychology / Sociology",
-      "B.A. - History / Political Science",
-      "M.A. - Master of Arts (Economics/English/Psychology)"
-    ]
-  },
-  {
-    category: "Law, Pharmacy & Technical",
-    icon: "⚖️",
-    degrees: [
-      "B.Arch - Bachelor of Architecture",
-      "B.Pharm - Bachelor of Pharmacy",
-      "D.Pharm - Diploma in Pharmacy",
-      "LLB / B.A. LLB - Law",
-      "LLM - Master of Laws",
-      "Ph.D. / Doctorate",
-      "ITI Trade (Fitter / Electrician / Welder / Machinist / Turner)"
-    ]
-  },
-  {
-    category: "High School Qualification",
-    icon: "🏫",
-    degrees: [
-      "12th Pass / HSC - Science Stream",
-      "12th Pass / HSC - Commerce Stream",
-      "12th Pass / HSC - Arts Stream",
-      "10th Pass / SSC (Secondary Certificate)",
-      "Other Qualification"
-    ]
-  }
-];
+export const CATEGORIZED_EDUCATION_DEGREES: EducationCategory[] = EDUCATION_QUALIFICATIONS.map(qual => ({
+  category: qual,
+  icon: EDUCATION_QUALIFICATION_ICONS[qual] || '',
+  degrees: EDUCATION_SPECIALIZATIONS[qual]
+}));
 
-export const ALL_EDUCATION_DEGREES: string[] = CATEGORIZED_EDUCATION_DEGREES.flatMap(c => c.degrees);
+// All unique specializations flattened
+export const ALL_EDUCATION_DEGREES: string[] = Array.from(
+  new Set(EDUCATION_QUALIFICATIONS.flatMap(qual => EDUCATION_SPECIALIZATIONS[qual]))
+);
+
+// Helper: Get specializations for a given qualification
+export function getSpecializationsForQualification(qualification: string): string[] {
+  const match = EDUCATION_QUALIFICATIONS.find(
+    q => q.toLowerCase() === qualification.trim().toLowerCase()
+  );
+  if (match) {
+    return EDUCATION_SPECIALIZATIONS[match];
+  }
+  return [];
+}
+
+// Helper: Find qualification(s) for a given specialization
+export function getQualificationForSpecialization(specialization: string): EducationQualification[] {
+  const norm = specialization.trim().toLowerCase();
+  const results: EducationQualification[] = [];
+  for (const qual of EDUCATION_QUALIFICATIONS) {
+    if (EDUCATION_SPECIALIZATIONS[qual].some(s => s.toLowerCase() === norm)) {
+      results.push(qual);
+    }
+  }
+  return results;
+}
 
 export { isEducationMatching } from '../utils/educationMatcher';
-

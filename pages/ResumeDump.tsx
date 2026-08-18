@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
 import { LocationCityInput } from '../components/LocationCityInput';
 import { EducationInput } from '../components/EducationInput';
+import { ALL_EDUCATION_DEGREES, EDUCATION_QUALIFICATIONS, EDUCATION_SPECIALIZATIONS, EducationQualification } from '../data/allEducationDegrees';
 import { isEducationMatching } from '../utils/educationMatcher';
 
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
@@ -522,6 +523,8 @@ const ResumeDump: React.FC = () => {
   const [domainRecSearch, setDomainRecSearch] = useState<string>('');
   const [matchScoreFilter, setMatchScoreFilter] = useState<string>('all');
   const [educationFilter, setEducationFilter] = useState<string>('all');
+  const [educationQualFilter, setEducationQualFilter] = useState<string>('all');
+  const [educationSpecFilter, setEducationSpecFilter] = useState<string>('all');
   const [selectedEducation, setSelectedEducation] = useState<string[]>([]);
   const [isEducationRecBoxOpen, setIsEducationRecBoxOpen] = useState<boolean>(false);
   const [educationRecSearch, setEducationRecSearch] = useState<string>('');
@@ -884,6 +887,8 @@ const ResumeDump: React.FC = () => {
     if (selectedDomains.length > 0) count++;
     if (matchScoreFilter !== 'all') count++;
     if (educationFilter !== 'all') count++;
+    if (educationQualFilter !== 'all') count++;
+    if (educationSpecFilter !== 'all') count++;
     if (selectedEducation.length > 0) count++;
     if (sourceFilter !== 'all') count++;
     if (dateFilter !== 'all') count++;
@@ -892,7 +897,7 @@ const ResumeDump: React.FC = () => {
     if (strictEducation) count++;
     if (strictExperience) count++;
     return count;
-  }, [selectedJobId, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, domainFilter, selectedDomains, matchScoreFilter, educationFilter, selectedEducation, sourceFilter, dateFilter, searchTerm, strictGender, strictLocation, strictEducation, strictExperience]);
+  }, [selectedJobId, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, domainFilter, selectedDomains, matchScoreFilter, educationFilter, educationQualFilter, educationSpecFilter, selectedEducation, sourceFilter, dateFilter, searchTerm, strictGender, strictLocation, strictEducation, strictExperience]);
 
   const handleClearAllFilters = () => {
     setSelectedJobId('all');
@@ -906,6 +911,8 @@ const ResumeDump: React.FC = () => {
     setSelectedDomains([]);
     setMatchScoreFilter('all');
     setEducationFilter('all');
+    setEducationQualFilter('all');
+    setEducationSpecFilter('all');
     setSelectedEducation([]);
     setSourceFilter('all');
     setDateFilter('all');
@@ -1183,7 +1190,22 @@ const ResumeDump: React.FC = () => {
         if (matchScoreFilter === '30+' && score < 30) return false;
       }
 
-      // 8. Education / Degree Filter (Single + Multi-select checkmark Rec Box)
+      // 8. Education / Degree Filter (Qualification & Specialization 2-Selector + Multi-select checkmark Rec Box)
+      if (educationQualFilter !== 'all') {
+        const candEduText = getCandidateEduText(candidate);
+        if (educationSpecFilter !== 'all') {
+          if (!isEducationMatching(candEduText, educationSpecFilter)) return false;
+        } else {
+          const validSpecs = EDUCATION_SPECIALIZATIONS[educationQualFilter as EducationQualification] || [];
+          const matchesQual = isEducationMatching(candEduText, educationQualFilter) ||
+            validSpecs.some(spec => isEducationMatching(candEduText, spec));
+          if (!matchesQual) return false;
+        }
+      } else if (educationSpecFilter !== 'all') {
+        const candEduText = getCandidateEduText(candidate);
+        if (!isEducationMatching(candEduText, educationSpecFilter)) return false;
+      }
+
       if (selectedEducation.length > 0) {
         const candEduText = getCandidateEduText(candidate);
         const hasSelectedEdu = selectedEducation.some(reqEdu =>
@@ -1286,7 +1308,7 @@ const ResumeDump: React.FC = () => {
     }
 
     return result;
-  }, [candidatesWithScores, searchTerm, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, selectedEducation, sourceFilter, dateFilter, selectedJobId, strictGender, strictLocation, strictEducation, strictExperience]);
+  }, [candidatesWithScores, searchTerm, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, educationQualFilter, educationSpecFilter, selectedEducation, sourceFilter, dateFilter, selectedJobId, strictGender, strictLocation, strictEducation, strictExperience]);
 
   const isSearchOrFilterActive = useMemo(() => {
     return Boolean(
@@ -2256,119 +2278,6 @@ const ResumeDump: React.FC = () => {
           </div>
         </div>
 
-        {/* Strict Mandatory AI Candidate Matching Criteria Checkmarks Panel */}
-        <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 dark:bg-amber-950/20 p-3 space-y-2.5 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-500 dark:text-amber-400 shrink-0 animate-pulse" />
-              <span className="geist-label text-xs uppercase font-bold text-amber-800 dark:text-amber-300 tracking-wider">
-                Strict Mandatory AI Criteria Checkmarks
-              </span>
-            </div>
-            <span className="text-[11px] text-amber-700 dark:text-amber-400/80 font-mono">
-              Checked criteria strictly filter out non-matching candidates.
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {/* Strict Gender Checkmark */}
-            <div
-              onClick={() => setStrictGender(prev => !prev)}
-              className={`flex items-center gap-2.5 p-2 rounded-md border text-xs cursor-pointer transition-all select-none ${
-                strictGender
-                  ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 text-amber-900 dark:text-amber-200 font-bold shadow-sm'
-                  : 'bg-white dark:bg-black/40 border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:border-amber-300 dark:hover:border-white/20'
-              }`}
-            >
-              <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                strictGender ? 'bg-amber-500 border-amber-500 text-black' : 'border-gray-400 dark:border-gray-500 bg-transparent'
-              }`}>
-                {strictGender && <Check size={11} strokeWidth={3} />}
-              </div>
-              <div className="min-w-0">
-                <span className="block truncate font-semibold">Strict Gender</span>
-                <span className="block text-[10px] text-amber-700 dark:text-amber-400/70 truncate">
-                  {activeSelectedJob?.genderRequirement && activeSelectedJob.genderRequirement !== 'Any'
-                    ? `Must be ${activeSelectedJob.genderRequirement}`
-                    : 'Any -> All genders'}
-                </span>
-              </div>
-            </div>
-
-            {/* Strict Location Checkmark */}
-            <div
-              onClick={() => setStrictLocation(prev => !prev)}
-              className={`flex items-center gap-2.5 p-2 rounded-md border text-xs cursor-pointer transition-all select-none ${
-                strictLocation
-                  ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 text-amber-900 dark:text-amber-200 font-bold shadow-sm'
-                  : 'bg-white dark:bg-black/40 border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:border-amber-300 dark:hover:border-white/20'
-              }`}
-            >
-              <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                strictLocation ? 'bg-amber-500 border-amber-500 text-black' : 'border-gray-400 dark:border-gray-500 bg-transparent'
-              }`}>
-                {strictLocation && <Check size={11} strokeWidth={3} />}
-              </div>
-              <div className="min-w-0">
-                <span className="block truncate font-semibold">Strict Location</span>
-                <span className="block text-[10px] text-amber-700 dark:text-amber-400/70 truncate">
-                  {locationFilter !== 'all'
-                    ? `Must match ${locationFilter}`
-                    : (activeSelectedJob?.city || activeSelectedJob?.location ? `Must match ${activeSelectedJob.city || activeSelectedJob.location}` : 'Must match Location')}
-                </span>
-              </div>
-            </div>
-
-            {/* Strict Education Checkmark */}
-            <div
-              onClick={() => setStrictEducation(prev => !prev)}
-              className={`flex items-center gap-2.5 p-2 rounded-md border text-xs cursor-pointer transition-all select-none ${
-                strictEducation
-                  ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 text-amber-900 dark:text-amber-200 font-bold shadow-sm'
-                  : 'bg-white dark:bg-black/40 border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:border-amber-300 dark:hover:border-white/20'
-              }`}
-            >
-              <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                strictEducation ? 'bg-amber-500 border-amber-500 text-black' : 'border-gray-400 dark:border-gray-500 bg-transparent'
-              }`}>
-                {strictEducation && <Check size={11} strokeWidth={3} />}
-              </div>
-              <div className="min-w-0">
-                <span className="block truncate font-semibold">Strict Education</span>
-                <span className="block text-[10px] text-amber-700 dark:text-amber-400/70 truncate">
-                  {selectedEducation.length > 0
-                    ? `Must match ${selectedEducation.join(', ')}`
-                    : (activeSelectedJob?.education ? `Must match ${activeSelectedJob.education}` : 'Must match Qualification')}
-                </span>
-              </div>
-            </div>
-
-            {/* Strict Experience Checkmark */}
-            <div
-              onClick={() => setStrictExperience(prev => !prev)}
-              className={`flex items-center gap-2.5 p-2 rounded-md border text-xs cursor-pointer transition-all select-none ${
-                strictExperience
-                  ? 'bg-amber-100 dark:bg-amber-950/80 border-amber-500 text-amber-900 dark:text-amber-200 font-bold shadow-sm'
-                  : 'bg-white dark:bg-black/40 border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-400 hover:border-amber-300 dark:hover:border-white/20'
-              }`}
-            >
-              <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                strictExperience ? 'bg-amber-500 border-amber-500 text-black' : 'border-gray-400 dark:border-gray-500 bg-transparent'
-              }`}>
-                {strictExperience && <Check size={11} strokeWidth={3} />}
-              </div>
-              <div className="min-w-0">
-                <span className="block truncate font-semibold">Strict Experience</span>
-                <span className="block text-[10px] text-amber-700 dark:text-amber-400/70 truncate">
-                  {activeSelectedJob?.minExperience || activeSelectedJob?.maxExperience
-                    ? `${activeSelectedJob.minExperience || 0}-${activeSelectedJob.maxExperience || '8'} Yrs`
-                    : (expFilter !== 'all' ? `Must match ${expFilter} Yrs` : 'Must fit Yrs range')}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Row 2: Secondary / Advanced Naukri Recruiter Filters */}
         {showMoreFilters && (
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-200 dark:border-white/[0.08] animate-in fade-in duration-150">
@@ -2387,103 +2296,48 @@ const ResumeDump: React.FC = () => {
               </select>
             </div>
 
-            {/* Education / Qualification Multi-Select Checkmark Filter Box */}
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setIsEducationRecBoxOpen(prev => !prev)}
-                className="geist-caption inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs font-normal text-slate-800 dark:text-white transition-all cursor-pointer shadow-sm hover:border-gray-400 dark:hover:border-white/30"
+            {/* 1. Education Qualification Filter Selector */}
+            <div className="flex items-center gap-1 shrink-0">
+              <GraduationCap size={13} className="text-gray-500 dark:text-[#8f8f8f] shrink-0" />
+              <select
+                value={educationQualFilter}
+                onChange={(e) => {
+                  setEducationQualFilter(e.target.value);
+                  setEducationSpecFilter('all');
+                }}
+                className="geist-caption h-8 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs text-slate-800 dark:text-white outline-none focus:border-black dark:focus:border-white/30 cursor-pointer max-w-[160px]"
               >
-                <GraduationCap size={13} className="text-gray-500 dark:text-[#8f8f8f] shrink-0" />
-                <span className="font-normal text-slate-800 dark:text-white">
-                  {selectedEducation.length > 0
-                    ? `Education (${selectedEducation.length})`
-                    : 'All Education'}
-                </span>
-                <ChevronDown size={12} className="text-gray-400 dark:text-gray-500 shrink-0" />
-              </button>
+                <option value="all">All Qualifications</option>
+                {EDUCATION_QUALIFICATIONS.map(qual => (
+                  <option key={qual} value={qual}>{qual}</option>
+                ))}
+              </select>
+            </div>
 
-              {isEducationRecBoxOpen && (
-                <div className="absolute left-0 top-full mt-1.5 z-[9999] w-72 sm:w-80 rounded-lg border border-gray-200 dark:border-white/15 bg-white dark:bg-[#0c0c0d] p-3 shadow-2xl backdrop-blur-md animate-in fade-in duration-100">
-                  <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-gray-100 dark:border-white/10">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 size-3" />
-                      <input
-                        type="text"
-                        value={educationRecSearch}
-                        onChange={(e) => setEducationRecSearch(e.target.value)}
-                        placeholder="Search degrees / trades..."
-                        className="w-full h-7 pl-7 pr-2 rounded bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/10 text-xs text-slate-900 dark:text-white outline-none"
-                        autoFocus
-                      />
-                    </div>
-                    {selectedEducation.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedEducation([])}
-                        className="text-[10px] text-red-500 hover:underline font-semibold shrink-0"
-                      >
-                        Clear All
-                      </button>
-                    )}
-                  </div>
-
-                  <p className="geist-label text-[10px] uppercase text-gray-500 dark:text-gray-400 mb-1.5 font-bold tracking-wider">
-                    Select Education Qualifications:
-                  </p>
-
-                  <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
-                    {Array.from(new Set([
-                      "B.Tech / B.E.", "M.Tech / M.E.", "Diploma in Civil Engineering", "Diploma in Mechanical Engineering",
-                      "Diploma in Electrical Engineering", "Diploma in Computer Engineering / IT", "MBA / PGDM", "BBA / BBM",
-                      "BCA", "MCA", "B.Sc", "M.Sc", "B.Com", "M.Com", "B.A.", "M.A.", "Ph.D.", "12th Pass / HSC", "10th Pass / SSC",
-                      ...uniqueEducationList
-                    ]))
-                      .filter(edu => edu.toLowerCase().includes(educationRecSearch.toLowerCase()))
-                      .map(edu => {
-                        const isChecked = selectedEducation.includes(edu);
-                        return (
-                          <label
-                            key={edu}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedEducation(prev =>
-                                isChecked ? prev.filter(eItem => eItem !== edu) : [...prev, edu]
-                              );
-                            }}
-                            className={`flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer text-xs transition-colors ${
-                              isChecked
-                                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold'
-                                : 'hover:bg-gray-100 dark:hover:bg-white/5 text-slate-700 dark:text-gray-200'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                                isChecked
-                                  ? 'bg-emerald-500 border-emerald-500 text-white'
-                                  : 'border-gray-300 dark:border-white/20 bg-white dark:bg-transparent'
-                              }`}>
-                                {isChecked && <Check size={11} strokeWidth={3} />}
-                              </div>
-                              <span className="whitespace-normal text-xs">{edu}</span>
-                            </div>
-                          </label>
-                        );
-                      })}
-                  </div>
-
-                  <div className="mt-2 pt-2 border-t border-gray-200 dark:border-white/10 flex items-center justify-between text-[11px]">
-                    <span className="text-gray-500 dark:text-gray-400 font-medium">{selectedEducation.length} selected</span>
-                    <button
-                      type="button"
-                      onClick={() => setIsEducationRecBoxOpen(false)}
-                      className="px-3 py-1 rounded bg-black dark:bg-white text-white dark:text-black font-bold text-xs hover:opacity-90 cursor-pointer"
-                    >
-                      Done
-                    </button>
-                  </div>
-                </div>
-              )}
+            {/* 2. Education Specialization Filter Selector (Dependent on chosen Qualification) */}
+            <div className="flex items-center gap-1 shrink-0">
+              <select
+                value={educationSpecFilter}
+                onChange={(e) => setEducationSpecFilter(e.target.value)}
+                disabled={educationQualFilter === 'all'}
+                className={`geist-caption h-8 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs text-slate-800 dark:text-white outline-none focus:border-black dark:focus:border-white/30 cursor-pointer max-w-[210px] ${
+                  educationQualFilter === 'all'
+                    ? 'opacity-60 cursor-not-allowed bg-gray-100 dark:bg-white/[0.03]'
+                    : ''
+                }`}
+              >
+                <option value="all">
+                  {educationQualFilter !== 'all'
+                    ? `All ${educationQualFilter} Specializations`
+                    : 'All Specializations (Pick Qual first)'}
+                </option>
+                {(educationQualFilter !== 'all' && EDUCATION_SPECIALIZATIONS[educationQualFilter as EducationQualification]
+                  ? EDUCATION_SPECIALIZATIONS[educationQualFilter as EducationQualification]
+                  : []
+                ).map(spec => (
+                  <option key={spec} value={spec}>{spec}</option>
+                ))}
+              </select>
             </div>
 
             {/* Candidate Source Filter */}

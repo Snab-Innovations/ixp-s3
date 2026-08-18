@@ -8,6 +8,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { ExternalLink, Sparkles, Building2, Check } from 'lucide-react';
 import { LocationCityInput } from '../components/LocationCityInput';
 import { ALL_JOB_SECTORS, ALL_JOB_DEPARTMENTS, detectSectorsFromText, detectDepartmentsFromText } from '../data/jobDomains';
+import { EDUCATION_QUALIFICATIONS, EDUCATION_SPECIALIZATIONS, EducationQualification } from '../data/allEducationDegrees';
 import { resolveStrictListedCity } from '../data/maharashtraCities';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rateLimitService';
@@ -227,6 +228,7 @@ const CreateInterview: React.FC = () => {
   };
 
   const [eduInput, setEduInput] = useState('');
+  const [selectedQualForEdu, setSelectedQualForEdu] = useState<string>('Graduate');
   const [selectedJobSectors, setSelectedJobSectors] = useState<string[]>([]);
   const [selectedJobDepartments, setSelectedJobDepartments] = useState<string[]>([]);
 
@@ -1460,7 +1462,20 @@ const CreateInterview: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)_auto]">
+                <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_minmax(0,1fr)_auto]">
+                  {/* 1. Select Qualification */}
+                  <select
+                    className={selectClass}
+                    value={selectedQualForEdu}
+                    onChange={(e) => setSelectedQualForEdu(e.target.value)}
+                  >
+                    <option value="">-- Select Qualification --</option>
+                    {EDUCATION_QUALIFICATIONS.map(qual => (
+                      <option key={qual} value={qual}>{qual}</option>
+                    ))}
+                  </select>
+
+                  {/* 2. Select Specialization based on Qualification */}
                   <select
                     className={selectClass}
                     value=""
@@ -1471,9 +1486,12 @@ const CreateInterview: React.FC = () => {
                       }
                     }}
                   >
-                    <option value="">Select predefined level</option>
-                    {["High School", "Bachelor's", "Master's", "PhD"].map(edu => (
-                      <option key={edu} value={edu}>{edu}</option>
+                    <option value="">-- Select {selectedQualForEdu || 'Specialization'} --</option>
+                    {(selectedQualForEdu && EDUCATION_SPECIALIZATIONS[selectedQualForEdu as EducationQualification]
+                      ? EDUCATION_SPECIALIZATIONS[selectedQualForEdu as EducationQualification]
+                      : []
+                    ).map(spec => (
+                      <option key={spec} value={spec}>{spec}</option>
                     ))}
                   </select>
 
