@@ -1,4 +1,4 @@
-import { isEducationMatching } from '../utils/educationMatcher';
+import { isEducationMatching, getEducationMatchDetails } from '../utils/educationMatcher';
 import { detectCandidateGender } from './resumeService';
 import { isJobMatchingDomain, resolveCandidateSectorsAndDepartments } from '../data/jobDomains';
 
@@ -73,6 +73,8 @@ export interface JobMatchResult {
     label: string;
     requiredEdu: string;
     candidateEdu: string;
+    allOptions: string[];
+    matchedOptions: string[];
   };
   matchReasons: string[];
   failReasons: string[];
@@ -215,10 +217,10 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
   const matchReasons: string[] = [];
   const failReasons: string[] = [];
 
-  // 1. Gender Matching (Weight: 15 points)
+  // 1. Gender Matching (Weight: 10 points)
   const genResult = checkGenderMatch(candidate, job);
   const isGenderStrictBlocked = !genResult.isMatch;
-  const genderScore = genResult.isMatch ? 15 : 0;
+  const genderScore = genResult.isMatch ? 10 : 0;
   if (genResult.isMatch) {
     if (genResult.requiredGender !== 'Any') {
       matchReasons.push(genResult.label);
@@ -312,41 +314,42 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
     matchReasons.push(`Matched ${matchedSkills.length} of ${totalReqSkills} skills (${matchedSkills.slice(0, 3).join(', ')})`);
   }
 
-  // 4. City & Location Matching (Weight: 15 points)
+  // 4. City & Location Matching (Weight: 10 points)
   const jobLoc = job.location || (job.city && job.state ? `${job.city}, ${job.state}` : job.city || job.state || '');
   const candLoc = candidate.location || candidate.city || '';
   const locResult = checkLocationMatch(candLoc, jobLoc);
-  const locationScore = locResult.isMatch ? 15 : 6;
+  const locationScore = locResult.isMatch ? 10 : 4;
   if (locResult.isMatch) {
     matchReasons.push(locResult.label);
   } else {
     failReasons.push(locResult.details);
   }
 
-  // 5. Education Matching (Weight: 10 points)
+  // 5. Education Qualification & Specialization Matching (Weight: 15 points)
   const reqEdu = (job.education || job.qualification || job.qualifications || '').toString().trim();
   const candEduStr = (candidate.highestEducation || candidate.education || '').toString().trim();
   
-  let eduMatch = true;
-  let eduLabel = 'Qualification Matches';
-  let eduScore = 10;
+  const eduDetails = getEducationMatchDetails(candEduStr, reqEdu);
+  let eduMatch = eduDetails.isMatch;
+  let eduLabel = 'Qualification Matches 100%';
+  let eduScore = 15;
 
   if (reqEdu && reqEdu.toLowerCase() !== 'any' && reqEdu.toLowerCase() !== 'unspecified') {
-    const isMatched = isEducationMatching(candEduStr, reqEdu);
-    if (isMatched) {
-      eduScore = 10;
+    if (eduDetails.isMatch) {
+      eduScore = 15;
       eduLabel = `Education Matches (${candEduStr || 'Qualified'})`;
-      matchReasons.push(`Education matches requirement (${reqEdu})`);
+      matchReasons.push(`Education matches requirement (${eduDetails.matchedOptions.join(', ') || reqEdu})`);
     } else {
-      eduScore = 4;
+      eduScore = 0;
       eduMatch = false;
-      eduLabel = `Education Note (Job mentions ${reqEdu})`;
+      eduLabel = `Education Mismatch: Job requires ${reqEdu} (Candidate has ${candEduStr || 'None'})`;
+      failReasons.push(eduLabel);
     }
   } else {
     matchReasons.push('Open education requirements');
   }
 
-  // 6. Experience Matching (Weight: 10 points)
+  // 6. Experience Matching (Weight: 15 points)
   const minExp = Math.max(0, Number(job.minExperience) || (typeof job.experience === 'number' ? job.experience : 0));
   const maxExp = Math.max(0, Number(job.maxExperience) || 0);
   const rawCandExp = candidate.totalExperienceYears ?? candidate.experience ?? 0;
@@ -356,19 +359,20 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
   let expLabel = `Experience Fits (${candExpNum} Yrs)`;
   let reqExpText = minExp > 0 ? (maxExp > minExp ? `${minExp} - ${maxExp} Yrs` : `${minExp}+ Yrs`) : 'Fresher / Any Experience';
 
-  let expScore = 10;
+  let expScore = 15;
   if (minExp > 0) {
     if (candExpNum >= minExp) {
-      expScore = 10;
+      expScore = 15;
       expLabel = `Meets Experience (${candExpNum} Yrs vs ${minExp}+ Yrs required)`;
       matchReasons.push(`Meets experience criteria (${candExpNum} Yrs)`);
     } else if (candExpNum > 0 && candExpNum >= minExp - 1) {
-      expScore = 7;
+      expScore = 9;
       expLabel = `Close Experience (${candExpNum} Yrs vs ${minExp} Yrs required)`;
     } else {
       expMatch = candExpNum >= minExp;
-      expScore = 3;
+      expScore = 0;
       expLabel = `Requires min ${minExp} Yrs (Candidate has ${candExpNum} Yrs)`;
+      failReasons.push(expLabel);
     }
   } else {
     matchReasons.push(`Experience eligible (${candExpNum} Yrs)`);
@@ -377,7 +381,7 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
   // Composite Score (0 - 100)
   let compositeScore = genderScore + sectorDeptScore + skillScore + locationScore + eduScore + expScore;
 
-  // If hard gender conflict (e.g. Female Only for Male candidate), drop to 0
+  // If hard gender or education conflict, adjust
   if (isGenderStrictBlocked) {
     compositeScore = 0;
   }
@@ -462,7 +466,9 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
       isMatch: eduMatch,
       label: eduLabel,
       requiredEdu: reqEdu || 'Any Qualification',
-      candidateEdu: candEduStr || 'Candidate Degree'
+      candidateEdu: candEduStr || 'Candidate Degree',
+      allOptions: eduDetails.allOptions,
+      matchedOptions: eduDetails.matchedOptions
     },
     matchReasons,
     failReasons

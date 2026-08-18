@@ -21,6 +21,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo';
 import { calculateJobMatchScore, JobMatchResult, CandidateMatchProfile } from '../services/jobMatchService';
 import { FormattedJobDescription } from '../utils/jobDescriptionFormatter';
+import { splitEducationRequirements, checkSingleRequirementMatch } from '../utils/educationMatcher';
 
 const matchExtractedLocationToPresentCity = (rawLocation: string): string => {
   if (!rawLocation || typeof rawLocation !== 'string') return '';
@@ -532,8 +533,8 @@ export default function PublicJobSeekerUpload() {
     
     const results = activeJobs.map(job => calculateJobMatchScore(job, submittedCandidateData));
     
-    // STRICT ELIGIBILITY: Filter out any job where candidate criteria is unmet (experience mismatch, gender mismatch, etc.)
-    const eligibleResults = results.filter(r => r.expMatch.isMatch && r.genderMatch.isMatch && r.overallScore > 0);
+    // STRICT ELIGIBILITY: Filter out any job where candidate criteria is unmet (education qualification/specialization mismatch, experience mismatch, gender mismatch, etc.)
+    const eligibleResults = results.filter(r => r.eduMatch.isMatch && r.expMatch.isMatch && r.genderMatch.isMatch && r.overallScore > 0);
 
     eligibleResults.sort((a, b) => b.overallScore - a.overallScore);
 
@@ -2416,28 +2417,61 @@ export default function PublicJobSeekerUpload() {
                           </div>
                         </div>
 
-                        {/* Education Qualification */}
-                        <div className={`p-2 rounded-xl border text-[11px] flex items-center justify-between gap-1.5 ${
+                        {/* Education Qualification with Differentiators and Green Highlight for Matches */}
+                        <div className={`p-2 sm:p-2.5 rounded-xl border text-[11px] space-y-1.5 ${
                           isDark ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'
                         }`}>
-                          <div className="flex items-center gap-1 truncate">
-                            <GraduationCap className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                            <span className="text-slate-400">Edu:</span>
-                            <span className="font-bold truncate">{job.qualification}</span>
+                          <div className="flex items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-bold text-[10px] uppercase tracking-wider">
+                              <GraduationCap className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                              <span>Required Qualification</span>
+                            </div>
+                            {eduMatch.isMatch ? (
+                              <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${
+                                isDark ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' : 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                              }`}>
+                                ✓ Fit
+                              </span>
+                            ) : (
+                              <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full border shrink-0 ${
+                                isDark ? 'bg-amber-500/20 border-amber-500/30 text-amber-300' : 'bg-amber-100 border-amber-300 text-amber-800'
+                              }`}>
+                                Mismatch
+                              </span>
+                            )}
                           </div>
-                          {eduMatch.isMatch ? (
-                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${
-                              isDark ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' : 'bg-emerald-100 border-emerald-300 text-emerald-800'
-                            }`}>
-                              Fit
-                            </span>
-                          ) : (
-                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${
-                              isDark ? 'bg-amber-500/20 border-amber-500/30 text-amber-300' : 'bg-amber-100 border-amber-300 text-amber-800'
-                            }`}>
-                              Mismatch
-                            </span>
-                          )}
+
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {(eduMatch.allOptions && eduMatch.allOptions.length > 0
+                              ? eduMatch.allOptions
+                              : splitEducationRequirements(job.qualification || job.education || 'Any Qualification')
+                            ).map((option, idx, arr) => {
+                              const isOptionMatched = eduMatch.matchedOptions?.includes(option) ||
+                                (submittedCandidateData?.highestEducation && checkSingleRequirementMatch(submittedCandidateData.highestEducation, option));
+                              
+                              return (
+                                <React.Fragment key={option + idx}>
+                                  <span className={`px-2 py-0.5 rounded-lg text-[10px] sm:text-[11px] font-semibold border transition-all inline-flex items-center gap-1 ${
+                                    isOptionMatched
+                                      ? isDark
+                                        ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 font-bold shadow-sm ring-1 ring-emerald-500/30'
+                                        : 'bg-emerald-100 border-emerald-400 text-emerald-900 font-bold shadow-sm ring-1 ring-emerald-300'
+                                      : isDark
+                                      ? 'bg-white/5 border-white/10 text-slate-400'
+                                      : 'bg-white border-slate-200 text-slate-600'
+                                  }`}>
+                                    {isOptionMatched && <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400 stroke-[3]" />}
+                                    <span>{option}</span>
+                                  </span>
+                                  {idx < arr.length - 1 && (
+                                    <span className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 select-none px-0.5">
+                                      •
+                                    </span>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                          </div>
                         </div>
 
                         {/* Skills Display (Ratio count text like '0/4 matched' removed) */}
@@ -2608,14 +2642,53 @@ export default function PublicJobSeekerUpload() {
               </div>
             </div>
 
-            {/* Education & Qualification */}
+            {/* Education & Qualification with Differentiators */}
             <div className="space-y-1.5">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Qualification & Education</h4>
-              <div className={`p-2.5 rounded-2xl border text-xs font-bold flex items-center justify-between ${
-                isDark ? 'bg-emerald-950/50 border-emerald-800 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Qualification & Education Requirements</h4>
+              <div className={`p-3 rounded-2xl border text-xs space-y-2 ${
+                isDark ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'
               }`}>
-                <span>{selectedJobForModal.job.qualification}</span>
-                <span>{selectedJobForModal.eduMatch.isMatch ? '✓ Qualification Fits' : 'Mismatch'}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Accepted Degrees / Trades:</span>
+                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                    selectedJobForModal.eduMatch.isMatch
+                      ? isDark ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' : 'bg-emerald-100 border-emerald-300 text-emerald-800'
+                      : isDark ? 'bg-amber-500/20 border-amber-500/30 text-amber-300' : 'bg-amber-100 border-amber-300 text-amber-800'
+                  }`}>
+                    {selectedJobForModal.eduMatch.isMatch ? '✓ Qualification Fits' : 'Mismatch'}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(selectedJobForModal.eduMatch.allOptions && selectedJobForModal.eduMatch.allOptions.length > 0
+                    ? selectedJobForModal.eduMatch.allOptions
+                    : splitEducationRequirements(selectedJobForModal.job.qualification || selectedJobForModal.job.education || 'Any Qualification')
+                  ).map((option, idx, arr) => {
+                    const isOptionMatched = selectedJobForModal.eduMatch.matchedOptions?.includes(option) ||
+                      (submittedCandidateData?.highestEducation && checkSingleRequirementMatch(submittedCandidateData.highestEducation, option));
+
+                    return (
+                      <React.Fragment key={option + idx}>
+                        <span className={`px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all inline-flex items-center gap-1.5 ${
+                          isOptionMatched
+                            ? isDark
+                              ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 font-bold shadow-sm ring-1 ring-emerald-500/30'
+                              : 'bg-emerald-100 border-emerald-400 text-emerald-900 font-bold shadow-sm ring-1 ring-emerald-300'
+                            : isDark
+                            ? 'bg-white/5 border-white/10 text-slate-400'
+                            : 'bg-white border-slate-200 text-slate-600'
+                        }`}>
+                          {isOptionMatched && <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 stroke-[3]" />}
+                          <span>{option}</span>
+                        </span>
+                        {idx < arr.length - 1 && (
+                          <span className="text-xs font-extrabold text-slate-400 dark:text-slate-500 select-none px-0.5">
+                            •
+                          </span>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
