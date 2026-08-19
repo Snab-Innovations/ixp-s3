@@ -339,16 +339,77 @@ export function matchesEduFamily(candidateFamily: EduFamily, requiredFamily: Edu
     return ['BE_ELECTRONICS', 'BE_ELECTRICAL'].includes(candidateFamily);
   }
 
+  // 12. Cross-Discipline Boundaries & Specializations:
+  // Candidate with generic "GRADUATE_ANY" (without specific degree) matches Bachelor requirements
+  if (candidateFamily === 'GRADUATE_ANY') {
+    const allGradFamilies: EduFamily[] = [
+      'GRADUATE_ANY', 'BE_ANY', 'BE_COMPUTERS', 'BE_CIVIL', 'BE_MECHANICAL',
+      'BE_ELECTRICAL', 'BE_ELECTRONICS', 'BE_CHEMICAL', 'BE_METALLURGY', 'BE_TEXTILE', 'BE_OTHER',
+      'BSC', 'BSC_COMPUTERS', 'BSC_MICROBIOLOGY', 'BA', 'BCOM', 'BBA', 'BCA',
+      'BARCH', 'BED', 'BPHARM', 'MEDICAL', 'LAW'
+    ];
+    if (allGradFamilies.includes(requiredFamily)) {
+      return true;
+    }
+  }
+
+  // B.Com / Commerce family cross-compatibility
+  if (requiredFamily === 'BCOM') {
+    if (['BCOM', 'MCOM'].includes(candidateFamily)) return true;
+    const candLower = (rawCand || '').toLowerCase();
+    if (candLower.includes('b.com') || candLower.includes('bcom') || candLower.includes('commerce') || candLower.includes('b com') || candLower.includes('m.com') || candLower.includes('mcom')) {
+      return true;
+    }
+    return false;
+  }
+
+  // B.A / Arts family
+  if (requiredFamily === 'BA') {
+    if (['BA', 'MA'].includes(candidateFamily)) return true;
+    const candLower = (rawCand || '').toLowerCase();
+    if (candLower.includes('b.a') || candLower.includes('arts') || candLower.includes('b a ') || candLower.includes('bachelor of arts')) {
+      return true;
+    }
+    return false;
+  }
+
+  // B.Sc family
+  if (requiredFamily === 'BSC') {
+    if (['BSC', 'BSC_COMPUTERS', 'BSC_MICROBIOLOGY', 'MSC'].includes(candidateFamily)) return true;
+    const candLower = (rawCand || '').toLowerCase();
+    if (candLower.includes('b.sc') || candLower.includes('bsc') || candLower.includes('b sc') || candLower.includes('science')) {
+      return true;
+    }
+    return false;
+  }
+
+  // MBA / Management family
+  if (requiredFamily === 'MBA_ANY' || requiredFamily === 'MBA_FINANCE' || requiredFamily === 'MBA_HR' || requiredFamily === 'MBA_MARKETING' || requiredFamily === 'MBA_OPERATIONS') {
+    if (['MBA_ANY', 'MBA_FINANCE', 'MBA_HR', 'MBA_MARKETING', 'MBA_OPERATIONS', 'POST_GRADUATE_ANY'].includes(candidateFamily)) return true;
+    const candLower = (rawCand || '').toLowerCase();
+    if (candLower.includes('mba') || candLower.includes('pgdm') || candLower.includes('management')) {
+      return true;
+    }
+    return false;
+  }
+
   // Text substring fallback for exact degree title match
   const candNorm = normalizeEducationString(rawCand);
   const reqNorm = normalizeEducationString(rawReq);
   if (candNorm && reqNorm && (candNorm === reqNorm || candNorm.includes(reqNorm) || reqNorm.includes(candNorm))) {
-    // Only if not crossing major degree boundaries (e.g. comp vs civil, or b.sc vs be)
-    const isCandComp = candNorm.includes('comp') || candNorm.includes('cse') || candNorm.includes('it');
-    const isReqComp = reqNorm.includes('comp') || reqNorm.includes('cse') || reqNorm.includes('it');
-    if (isCandComp === isReqComp) {
-      return true;
-    }
+    // Prevent major cross-category leaks (e.g. mba matching bcom, or civil matching comp)
+    const isCandMba = candNorm.includes('mba') || candNorm.includes('pgdm');
+    const isReqMba = reqNorm.includes('mba') || reqNorm.includes('pgdm');
+    const isCandCom = candNorm.includes('com') || candNorm.includes('commerce');
+    const isReqCom = reqNorm.includes('com') || reqNorm.includes('commerce');
+    const isCandEng = candNorm.includes('be') || candNorm.includes('tech') || candNorm.includes('engineering') || candNorm.includes('diploma');
+    const isReqEng = reqNorm.includes('be') || reqNorm.includes('tech') || reqNorm.includes('engineering') || reqNorm.includes('diploma');
+    
+    if (isReqMba && !isCandMba) return false;
+    if (isReqCom && !isCandCom && !candNorm.includes('graduate')) return false;
+    if (isReqEng && !isCandEng && !candNorm.includes('graduate')) return false;
+
+    return true;
   }
 
   return false;

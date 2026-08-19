@@ -327,7 +327,21 @@ export function calculateJobMatchScore(job: any, candidate: CandidateMatchProfil
 
   // 5. Education Qualification & Specialization Matching (Weight: 15 points)
   const reqEdu = (job.education || job.qualification || job.qualifications || '').toString().trim();
-  const candEduStr = (candidate.highestEducation || candidate.education || '').toString().trim();
+  
+  let candEduStr = '';
+  if (typeof candidate.highestEducation === 'string' && candidate.highestEducation.trim()) {
+    candEduStr = candidate.highestEducation.trim();
+  } else if (typeof candidate.education === 'string' && candidate.education.trim()) {
+    candEduStr = candidate.education.trim();
+  } else if (Array.isArray(candidate.education) && candidate.education.length > 0) {
+    candEduStr = candidate.education
+      .map(e => (typeof e === 'string' ? e : e?.degree || e?.title || e?.name || ''))
+      .filter(Boolean)
+      .join(', ');
+  }
+  if (!candEduStr && (candidate as any).degree) {
+    candEduStr = String((candidate as any).degree).trim();
+  }
   
   const eduDetails = getEducationMatchDetails(candEduStr, reqEdu);
   let eduMatch = eduDetails.isMatch;

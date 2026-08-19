@@ -152,21 +152,11 @@ export const RecruiterInterviewsSkeleton = () => (
   </div>
 );
 
+import { calculateJobMatchScore, CandidateMatchProfile } from '../services/jobMatchService';
+
 function getAISuggestedCandidatesForJob(job: any, candidates: any[], alreadyInvitedEmails: string[]) {
   if (!job || !candidates || candidates.length === 0) return [];
 
-  const jobTitle = (job.title || job.jobRole || '').toLowerCase();
-
-  let jobSkills: string[] = [];
-  if (Array.isArray(job.requiredSkills)) {
-    jobSkills = job.requiredSkills.map((s: any) => String(s).toLowerCase().trim());
-  } else if (typeof job.requiredSkills === 'string') {
-    jobSkills = job.requiredSkills.split(',').map((s: string) => s.toLowerCase().trim()).filter(Boolean);
-  } else if (Array.isArray(job.skills)) {
-    jobSkills = job.skills.map((s: any) => String(s).toLowerCase().trim());
-  }
-
-  const jobDescText = (job.description || job.jdText || job.jobDescription || '').toLowerCase();
   const normalizedInvited = (alreadyInvitedEmails || []).map(e => e.toLowerCase().trim());
 
   return candidates
@@ -174,72 +164,123 @@ function getAISuggestedCandidatesForJob(job: any, candidates: any[], alreadyInvi
       const email = (c.email || '').toLowerCase().trim();
       const phone = (c.phone || '').trim();
       const pseudoEmail = phone ? `${phone.replace(/[^0-9]/g, '')}@whatsapp.local` : '';
-      if (normalizedInvited.includes(email) || (pseudoEmail && normalizedInvited.includes(pseudoEmail))) {
+      if ((email && normalizedInvited.includes(email)) || (pseudoEmail && normalizedInvited.includes(pseudoEmail))) {
         return false;
       }
-
-      // Check strict mandatory criteria FIRST!
-      const mandatory = checkMandatoryCriteriaMatch(job, c);
-      if (!mandatory.isMatch) return false;
-
       return true;
     })
     .map(candidate => {
-      const candSkills = (candidate.skills || []).map((s: any) => String(s).toLowerCase().trim());
-      const candTitle = (candidate.currentTitle || candidate.sourceJobTitle || candidate.title || '').toLowerCase().trim();
-      const candText = `${candidate.summary || ''} ${candidate.resumeText || ''}`.toLowerCase();
-
-      let skillScore = 0;
-      if (jobSkills.length > 0) {
-        let matchCount = 0;
-        jobSkills.forEach(js => {
-          if (candSkills.some((cs: string) => cs.includes(js) || js.includes(cs)) || candText.includes(js)) {
-            matchCount++;
-          }
-        });
-        skillScore = (matchCount / jobSkills.length) * 100;
-      } else {
-        let matchCount = 0;
-        candSkills.forEach((cs: string) => {
-          if (jobTitle.includes(cs) || jobDescText.includes(cs)) matchCount++;
-        });
-        skillScore = Math.min(100, matchCount * 25);
+      let candEdu = '';
+      if (Array.isArray(candidate.education) && candidate.education.length > 0) {
+        candEdu = candidate.education.map((e: any) => typeof e === 'string' ? e : e?.degree || e?.title || '').filter(Boolean).join(', ');
+      }
+      if (!candEdu) {
+        candEdu = candidate.highestEducation || candidate.qualification || candidate.degree || '';
       }
 
-      let titleScore = 0;
-      if (candTitle && jobTitle) {
-        if (candTitle === jobTitle || jobTitle.includes(candTitle) || candTitle.includes(jobTitle)) {
-          titleScore = 100;
-        } else {
-          const titleWords = jobTitle.split(/\s+/).filter((w: string) => w.length > 3);
-          const matchedWords = titleWords.filter((w: string) => candTitle.includes(w));
-          if (titleWords.length > 0) {
-            titleScore = (matchedWords.length / titleWords.length) * 80;
-          }
+      let candExp = 0;
+      if (candidate.totalExperienceYears !== undefined && candidate.totalExperienceYears !== null && !isNaN(Number(candidate.totalExperienceYears))) {
+        candExp = Number(candidate.totalExperienceYears);
+      } else if (candidate.experienceYears !== undefined && candidate.experienceYears !== null && !isNaN(Number(candidate.experienceYears))) {
+        candExp = Number(candidate.experienceYears);
+      } else if (Array.isArray(candidate.experience)) {
+        candExp = candidate.experience.length;
+      }
+
+      const candDomains = Array.isArray(candidate.domains) && candidate.domains.length > 0
+        ? candidate.domains
+        : (candidate.domain ? [candidate.domain] : []);
+      const candSectors = Array.isArray(candidate.sectors) && candidate.sectors.length > 0
+        ? candidate.sectors
+        : (candidate.sector ? [candidate.sector] : []);
+      const candDepts = Array.isArray(candidate.departments) && candidate.departments.length > 0
+        ? candidate.departments
+        : (candidate.department ? [candidate.department] : []);
+
+      const candidateProfile: CandidateMatchProfile = {
+        name: candidate.name || 'Candidate',
+        email: candidate.email || '',
+        phone: candidate.phone || '',
+        location: candidate.location || candidate.city || '',
+        gender: candidate.gender || candidate.genderRequirement || '',
+        experience: String(candExp),
+        totalExperienceYears: candExp,
+        education: candEdu,
+        highestEducation: candEdu,
+        skills: Array.isArray(candidate.skills) ? candidate.skills : (candidate.skills ? String(candidate.skills).split(',').map((s: string) => s.trim()) : []),
+        domains: candDomains,
+        domain: candidate.domain || candDomains.join(', '),
+        sectors: candSectors,
+        sector: candidate.sector || candSectors[0] || '',
+        departments: candDepts,
+        department: candidate.department || candDepts[0] || '',
+        preferredDomains: candDomains,
+        preferredLocations: candidate.location ? [candidate.location] : []
+      };
+
+    const parseExpMinMax = (data: any) => {
+      let minExperience: number | undefined = undefined;
+      let maxExperience: number | undefined = undefined;
+      let experience = '';
+
+      if (data.minExperience !== undefined && data.minExperience !== null && !isNaN(Number(data.minExperience))) {
+        minExperience = Number(data.minExperience);
+      }
+      if (data.maxExperience !== undefined && data.maxExperience !== null && !isNaN(Number(data.maxExperience))) {
+        maxExperience = Number(data.maxExperience);
+      }
+
+      const expStr = typeof data.experience === 'string' ? data.experience : (typeof data.experienceYears === 'string' ? data.experienceYears : '');
+      if (expStr) {
+        experience = expStr;
+        const matches = expStr.match(/(\d+)(?:\s*-\s*(\d+))?/);
+        if (matches) {
+          if (minExperience === undefined) minExperience = parseInt(matches[1], 10);
+          if (maxExperience === undefined && matches[2]) maxExperience = parseInt(matches[2], 10);
         }
       }
 
-      const rawScore = Math.round((skillScore * 0.7) + (titleScore * 0.3));
-      if (jobSkills.length > 0 && rawScore < 15 && titleScore < 20) {
-        return null;
-      }
+      return { minExperience: minExperience ?? 0, maxExperience, experience: experience || `${minExperience ?? 0} Yrs` };
+    };
 
-      const matchScore = Math.round(Math.min(100, Math.max(35, rawScore)));
+    const parsedExp = parseExpMinMax(job);
+    const normalizedJob = {
+      ...job,
+      minExperience: parsedExp.minExperience,
+      maxExperience: parsedExp.maxExperience,
+      experience: parsedExp.experience,
+      qualification: job.qualification || job.education || job.qualifications || 'Diploma / Graduate',
+      education: job.education || job.qualification || job.qualifications || 'Diploma / Graduate',
+      genderRequirement: job.genderRequirement || job.gender || job.genderPreference || 'Any',
+      gender: job.gender || job.genderRequirement || 'Any',
+      department: job.department || job.roleCategory || job.category || 'General',
+      departments: job.departments || [job.department || job.roleCategory || job.category || 'General'],
+      location: job.location || (job.city && job.state ? `${job.city}, ${job.state}` : job.city || 'Nashik, Maharashtra'),
+      city: job.city || job.location || 'Nashik',
+    };
 
-      return {
-        id: candidate.id,
-        name: candidate.name || 'Candidate',
-        email: candidate.email || (candidate.phone ? `${candidate.phone.replace(/[^0-9]/g, '')}@whatsapp.local` : ''),
-        phone: candidate.phone || 'N/A',
-        experience: candidate.totalExperienceYears !== undefined && candidate.totalExperienceYears !== null
-          ? `${candidate.totalExperienceYears} yrs`
-          : 'N/A',
-        skills: candidate.skills || [],
-        matchScore
-      };
-    })
-    .filter((c): c is NonNullable<typeof c> => c !== null)
-    .sort((a, b) => b.matchScore - a.matchScore);
+    const matchResult = calculateJobMatchScore(normalizedJob, candidateProfile);
+
+    // Exact matching criteria as AI Job Recommendations on Public Upload & Resume Dump:
+    // eduMatch.isMatch && expMatch.isMatch && genderMatch.isMatch && overallScore > 0
+    if (!matchResult.eduMatch.isMatch || !matchResult.expMatch.isMatch || !matchResult.genderMatch.isMatch || matchResult.overallScore <= 0) {
+      return null;
+    }
+
+    return {
+      id: candidate.id,
+      name: candidate.name || 'Candidate',
+      email: candidate.email || (candidate.phone ? `${candidate.phone.replace(/[^0-9]/g, '')}@whatsapp.local` : ''),
+      phone: candidate.phone || 'N/A',
+      experience: candExp > 0 ? `${candExp} yrs` : 'Fresher',
+      skills: candidate.skills || [],
+      matchScore: matchResult.overallScore,
+      matchGrade: matchResult.matchGrade,
+      matchResult
+    };
+  })
+  .filter((c): c is NonNullable<typeof c> => c !== null)
+  .sort((a, b) => b.matchScore - a.matchScore);
 }
 
 const RecruiterInterviews: React.FC = () => {
@@ -295,13 +336,65 @@ const RecruiterInterviews: React.FC = () => {
   useEffect(() => {
     if (!selectedInterview || !user) return;
     setLoadingDumpCandidates(true);
-    const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
-    const q = teamId
-      ? query(collection(db, 'resumeDumpCandidates'), where('teamId', '==', teamId))
-      : query(collection(db, 'resumeDumpCandidates'), where('recruiterUID', '==', user.uid));
+    const q = query(collection(db, 'resumeDumpCandidates'));
 
     getDocs(q).then((snap) => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const list = snap.docs.map(snapshotDoc => {
+        const data = snapshotDoc.data();
+        const prof = (data.profile && typeof data.profile === 'object') ? data.profile : {};
+        const name = data.name || prof.name || '';
+        const email = data.email || prof.email || '';
+        const phone = data.phone || prof.phone || '';
+        const location = data.location || data.city || prof.location || prof.city || '';
+        const gender = data.gender || prof.gender || '';
+        const totalExperienceYears = data.totalExperienceYears !== undefined && data.totalExperienceYears !== null
+          ? data.totalExperienceYears
+          : (prof.totalExperienceYears !== undefined && prof.totalExperienceYears !== null
+            ? prof.totalExperienceYears
+            : (data.experienceYears ?? prof.experienceYears ?? 0));
+        const skills = Array.isArray(data.skills) && data.skills.length > 0
+          ? data.skills
+          : (Array.isArray(prof.skills) ? prof.skills : []);
+        const education = Array.isArray(data.education) && data.education.length > 0
+          ? data.education
+          : (Array.isArray(prof.education) ? prof.education : (data.education ? [{ degree: String(data.education) }] : (prof.education ? [{ degree: String(prof.education) }] : [])));
+        const domains = Array.isArray(data.domains) && data.domains.length > 0
+          ? data.domains
+          : (Array.isArray(prof.domains) ? prof.domains : (data.domain ? [data.domain] : (prof.domain ? [prof.domain] : [])));
+        const sectors = Array.isArray(data.sectors) && data.sectors.length > 0
+          ? data.sectors
+          : (Array.isArray(prof.sectors) ? prof.sectors : (data.sector ? [data.sector] : (prof.sector ? [prof.sector] : [])));
+        const departments = Array.isArray(data.departments) && data.departments.length > 0
+          ? data.departments
+          : (Array.isArray(prof.departments) ? prof.departments : (data.department ? [data.department] : (prof.department ? [prof.department] : [])));
+
+        return {
+          ...prof,
+          ...data,
+          id: snapshotDoc.id,
+          name,
+          email,
+          phone,
+          location,
+          city: location,
+          gender,
+          totalExperienceYears,
+          experienceYears: totalExperienceYears,
+          skills,
+          education,
+          domains,
+          domain: data.domain || prof.domain || domains.join(', '),
+          sectors,
+          sector: data.sector || prof.sector || sectors[0] || '',
+          departments,
+          department: data.department || prof.department || departments[0] || '',
+          resumeUrl: data.resumeUrl || prof.resumeUrl || '',
+          resumeFileName: data.resumeFileName || prof.resumeFileName || data.fileName || 'resume',
+          resumeText: data.resumeText || prof.resumeText || '',
+          summary: data.summary || prof.summary || '',
+          currentTitle: data.currentTitle || prof.currentTitle || data.sourceJobTitle || '',
+        };
+      });
       setDumpCandidates(list);
     }).catch((err) => {
       console.error("Error fetching candidates for AI suggestions:", err);

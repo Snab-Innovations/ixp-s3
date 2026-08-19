@@ -130,8 +130,29 @@ export default function PublicJobSeekerUpload() {
   const [candidateEmploymentStatus, setCandidateEmploymentStatus] = useState('Working');
   const [candidateNoticePeriodVal, setCandidateNoticePeriodVal] = useState('30');
   const [candidateNoticePeriodUnit, setCandidateNoticePeriodUnit] = useState<'Days' | 'Months'>('Days');
-  const [candidateCurrentSalary, setCandidateCurrentSalary] = useState('');
-  const [candidateExpectedSalary, setCandidateExpectedSalary] = useState('');
+
+  // Salary State with Period (Per Month / Per Year) and Type (In-Hand / CTC)
+  const [candidateCurrentSalaryVal, setCandidateCurrentSalaryVal] = useState('');
+  const [candidateCurrentSalaryPeriod, setCandidateCurrentSalaryPeriod] = useState<'Per Month' | 'Per Year'>('Per Year');
+  const [candidateCurrentSalaryType, setCandidateCurrentSalaryType] = useState<'In-Hand' | 'CTC'>('In-Hand');
+
+  const [candidateExpectedSalaryVal, setCandidateExpectedSalaryVal] = useState('');
+  const [candidateExpectedSalaryPeriod, setCandidateExpectedSalaryPeriod] = useState<'Per Month' | 'Per Year'>('Per Year');
+  const [candidateExpectedSalaryType, setCandidateExpectedSalaryType] = useState<'In-Hand' | 'CTC'>('In-Hand');
+
+  const getFormattedCurrentSalary = () => {
+    const v = candidateCurrentSalaryVal.trim();
+    if (!v) return '';
+    if (v === '0' || v.toLowerCase() === 'fresher') return 'Fresher (0)';
+    return `${v} / ${candidateCurrentSalaryPeriod} (${candidateCurrentSalaryType})`;
+  };
+
+  const getFormattedExpectedSalary = () => {
+    const v = candidateExpectedSalaryVal.trim();
+    if (!v) return '';
+    return `${v} / ${candidateExpectedSalaryPeriod} (${candidateExpectedSalaryType})`;
+  };
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [extraBioText, setExtraBioText] = useState('');
 
@@ -197,8 +218,16 @@ export default function PublicJobSeekerUpload() {
         if (parsed.status) setCandidateEmploymentStatus(parsed.status);
         if (parsed.noticeVal) setCandidateNoticePeriodVal(parsed.noticeVal);
         if (parsed.noticeUnit) setCandidateNoticePeriodUnit(parsed.noticeUnit);
-        if (parsed.currentSalary) setCandidateCurrentSalary(parsed.currentSalary);
-        if (parsed.expectedSalary) setCandidateExpectedSalary(parsed.expectedSalary);
+        if (parsed.currentSalaryVal) setCandidateCurrentSalaryVal(parsed.currentSalaryVal);
+        else if (parsed.currentSalary) setCandidateCurrentSalaryVal(parsed.currentSalary);
+        if (parsed.currentSalaryPeriod) setCandidateCurrentSalaryPeriod(parsed.currentSalaryPeriod);
+        if (parsed.currentSalaryType) setCandidateCurrentSalaryType(parsed.currentSalaryType);
+
+        if (parsed.expectedSalaryVal) setCandidateExpectedSalaryVal(parsed.expectedSalaryVal);
+        else if (parsed.expectedSalary) setCandidateExpectedSalaryVal(parsed.expectedSalary);
+        if (parsed.expectedSalaryPeriod) setCandidateExpectedSalaryPeriod(parsed.expectedSalaryPeriod);
+        if (parsed.expectedSalaryType) setCandidateExpectedSalaryType(parsed.expectedSalaryType);
+
         if (Array.isArray(parsed.skills) && parsed.skills.length > 0) setExtractedSkills(parsed.skills);
         if (parsed.extraBioText) setExtraBioText(parsed.extraBioText);
       }
@@ -241,8 +270,14 @@ export default function PublicJobSeekerUpload() {
           status: candidateEmploymentStatus,
           noticeVal: candidateNoticePeriodVal,
           noticeUnit: candidateNoticePeriodUnit,
-          currentSalary: candidateCurrentSalary,
-          expectedSalary: candidateExpectedSalary,
+          currentSalaryVal: candidateCurrentSalaryVal,
+          currentSalaryPeriod: candidateCurrentSalaryPeriod,
+          currentSalaryType: candidateCurrentSalaryType,
+          currentSalary: getFormattedCurrentSalary(),
+          expectedSalaryVal: candidateExpectedSalaryVal,
+          expectedSalaryPeriod: candidateExpectedSalaryPeriod,
+          expectedSalaryType: candidateExpectedSalaryType,
+          expectedSalary: getFormattedExpectedSalary(),
           skills: extractedSkills,
           extraBioText: extraBioText,
         };
@@ -254,7 +289,8 @@ export default function PublicJobSeekerUpload() {
   }, [
     candidateName, candidateEmail, candidatePhone, candidateGender, candidateLocation, candidateDomains,
     candidateExp, candidateEducation, candidateEmploymentStatus, candidateNoticePeriodVal,
-    candidateNoticePeriodUnit, candidateCurrentSalary, candidateExpectedSalary, extractedSkills, extraBioText
+    candidateNoticePeriodUnit, candidateCurrentSalaryVal, candidateCurrentSalaryPeriod, candidateCurrentSalaryType,
+    candidateExpectedSalaryVal, candidateExpectedSalaryPeriod, candidateExpectedSalaryType, extractedSkills, extraBioText
   ]);
 
   // Persist Matched Candidate Results State on Form Submission
@@ -406,6 +442,7 @@ export default function PublicJobSeekerUpload() {
     setSubmittedCandidateData(profileObj);
     setOriginalCandidateData({ ...profileObj });
     setIsSubmittedSuccess(true);
+    setShowEmailLookup(false);
     messageBox.showSuccess(`Welcome back, ${profileObj.name}! Your existing profile has been loaded and matched with active job openings.`);
   };
 
@@ -865,32 +902,67 @@ export default function PublicJobSeekerUpload() {
     }
   };
 
-  // Handle Returning Candidate Email Lookup
+  // Handle Returning Candidate Profile Lookup by Email, Name, or Phone
   const handleLookupEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanEmail = lookupEmailInput.trim().toLowerCase();
-    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      messageBox.showError("Please enter a valid email address.");
+    const cleanInput = lookupEmailInput.trim().toLowerCase();
+    if (!cleanInput) {
+      messageBox.showError("Please enter your name, email address, or phone number.");
       return;
     }
 
     setIsSearchingEmail(true);
     try {
-      const q = query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanEmail));
-      const snap = await getDocs(q);
+      let matchedCand: any = null;
 
-      if (snap.empty) {
-        messageBox.showError(`No registered resume profile found for "${cleanEmail}". Please submit your resume below to get instant job recommendations.`);
+      // 1. Direct query if valid email format
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanInput)) {
+        const q = query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanInput));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const d = snap.docs[0];
+          matchedCand = { id: d.id, ...d.data() };
+        }
+      }
+
+      // 2. Search across name, phone, or email substring
+      if (!matchedCand) {
+        const snapAll = await getDocs(query(collection(db, 'resumeDumpCandidates')));
+        const cleanDigits = cleanInput.replace(/\D/g, '');
+
+        for (const docSnap of snapAll.docs) {
+          const data = docSnap.data();
+          const prof = (data.profile && typeof data.profile === 'object') ? data.profile : {};
+          const candEmail = String(data.email || prof.email || '').toLowerCase().trim();
+          const candName = String(data.name || prof.name || '').toLowerCase().trim();
+          const candPhone = String(data.phone || prof.phone || '').replace(/\D/g, '');
+
+          if (candEmail === cleanInput || candEmail.includes(cleanInput)) {
+            matchedCand = { id: docSnap.id, ...prof, ...data };
+            break;
+          }
+          if (candName && (candName === cleanInput || candName.includes(cleanInput) || cleanInput.includes(candName))) {
+            matchedCand = { id: docSnap.id, ...prof, ...data };
+            break;
+          }
+          if (cleanDigits && cleanDigits.length >= 6 && candPhone.includes(cleanDigits)) {
+            matchedCand = { id: docSnap.id, ...prof, ...data };
+            break;
+          }
+        }
+      }
+
+      if (!matchedCand) {
+        messageBox.showError(`No registered resume profile found for "${lookupEmailInput}". Please submit your resume below to get instant job recommendations.`);
         setIsSearchingEmail(false);
         return;
       }
 
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const matchedCand: any = docs[0];
+      setShowEmailLookup(false);
       handleLoadExistingProfile(matchedCand);
     } catch (err: any) {
-      console.error("Email Lookup Error:", err);
-      messageBox.showError("Failed to lookup email. Please try again or fill out the form below.");
+      console.error("Profile Lookup Error:", err);
+      messageBox.showError("Failed to lookup profile. Please try again or fill out the form below.");
     } finally {
       setIsSearchingEmail(false);
     }
@@ -966,11 +1038,11 @@ export default function PublicJobSeekerUpload() {
       messageBox.showError("Please enter your Notice Period.");
       return;
     }
-    if (!candidateCurrentSalary.trim()) {
-      messageBox.showError("Please enter your Current Salary.");
+    if (!candidateCurrentSalaryVal.trim()) {
+      messageBox.showError("Please enter your Current Salary (Enter 0 if you are a Fresher).");
       return;
     }
-    if (!candidateExpectedSalary.trim()) {
+    if (!candidateExpectedSalaryVal.trim()) {
       messageBox.showError("Please enter your Expected Salary.");
       return;
     }
@@ -1039,8 +1111,17 @@ export default function PublicJobSeekerUpload() {
       finalProfile.noticePeriodDays = candidateNoticePeriodUnit === 'Months'
         ? String(Math.round((parseFloat(candidateNoticePeriodVal) || 0) * 30))
         : candidateNoticePeriodVal.trim();
-      finalProfile.currentSalary = candidateCurrentSalary.trim();
-      finalProfile.expectedSalary = candidateExpectedSalary.trim();
+
+      const formattedCurrentSalary = getFormattedCurrentSalary();
+      const formattedExpectedSalary = getFormattedExpectedSalary();
+      finalProfile.currentSalary = formattedCurrentSalary;
+      finalProfile.expectedSalary = formattedExpectedSalary;
+      finalProfile.currentSalaryVal = candidateCurrentSalaryVal.trim();
+      finalProfile.currentSalaryPeriod = candidateCurrentSalaryPeriod;
+      finalProfile.currentSalaryType = candidateCurrentSalaryType;
+      finalProfile.expectedSalaryVal = candidateExpectedSalaryVal.trim();
+      finalProfile.expectedSalaryPeriod = candidateExpectedSalaryPeriod;
+      finalProfile.expectedSalaryType = candidateExpectedSalaryType;
 
       const selectedDegree = candidateEducation.trim();
       const existingEdu = finalProfile.education || [];
@@ -1090,8 +1171,8 @@ export default function PublicJobSeekerUpload() {
         highestEducation: selectedDegree,
         employmentStatus: formattedStatus,
         noticePeriod: `${candidateNoticePeriodVal.trim()} ${candidateNoticePeriodUnit}`,
-        currentSalary: candidateCurrentSalary.trim(),
-        expectedSalary: candidateExpectedSalary.trim(),
+        currentSalary: formattedCurrentSalary,
+        expectedSalary: formattedExpectedSalary,
         fileName: selectedFile ? selectedFile.name : (existingEmailCandidate?.fileName || 'resume.pdf'),
         skills: extractedSkills,
         resumeText: finalResumeText,
@@ -1122,8 +1203,12 @@ export default function PublicJobSeekerUpload() {
     setCandidateEmploymentStatus('Working');
     setCandidateNoticePeriodVal('30');
     setCandidateNoticePeriodUnit('Days');
-    setCandidateCurrentSalary('');
-    setCandidateExpectedSalary('');
+    setCandidateCurrentSalaryVal('');
+    setCandidateCurrentSalaryPeriod('LPA');
+    setCandidateCurrentSalaryType('CTC');
+    setCandidateExpectedSalaryVal('');
+    setCandidateExpectedSalaryPeriod('LPA');
+    setCandidateExpectedSalaryType('CTC');
     setSelectedFile(null);
     setExtraBioText('');
     setExtractedSkills([]);
@@ -1291,17 +1376,17 @@ export default function PublicJobSeekerUpload() {
               <form onSubmit={handleLookupEmailSubmit} className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider mb-2">
-                    Registered Email Address <span className="text-red-500">*</span>
+                    Registered Name, Email Address, or Phone <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
-                    <Mail className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
+                    <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
                     <input
-                      type="email"
+                      type="text"
                       required
                       autoFocus
                       value={lookupEmailInput}
                       onChange={(e) => setLookupEmailInput(e.target.value)}
-                      placeholder="e.g. yourname@gmail.com"
+                      placeholder="e.g. Chinmay Upasani or yourname@gmail.com"
                       className={`w-full pl-10 pr-4 py-3 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 font-medium transition-all ${
                         isDark 
                           ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' 
@@ -1310,7 +1395,7 @@ export default function PublicJobSeekerUpload() {
                     />
                   </div>
                   <p className="text-[11px] text-slate-400 mt-1.5">
-                    Enter the email address you previously used to upload your resume.
+                    Enter the name, email address, or phone number you previously used to upload your resume.
                   </p>
                 </div>
 
@@ -1773,7 +1858,8 @@ export default function PublicJobSeekerUpload() {
                   <span className="text-[11px] text-red-500">* Mandatory</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+                  {/* 1. Working Status */}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
                       Working Status <span className="text-red-500">*</span>
@@ -1792,13 +1878,14 @@ export default function PublicJobSeekerUpload() {
                     </select>
                   </div>
 
+                  {/* 2. Notice Period */}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider mb-1.5 flex items-center justify-between">
                       <span>Notice Period <span className="text-red-500">*</span></span>
                     </label>
                     <div className="flex items-center gap-2">
                       <div className="relative flex-1">
-                        <Clock className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                        <Clock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                         <input
                           type="number"
                           min="0"
@@ -1815,7 +1902,7 @@ export default function PublicJobSeekerUpload() {
                       <select
                         value={candidateNoticePeriodUnit}
                         onChange={(e) => setCandidateNoticePeriodUnit(e.target.value as 'Days' | 'Months')}
-                        className={`px-3 py-2.5 rounded-xl border text-xs font-bold outline-none cursor-pointer ${
+                        className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold outline-none cursor-pointer ${
                           isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
                         }`}
                       >
@@ -1825,41 +1912,101 @@ export default function PublicJobSeekerUpload() {
                     </div>
                   </div>
 
+                  {/* 3. Current Salary */}
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
-                      Current Salary <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <IndianRupee className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
-                      <input
-                        type="text"
-                        required
-                        value={candidateCurrentSalary}
-                        onChange={(e) => setCandidateCurrentSalary(e.target.value)}
-                        placeholder="e.g. 4.5 LPA (0 if fresher)"
-                        className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 transition-all ${
-                          isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
-                        }`}
-                      />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold uppercase tracking-wider">
+                        Current Salary <span className="text-red-500">*</span>
+                      </label>
+                      <span className="text-[11px] text-slate-400">(0 if Fresher)</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <div className="relative flex-1 min-w-0">
+                        <IndianRupee className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                        <input
+                          type="text"
+                          required
+                          value={candidateCurrentSalaryVal}
+                          onChange={(e) => setCandidateCurrentSalaryVal(e.target.value)}
+                          placeholder="e.g. 4.5 or 35,000"
+                          className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 transition-all ${
+                            isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                          }`}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <select
+                          value={candidateCurrentSalaryPeriod}
+                          onChange={(e) => setCandidateCurrentSalaryPeriod(e.target.value as any)}
+                          className={`flex-1 sm:flex-initial px-3 py-2.5 rounded-xl border text-xs font-bold outline-none cursor-pointer ${
+                            isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                          }`}
+                          title="Salary Period"
+                        >
+                          <option value="Per Month">Per Month</option>
+                          <option value="Per Year">Per Year</option>
+                        </select>
+                        <select
+                          value={candidateCurrentSalaryType}
+                          onChange={(e) => setCandidateCurrentSalaryType(e.target.value as any)}
+                          className={`flex-1 sm:flex-initial px-3 py-2.5 rounded-xl border text-xs font-bold outline-none cursor-pointer ${
+                            isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                          }`}
+                          title="Salary Structure"
+                        >
+                          <option value="In-Hand">In-Hand</option>
+                          <option value="CTC">CTC</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
 
+                  {/* 4. Expected Salary */}
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
-                      Expected Salary <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <IndianRupee className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
-                      <input
-                        type="text"
-                        required
-                        value={candidateExpectedSalary}
-                        onChange={(e) => setCandidateExpectedSalary(e.target.value)}
-                        placeholder="e.g. 6.5 LPA"
-                        className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 transition-all ${
-                          isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
-                        }`}
-                      />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold uppercase tracking-wider">
+                        Expected Salary <span className="text-red-500">*</span>
+                      </label>
+                      <span className="text-[11px] text-slate-400">Target Range</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <div className="relative flex-1 min-w-0">
+                        <IndianRupee className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                        <input
+                          type="text"
+                          required
+                          value={candidateExpectedSalaryVal}
+                          onChange={(e) => setCandidateExpectedSalaryVal(e.target.value)}
+                          placeholder="e.g. 6.5 or 50,000"
+                          className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-xs sm:text-sm outline-none focus:border-emerald-500 transition-all ${
+                            isDark ? 'bg-[#141414] border-white/10 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                          }`}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <select
+                          value={candidateExpectedSalaryPeriod}
+                          onChange={(e) => setCandidateExpectedSalaryPeriod(e.target.value as any)}
+                          className={`flex-1 sm:flex-initial px-3 py-2.5 rounded-xl border text-xs font-bold outline-none cursor-pointer ${
+                            isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                          }`}
+                          title="Salary Period"
+                        >
+                          <option value="Per Month">Per Month</option>
+                          <option value="Per Year">Per Year</option>
+                        </select>
+                        <select
+                          value={candidateExpectedSalaryType}
+                          onChange={(e) => setCandidateExpectedSalaryType(e.target.value as any)}
+                          className={`flex-1 sm:flex-initial px-3 py-2.5 rounded-xl border text-xs font-bold outline-none cursor-pointer ${
+                            isDark ? 'bg-[#141414] border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                          }`}
+                          title="Salary Structure"
+                        >
+                          <option value="In-Hand">In-Hand</option>
+                          <option value="CTC">CTC</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                 </div>

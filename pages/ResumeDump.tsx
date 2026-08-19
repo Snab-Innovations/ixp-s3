@@ -16,7 +16,8 @@ import { isEducationMatching } from '../utils/educationMatcher';
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
 import { ALL_JOB_DOMAINS, ALL_JOB_SECTORS, ALL_JOB_DEPARTMENTS, resolveCandidateSectorsAndDepartments } from '../data/jobDomains';
 import { SKILL_OPTIONS } from './Profile';
-import { analyzeResumeText, ingestResumeFile, saveResumeDumpCandidate } from '../services/resumeService';
+import { analyzeResumeText, ingestResumeFile, saveResumeDumpCandidate, detectCandidateGender } from '../services/resumeService';
+import { calculateJobMatchScore, JobMatchResult, CandidateMatchProfile } from '../services/jobMatchService';
 import { sendBulkWhatsAppInvites } from '../services/waSenderService';
 import { sendInterviewInvitations } from '../services/sesService';
 import { logTeamActivity } from '../services/auditService';
@@ -543,6 +544,8 @@ const ResumeDump: React.FC = () => {
   // Job selection, scoring, candidate checkbox selection, and invite modal states
   const [jobs, setJobs] = useState<any[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string>('all');
+  const [isJobSelectorOpen, setIsJobSelectorOpen] = useState(false);
+  const [jobSearchQuery, setJobSearchQuery] = useState('');
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
@@ -696,24 +699,157 @@ const ResumeDump: React.FC = () => {
   }, [searchTerm, statusFilter, skillFilter, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, sourceFilter, dateFilter, selectedJobId]);
 
 
-  // Fetch all platform jobs / interviews from Firestore
+  // Fetch all active platform jobs / interviews from Firestore
   useEffect(() => {
     if (!user) return;
+
+    let activeInterviewsList: any[] = [];
+    let activeJobsList: any[] = [];
+
+    const parseExpMinMax = (data: any) => {
+      let min = 0;
+      let max = 0;
+      if (data.minExperience !== undefined && data.minExperience !== null && !isNaN(Number(data.minExperience))) {
+        min = Math.max(0, Number(data.minExperience));
+      }
+      if (data.maxExperience !== undefined && data.maxExperience !== null && !isNaN(Number(data.maxExperience))) {
+        max = Math.max(0, Number(data.maxExperience));
+      }
+      const rawStr = String(data.experience || data.minExperience || '').trim();
+      if (min === 0 && rawStr) {
+        const rangeMatch = rawStr.match(/(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)/i);
+        if (rangeMatch) {
+          min = parseFloat(rangeMatch[1]) || 0;
+          max = parseFloat(rangeMatch[2]) || 0;
+        } else {
+          const singleMatch = rawStr.match(/(\d+(?:\.\d+)?)/);
+          if (singleMatch && !/fresher|0\s*yr/i.test(rawStr)) {
+            min = parseFloat(singleMatch[1]) || 0;
+          }
+        }
+      }
+      return { minExperience: min, maxExperience: max, experience: rawStr || (min > 0 ? (max > min ? `${min} - ${max} Yrs` : `${min}+ Yrs`) : 'Fresher / Any Experience') };
+    };
+
+    const mergeJobs = () => {
+      const allRaw = [...activeInterviewsList, ...activeJobsList];
+      const seenIds = new Set<string>();
+      const combined: any[] = [];
+
+      for (const item of allRaw) {
+        if (!item || !item.id || seenIds.has(item.id)) continue;
+        seenIds.add(item.id);
+
+        const statusLower = String(item.status || '').trim().toLowerCase();
+        if (['inactive', 'expired', 'closed', 'disabled', 'deactivated', 'draft'].includes(statusLower)) {
+          continue;
+        }
+        if (item.isMock) continue;
+
+        combined.push(item);
+      }
+
+      setJobs(combined);
+    };
+
     const qInterviews = query(collection(db, 'interviews'));
-    const unsubscribe = onSnapshot(
+    const unsubInterviews = onSnapshot(
       qInterviews,
       (snapshot) => {
-        const records = snapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data()
-        }));
-        setJobs(records);
+        activeInterviewsList = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          const jobNo = data.jobNo ? String(data.jobNo).trim() : '';
+          const accessCode = jobNo || data.accessCode || docSnap.id.slice(0, 6).toUpperCase();
+          const parsedExp = parseExpMinMax(data);
+          return {
+            id: docSnap.id,
+            jobNo,
+            title: data.title || 'Untitled Job Role',
+            company: data.company || data.companyName || 'Company',
+            companyName: data.companyName || data.company || 'Company',
+            description: data.description || data.jobDescription || '',
+            industrySector: data.industrySector || data.sector || data.industryName || data.industry || '',
+            sector: data.sector || data.industrySector || data.industryName || '',
+            department: data.department || data.roleCategory || data.category || 'General',
+            departments: data.departments || [data.department || data.roleCategory || data.category || 'General'],
+            location: data.location || (data.city && data.state ? `${data.city}, ${data.state}` : data.city || 'Nashik, Maharashtra'),
+            city: data.city || data.location || 'Nashik',
+            genderRequirement: data.genderRequirement || data.gender || data.genderPreference || 'Any',
+            gender: data.gender || data.genderRequirement || 'Any',
+            employmentType: data.employmentType || data.jobType || 'Full-Time',
+            salary: data.salary || data.salaryRange || (data.minSalary && data.maxSalary ? `₹${data.minSalary} - ₹${data.maxSalary} / month` : 'Competitive CTC'),
+            minSalary: data.minSalary,
+            maxSalary: data.maxSalary,
+            minExperience: parsedExp.minExperience,
+            maxExperience: parsedExp.maxExperience,
+            experience: parsedExp.experience,
+            qualification: data.qualification || data.education || data.qualifications || 'Diploma / Graduate',
+            education: data.education || data.qualification || data.qualifications || 'Diploma / Graduate',
+            skills: Array.isArray(data.skills) ? data.skills : (data.skills ? String(data.skills).split(',').map((s: string) => s.trim()) : []),
+            accessCode,
+            status: data.status || 'Active',
+            deadline: data.deadline || data.applyDeadline,
+            isMock: Boolean(data.isMock),
+          };
+        });
+        mergeJobs();
       },
       (error) => {
-        console.error('Error fetching jobs:', error);
+        console.error('Error fetching interviews for resume dump:', error);
       }
     );
-    return () => unsubscribe();
+
+    const qJobs = query(collection(db, 'jobs'));
+    const unsubJobs = onSnapshot(
+      qJobs,
+      (snapshot) => {
+        activeJobsList = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          const jobNo = data.jobNo ? String(data.jobNo).trim() : '';
+          const accessCode = jobNo || data.accessCode || docSnap.id.slice(0, 6).toUpperCase();
+          const parsedExp = parseExpMinMax(data);
+          return {
+            id: docSnap.id,
+            jobNo,
+            title: data.title || 'Untitled Job Role',
+            company: data.company || data.companyName || 'Company',
+            companyName: data.companyName || data.company || 'Company',
+            description: data.description || data.jobDescription || '',
+            industrySector: data.industrySector || data.sector || data.industryName || data.industry || '',
+            sector: data.sector || data.industrySector || data.industryName || '',
+            department: data.department || data.roleCategory || data.category || 'General',
+            departments: data.departments || [data.department || data.roleCategory || data.category || 'General'],
+            location: data.location || (data.city && data.state ? `${data.city}, ${data.state}` : data.city || 'Nashik, Maharashtra'),
+            city: data.city || data.location || 'Nashik',
+            genderRequirement: data.genderRequirement || data.gender || data.genderPreference || 'Any',
+            gender: data.gender || data.genderRequirement || 'Any',
+            employmentType: data.employmentType || data.jobType || 'Full-Time',
+            salary: data.salary || data.salaryRange || (data.minSalary && data.maxSalary ? `₹${data.minSalary} - ₹${data.maxSalary} / month` : 'Competitive CTC'),
+            minSalary: data.minSalary,
+            maxSalary: data.maxSalary,
+            minExperience: parsedExp.minExperience,
+            maxExperience: parsedExp.maxExperience,
+            experience: parsedExp.experience,
+            qualification: data.qualification || data.education || data.qualifications || 'Diploma / Graduate',
+            education: data.education || data.qualification || data.qualifications || 'Diploma / Graduate',
+            skills: Array.isArray(data.skills) ? data.skills : (data.skills ? String(data.skills).split(',').map((s: string) => s.trim()) : []),
+            accessCode,
+            status: data.status || 'Active',
+            deadline: data.deadline || data.applyDeadline,
+            isMock: Boolean(data.isMock),
+          };
+        });
+        mergeJobs();
+      },
+      (error) => {
+        console.error('Error fetching jobs for resume dump:', error);
+      }
+    );
+
+    return () => {
+      unsubInterviews();
+      unsubJobs();
+    };
   }, [user]);
 
   useEffect(() => {
@@ -732,38 +868,64 @@ const ResumeDump: React.FC = () => {
         const records = snapshot.docs
           .map((snapshotDoc) => {
             const data = snapshotDoc.data();
+            const prof = (data.profile && typeof data.profile === 'object') ? data.profile : {};
+
+            const name = data.name || prof.name || '';
+            const email = data.email || prof.email || '';
+            const phone = data.phone || prof.phone || '';
+            const location = data.location || data.city || prof.location || prof.city || '';
+            const gender = data.gender || prof.gender || '';
+            const totalExperienceYears = data.totalExperienceYears !== undefined && data.totalExperienceYears !== null
+              ? data.totalExperienceYears
+              : (prof.totalExperienceYears !== undefined && prof.totalExperienceYears !== null
+                ? prof.totalExperienceYears
+                : (data.experienceYears ?? prof.experienceYears ?? 0));
+            const skills = Array.isArray(data.skills) && data.skills.length > 0
+              ? data.skills
+              : (Array.isArray(prof.skills) ? prof.skills : []);
+            const education = Array.isArray(data.education) && data.education.length > 0
+              ? data.education
+              : (Array.isArray(prof.education) ? prof.education : (data.education ? [{ degree: String(data.education) }] : (prof.education ? [{ degree: String(prof.education) }] : [])));
+            const domains = Array.isArray(data.domains) && data.domains.length > 0
+              ? data.domains
+              : (Array.isArray(prof.domains) ? prof.domains : (data.domain ? [data.domain] : (prof.domain ? [prof.domain] : [])));
+            const sectors = Array.isArray(data.sectors) && data.sectors.length > 0
+              ? data.sectors
+              : (Array.isArray(prof.sectors) ? prof.sectors : (data.sector ? [data.sector] : (prof.sector ? [prof.sector] : [])));
+            const departments = Array.isArray(data.departments) && data.departments.length > 0
+              ? data.departments
+              : (Array.isArray(prof.departments) ? prof.departments : (data.department ? [data.department] : (prof.department ? [prof.department] : [])));
+
             return {
+              ...prof,
               ...data,
               id: snapshotDoc.id,
-              name: typeof data.name === 'string' ? data.name : '',
-              email: typeof data.email === 'string' ? data.email : '',
-              phone: typeof data.phone === 'string' ? data.phone : '',
-              skills: Array.isArray(data.skills) ? data.skills : [],
-              experience: Array.isArray(data.experience) ? data.experience : [],
-              education: Array.isArray(data.education) ? data.education : [],
-              certifications: Array.isArray(data.certifications) ? data.certifications : [],
-              languages: Array.isArray(data.languages) ? data.languages : [],
-              resumeUrl: typeof data.resumeUrl === 'string' ? data.resumeUrl : '',
-              resumeFileName: typeof data.resumeFileName === 'string' ? data.resumeFileName : 'resume',
+              name,
+              email,
+              phone,
+              location,
+              city: location,
+              gender,
+              totalExperienceYears,
+              experienceYears: totalExperienceYears,
+              skills,
+              education,
+              domains,
+              domain: data.domain || prof.domain || domains.join(', '),
+              sectors,
+              sector: data.sector || prof.sector || sectors[0] || '',
+              departments,
+              department: data.department || prof.department || departments[0] || '',
+              resumeUrl: data.resumeUrl || prof.resumeUrl || '',
+              resumeFileName: data.resumeFileName || prof.resumeFileName || data.fileName || 'resume',
+              resumeText: data.resumeText || prof.resumeText || '',
+              summary: data.summary || prof.summary || '',
+              currentTitle: data.currentTitle || prof.currentTitle || data.sourceJobTitle || '',
             } as ResumeDumpCandidate;
           })
           .filter((c: any) => {
-            // Include candidates from public upload portal (/#/upload-resume) for ALL recruiters on the platform
-            if (
-              c.isPublicUpload === true ||
-              c.isPublicCandidate === true ||
-              c.isGlobalPublicCandidate === true ||
-              c.source === 'public_job_seeker_upload' ||
-              c.recruiterUID === 'DSOURCE_PUBLIC_JOB_SEEKER_POOL' ||
-              c.recruiterUID === 'PUBLIC_JOB_SEEKER_POOL' ||
-              c.teamId === 'DSOURCE_TALENT_ROSTER' ||
-              c.teamId === 'GLOBAL_CANDIDATE_POOL'
-            ) {
-              return true;
-            }
-            if (teamId && c.teamId === teamId) return true;
-            if (user?.uid && c.recruiterUID === user.uid) return true;
-            return false;
+            // Include all candidates from global pool, public upload portal, and recruiter collections
+            return Boolean(c && (c.name || c.email || c.phone || c.skills?.length > 0 || c.resumeFileName));
           })
           .sort((left, right) => toMillis(right.updatedAt || right.createdAt) - toMillis(left.updatedAt || left.createdAt));
         setCandidates(dedupeCandidatesByIdentity(records, (candidate) => toMillis(candidate.updatedAt || candidate.createdAt)));
@@ -824,6 +986,8 @@ const ResumeDump: React.FC = () => {
           if (e.degree && typeof e.degree === 'string') eduParts.push(e.degree);
           if (e.institution && typeof e.institution === 'string') eduParts.push(e.institution);
           if (e.field || e.major) eduParts.push(e.field || e.major);
+          if (e.name && typeof e.name === 'string') eduParts.push(e.name);
+          if (e.title && typeof e.title === 'string') eduParts.push(e.title);
         }
       });
     } else if (typeof cand.education === 'string' && cand.education.trim()) {
@@ -835,6 +999,17 @@ const ResumeDump: React.FC = () => {
     if (typeof cand.qualification === 'string' && cand.qualification.trim()) eduParts.push(cand.qualification.trim());
     if (typeof cand.highestEducation === 'string' && cand.highestEducation.trim()) eduParts.push(cand.highestEducation.trim());
     if (typeof cand.degree === 'string' && cand.degree.trim()) eduParts.push(cand.degree.trim());
+
+    if (cand.profile && typeof cand.profile === 'object') {
+      if (typeof cand.profile.highestEducation === 'string' && cand.profile.highestEducation.trim()) eduParts.push(cand.profile.highestEducation.trim());
+      if (typeof cand.profile.education === 'string' && cand.profile.education.trim()) eduParts.push(cand.profile.education.trim());
+      if (Array.isArray(cand.profile.education)) {
+        cand.profile.education.forEach((e: any) => {
+          if (typeof e === 'string' && e.trim()) eduParts.push(e.trim());
+          else if (e?.degree && typeof e.degree === 'string') eduParts.push(e.degree);
+        });
+      }
+    }
 
     return eduParts.join(' ').trim();
   };
@@ -929,69 +1104,9 @@ const ResumeDump: React.FC = () => {
     return jobs.find(j => j.id === selectedJobId) || null;
   }, [jobs, selectedJobId]);
 
-  // Sync & Auto-Check strict states when activeSelectedJob changes
+  // Reset manual strict filters when activeSelectedJob is changed
   useEffect(() => {
-    if (activeSelectedJob) {
-      // 1. Strict Gender
-      const hasSpecificGender = Boolean(
-        activeSelectedJob.strictGenderMatch ||
-        activeSelectedJob.strictGender ||
-        (activeSelectedJob.genderRequirement && activeSelectedJob.genderRequirement !== 'Any' && activeSelectedJob.genderRequirement !== 'all')
-      );
-      setStrictGender(hasSpecificGender);
-
-      // 2. Strict Location
-      const jobCity = activeSelectedJob.city || activeSelectedJob.location || '';
-      const hasLocation = Boolean(
-        activeSelectedJob.strictLocationMatch ||
-        activeSelectedJob.strictLocation ||
-        activeSelectedJob.isLocationStrict ||
-        jobCity.trim().length > 0
-      );
-      setStrictLocation(hasLocation);
-      if (jobCity) {
-        const matchedCity = MAHARASHTRA_CITIES.find(m => m.toLowerCase() === jobCity.toLowerCase() || jobCity.toLowerCase().includes(m.toLowerCase()));
-        if (matchedCity) setLocationFilter(matchedCity);
-        else setLocationFilter(jobCity);
-      }
-
-      // 3. Strict Education
-      const jobEdu = activeSelectedJob.education || activeSelectedJob.qualification || '';
-      const hasEducation = Boolean(
-        activeSelectedJob.strictEducationMatch ||
-        activeSelectedJob.strictEducation ||
-        activeSelectedJob.isEducationStrict ||
-        (typeof jobEdu === 'string' ? jobEdu.trim().length > 0 : (Array.isArray(jobEdu) && jobEdu.length > 0))
-      );
-      setStrictEducation(hasEducation);
-      if (jobEdu) {
-        if (typeof jobEdu === 'string' && jobEdu.trim()) {
-          setSelectedEducation(jobEdu.split(',').map((s: string) => s.trim()).filter(Boolean));
-        } else if (Array.isArray(jobEdu)) {
-          setSelectedEducation(jobEdu.map((s: any) => String(s).trim()).filter(Boolean));
-        }
-      }
-
-      // 4. Strict Experience
-      const minExp = activeSelectedJob.minExperience ?? activeSelectedJob.experienceYears ?? 0;
-      const maxExp = activeSelectedJob.maxExperience ?? 0;
-      const hasExp = Boolean(
-        activeSelectedJob.strictExperienceMatch ||
-        activeSelectedJob.strictExperience ||
-        activeSelectedJob.isExperienceStrict ||
-        minExp > 0 ||
-        maxExp > 0
-      );
-      setStrictExperience(hasExp);
-      if (minExp > 0 || maxExp > 0) {
-        if (minExp >= 6 && (maxExp <= 8 || maxExp === 0)) setExpFilter('5-10');
-        else if (minExp >= 1 && minExp < 3) setExpFilter('1-3');
-        else if (minExp >= 3 && minExp < 5) setExpFilter('3-5');
-        else if (minExp >= 5 && minExp < 10) setExpFilter('5-10');
-        else if (minExp >= 10) setExpFilter('10+');
-        else if (minExp === 0 && maxExp <= 1) setExpFilter('0-1');
-      }
-    } else {
+    if (!activeSelectedJob) {
       setStrictGender(false);
       setStrictLocation(false);
       setStrictEducation(false);
@@ -999,65 +1114,92 @@ const ResumeDump: React.FC = () => {
     }
   }, [activeSelectedJob]);
 
-  // Compute Match Score for each candidate against activeSelectedJob
+  // Searchable Jobs List for the Job Selector dropdown
+  const filteredJobsList = useMemo(() => {
+    if (!jobSearchQuery.trim()) return jobs;
+    const q = jobSearchQuery.toLowerCase().trim();
+    const searchDigits = q.replace(/\D/g, '');
+    return jobs.filter(j => {
+      const jobNoStr = String(j.jobNo || '').toLowerCase();
+      const codeStr = String(j.accessCode || '').toLowerCase();
+      const titleStr = String(j.title || j.jobRole || '').toLowerCase();
+      const compStr = String(j.company || j.companyName || '').toLowerCase();
+      const locStr = String(j.location || j.city || '').toLowerCase();
+      const deptStr = String(j.department || j.category || '').toLowerCase();
+      const skillsStr = (Array.isArray(j.skills) ? j.skills.join(' ') : String(j.skills || '')).toLowerCase();
+
+      return (
+        titleStr.includes(q) ||
+        compStr.includes(q) ||
+        locStr.includes(q) ||
+        deptStr.includes(q) ||
+        skillsStr.includes(q) ||
+        jobNoStr.includes(q) ||
+        codeStr.includes(q) ||
+        (Boolean(searchDigits) && (jobNoStr.includes(searchDigits) || codeStr.includes(searchDigits)))
+      );
+    });
+  }, [jobs, jobSearchQuery]);
+
+  // Compute Match Score for each candidate against activeSelectedJob using exact calculateJobMatchScore
   const candidatesWithScores = useMemo(() => {
     if (!activeSelectedJob) {
-      return candidates.map(c => ({ ...c, matchScore: undefined }));
+      return candidates.map(c => ({ ...c, matchScore: undefined, matchResult: undefined }));
     }
-
-    const jobTitle = (activeSelectedJob.title || activeSelectedJob.jobRole || '').toLowerCase();
-    
-    // Extract job skills
-    let jobSkills: string[] = [];
-    if (Array.isArray(activeSelectedJob.requiredSkills)) {
-      jobSkills = activeSelectedJob.requiredSkills.map((s: any) => String(s).toLowerCase().trim());
-    } else if (typeof activeSelectedJob.requiredSkills === 'string') {
-      jobSkills = activeSelectedJob.requiredSkills.split(',').map((s: string) => s.toLowerCase().trim());
-    } else if (Array.isArray(activeSelectedJob.skills)) {
-      jobSkills = activeSelectedJob.skills.map((s: any) => String(s).toLowerCase().trim());
-    }
-
-    const jobDescText = (activeSelectedJob.description || activeSelectedJob.jdText || activeSelectedJob.jobDescription || '').toLowerCase();
 
     return candidates.map(candidate => {
-      const candSkills = (candidate.skills || []).map(s => s.toLowerCase().trim());
-      const candTitle = (candidate.currentTitle || candidate.sourceJobTitle || '').toLowerCase().trim();
-      const candText = `${candidate.summary || ''} ${candidate.resumeText || ''}`.toLowerCase();
-
-      let skillScore = 0;
-      if (jobSkills.length > 0) {
-        let matchCount = 0;
-        jobSkills.forEach(js => {
-          if (candSkills.some(cs => cs.includes(js) || js.includes(cs)) || candText.includes(js)) {
-            matchCount++;
-          }
-        });
-        skillScore = (matchCount / jobSkills.length) * 100;
-      } else {
-        let matchCount = 0;
-        candSkills.forEach(cs => {
-          if (jobTitle.includes(cs) || jobDescText.includes(cs)) matchCount++;
-        });
-        skillScore = Math.min(100, matchCount * 25);
+      // 1. Extract education text and degrees
+      let candEdu = '';
+      if (Array.isArray(candidate.education) && candidate.education.length > 0) {
+        candEdu = candidate.education.map((e: any) => typeof e === 'string' ? e : e?.degree || '').filter(Boolean).join(', ');
+      }
+      if (!candEdu) {
+        candEdu = getCandidateEduText(candidate) || candidate.highestEducation || (candidate as any).qualification || '';
       }
 
-      let titleScore = 0;
-      if (candTitle && jobTitle) {
-        if (candTitle === jobTitle || jobTitle.includes(candTitle) || candTitle.includes(jobTitle)) {
-          titleScore = 100;
-        } else {
-          const titleWords = jobTitle.split(/\s+/).filter(w => w.length > 3);
-          const matchedWords = titleWords.filter(w => candTitle.includes(w));
-          if (titleWords.length > 0) {
-            titleScore = (matchedWords.length / titleWords.length) * 80;
-          }
-        }
+      // 2. Extract experience
+      let candExp = 0;
+      if (candidate.totalExperienceYears !== undefined && candidate.totalExperienceYears !== null && !isNaN(Number(candidate.totalExperienceYears))) {
+        candExp = Number(candidate.totalExperienceYears);
+      } else if ((candidate as any).experienceYears !== undefined && (candidate as any).experienceYears !== null && !isNaN(Number((candidate as any).experienceYears))) {
+        candExp = Number((candidate as any).experienceYears);
+      } else if (Array.isArray(candidate.experience)) {
+        candExp = candidate.experience.length;
       }
 
-      const totalScore = Math.round(Math.min(100, Math.max(15, (skillScore * 0.7) + (titleScore * 0.3))));
+      // 3. Extract sectors and departments
+      const candDomains = Array.isArray((candidate as any).domains)
+        ? (candidate as any).domains
+        : (candidate.domain ? candidate.domain.split(', ').filter(Boolean) : []);
+
+      const candidateProfile: CandidateMatchProfile = {
+        name: candidate.name,
+        email: candidate.email,
+        phone: candidate.phone,
+        gender: candidate.gender || (candidate as any).genderRequirement || detectCandidateGender(candidate),
+        location: candidate.location || (candidate as any).city || '',
+        city: candidate.location || (candidate as any).city || '',
+        domain: candidate.domain || candDomains.join(', '),
+        domains: candDomains,
+        preferredDomains: candDomains,
+        sectors: (candidate as any).sectors || (candidate as any).targetSectors || [],
+        departments: (candidate as any).departments || (candidate as any).targetDepartments || [],
+        experience: candExp,
+        totalExperienceYears: candExp,
+        education: candEdu,
+        highestEducation: candEdu,
+        skills: Array.isArray(candidate.skills) ? candidate.skills : [],
+        resumeText: `${(candidate.skills || []).join(' ')} ${candidate.resumeText || ''} ${candidate.additionalText || ''} ${candidate.summary || ''} ${candidate.currentTitle || ''} ${candEdu}`,
+        summary: candidate.summary || '',
+        currentTitle: candidate.currentTitle || candidate.sourceJobTitle || '',
+      };
+
+      const matchResult = calculateJobMatchScore(activeSelectedJob, candidateProfile);
+
       return {
         ...candidate,
-        matchScore: totalScore
+        matchScore: matchResult.overallScore,
+        matchResult
       };
     });
   }, [candidates, activeSelectedJob]);
@@ -1084,105 +1226,7 @@ const ResumeDump: React.FC = () => {
       if (statusFilter === 'hired' && !(candidate.isHired || candidate.doNotSuggest)) return false;
       if (statusFilter === 'available' && (candidate.isHired || candidate.doNotSuggest)) return false;
 
-      // 3. Skill filter (Recommended Domain Skills & Multi-Select Checkmark Box)
-      if (selectedSkills.length > 0) {
-        const candSkillsList = (candidate.skills || []).map(s => s.toLowerCase());
-        const candFullText = `${(candidate.skills || []).join(' ')} ${candidate.resumeText || ''} ${candidate.additionalText || ''} ${candidate.currentTitle || ''} ${candidate.sourceJobTitle || ''}`.toLowerCase();
-
-        const hasSelectedSkill = selectedSkills.some(reqSkill => {
-          const reqLower = reqSkill.toLowerCase().trim();
-          if (!reqLower) return true;
-
-          // 1. Direct candidate skill array match
-          if (candSkillsList.some(cs => cs.includes(reqLower) || reqLower.includes(cs))) return true;
-
-          // 2. Full text / resume text match
-          if (candFullText.includes(reqLower)) return true;
-
-          // 3. Domain synonyms check
-          for (const [key, synonyms] of Object.entries(DOMAIN_SKILL_SYNONYMS)) {
-            if (reqLower.includes(key) || key.includes(reqLower)) {
-              if (synonyms.some(syn => candSkillsList.some(cs => cs.includes(syn)) || candFullText.includes(syn))) {
-                return true;
-              }
-            }
-          }
-
-          return false;
-        });
-
-        if (!hasSelectedSkill) return false;
-      }
-      if (skillFilter !== 'all') {
-        const reqLower = skillFilter.toLowerCase().trim();
-        const candSkillsList = (candidate.skills || []).map(s => s.toLowerCase());
-        const candFullText = `${(candidate.skills || []).join(' ')} ${candidate.resumeText || ''} ${candidate.additionalText || ''} ${candidate.currentTitle || ''} ${candidate.sourceJobTitle || ''}`.toLowerCase();
-
-        const hasSkill = candSkillsList.some(s => s.includes(reqLower) || reqLower.includes(s)) || candFullText.includes(reqLower);
-        if (!hasSkill) return false;
-      }
-
-      // 4. Job Title / Industry filter
-      if (titleFilter !== 'all') {
-        const candidateTitle = (candidate.currentTitle || candidate.sourceJobTitle || '').toLowerCase();
-        if (!candidateTitle.includes(titleFilter.toLowerCase())) return false;
-      }
-
-      // 5. Experience Filter
-      if (expFilter !== 'all') {
-        const expYears = candidate.totalExperienceYears !== undefined && candidate.totalExperienceYears !== null
-          ? candidate.totalExperienceYears
-          : (parseFloat((candidate as any).experienceYears || '0') || 0);
-        if (expFilter === '0-1' && (expYears < 0 || expYears > 1)) return false;
-        if (expFilter === '1-3' && (expYears < 1 || expYears > 3)) return false;
-        if (expFilter === '3-5' && (expYears < 3 || expYears > 5)) return false;
-        if (expFilter === '5-10' && (expYears < 5 || expYears > 10)) return false;
-        if (expFilter === '10+' && expYears < 10) return false;
-      }
-
-      // 6. Location Filter
-      if (locationFilter !== 'all') {
-        const candLoc = (candidate.location || '').toLowerCase();
-        if (!candLoc.includes(locationFilter.toLowerCase())) return false;
-      }
-
-      // 6.5. Target Domain Filter
-      if (domainFilter !== 'all') {
-        const candDom = (candidate.domain || '').toLowerCase().trim();
-        const candTitle = (candidate.currentTitle || candidate.sourceJobTitle || '').toLowerCase();
-        const candSkills = (candidate.skills || []).join(' ').toLowerCase();
-        const targetDomainObj = ALL_JOB_DOMAINS.find(d => d.name.toLowerCase() === domainFilter.toLowerCase());
-        const domReqLower = domainFilter.toLowerCase();
-
-        let matchesDomain = candDom.includes(domReqLower) || domReqLower.includes(candDom) || candTitle.includes(domReqLower);
-        if (!matchesDomain && targetDomainObj) {
-          matchesDomain = targetDomainObj.keywords.some(kw => candDom.includes(kw) || candTitle.includes(kw) || candSkills.includes(kw));
-        }
-        if (!matchesDomain) return false;
-      }
-
-      // 6.6. Multi-Select Target Sectors & Departments Checkmark Filter
-      if (selectedDomains.length > 0) {
-        const candDom = (candidate.domain || '').toLowerCase().trim();
-        const candTitle = (candidate.currentTitle || candidate.sourceJobTitle || '').toLowerCase();
-        const candSkills = (candidate.skills || []).join(' ').toLowerCase();
-
-        const matchesCheckmarkDomain = selectedDomains.some(reqDomain => {
-          const domReqLower = reqDomain.toLowerCase().trim();
-          if (candDom.includes(domReqLower) || domReqLower.includes(candDom) || candTitle.includes(domReqLower)) {
-            return true;
-          }
-          const targetDomainObj = ALL_JOB_DOMAINS.find(d => d.name.toLowerCase() === domReqLower);
-          if (targetDomainObj) {
-            return targetDomainObj.keywords.some(kw => candDom.includes(kw) || candTitle.includes(kw) || candSkills.includes(kw));
-          }
-          return false;
-        });
-
-        if (!matchesCheckmarkDomain) return false;
-      }
-
-      // 7. Match Score Filter
+      // 3. Match Score Filter (when custom match score filter is chosen)
       if (matchScoreFilter !== 'all') {
         const score = candidate.matchScore || 0;
         if (matchScoreFilter === '75+' && score < 75) return false;
@@ -1190,35 +1234,7 @@ const ResumeDump: React.FC = () => {
         if (matchScoreFilter === '30+' && score < 30) return false;
       }
 
-      // 8. Education / Degree Filter (Qualification & Specialization 2-Selector + Multi-select checkmark Rec Box)
-      if (educationQualFilter !== 'all') {
-        const candEduText = getCandidateEduText(candidate);
-        if (educationSpecFilter !== 'all') {
-          if (!isEducationMatching(candEduText, educationSpecFilter)) return false;
-        } else {
-          const validSpecs = EDUCATION_SPECIALIZATIONS[educationQualFilter as EducationQualification] || [];
-          const matchesQual = isEducationMatching(candEduText, educationQualFilter) ||
-            validSpecs.some(spec => isEducationMatching(candEduText, spec));
-          if (!matchesQual) return false;
-        }
-      } else if (educationSpecFilter !== 'all') {
-        const candEduText = getCandidateEduText(candidate);
-        if (!isEducationMatching(candEduText, educationSpecFilter)) return false;
-      }
-
-      if (selectedEducation.length > 0) {
-        const candEduText = getCandidateEduText(candidate);
-        const hasSelectedEdu = selectedEducation.some(reqEdu =>
-          isEducationMatching(candEduText, reqEdu)
-        );
-        if (!hasSelectedEdu) return false;
-      }
-      if (educationFilter !== 'all') {
-        const candEduText = getCandidateEduText(candidate);
-        if (!isEducationMatching(candEduText, educationFilter)) return false;
-      }
-
-      // 9. Source Filter
+      // 4. Source Filter
       if (sourceFilter !== 'all') {
         const candSource = ((candidate as any).source || '').toLowerCase();
         if (sourceFilter === 'upload' && !candSource.includes('upload') && candSource !== 'resume_dump' && !candSource) return false;
@@ -1226,7 +1242,7 @@ const ResumeDump: React.FC = () => {
         if (sourceFilter === 'manual' && candSource !== 'manual') return false;
       }
 
-      // 10. Date Filter
+      // 5. Date Filter
       if (dateFilter !== 'all') {
         const createdTime = (candidate.createdAt as any)?.seconds
           ? (candidate.createdAt as any).seconds * 1000
@@ -1240,71 +1256,196 @@ const ResumeDump: React.FC = () => {
         }
       }
 
-      // --- STRICT MANDATORY AI CRITERIA EVALUATION ---
-      // 1. Strict Gender Filter
-      if (strictGender) {
-        let reqGender = (activeSelectedJob?.genderRequirement || (activeSelectedJob as any)?.gender || 'Any').toLowerCase().trim();
-        if (reqGender !== 'any' && reqGender !== 'all') {
-          const candGender = (candidate.gender || (candidate as any).genderRequirement || '').toLowerCase().trim();
-          if (candGender && candGender !== reqGender && !candGender.includes(reqGender) && !reqGender.includes(candGender)) {
+      // --- MANUAL FILTERS (Only applicable when NO job role is selected) ---
+      if (selectedJobId === 'all') {
+        // Skill filter
+        if (selectedSkills.length > 0) {
+          const candSkillsList = (candidate.skills || []).map(s => s.toLowerCase());
+          const candFullText = `${(candidate.skills || []).join(' ')} ${candidate.resumeText || ''} ${candidate.additionalText || ''} ${candidate.currentTitle || ''} ${candidate.sourceJobTitle || ''}`.toLowerCase();
+
+          const hasSelectedSkill = selectedSkills.some(reqSkill => {
+            const reqLower = reqSkill.toLowerCase().trim();
+            if (!reqLower) return true;
+            if (candSkillsList.some(cs => cs.includes(reqLower) || reqLower.includes(cs))) return true;
+            if (candFullText.includes(reqLower)) return true;
+            for (const [key, synonyms] of Object.entries(DOMAIN_SKILL_SYNONYMS)) {
+              if (reqLower.includes(key) || key.includes(reqLower)) {
+                if (synonyms.some(syn => candSkillsList.some(cs => cs.includes(syn)) || candFullText.includes(syn))) {
+                  return true;
+                }
+              }
+            }
             return false;
-          }
+          });
+          if (!hasSelectedSkill) return false;
         }
-      }
-
-      // 2. Strict Location Filter
-      if (strictLocation) {
-        const targetCity = (locationFilter !== 'all' ? locationFilter : (activeSelectedJob?.city || activeSelectedJob?.location || '')).toLowerCase().trim();
-        if (targetCity && targetCity !== 'all') {
-          const candLoc = (candidate.location || '').toLowerCase().trim();
-          if (!candLoc || (!candLoc.includes(targetCity) && !targetCity.includes(candLoc))) {
-            return false;
-          }
+        if (skillFilter !== 'all') {
+          const reqLower = skillFilter.toLowerCase().trim();
+          const candSkillsList = (candidate.skills || []).map(s => s.toLowerCase());
+          const candFullText = `${(candidate.skills || []).join(' ')} ${candidate.resumeText || ''} ${candidate.additionalText || ''} ${candidate.currentTitle || ''} ${candidate.sourceJobTitle || ''}`.toLowerCase();
+          const hasSkill = candSkillsList.some(s => s.includes(reqLower) || reqLower.includes(s)) || candFullText.includes(reqLower);
+          if (!hasSkill) return false;
         }
-      }
 
-      // 3. Strict Education Filter
-      if (strictEducation) {
-        const activeEduList = selectedEducation.length > 0
-          ? selectedEducation
-          : (educationFilter !== 'all'
-              ? [educationFilter]
-              : (activeSelectedJob?.education ? (typeof activeSelectedJob.education === 'string' ? activeSelectedJob.education.split(',') : activeSelectedJob.education) : []));
-
-        if (activeEduList.length > 0) {
-          const candEduText = getCandidateEduText(candidate);
-          const matchesAnyStrictEdu = activeEduList.some(reqEdu => isEducationMatching(candEduText, String(reqEdu).trim()));
-          if (!matchesAnyStrictEdu) return false;
+        // Job Title
+        if (titleFilter !== 'all') {
+          const candidateTitle = (candidate.currentTitle || candidate.sourceJobTitle || '').toLowerCase();
+          if (!candidateTitle.includes(titleFilter.toLowerCase())) return false;
         }
-      }
 
-      // 4. Strict Experience Filter
-      if (strictExperience) {
-        const expYears = candidate.totalExperienceYears !== undefined && candidate.totalExperienceYears !== null
-          ? candidate.totalExperienceYears
-          : (parseFloat((candidate as any).experienceYears || '0') || 0);
-
-        if (activeSelectedJob) {
-          const minExp = activeSelectedJob.minExperience ?? (activeSelectedJob as any).experienceYears ?? 0;
-          const maxExp = activeSelectedJob.maxExperience ?? (minExp > 0 ? minExp + 3 : 0);
-          if (minExp > 0 || maxExp > 0) {
-            if (expYears < minExp || (maxExp > 0 && expYears > maxExp)) return false;
-          }
-        } else if (expFilter !== 'all') {
+        // Experience
+        if (expFilter !== 'all') {
+          const expYears = candidate.totalExperienceYears !== undefined && candidate.totalExperienceYears !== null
+            ? candidate.totalExperienceYears
+            : (parseFloat((candidate as any).experienceYears || '0') || 0);
           if (expFilter === '0-1' && (expYears < 0 || expYears > 1)) return false;
           if (expFilter === '1-3' && (expYears < 1 || expYears > 3)) return false;
           if (expFilter === '3-5' && (expYears < 3 || expYears > 5)) return false;
           if (expFilter === '5-10' && (expYears < 5 || expYears > 10)) return false;
           if (expFilter === '10+' && expYears < 10) return false;
         }
+
+        // Location
+        if (locationFilter !== 'all') {
+          const candLoc = (candidate.location || '').toLowerCase();
+          if (!candLoc.includes(locationFilter.toLowerCase())) return false;
+        }
+
+        // Domain
+        if (domainFilter !== 'all') {
+          const candDom = (candidate.domain || '').toLowerCase().trim();
+          const candTitle = (candidate.currentTitle || candidate.sourceJobTitle || '').toLowerCase();
+          const candSkills = (candidate.skills || []).join(' ').toLowerCase();
+          const targetDomainObj = ALL_JOB_DOMAINS.find(d => d.name.toLowerCase() === domainFilter.toLowerCase());
+          const domReqLower = domainFilter.toLowerCase();
+          let matchesDomain = candDom.includes(domReqLower) || domReqLower.includes(candDom) || candTitle.includes(domReqLower);
+          if (!matchesDomain && targetDomainObj) {
+            matchesDomain = targetDomainObj.keywords.some(kw => candDom.includes(kw) || candTitle.includes(kw) || candSkills.includes(kw));
+          }
+          if (!matchesDomain) return false;
+        }
+
+        // Sectors & Departments Checkmarks
+        if (selectedDomains.length > 0) {
+          const candDom = (candidate.domain || '').toLowerCase().trim();
+          const candTitle = (candidate.currentTitle || candidate.sourceJobTitle || '').toLowerCase();
+          const candSkills = (candidate.skills || []).join(' ').toLowerCase();
+          const matchesCheckmarkDomain = selectedDomains.some(reqDomain => {
+            const domReqLower = reqDomain.toLowerCase().trim();
+            if (candDom.includes(domReqLower) || domReqLower.includes(candDom) || candTitle.includes(domReqLower)) return true;
+            const targetDomainObj = ALL_JOB_DOMAINS.find(d => d.name.toLowerCase() === domReqLower);
+            if (targetDomainObj) {
+              return targetDomainObj.keywords.some(kw => candDom.includes(kw) || candTitle.includes(kw) || candSkills.includes(kw));
+            }
+            return false;
+          });
+          if (!matchesCheckmarkDomain) return false;
+        }
+
+        // Education
+        if (educationQualFilter !== 'all') {
+          const candEduText = getCandidateEduText(candidate);
+          if (educationSpecFilter !== 'all') {
+            if (!isEducationMatching(candEduText, educationSpecFilter)) return false;
+          } else {
+            const validSpecs = EDUCATION_SPECIALIZATIONS[educationQualFilter as EducationQualification] || [];
+            const matchesQual = isEducationMatching(candEduText, educationQualFilter) ||
+              validSpecs.some(spec => isEducationMatching(candEduText, spec));
+            if (!matchesQual) return false;
+          }
+        } else if (educationSpecFilter !== 'all') {
+          const candEduText = getCandidateEduText(candidate);
+          if (!isEducationMatching(candEduText, educationSpecFilter)) return false;
+        }
+
+        if (selectedEducation.length > 0) {
+          const candEduText = getCandidateEduText(candidate);
+          const hasSelectedEdu = selectedEducation.some(reqEdu => isEducationMatching(candEduText, reqEdu));
+          if (!hasSelectedEdu) return false;
+        }
+        if (educationFilter !== 'all') {
+          const candEduText = getCandidateEduText(candidate);
+          if (!isEducationMatching(candEduText, educationFilter)) return false;
+        }
+
+        // Strict Checkboxes
+        if (strictGender) {
+          const candGender = (candidate.gender || (candidate as any).genderRequirement || '').toLowerCase().trim();
+          if (candGender && candGender !== 'male' && candGender !== 'female') return false;
+        }
+        if (strictLocation && locationFilter !== 'all') {
+          const candLoc = (candidate.location || '').toLowerCase().trim();
+          if (!candLoc.includes(locationFilter.toLowerCase().trim())) return false;
+        }
       }
 
       return true;
     });
 
-    // If a job is selected, sort candidates by highest match score to lowest match score
+    // When a Job Role is selected: Match Gender, Experience (Exp), Functional Departments / Domain (2), City & Keywords
+    // No need for exact education match; evaluates gender, exp, functional domain/department, and city keywords
+    // When a Job Role is selected: Match Qualification, Gender, Experience (Exp), Functional Departments / Domain (2), City & Keywords
     if (selectedJobId !== 'all') {
+      result = result.filter(candidate => {
+        const mr = (candidate as any).matchResult as JobMatchResult | undefined;
+        if (!mr) return false;
+
+        // 1. Education Qualification Match (Specialization & Degree matching)
+        const eduOk = mr.eduMatch ? mr.eduMatch.isMatch : true;
+
+        // 2. Gender Match (Male -> Male, Female -> Female, Any -> Both)
+        const genderOk = mr.genderMatch ? mr.genderMatch.isMatch : true;
+
+        // 3. Experience Match (Candidate exp >= minExp)
+        const expOk = mr.expMatch ? mr.expMatch.isMatch : true;
+
+        // 4. City / Location Match
+        const locOk = mr.locationMatch ? mr.locationMatch.isMatch : true;
+
+        // 5. Functional Departments / Domain / Keyword Match
+        const domainOrKeywordOk = Boolean(
+          mr.domainMatch?.isMatch ||
+          mr.sectorMatch?.isMatch ||
+          mr.deptMatch?.isMatch ||
+          (mr.skillMatch && mr.skillMatch.matchedSkills.length > 0) ||
+          mr.overallScore >= 20
+        );
+
+        return eduOk && genderOk && expOk && locOk && domainOrKeywordOk && mr.overallScore > 0;
+      });
+      // Sort candidates by highest match score to lowest match score
       result = [...result].sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+    }
+
+    // Always enforce manual Education Qualification / Specialization filters if selected by the recruiter
+    if (educationQualFilter !== 'all' || educationSpecFilter !== 'all' || selectedEducation.length > 0 || educationFilter !== 'all') {
+      result = result.filter(candidate => {
+        const candEduText = getCandidateEduText(candidate);
+
+        if (educationQualFilter !== 'all') {
+          if (educationSpecFilter !== 'all') {
+            if (!isEducationMatching(candEduText, educationSpecFilter)) return false;
+          } else {
+            const validSpecs = EDUCATION_SPECIALIZATIONS[educationQualFilter as EducationQualification] || [];
+            const matchesQual = isEducationMatching(candEduText, educationQualFilter) ||
+              validSpecs.some(spec => isEducationMatching(candEduText, spec));
+            if (!matchesQual) return false;
+          }
+        } else if (educationSpecFilter !== 'all') {
+          if (!isEducationMatching(candEduText, educationSpecFilter)) return false;
+        }
+
+        if (selectedEducation.length > 0) {
+          const hasSelectedEdu = selectedEducation.some(reqEdu => isEducationMatching(candEduText, reqEdu));
+          if (!hasSelectedEdu) return false;
+        }
+
+        if (educationFilter !== 'all') {
+          if (!isEducationMatching(candEduText, educationFilter)) return false;
+        }
+
+        return true;
+      });
     }
 
     return result;
@@ -1787,21 +1928,143 @@ const ResumeDump: React.FC = () => {
       <section className="border-b border-gray-200 dark:border-white/[0.11] bg-slate-50 dark:bg-[#050505] px-4 py-3 sm:px-6 lg:px-7 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-            {/* Select Job Role (Ranks candidates by Highest Match Score) */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Briefcase size={14} className="text-gray-500 dark:text-[#8f8f8f] shrink-0" />
-              <select
-                value={selectedJobId}
-                onChange={(e) => setSelectedJobId(e.target.value)}
-                className="geist-caption h-8 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs text-slate-800 dark:text-white outline-none focus:border-black dark:focus:border-white/30 cursor-pointer max-w-[200px]"
+            {/* Searchable Job Role Selector (Shows Job No, Title, Company & Auto-Ranks by AI Match Score) */}
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsJobSelectorOpen(prev => !prev)}
+                className={`geist-caption h-8 inline-flex items-center gap-1.5 rounded-[6px] border px-2.5 text-xs font-medium transition-all shadow-2xs cursor-pointer max-w-[260px] ${
+                  selectedJobId !== 'all' && activeSelectedJob
+                    ? 'bg-blue-500/10 border-blue-500/40 text-blue-700 dark:text-blue-300 font-semibold'
+                    : 'border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] text-slate-800 dark:text-white hover:border-gray-400 dark:hover:border-white/30'
+                }`}
+                title="Click to search and select target job role"
               >
-                <option value="all">Select Job Role ({jobs.length} Jobs)</option>
-                {jobs.map(j => (
-                  <option key={j.id} value={j.id}>
-                    {j.title || j.jobRole || 'Job'} {j.accessCode ? `(${j.accessCode})` : ''}
-                  </option>
-                ))}
-              </select>
+                <Briefcase size={13} className="shrink-0 text-gray-500 dark:text-[#8f8f8f]" />
+                <span className="truncate">
+                  {selectedJobId !== 'all' && activeSelectedJob
+                    ? `${activeSelectedJob.jobNo ? `#${activeSelectedJob.jobNo} ` : ''}${activeSelectedJob.title || 'Job'}`
+                    : `Select Job Role (${jobs.length} Jobs)`}
+                </span>
+                {selectedJobId !== 'all' ? (
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedJobId('all');
+                      setIsJobSelectorOpen(false);
+                    }}
+                    className="ml-1 p-0.5 hover:bg-black/10 dark:hover:bg-white/15 rounded-full"
+                    title="Clear Job Selection"
+                  >
+                    <XCircle size={12} className="text-gray-400 hover:text-red-500" />
+                  </span>
+                ) : (
+                  <ChevronDown size={12} className="text-gray-500 dark:text-[#8f8f8f] shrink-0 ml-0.5" />
+                )}
+              </button>
+
+              {/* Searchable Floating Job Role Menu */}
+              {isJobSelectorOpen && (
+                <div
+                  className="absolute left-0 top-full mt-1.5 z-[9999] w-80 sm:w-96 rounded-lg border border-gray-200 dark:border-white/15 bg-white dark:bg-[#0c0c0d] p-3 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in duration-100"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-gray-200 dark:border-white/10">
+                    <div className="relative flex-1">
+                      <Search size={12} className="absolute left-2.5 top-2.5 text-gray-400" />
+                      <input
+                        type="text"
+                        value={jobSearchQuery}
+                        onChange={(e) => setJobSearchQuery(e.target.value)}
+                        placeholder="Search by Job No, Title, Company, City..."
+                        className="w-full h-7 pl-7 pr-2 rounded bg-gray-100 dark:bg-white/[0.06] border border-gray-200 dark:border-white/[0.08] text-xs text-slate-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                        autoFocus
+                      />
+                    </div>
+                    {jobSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setJobSearchQuery('')}
+                        className="text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-64 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                    {/* All Jobs / Reset Option */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedJobId('all');
+                        setIsJobSelectorOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between p-2 rounded-md text-left transition-colors cursor-pointer ${
+                        selectedJobId === 'all'
+                          ? 'bg-blue-50 dark:bg-white/[0.08] text-blue-700 dark:text-blue-300 font-semibold'
+                          : 'hover:bg-gray-50 dark:hover:bg-white/[0.04] text-slate-700 dark:text-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Archive size={13} className="text-gray-400" />
+                        <span className="text-xs">All Job Roles ({jobs.length} Available)</span>
+                      </div>
+                      {selectedJobId === 'all' && <Check size={13} className="text-blue-600 dark:text-blue-400" />}
+                    </button>
+
+                    {filteredJobsList.length === 0 ? (
+                      <div className="py-4 text-center text-xs text-gray-400">
+                        No jobs found matching "{jobSearchQuery}".
+                      </div>
+                    ) : (
+                      filteredJobsList.map((j) => {
+                        const isSelected = selectedJobId === j.id;
+                        const jobNoDisplay = j.jobNo ? `Job No: #${j.jobNo}` : (j.accessCode ? `Code: ${j.accessCode}` : '');
+                        return (
+                          <button
+                            key={j.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedJobId(j.id);
+                              setIsJobSelectorOpen(false);
+                            }}
+                            className={`w-full p-2 rounded-md text-left transition-colors cursor-pointer border ${
+                              isSelected
+                                ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700/50'
+                                : 'border-transparent hover:bg-gray-50 dark:hover:bg-white/[0.04]'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {jobNoDisplay && (
+                                    <span className="inline-flex items-center px-1.5 py-0.2 font-mono text-[10px] font-bold rounded bg-gray-200 dark:bg-white/10 text-slate-800 dark:text-gray-200">
+                                      {jobNoDisplay}
+                                    </span>
+                                  )}
+                                  <span className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+                                    {j.title || j.jobRole || 'Untitled Job'}
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-gray-500 dark:text-[#8f8f8f] mt-0.5 truncate">
+                                  {j.company || j.companyName || 'DSource Partner'} • {j.city || j.location || 'Nashik'}
+                                </div>
+                                <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-400">
+                                  {j.experience && <span>💼 {j.experience}</span>}
+                                  {j.department && <span>🏷️ {j.department}</span>}
+                                  {j.qualification && <span className="truncate max-w-[120px]">🎓 {j.qualification}</span>}
+                                </div>
+                              </div>
+                              {isSelected && <Check size={14} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />}
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Status Filter */}
@@ -2429,6 +2692,34 @@ const ResumeDump: React.FC = () => {
         </section>
       )}
 
+      {/* Active Selected Job AI Recommendation Banner */}
+      {selectedJobId !== 'all' && activeSelectedJob && (
+        <section className="border-b border-blue-200 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/20 px-4 py-2.5 sm:px-6 lg:px-7">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-600 text-white font-mono text-[10px] font-bold">
+                <Sparkles size={11} />
+                AI Job Recommendations Active
+              </span>
+              <span className="font-semibold text-xs text-blue-950 dark:text-blue-200">
+                {activeSelectedJob.jobNo ? `Job No: #${activeSelectedJob.jobNo} • ` : (activeSelectedJob.accessCode ? `Code: ${activeSelectedJob.accessCode} • ` : '')}
+                {activeSelectedJob.title}
+              </span>
+              <span className="text-xs text-blue-700 dark:text-blue-300">
+                ({filteredCandidates.length} eligible candidates qualified on qualification, experience, gender & skills)
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedJobId('all')}
+              className="text-xs text-blue-700 hover:text-blue-900 dark:text-blue-300 dark:hover:text-white flex items-center gap-1 font-medium underline cursor-pointer"
+            >
+              Clear Job Recommendation Filter
+            </button>
+          </div>
+        </section>
+      )}
+
       <section className="flex min-h-[360px] flex-col">
         {filteredCandidates.length === 0 && !uploading ? (
           <label
@@ -2535,15 +2826,26 @@ const ResumeDump: React.FC = () => {
 
                     {selectedJobId !== 'all' && (
                       <td className="px-3 py-1.5 whitespace-nowrap">
-                        <span className={`geist-caption inline-flex items-center rounded-full px-2 py-0.5 font-mono text-[10px] font-bold ${
-                          (candidate.matchScore || 0) >= 70
-                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
-                            : (candidate.matchScore || 0) >= 40
-                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
-                            : 'bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-[#a1a1aa] border border-gray-200 dark:border-white/[0.1]'
-                        }`}>
-                          {candidate.matchScore ?? 0}%
-                        </span>
+                        <div className="flex flex-col gap-0.5">
+                          <span
+                            className={`geist-caption inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] font-bold w-fit ${
+                              (candidate.matchScore || 0) >= 70
+                                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                                : (candidate.matchScore || 0) >= 40
+                                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
+                                : 'bg-gray-100 dark:bg-white/[0.06] text-gray-600 dark:text-[#a1a1aa] border border-gray-200 dark:border-white/[0.1]'
+                            }`}
+                            title={(candidate as any).matchResult?.matchReasons?.join(' • ') || 'Match Score'}
+                          >
+                            <Sparkles size={9} />
+                            {candidate.matchScore ?? 0}%
+                          </span>
+                          {(candidate as any).matchResult?.skillMatch?.ratioText && (
+                            <span className="text-[10px] text-gray-500 dark:text-[#8f8f8f]">
+                              {(candidate as any).matchResult.skillMatch.ratioText}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     )}
 
