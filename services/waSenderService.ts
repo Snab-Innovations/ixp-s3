@@ -138,7 +138,6 @@ export async function fetchWhatsAppStatus(
     try {
       const res = await fetch(url, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
       });
 
       if (res.ok) {
