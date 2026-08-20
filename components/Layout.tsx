@@ -24,13 +24,9 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   React.useEffect(() => {
     let isMounted = true;
     const checkRealWaStatus = async () => {
-      if (!userProfile?.whatsappSessionId || !userProfile?.whatsappSessionPasscode) {
-        if (isMounted) setWaRealStatus('DISCONNECTED');
-        return;
-      }
       try {
-        const res = await fetchWhatsAppStatus(userProfile.whatsappSessionId, userProfile.whatsappSessionPasscode);
-        const isConnected = res.status === 'CONNECTED' || res.status === 'AUTHENTICATED' || res.status === 'READY' || !!res.userInfo;
+        const res = await fetchWhatsAppStatus();
+        const isConnected = res.status === 'connected' || res.status === 'CONNECTED' || res.status === 'AUTHENTICATED' || res.status === 'READY' || !!res.userInfo;
         if (isMounted) setWaRealStatus(isConnected ? 'CONNECTED' : 'DISCONNECTED');
       } catch (err) {
         if (isMounted) setWaRealStatus('DISCONNECTED');
@@ -43,7 +39,7 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       isMounted = false;
       clearInterval(interval);
     };
-  }, [userProfile?.whatsappSessionId, userProfile?.whatsappSessionPasscode]);
+  }, []);
 
   const handleLogout = async () => {
     try {

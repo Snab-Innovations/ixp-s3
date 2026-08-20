@@ -146,11 +146,7 @@ const Profile: React.FC = () => {
 
   const handleTestWaMessage = async () => {
     if (!testPhone.trim()) {
-      messageBox.showError("Please enter a valid mobile number for testing (e.g. 9823188483)");
-      return;
-    }
-    if (!formData.whatsappSessionId.trim() || !formData.whatsappSessionPasscode.trim()) {
-      messageBox.showError("Please enter your WhatsApp Session ID & Passcode before testing.");
+      messageBox.showError("Please enter a valid mobile number with country code for testing (e.g. 919876543210)");
       return;
     }
 
@@ -158,11 +154,7 @@ const Profile: React.FC = () => {
     try {
       const res = await sendWhatsAppMessage(
         testPhone.trim(),
-        testMessage.trim(),
-        {
-          sessionId: formData.whatsappSessionId.trim(),
-          passcode: formData.whatsappSessionPasscode.trim()
-        }
+        testMessage.trim()
       );
 
       if (res.success) {

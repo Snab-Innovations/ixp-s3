@@ -544,7 +544,7 @@ export const RecruiterTeamPanel: React.FC = () => {
                     <Phone size={14} /> WhatsApp Credentials (Optional)
                   </div>
                   <a
-                    href="https://whatsapp-sending-api.onrender.com/"
+                    href="https://whatsapp-serverless.vercel.app/"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="geist-small text-[#9ca3af] hover:text-white underline flex items-center gap-1 font-medium transition-colors"
@@ -555,12 +555,11 @@ export const RecruiterTeamPanel: React.FC = () => {
 
                 <div className="p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.08] geist-small text-[#9ca3af] space-y-1.5 leading-relaxed">
                   <div className="font-medium text-white">
-                    Steps to get credentials:
+                    Steps to connect WhatsApp:
                   </div>
                   <ol className="list-decimal list-inside space-y-0.5 text-[#6b7280]">
-                    <li>Go to site <a href="https://whatsapp-sending-api.onrender.com/" target="_blank" rel="noopener noreferrer" className="text-[#9ca3af] underline font-medium hover:text-white">whatsapp-sending-api.onrender.com</a></li>
-                    <li>Scan WhatsApp QR code using WhatsApp app on phone (Linked Devices)</li>
-                    <li>Get &amp; copy your API Credentials (Session ID &amp; Passcode) and insert them below</li>
+                    <li>Open WhatsApp integration in your profile or layout modal</li>
+                    <li>Scan the QR code with WhatsApp on your phone (Linked Devices)</li>
                   </ol>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
