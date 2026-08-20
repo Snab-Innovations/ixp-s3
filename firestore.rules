@@ -56,14 +56,12 @@ service cloud.firestore {
 
     // --- Jobs Collection Rules ---
     match /jobs/{jobId} {
-      allow read, create, update: if true;
-      allow delete: if request.auth != null;
+      allow read, create, update, delete: if true;
     }
 
     // --- Interviews Collection Rules ---
     match /interviews/{interviewId} {
-        allow read, create, update: if true;
-        allow delete: if request.auth != null;
+        allow read, create, update, delete: if true;
 
         // --- Attempts Subcollection Rules ---
         match /attempts/{attemptId} {
@@ -73,15 +71,14 @@ service cloud.firestore {
             allow read: if true;
             // Allow updating attempt status or reattempt permissions
             allow update: if true;
-            allow delete: if request.auth != null;
+            allow delete: if true;
         }
     }
 
     // --- Candidate Responses Collection Rules (Top-level attempts mirror) ---
     match /candidateResponses/{submissionId} {
       allow read: if true;
-      allow create, update: if true;
-      allow delete: if request.auth != null;
+      allow create, update, delete: if true;
     }
 
     // --- Collection Group Rules ---

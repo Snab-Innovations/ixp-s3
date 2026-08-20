@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/jobs/:jobId",
+      "destination": "/api/jobs?jobId=:jobId"
+    }
+  ]
+}

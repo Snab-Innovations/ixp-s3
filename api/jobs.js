@@ -1,11 +1,27 @@
 /**
- * Vercel Serverless API: Jobs Receiver & Webhook Endpoint
- * Allows external databases, ATS systems, and scripts to post jobs directly to InterviewXpert.
- * Hosted 100% on Vercel (e.g. https://interviewxpert.in/api/jobs)
+ * Vercel Serverless API: Complete Jobs REST API Suite
+ * 
+ * Supported Endpoints & Actions:
+ * 1. POST   /api/jobs          - Create new job or update status
+ * 2. PUT    /api/jobs          - Update existing job fields by jobNo / id
+ * 3. PATCH  /api/jobs          - Partial update (e.g. status: "Inactive")
+ * 4. GET    /api/jobs          - List all jobs or fetch single job (?jobNo=... or ?id=...)
+ * 5. DELETE /api/jobs          - Delete job by jobNo or id
  */
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDocs, collection, query, limit, orderBy } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  getDocs, 
+  deleteDoc, 
+  collection, 
+  query, 
+  where, 
+  limit 
+} from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY || "AIzaSyDBo-Hbvw3MJdnSBx-cZq_hn_yUSSBduiE",
@@ -84,7 +100,7 @@ const inMemoryJobs = new Map();
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST,PUT,PATCH,DELETE');
   res.setHeader(
     'Access-Control-Allow-Headers',
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
@@ -94,7 +110,7 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // ── Mandatory Bearer Authentication from Environment Variables ──
+  // ── Mandatory Bearer Authentication ──
   const authHeader = req.headers['authorization'] || req.headers['Authorization'] || '';
   const apiKey = authHeader.startsWith('Bearer ') 
     ? authHeader.substring(7).trim() 
@@ -109,9 +125,43 @@ export default async function handler(req, res) {
     });
   }
 
-  // GET: List all jobs (requires authentication)
+  const queryParams = req.query || {};
+  const urlPath = req.url ? req.url.split('?')[0] : '';
+  const urlSlug = urlPath.startsWith('/api/jobs/') ? decodeURIComponent(urlPath.replace('/api/jobs/', '')).trim() : '';
+  const targetJobNo = (req.body?.jobNo || queryParams.jobNo || queryParams.jobId || urlSlug || '').toString().trim();
+  const targetId = (req.body?.id || req.body?.interviewId || queryParams.id || queryParams.interviewId || urlSlug || '').toString().trim();
+
+  // ── 1. GET: List All Jobs or Fetch Single Job ──
   if (req.method === 'GET') {
     try {
+      // Single Job Fetch
+      if (targetId || targetJobNo) {
+        if (targetId && inMemoryJobs.has(targetId)) {
+          return res.status(200).json({ success: true, data: inMemoryJobs.get(targetId) });
+        }
+        for (const job of inMemoryJobs.values()) {
+          if (targetJobNo && String(job.jobNo) === targetJobNo) {
+            return res.status(200).json({ success: true, data: job });
+          }
+        }
+
+        if (targetId) {
+          const snap = await getDoc(doc(db, 'interviews', targetId));
+          if (snap.exists()) {
+            return res.status(200).json({ success: true, data: { id: snap.id, ...snap.data() } });
+          }
+        }
+        if (targetJobNo) {
+          const q = query(collection(db, 'interviews'), where('jobNo', '==', targetJobNo), limit(1));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const d = snap.docs[0];
+            return res.status(200).json({ success: true, data: { id: d.id, ...d.data() } });
+          }
+        }
+      }
+
+      // List Jobs (with optional ?status= filter)
       const q = query(collection(db, 'interviews'), limit(100));
       const snap = await getDocs(q).catch(() => null);
       const dbJobs = snap ? snap.docs.map(d => ({ id: d.id, ...d.data() })) : [];
@@ -124,19 +174,117 @@ export default async function handler(req, res) {
         mergedMap.set(id, j);
       }
 
-      return res.status(200).json(Array.from(mergedMap.values()));
+      let allJobs = Array.from(mergedMap.values());
+      if (queryParams.status) {
+        const filterStatus = queryParams.status.toLowerCase();
+        allJobs = allJobs.filter(j => (j.status || 'active').toLowerCase() === filterStatus);
+      }
+
+      return res.status(200).json(allJobs);
     } catch (err) {
-      console.error('Error fetching jobs in GET /api/jobs:', err);
+      console.error('Error in GET /api/jobs:', err);
       return res.status(200).json(Array.from(inMemoryJobs.values()));
     }
   }
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ success: false, error: 'Method Not Allowed. Use POST.' });
+  // ── 2. DELETE: Delete a Job by jobNo or ID ──
+  if (req.method === 'DELETE') {
+    if (!targetJobNo && !targetId) {
+      return res.status(400).json({ success: false, error: 'Please provide jobNo or id to delete.' });
+    }
+
+    // Remove from in-memory cache
+    if (targetId) inMemoryJobs.delete(targetId);
+    for (const [id, job] of inMemoryJobs.entries()) {
+      if (targetJobNo && String(job.jobNo) === targetJobNo) {
+        inMemoryJobs.delete(id);
+      }
+    }
+
+    // Remove from Firestore collections
+    try {
+      if (targetId) {
+        await Promise.all([
+          deleteDoc(doc(db, 'interviews', targetId)).catch(() => null),
+          deleteDoc(doc(db, 'jobs', targetId)).catch(() => null)
+        ]);
+      }
+      if (targetJobNo) {
+        for (const col of ['interviews', 'jobs']) {
+          const q = query(collection(db, col), where('jobNo', '==', targetJobNo));
+          const snap = await getDocs(q);
+          for (const d of snap.docs) {
+            await deleteDoc(doc(db, col, d.id)).catch(() => null);
+          }
+        }
+      }
+    } catch (delErr) {
+      console.warn('Firestore delete error:', delErr.message);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Job ${targetJobNo || targetId} successfully deleted.`
+    });
   }
 
+  // ── 3. PUT / PATCH / POST: Update Job or Create Job ──
   try {
     const payload = req.body || {};
+    const isExplicitUpdate = req.method === 'PUT' || req.method === 'PATCH';
+    const isDeactivateAction = payload.action === 'deactivate' || payload.action === 'close';
+    const hasRequiredCreationFields = Boolean(payload.title && payload.description);
+    const isPartialUpdate = isExplicitUpdate || isDeactivateAction || (!hasRequiredCreationFields && (targetJobNo || targetId));
+
+    // UPDATE / DEACTIVATE BRANCH
+    if ((targetJobNo || targetId) && isPartialUpdate && !hasRequiredCreationFields) {
+      const newStatus = payload.status || (payload.action === 'deactivate' ? 'Inactive' : 'Active');
+      const updatedTimestamp = new Date().toISOString();
+      const updateFields = {
+        ...payload,
+        status: newStatus,
+        updatedAt: updatedTimestamp
+      };
+
+      // Update in-memory
+      for (const [id, job] of inMemoryJobs.entries()) {
+        if ((targetJobNo && String(job.jobNo) === targetJobNo) || (targetId && id === targetId)) {
+          Object.assign(job, updateFields);
+        }
+      }
+
+      // Update Firestore
+      try {
+        const collectionsToSearch = ['interviews', 'jobs'];
+        for (const colName of collectionsToSearch) {
+          if (targetId) {
+            await setDoc(doc(db, colName, targetId), updateFields, { merge: true });
+          }
+          if (targetJobNo) {
+            const q = query(collection(db, colName), where('jobNo', '==', targetJobNo));
+            const snap = await getDocs(q);
+            for (const d of snap.docs) {
+              await setDoc(doc(db, colName, d.id), updateFields, { merge: true });
+            }
+          }
+        }
+      } catch (dbErr) {
+        console.warn('[API /api/jobs] Firestore update warning:', dbErr.message);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Job ${targetJobNo || targetId} successfully updated to status: "${newStatus}"`,
+        data: {
+          jobNo: targetJobNo,
+          id: targetId,
+          status: newStatus,
+          updatedAt: updatedTimestamp
+        }
+      });
+    }
+
+    // CREATE NEW JOB BRANCH
     const title = (payload.title || '').trim();
     const description = payload.description || '';
     const recruiterUID = payload.recruiterUID || 'pbbMTYxPDaf7jhc9uPEZ34CcWfz2';
@@ -144,7 +292,7 @@ export default async function handler(req, res) {
     if (!title || !description) {
       return res.status(400).json({
         success: false,
-        error: "Missing required fields: 'title' and 'description' are mandatory."
+        error: "Missing required fields: 'title' and 'description' are mandatory to create a new job. To update an existing job, provide 'jobNo' or 'id' with 'status'."
       });
     }
 
@@ -189,17 +337,17 @@ export default async function handler(req, res) {
     const genderRequirement = payload.genderRequirement || payload.gender || 'Any';
     const strictGenderMatch = payload.strictGenderMatch === true || payload.strictGenderMatch === 'true';
     const jobNo = payload.jobNo ? String(payload.jobNo).trim() : '';
+    const jobId = jobNo || payload.id || payload.interviewId || Math.random().toString(36).substring(2, 15);
     const accessCode = jobNo || payload.accessCode || Math.random().toString(36).substring(2, 8).toUpperCase();
     const entryBy = payload.entryBy || payload.recruiterName || '';
     const deadline = (payload.deadlineDate || payload.deadline || payload.applyDeadline || '').toString().trim();
 
-    const randomId = Math.random().toString(36).substring(2, 15);
-    const origin = req.headers['origin'] || req.headers['host'] ? `https://${req.headers['host']}` : 'https://interviewxpert.in';
-    const interviewLink = `${origin}/#/interview/${randomId}`;
+    const origin = req.headers['origin'] || (req.headers['host'] ? `https://${req.headers['host']}` : 'https://interviewxpert.in');
+    const interviewLink = `${origin}/#/interview/${jobId}`;
 
     const jobData = {
-      id: randomId,
-      interviewId: randomId,
+      id: jobId,
+      interviewId: jobId,
       title,
       description,
       company,
@@ -226,7 +374,7 @@ export default async function handler(req, res) {
       qualifications,
       genderRequirement,
       strictGenderMatch,
-      jobNo,
+      jobNo: jobNo || jobId,
       accessCode,
       status: payload.status || 'Active',
       entryBy,
@@ -242,26 +390,26 @@ export default async function handler(req, res) {
       candidateEmails: Array.isArray(payload.candidateEmails) ? payload.candidateEmails : []
     };
 
-    // Cache locally
-    inMemoryJobs.set(randomId, jobData);
+    // Cache in memory
+    inMemoryJobs.set(jobId, jobData);
 
-    // Save to Firestore collections 'interviews' and 'jobs'
+    // Save to Firestore collections 'interviews' and 'jobs' using the jobId (matching jobNo)
     try {
       await Promise.all([
-        setDoc(doc(db, 'interviews', randomId), jobData, { merge: true }),
-        setDoc(doc(db, 'jobs', randomId), jobData, { merge: true })
+        setDoc(doc(db, 'interviews', jobId), jobData, { merge: true }),
+        setDoc(doc(db, 'jobs', jobId), jobData, { merge: true })
       ]);
-      console.log(`[API /api/jobs] Successfully saved job ${randomId} ("${title}") to Firestore!`);
     } catch (firestoreErr) {
-      console.warn('[API /api/jobs] Firestore write note (cached in memory):', firestoreErr.message);
+      console.warn('[API /api/jobs] Firestore write note:', firestoreErr.message);
     }
 
     return res.status(201).json({
       success: true,
       message: 'Job description received and interview successfully scheduled inside InterviewXpert!',
       data: {
-        interviewId: randomId,
-        jobNo,
+        id: jobId,
+        interviewId: jobId,
+        jobNo: jobNo || jobId,
         accessCode,
         interviewLink,
         title,
@@ -277,7 +425,7 @@ export default async function handler(req, res) {
     console.error('Error in /api/jobs:', error);
     return res.status(500).json({
       success: false,
-      error: error.message || 'Internal Server Error while saving job'
+      error: error.message || 'Internal Server Error'
     });
   }
 }

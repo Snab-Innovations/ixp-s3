@@ -25,7 +25,7 @@ function localServerlessPlugin(env: Record<string, string>): Plugin {
           handlerModule = await import('./api/send-email.js');
         } else if (pathname === '/api/s3-manage') {
           handlerModule = await import('./api/s3-manage.js');
-        } else if (pathname === '/api/jobs' || pathname === '/api/jobs/receive') {
+        } else if (pathname === '/api/jobs' || pathname.startsWith('/api/jobs/') || pathname === '/api/jobs/receive') {
           handlerModule = await import('./api/jobs.js');
         }
 
