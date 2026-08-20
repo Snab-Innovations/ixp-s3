@@ -6,6 +6,8 @@
 
 import { renderTemplateText, getRecruiterTemplates, EmailTemplateConfig, DEFAULT_JOB_DETAILS_FIELDS, DEFAULT_JOB_DETAILS_ITEMS, formatDeadlineDisplay } from './templateService';
 
+export const FROM_EMAIL = 'info@interviewxpert.in';
+
 export interface JobDetailsOptions {
   gender?: string;
   location?: string;
