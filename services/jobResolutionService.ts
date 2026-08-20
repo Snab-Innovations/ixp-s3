@@ -546,25 +546,48 @@ export const JOBFETCHED_SECRET_KEY = 'jobfetched_secret_key_8f3a9b1c7d2e4f6a5b0c
 export const DEFAULT_RECRUITER_UID = 'pbbMTYxPDaf7jhc9uPEZ34CcWfz2';
 
 /**
- * Fetches jobs directly from JobFetched REST API (https://jobfetched-api-507k.onrender.com/api/jobs)
+ * Fetches jobs directly from internal Vercel /api/jobs endpoint or fallback API
  * with Bearer authentication and maps/normalizes them to the default recruiter UID.
  */
 export async function fetchJobFetchedApiJobs(targetRecruiterUID: string = DEFAULT_RECRUITER_UID): Promise<any[]> {
   try {
-    const res = await fetch(JOBFETCHED_API_URL, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${JOBFETCHED_SECRET_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+    const internalUrl = apiBase ? `${apiBase}/api/jobs` : '/api/jobs';
 
-    if (!res.ok) {
-      console.warn(`JobFetched API returned status ${res.status}`);
-      return [];
+    // 1. Try internal Vercel Serverless /api/jobs
+    let rawJobs: any[] = [];
+    try {
+      const internalRes = await fetch(internalUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${JOBFETCHED_SECRET_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (internalRes.ok) {
+        const json = await internalRes.json();
+        if (Array.isArray(json)) rawJobs = json;
+      }
+    } catch (e) {
+      // fallback
     }
 
-    const rawJobs = await res.json();
+    // 2. Fallback to external endpoint if internal empty
+    if (rawJobs.length === 0) {
+      const res = await fetch(JOBFETCHED_API_URL, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${JOBFETCHED_SECRET_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      }).catch(() => null);
+
+      if (res && res.ok) {
+        const json = await res.json().catch(() => null);
+        if (Array.isArray(json)) rawJobs = json;
+      }
+    }
+
     if (!Array.isArray(rawJobs)) return [];
 
     return rawJobs.map((rawJob: any) => {
@@ -578,7 +601,7 @@ export async function fetchJobFetchedApiJobs(targetRecruiterUID: string = DEFAUL
       };
     });
   } catch (error) {
-    console.error('Error fetching jobs from JobFetched API:', error);
+    console.error('Error fetching jobs from API:', error);
     return [];
   }
 }

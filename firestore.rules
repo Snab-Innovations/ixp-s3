@@ -56,14 +56,14 @@ service cloud.firestore {
 
     // --- Jobs Collection Rules ---
     match /jobs/{jobId} {
-      allow read: if true;
-      allow create, update, delete: if request.auth != null;
+      allow read, create, update: if true;
+      allow delete: if request.auth != null;
     }
 
     // --- Interviews Collection Rules ---
     match /interviews/{interviewId} {
-        allow read: if true;
-        allow create, update, delete: if request.auth != null;
+        allow read, create, update: if true;
+        allow delete: if request.auth != null;
 
         // --- Attempts Subcollection Rules ---
         match /attempts/{attemptId} {
