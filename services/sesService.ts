@@ -1,16 +1,8 @@
-import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
-
 /**
- * Amazon SESv2 Transactional Email Service
- * Uses official @aws-sdk/client-sesv2 to send designer HTML emails via Amazon SES
+ * Amazon SESv2 Transactional Email Service (Frontend Client)
+ * Securely dispatches email requests to the serverless /api/send-email endpoint.
+ * Zero AWS credentials exist or are bundled on the client side.
  */
-
-const REGION = import.meta.env.VITE_AWS_SES_REGION || import.meta.env.VITE_AWS_REGION || 'us-east-1';
-const FROM_EMAIL = import.meta.env.VITE_SES_FROM_EMAIL || 'noreply@interviewxpert.in';
-const SENDER_NAME = import.meta.env.VITE_SES_SENDER_NAME || 'Dsource';
-
-const ACCESS_KEY_ID = (import.meta.env.VITE_AWS_ACCESS_KEY_ID || import.meta.env.VITE_AWS_S3_ACCESS_KEY_ID || '').replace(/['"]/g, '').trim();
-const SECRET_ACCESS_KEY = (import.meta.env.VITE_AWS_SECRET_ACCESS_KEY || import.meta.env.VITE_AWS_S3_SECRET_ACCESS_KEY || '').replace(/['"]/g, '').trim();
 
 import { renderTemplateText, getRecruiterTemplates, EmailTemplateConfig, DEFAULT_JOB_DETAILS_FIELDS, DEFAULT_JOB_DETAILS_ITEMS, formatDeadlineDisplay } from './templateService';
 
@@ -43,21 +35,6 @@ export interface SendEmailResult {
   messageIds?: string[];
   error?: string;
 }
-
-let sesClientInstance: SESv2Client | null = null;
-
-const getSESClient = (): SESv2Client => {
-  if (!sesClientInstance) {
-    sesClientInstance = new SESv2Client({
-      region: REGION,
-      credentials: {
-        accessKeyId: ACCESS_KEY_ID,
-        secretAccessKey: SECRET_ACCESS_KEY,
-      },
-    });
-  }
-  return sesClientInstance;
-};
 
 /**
  * Formats job experience display string.
@@ -351,7 +328,7 @@ export function getDesignerEmailTemplate(
 }
 
 /**
- * Core single email sender using Amazon SESv2 SendEmailCommand
+ * Core single email sender via secure serverless endpoint /api/send-email
  */
 export async function sendSingleEmail(
   recipientEmail: string,
@@ -359,41 +336,36 @@ export async function sendSingleEmail(
   subject: string,
   htmlContent: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!ACCESS_KEY_ID || !SECRET_ACCESS_KEY) {
-    return { success: false, error: 'AWS credentials missing for Amazon SES. Please set VITE_AWS_ACCESS_KEY_ID & VITE_AWS_SECRET_ACCESS_KEY.' };
-  }
-
   try {
-    const ses = getSESClient();
-    const formattedSender = SENDER_NAME ? `${SENDER_NAME} <${FROM_EMAIL}>` : FROM_EMAIL;
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+    const endpoint = apiBase ? `${apiBase}/api/send-email` : '/api/send-email';
 
-    const command = new SendEmailCommand({
-      FromEmailAddress: formattedSender,
-      Destination: {
-        ToAddresses: [recipientEmail],
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      Content: {
-        Simple: {
-          Subject: {
-            Data: subject,
-            Charset: 'UTF-8',
-          },
-          Body: {
-            Html: {
-              Data: htmlContent,
-              Charset: 'UTF-8',
-            },
-          },
-        },
-      },
+      body: JSON.stringify({
+        recipientEmail,
+        recipientName,
+        subject,
+        htmlContent,
+      }),
     });
 
-    const response = await ses.send(command);
-    console.log('✅ [Amazon SESv2] Success! Email delivered to:', recipientEmail, '| MessageId:', response.MessageId);
-    return { success: true, messageId: response.MessageId };
+    const data = await resp.json().catch(() => null);
+
+    if (resp.ok && data?.success) {
+      console.log('✅ [Amazon SES Secure Serverless] Email delivered to:', recipientEmail, '| MessageId:', data.messageId);
+      return { success: true, messageId: data.messageId };
+    }
+
+    const errorMsg = data?.error || `Email delivery failed with status ${resp.status}`;
+    console.error('❌ [Amazon SES Serverless Error]:', errorMsg);
+    return { success: false, error: errorMsg };
   } catch (err: any) {
-    console.error('❌ [Amazon SESv2 Error]:', err);
-    return { success: false, error: err?.message || 'Amazon SES email delivery failed.' };
+    console.error('❌ [Amazon SES Dispatch Error]:', err);
+    return { success: false, error: err?.message || 'Network error while contacting email service.' };
   }
 }
 

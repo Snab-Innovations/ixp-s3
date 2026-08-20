@@ -37,7 +37,7 @@ const getS3Client = (): S3Client => {
 };
 
 export const isS3Configured = (): boolean => {
-  return Boolean(ACCESS_KEY_ID && SECRET_ACCESS_KEY && BUCKET_NAME);
+  return true; // Supported via secure backend serverless endpoint
 };
 
 /**
@@ -70,37 +70,102 @@ export const uploadToS3 = async (
   const cleanName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const key = `${folder}${Date.now()}_${cleanName}`;
 
+  // 1. Try secure Serverless S3 Uploader (zero client secrets)
   try {
-    const s3 = getS3Client();
-    const arrayBuffer = await blob.arrayBuffer();
-    
-    const command = new PutObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: key,
-      Body: new Uint8Array(arrayBuffer),
-      ContentType: mimeType,
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
     });
 
-    await s3.send(command);
-    
-    // Construct public S3 Object URL
-    const publicUrl = `https://${BUCKET_NAME}.s3.${REGION}.amazonaws.com/${key}`;
-    console.log("Uploaded successfully to Amazon S3 folder:", publicUrl);
-    return publicUrl;
-  } catch (error: any) {
-    console.error("Amazon S3 Upload Error:", error);
-    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-      const detailedError = new Error("Failed to connect to AWS S3. Please ensure CORS is enabled on your S3 bucket permissions in AWS and your AWS Region is correct.");
-      throw detailedError;
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+    const endpoint = apiBase ? `${apiBase}/api/upload-s3` : '/api/upload-s3';
+
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        base64Data,
+        fileName: cleanName,
+        mimeType,
+        folder
+      })
+    });
+
+    const data = await resp.json().catch(() => null);
+
+    if (resp.ok && data?.url) {
+      console.log("✅ Uploaded successfully via Serverless S3:", data.url);
+      return data.url;
     }
-    throw error;
+
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+  } catch (serverlessErr: any) {
+    if (serverlessErr.message && !serverlessErr.message.includes('fetch')) {
+      throw serverlessErr;
+    }
+    // If serverless endpoint is not reachable, fallback only if client credentials configured
   }
+
+  // 2. Direct AWS S3 Client Fallback (only if client credentials explicitly configured)
+  if (ACCESS_KEY_ID && SECRET_ACCESS_KEY) {
+    try {
+      const s3 = getS3Client();
+      const arrayBuffer = await blob.arrayBuffer();
+      
+      const command = new PutObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+        Body: new Uint8Array(arrayBuffer),
+        ContentType: mimeType,
+      });
+
+      await s3.send(command);
+      
+      // Construct public S3 Object URL
+      const publicUrl = `https://${BUCKET_NAME}.s3.${REGION}.amazonaws.com/${key}`;
+      console.log("Uploaded successfully to Amazon S3 folder:", publicUrl);
+      return publicUrl;
+    } catch (error: any) {
+      console.error("Amazon S3 Upload Error:", error);
+      if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+        throw new Error("Failed to connect to AWS S3. Please ensure CORS is enabled on your S3 bucket permissions in AWS and your AWS Region is correct.");
+      }
+      throw error;
+    }
+  }
+
+  throw new Error("S3 Upload failed: Serverless upload endpoint unavailable.");
 };
+
 
 /**
  * List all objects stored in S3 Bucket with categorization & age calculation
  */
 export const listS3Objects = async (prefix?: string): Promise<S3FileItem[]> => {
+  // 1. Try secure Serverless S3 Manager (zero client secrets)
+  try {
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+    const endpoint = apiBase ? `${apiBase}/api/s3-manage` : '/api/s3-manage';
+
+    const resp = await fetch(prefix ? `${endpoint}?prefix=${encodeURIComponent(prefix)}` : endpoint);
+    if (resp.ok) {
+      const data = await resp.json();
+      if (Array.isArray(data?.files)) {
+        return data.files.map((f: any) => ({
+          ...f,
+          lastModified: new Date(f.lastModified)
+        }));
+      }
+    }
+  } catch (serverlessErr) {
+    // Fallback to direct client if configured
+  }
+
+  // 2. Direct AWS S3 Client Fallback
   try {
     const s3 = getS3Client();
     const command = new ListObjectsV2Command({
@@ -150,18 +215,7 @@ export const listS3Objects = async (prefix?: string): Promise<S3FileItem[]> => {
  * Delete a single file from Amazon S3
  */
 export const deleteS3Object = async (key: string): Promise<boolean> => {
-  try {
-    const s3 = getS3Client();
-    const command = new DeleteObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: key,
-    });
-    await s3.send(command);
-    return true;
-  } catch (error: any) {
-    console.error(`Error deleting object ${key} from S3:`, error);
-    return false;
-  }
+  return (await deleteS3Objects([key])) > 0;
 };
 
 /**
@@ -169,6 +223,27 @@ export const deleteS3Object = async (key: string): Promise<boolean> => {
  */
 export const deleteS3Objects = async (keys: string[]): Promise<number> => {
   if (keys.length === 0) return 0;
+
+  // 1. Try secure Serverless S3 Manager
+  try {
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+    const endpoint = apiBase ? `${apiBase}/api/s3-manage` : '/api/s3-manage';
+
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', keys })
+    });
+
+    if (resp.ok) {
+      const data = await resp.json();
+      return data?.count || keys.length;
+    }
+  } catch (serverlessErr) {
+    // Fallback to client
+  }
+
+  // 2. Direct AWS S3 Client Fallback
   try {
     const s3 = getS3Client();
     const command = new DeleteObjectsCommand({

@@ -686,6 +686,78 @@ app.post('/api/reports/dispatch', authenticateApiKey, async (req, res) => {
   }
 });
 
+// Amazon SES Send Email Endpoint (Server-Side)
+app.post('/api/send-email', async (req, res) => {
+  try {
+    const { recipientEmail, recipientName, subject, htmlContent } = req.body;
+    if (!recipientEmail || !recipientEmail.includes('@')) {
+      return res.status(400).json({ success: false, error: 'Valid recipientEmail is required.' });
+    }
+    if (!subject || !htmlContent) {
+      return res.status(400).json({ success: false, error: 'Subject and htmlContent are required.' });
+    }
+
+    const { SESv2Client, SendEmailCommand } = require('@aws-sdk/client-sesv2');
+    const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || process.env.VITE_AWS_ACCESS_KEY_ID || '').replace(/['"]/g, '').trim();
+    const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || process.env.VITE_AWS_SECRET_ACCESS_KEY || '').replace(/['"]/g, '').trim();
+    const region = process.env.AWS_SES_REGION || process.env.AWS_REGION || 'us-east-1';
+    const fromEmail = process.env.SES_FROM_EMAIL || 'info@interviewxpert.in';
+    const senderName = process.env.SES_SENDER_NAME || 'InterviewXpert';
+
+    if (!accessKeyId || !secretAccessKey) {
+      return res.status(500).json({
+        success: false,
+        error: 'AWS SES credentials not configured on the server.'
+      });
+    }
+
+    const sesClient = new SESv2Client({
+      region,
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
+    });
+
+    const formattedSender = senderName ? `${senderName} <${fromEmail}>` : fromEmail;
+
+    const command = new SendEmailCommand({
+      FromEmailAddress: formattedSender,
+      Destination: {
+        ToAddresses: [recipientEmail.trim()],
+      },
+      Content: {
+        Simple: {
+          Subject: {
+            Data: subject,
+            Charset: 'UTF-8',
+          },
+          Body: {
+            Html: {
+              Data: htmlContent,
+              Charset: 'UTF-8',
+            },
+          },
+        },
+      },
+    });
+
+    const response = await sesClient.send(command);
+    console.log(`[REST API /api/send-email] Sent to ${recipientEmail}, MessageId: ${response.MessageId}`);
+
+    return res.status(200).json({
+      success: true,
+      messageId: response.MessageId
+    });
+  } catch (error) {
+    console.error('Error in /api/send-email:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Amazon SES email delivery failed on server.'
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: "healthy", service: "InterviewXpert REST Integration API" });
