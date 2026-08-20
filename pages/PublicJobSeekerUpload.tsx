@@ -546,7 +546,8 @@ export default function PublicJobSeekerUpload() {
           skills: data.skills || [],
           accessCode,
           status: data.status || 'Active',
-          deadline: data.deadline || data.applyDeadline,
+          deadline: data.deadlineDate || data.deadline || data.applyDeadline || data.interviewDeadline || data.endDate || data.interviewDates || '',
+          deadlineDate: data.deadlineDate || data.deadline || data.applyDeadline || data.interviewDeadline || data.endDate || data.interviewDates || '',
           isMock: Boolean(data.isMock)
         };
       });
@@ -604,7 +605,8 @@ export default function PublicJobSeekerUpload() {
           skills: data.skills || [],
           accessCode,
           status: data.status || 'Active',
-          deadline: data.deadline || data.applyDeadline,
+          deadline: data.deadlineDate || data.deadline || data.applyDeadline || data.interviewDeadline || data.endDate || data.interviewDates || '',
+          deadlineDate: data.deadlineDate || data.deadline || data.applyDeadline || data.interviewDeadline || data.endDate || data.interviewDates || '',
           isMock: Boolean(data.isMock)
         };
       });
@@ -2886,6 +2888,30 @@ export default function PublicJobSeekerUpload() {
           </div>
         )}
       </main>
+
+      {/* Page Footer */}
+      <footer className={`border-t py-8 text-center text-xs transition-colors mt-12 ${isDark ? 'border-white/[0.08] text-slate-500 bg-[#030303]' : 'border-slate-200 text-slate-600 bg-white'}`}>
+        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p>
+            © {new Date().getFullYear()} InterviewXpert. All rights reserved. Powered by{' '}
+            <a 
+              href="https://snab.co.in" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline transition-colors"
+            >
+              SNAB Innovations
+            </a>
+          </p>
+          <div className="flex items-center gap-4">
+            <Link to="/active-jobs" className="hover:text-emerald-500 transition-colors">Active Jobs</Link>
+            <Link to="/career-hub" className="hover:text-emerald-500 transition-colors">Career Hub</Link>
+            <Link to="/blogs" className="hover:text-emerald-500 transition-colors">Blogs</Link>
+            <Link to="/privacy-policy" className="hover:text-emerald-500 transition-colors">Privacy Policy</Link>
+            <Link to="/terms-of-service" className="hover:text-emerald-500 transition-colors">Terms</Link>
+          </div>
+        </div>
+      </footer>
 
       {/* Modal Dialog for View Job Details */}
       {selectedJobForModal && (

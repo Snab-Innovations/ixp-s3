@@ -25,6 +25,7 @@ export interface JobDetailsOptions {
   salary?: string;
   salaryRange?: string;
   deadline?: string;
+  deadlineDate?: string;
   recruiterName?: string;
   recruiterPhone?: string;
   recruiterEmail?: string;
@@ -146,7 +147,7 @@ export function getDesignerEmailTemplate(
   isReminder: boolean = false,
   options?: JobDetailsOptions
 ): string {
-  const deadline = options?.deadline || 'Within 48 Hours';
+  const deadline = options?.deadlineDate || options?.deadline || 'Within 48 Hours';
 
   const context: Record<string, string> = {
     candidate_name: candidateName,

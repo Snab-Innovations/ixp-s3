@@ -352,13 +352,15 @@ export function renderTemplateText(templateText: string, context: Record<string,
   if (!templateText) return '';
   let result = templateText;
 
-  const rawDeadline = context.interview_deadline || context.deadline;
+  const rawDeadline = context.interview_deadline || context.deadline || context.deadlineDate || context.applyDeadline;
   const formattedDeadline = formatDeadlineDisplay(rawDeadline);
   
   const cleanContext: Record<string, string> = {
     ...context,
     interview_deadline: formattedDeadline,
-    deadline: formattedDeadline
+    deadline: formattedDeadline,
+    deadlineDate: formattedDeadline,
+    deadline_date: formattedDeadline
   };
   
   // Replace standard placeholders

@@ -276,7 +276,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
           setAccessCode(sourceData.accessCode || '');
 
           let deadlineStr = '';
-          const deadlineSource = sourceData.applyDeadline || sourceData.deadline;
+          const deadlineSource = sourceData.deadlineDate || sourceData.applyDeadline || sourceData.deadline || sourceData.interviewDeadline;
           if (deadlineSource) {
             if (deadlineSource.toDate) {
               deadlineStr = deadlineSource.toDate().toISOString().split('T')[0];

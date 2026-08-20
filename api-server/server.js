@@ -174,7 +174,8 @@ app.post('/api/jobs/receive', authenticateApiKey, async (req, res) => {
   const accessCode = jobNo || payload.accessCode || Math.random().toString(36).substring(2, 8).toUpperCase();
   const status = payload.status || "Active";
   const entryBy = payload.entryBy || payload.recruiterName || "";
-  const deadline = payload.deadline || payload.applyDeadline || "";
+  const deadline = (payload.deadlineDate || payload.deadline || payload.applyDeadline || payload.interviewDeadline || payload.endDate || payload.interviewDates || "").toString().trim();
+  const deadlineDate = deadline;
   const numQuestions = Number(payload.numQuestions || 5);
   const difficulty = payload.difficulty || "Medium";
   const strictness = payload.strictness || "Medium";
@@ -205,7 +206,9 @@ app.post('/api/jobs/receive', authenticateApiKey, async (req, res) => {
         recruiterUID,
         company,
         location,
-        status
+        status,
+        deadline,
+        deadlineDate
       }
     });
   }
@@ -248,6 +251,8 @@ app.post('/api/jobs/receive', authenticateApiKey, async (req, res) => {
       recruiterName: entryBy,
       recruiterUID,
       deadline,
+      deadlineDate,
+      applyDeadline: deadline,
       numQuestions,
       difficulty,
       strictness,

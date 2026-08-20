@@ -72,6 +72,7 @@ export interface WhatsAppInviteOptions {
   salary?: string;
   salaryRange?: string;
   deadline?: string;
+  deadlineDate?: string;
   employmentType?: string;
   customFields?: Array<{ key: string; value: string }>;
   recruiterName?: string;
@@ -210,7 +211,7 @@ export function buildWhatsAppInviteText(params: {
   options?: WhatsAppInviteOptions;
 }): string {
   const { candidateName = 'Candidate', jobTitle, interviewLink, accessCode, isReminder = false, options } = params;
-  const deadline = formatDeadlineDisplay(options?.deadline || (options as any)?.interviewDeadline);
+  const deadline = formatDeadlineDisplay(options?.deadlineDate || options?.deadline || (options as any)?.interviewDeadline || (options as any)?.applyDeadline);
 
   const context: Record<string, string> = {
     candidate_name: candidateName,

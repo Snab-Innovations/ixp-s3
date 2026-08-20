@@ -788,7 +788,8 @@ const ResumeDump: React.FC = () => {
             skills: Array.isArray(data.skills) ? data.skills : (data.skills ? String(data.skills).split(',').map((s: string) => s.trim()) : []),
             accessCode,
             status: data.status || 'Active',
-            deadline: data.deadline || data.applyDeadline,
+            deadline: data.deadlineDate || data.deadline || data.applyDeadline || data.interviewDeadline || data.endDate || data.interviewDates || '',
+            deadlineDate: data.deadlineDate || data.deadline || data.applyDeadline || data.interviewDeadline || data.endDate || data.interviewDates || '',
             isMock: Boolean(data.isMock),
           };
         });
@@ -835,7 +836,8 @@ const ResumeDump: React.FC = () => {
             skills: Array.isArray(data.skills) ? data.skills : (data.skills ? String(data.skills).split(',').map((s: string) => s.trim()) : []),
             accessCode,
             status: data.status || 'Active',
-            deadline: data.deadline || data.applyDeadline,
+            deadline: data.deadlineDate || data.deadline || data.applyDeadline || data.interviewDeadline || data.endDate || data.interviewDates || '',
+            deadlineDate: data.deadlineDate || data.deadline || data.applyDeadline || data.interviewDeadline || data.endDate || data.interviewDates || '',
             isMock: Boolean(data.isMock),
           };
         });
