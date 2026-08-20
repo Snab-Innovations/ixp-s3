@@ -541,8 +541,8 @@ export function subscribeToJobOrInterview(
   };
 }
 
-export const JOBFETCHED_API_URL = 'https://jobfetched-api-507k.onrender.com/api/jobs';
-export const JOBFETCHED_SECRET_KEY = 'jobfetched_secret_key_8f3a9b1c7d2e4f6a5b0c';
+export const JOBFETCHED_API_URL = import.meta.env.VITE_JOBFETCHED_API_URL || 'https://jobfetched-api-507k.onrender.com/api/jobs';
+export const JOBFETCHED_SECRET_KEY = import.meta.env.VITE_JOBFETCHED_SECRET_KEY || '';
 export const DEFAULT_RECRUITER_UID = 'pbbMTYxPDaf7jhc9uPEZ34CcWfz2';
 
 /**

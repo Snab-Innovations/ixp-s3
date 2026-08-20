@@ -79,6 +79,8 @@ function predictSectorAndRole(title = '', description = '', skills = [], company
   };
 }
 
+const inMemoryJobs = new Map();
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -92,9 +94,22 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const inMemoryJobs = new Map();
+  // ── Mandatory Bearer Authentication from Environment Variables ──
+  const authHeader = req.headers['authorization'] || req.headers['Authorization'] || '';
+  const apiKey = authHeader.startsWith('Bearer ') 
+    ? authHeader.substring(7).trim() 
+    : (req.query?.apiKey || req.headers['x-api-key'] || '');
 
-// GET: List all jobs
+  const expectedKey = (process.env.JOBFETCHED_SECRET_KEY || process.env.IX_API_KEY || '').trim();
+
+  if (!apiKey || !expectedKey || apiKey !== expectedKey) {
+    return res.status(401).json({
+      success: false,
+      error: "Unauthorized: Invalid or missing API Key. Please provide a valid 'Authorization: Bearer <API_KEY>' header."
+    });
+  }
+
+  // GET: List all jobs (requires authentication)
   if (req.method === 'GET') {
     try {
       const q = query(collection(db, 'interviews'), limit(100));
