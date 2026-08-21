@@ -11,7 +11,7 @@ import Logo from './Logo';
 import DashboardSidebar from './ui/dashboard-sidebar';
 import RecruiterRateLimitBanner from './RecruiterRateLimitBanner';
 import WhatsAppConnectModal from './WhatsAppConnectModal';
-import { fetchWhatsAppStatus } from '../services/waSenderService';
+import { fetchWhatsAppStatus, getStoredSessionId, getStoredPasscode } from '../services/waSenderService';
 
 const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, userProfile, loading: authLoading } = useAuth();
@@ -23,11 +23,12 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   React.useEffect(() => {
     let isMounted = true;
-    const userSessionId = user?.uid ? `user_${user.uid.slice(0, 12)}` : undefined;
 
     const checkRealWaStatus = async () => {
       try {
-        const res = await fetchWhatsAppStatus(userSessionId);
+        const activeSessionId = getStoredSessionId((userProfile as any)?.whatsappSessionId);
+        const activePasscode = getStoredPasscode((userProfile as any)?.whatsappSessionPasscode);
+        const res = await fetchWhatsAppStatus(activeSessionId, activePasscode);
         const isConnected = res.status === 'connected' || res.status === 'CONNECTED' || res.status === 'AUTHENTICATED' || res.status === 'READY' || !!res.userInfo;
         if (isMounted) setWaRealStatus(isConnected ? 'CONNECTED' : 'DISCONNECTED');
       } catch (err) {
@@ -36,12 +37,19 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     };
 
     checkRealWaStatus();
-    const interval = setInterval(checkRealWaStatus, 15000);
+    const interval = setInterval(checkRealWaStatus, 10000);
+    const handleStatusChangeEvent = () => checkRealWaStatus();
+
+    window.addEventListener('whatsapp_status_changed', handleStatusChangeEvent);
+    window.addEventListener('storage', handleStatusChangeEvent);
+
     return () => {
       isMounted = false;
       clearInterval(interval);
+      window.removeEventListener('whatsapp_status_changed', handleStatusChangeEvent);
+      window.removeEventListener('storage', handleStatusChangeEvent);
     };
-  }, [user?.uid]);
+  }, [user?.uid, userProfile]);
 
   const handleLogout = async () => {
     try {

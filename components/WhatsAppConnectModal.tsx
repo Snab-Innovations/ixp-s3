@@ -107,6 +107,10 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
       if (res.status === 'connected' || res.status === 'READY') {
         setQrCodeUrl(null);
       }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('whatsapp_status_changed'));
+      }
     } catch (err) {
       console.error('Error fetching WhatsApp status:', err);
     } finally {
