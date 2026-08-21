@@ -392,10 +392,28 @@ app.post('/api/jobs/update', authenticateApiKey, async (req, res) => {
     ]);
 
     console.log(`[REST API] Job updated successfully: ${targetId} (Status: ${status})`);
+    const deadline = (payload.deadlineDate || payload.deadline || payload.applyDeadline || '').toString().trim();
+    const updatedJobId = String(docRef.id || targetId);
+    const updatedJobNo = jobNo || updatedJobId;
+    const origin = process.env.IX_FRONTEND_URL || 'https://dsource.interviewxpert.in';
+    const interviewLink = `${origin}/#/interview/${updatedJobId}`;
+
     return res.status(200).json({
       success: true,
-      message: `Job '${targetId}' updated successfully in Firestore.`,
-      data: updatedJobData
+      message: 'Job updated successfully inside InterviewXpert!',
+      data: {
+        id: updatedJobId,
+        interviewId: updatedJobId,
+        jobNo: updatedJobNo,
+        accessCode: accessCode || updatedJobNo,
+        interviewLink,
+        title,
+        recruiterUID,
+        company,
+        location,
+        status,
+        deadline
+      }
     });
   } catch (error) {
     console.error("Error updating job via API:", error);

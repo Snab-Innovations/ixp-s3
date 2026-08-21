@@ -127,9 +127,17 @@ export default async function handler(req, res) {
 
   const queryParams = req.query || {};
   const urlPath = req.url ? req.url.split('?')[0] : '';
-  const urlSlug = urlPath.startsWith('/api/jobs/') ? decodeURIComponent(urlPath.replace('/api/jobs/', '')).trim() : '';
-  const targetJobNo = (req.body?.jobNo || queryParams.jobNo || queryParams.jobId || urlSlug || '').toString().trim();
-  const targetId = (req.body?.id || req.body?.interviewId || queryParams.id || queryParams.interviewId || urlSlug || '').toString().trim();
+  const isUpdateRoute = urlPath.includes('/api/jobs/update') || urlPath.includes('/api/jobs/edit');
+  const rawUrlSlug = urlPath.startsWith('/api/jobs/') ? decodeURIComponent(urlPath.replace('/api/jobs/', '')).trim() : '';
+  
+  const reservedKeywords = ['update', 'edit', 'receive', 'delete', 'list'];
+  const cleanUrlSlug = reservedKeywords.includes(rawUrlSlug.toLowerCase()) ? '' : rawUrlSlug;
+  const rawQueryJobId = queryParams.jobId || queryParams.jobNo || queryParams.id || '';
+  const cleanQueryJobId = reservedKeywords.includes(String(rawQueryJobId).toLowerCase()) ? '' : String(rawQueryJobId).trim();
+
+  const payload = req.body || {};
+  const targetJobNo = (payload.jobNo || cleanQueryJobId || cleanUrlSlug || '').toString().trim();
+  const targetId = (payload.id || payload.interviewId || cleanQueryJobId || cleanUrlSlug || '').toString().trim();
 
   // ── 1. GET: List All Jobs or Fetch Single Job ──
   if (req.method === 'GET') {
@@ -230,41 +238,145 @@ export default async function handler(req, res) {
 
   // ── 3. PUT / PATCH / POST: Update Job or Create Job ──
   try {
-    const payload = req.body || {};
-    const isExplicitUpdate = req.method === 'PUT' || req.method === 'PATCH';
-    const isDeactivateAction = payload.action === 'deactivate' || payload.action === 'close';
-    const hasRequiredCreationFields = Boolean(payload.title && payload.description);
-    const isPartialUpdate = isExplicitUpdate || isDeactivateAction || (!hasRequiredCreationFields && (targetJobNo || targetId));
+    const isExplicitUpdateMethod = req.method === 'PUT' || req.method === 'PATCH';
+    const isExplicitUpdateAction = ['update', 'edit', 'deactivate', 'close'].includes(String(payload.action).toLowerCase()) || payload.isUpdate === true || payload.isEdit === true;
 
-    // UPDATE / DEACTIVATE BRANCH
-    if ((targetJobNo || targetId) && isPartialUpdate && !hasRequiredCreationFields) {
-      const newStatus = payload.status || (payload.action === 'deactivate' ? 'Inactive' : 'Active');
+    // Search for pre-existing job in memory or Firestore if target ID/jobNo provided
+    let existingJob = null;
+    const searchKey = targetId || targetJobNo;
+    if (searchKey) {
+      if (inMemoryJobs.has(searchKey)) {
+        existingJob = inMemoryJobs.get(searchKey);
+      }
+      if (!existingJob) {
+        for (const job of inMemoryJobs.values()) {
+          if (String(job.jobNo) === searchKey || String(job.id) === searchKey) {
+            existingJob = job;
+            break;
+          }
+        }
+      }
+      if (!existingJob) {
+        try {
+          const snapInt = await getDoc(doc(db, 'interviews', searchKey)).catch(() => null);
+          if (snapInt && snapInt.exists()) {
+            existingJob = { id: snapInt.id, ...snapInt.data() };
+          } else {
+            const snapJob = await getDoc(doc(db, 'jobs', searchKey)).catch(() => null);
+            if (snapJob && snapJob.exists()) {
+              existingJob = { id: snapJob.id, ...snapJob.data() };
+            } else {
+              const q1 = query(collection(db, 'interviews'), where('jobNo', '==', searchKey), limit(1));
+              const qSnap1 = await getDocs(q1).catch(() => null);
+              if (qSnap1 && !qSnap1.empty) {
+                existingJob = { id: qSnap1.docs[0].id, ...qSnap1.docs[0].data() };
+              } else {
+                const q2 = query(collection(db, 'jobs'), where('jobNo', '==', searchKey), limit(1));
+                const qSnap2 = await getDocs(q2).catch(() => null);
+                if (qSnap2 && !qSnap2.empty) {
+                  existingJob = { id: qSnap2.docs[0].id, ...qSnap2.docs[0].data() };
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[API /api/jobs] Error looking up existing job:', e.message);
+        }
+      }
+    }
+
+    const isUpdate = isExplicitUpdateMethod || isUpdateRoute || isExplicitUpdateAction || Boolean(existingJob);
+
+    // ── UPDATE BRANCH ──
+    if (isUpdate) {
+      const jobId = existingJob?.id || targetId || targetJobNo || Math.random().toString(36).substring(2, 15);
+      const jobNo = payload.jobNo ? String(payload.jobNo).trim() : (existingJob?.jobNo || targetJobNo || jobId);
+      const accessCode = payload.accessCode || jobNo || existingJob?.accessCode || Math.random().toString(36).substring(2, 8).toUpperCase();
+      
+      const title = payload.title !== undefined ? String(payload.title).trim() : (existingJob?.title || '');
+      const description = payload.description !== undefined ? payload.description : (existingJob?.description || '');
+      const company = (payload.company || payload.companyName || existingJob?.company || existingJob?.companyName || 'InterviewXpert Partner').trim();
+      const recruiterUID = payload.recruiterUID || existingJob?.recruiterUID || 'pbbMTYxPDaf7jhc9uPEZ34CcWfz2';
+      const status = payload.status || (payload.action === 'deactivate' ? 'Inactive' : (existingJob?.status || 'Active'));
+      
+      const location = payload.location !== undefined ? String(payload.location).trim() : (existingJob?.location || payload.city || '');
+      const city = payload.city !== undefined ? String(payload.city).trim() : (existingJob?.city || location);
+      
+      const minExperience = payload.minExperience !== undefined ? Number(payload.minExperience) : (existingJob?.minExperience ?? 0);
+      const maxExperience = payload.maxExperience !== undefined ? Number(payload.maxExperience) : (existingJob?.maxExperience ?? minExperience);
+      const experience = payload.experience
+        ? String(payload.experience).trim()
+        : (existingJob?.experience || (maxExperience > minExperience ? `${minExperience} - ${maxExperience} Years` : `${minExperience} Years`));
+
+      const salaryRange = payload.salaryRange || payload.salary || existingJob?.salaryRange || existingJob?.salary || '';
+      const employmentType = payload.employmentType || existingJob?.employmentType || 'Full-Time';
+
+      const skills = payload.skills !== undefined
+        ? (Array.isArray(payload.skills) ? payload.skills : (typeof payload.skills === 'string' ? payload.skills.split(',').map((s) => s.trim()).filter(Boolean) : []))
+        : (existingJob?.skills || []);
+
+      const education = payload.education !== undefined
+        ? (Array.isArray(payload.education) ? payload.education.join(', ') : String(payload.education))
+        : (existingJob?.education || existingJob?.qualifications || '');
+
+      const deadline = (payload.deadlineDate || payload.deadline || payload.applyDeadline || existingJob?.deadline || existingJob?.deadlineDate || '').toString().trim();
+
+      const origin = req.headers['origin'] || (req.headers['host'] ? `https://${req.headers['host']}` : 'https://interviewxpert.in');
+      const interviewLink = existingJob?.interviewLink || `${origin}/#/interview/${jobId}`;
       const updatedTimestamp = new Date().toISOString();
-      const updateFields = {
+
+      const updatedJobData = {
+        ...(existingJob || {}),
         ...payload,
-        status: newStatus,
+        id: jobId,
+        interviewId: jobId,
+        jobNo,
+        accessCode,
+        title: title || existingJob?.title || '',
+        description: description || existingJob?.description || '',
+        company,
+        companyName: company,
+        recruiterUID,
+        status,
+        location,
+        city,
+        minExperience,
+        maxExperience,
+        experience,
+        salaryRange,
+        salary: salaryRange,
+        employmentType,
+        skills,
+        education,
+        qualifications: education,
+        deadline,
+        deadlineDate: deadline,
+        interviewLink,
         updatedAt: updatedTimestamp
       };
 
-      // Update in-memory
-      for (const [id, job] of inMemoryJobs.entries()) {
-        if ((targetJobNo && String(job.jobNo) === targetJobNo) || (targetId && id === targetId)) {
-          Object.assign(job, updateFields);
-        }
-      }
+      // Update in-memory cache
+      inMemoryJobs.set(jobId, updatedJobData);
 
-      // Update Firestore
+      // Update Firestore collections 'interviews' and 'jobs'
       try {
-        const collectionsToSearch = ['interviews', 'jobs'];
-        for (const colName of collectionsToSearch) {
-          if (targetId) {
-            await setDoc(doc(db, colName, targetId), updateFields, { merge: true });
+        await Promise.all([
+          setDoc(doc(db, 'interviews', jobId), updatedJobData, { merge: true }),
+          setDoc(doc(db, 'jobs', jobId), updatedJobData, { merge: true })
+        ]);
+        if (jobNo && jobNo !== jobId) {
+          const q1 = query(collection(db, 'interviews'), where('jobNo', '==', jobNo));
+          const snap1 = await getDocs(q1).catch(() => null);
+          if (snap1 && !snap1.empty) {
+            for (const d of snap1.docs) {
+              await setDoc(doc(db, 'interviews', d.id), updatedJobData, { merge: true });
+            }
           }
-          if (targetJobNo) {
-            const q = query(collection(db, colName), where('jobNo', '==', targetJobNo));
-            const snap = await getDocs(q);
-            for (const d of snap.docs) {
-              await setDoc(doc(db, colName, d.id), updateFields, { merge: true });
+          const q2 = query(collection(db, 'jobs'), where('jobNo', '==', jobNo));
+          const snap2 = await getDocs(q2).catch(() => null);
+          if (snap2 && !snap2.empty) {
+            for (const d of snap2.docs) {
+              await setDoc(doc(db, 'jobs', d.id), updatedJobData, { merge: true });
             }
           }
         }
@@ -274,17 +386,24 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         success: true,
-        message: `Job ${targetJobNo || targetId} successfully updated to status: "${newStatus}"`,
+        message: 'Job updated successfully inside InterviewXpert!',
         data: {
-          jobNo: targetJobNo,
-          id: targetId,
-          status: newStatus,
-          updatedAt: updatedTimestamp
+          id: jobId,
+          interviewId: jobId,
+          jobNo,
+          accessCode,
+          interviewLink,
+          title: updatedJobData.title,
+          recruiterUID,
+          company,
+          location,
+          status,
+          deadline
         }
       });
     }
 
-    // CREATE NEW JOB BRANCH
+    // ── CREATE NEW JOB BRANCH ──
     const title = (payload.title || '').trim();
     const description = payload.description || '';
     const recruiterUID = payload.recruiterUID || 'pbbMTYxPDaf7jhc9uPEZ34CcWfz2';
@@ -292,7 +411,7 @@ export default async function handler(req, res) {
     if (!title || !description) {
       return res.status(400).json({
         success: false,
-        error: "Missing required fields: 'title' and 'description' are mandatory to create a new job. To update an existing job, provide 'jobNo' or 'id' with 'status'."
+        error: "Missing required fields: 'title' and 'description' are mandatory to create a new job. To update an existing job, provide 'jobNo' or 'id'."
       });
     }
 
