@@ -90,7 +90,7 @@ export function formatPhoneForWhatsApp(phone: string): string {
  * Initiates the QR pairing handshake on the WhatsApp serverless instance.
  * Endpoint: POST /api/connect
  */
-export async function initiateWhatsAppConnect(): Promise<{ status: string; message: string }> {
+export async function initiateWhatsAppConnect(): Promise<{ status: string; message?: string; qr?: string; qrCodeDataUrl?: string }> {
   try {
     const res = await fetch(`${WHATSAPP_API_BASE_URL}/api/connect`, {
       method: 'POST',

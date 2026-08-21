@@ -89,27 +89,53 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
   const handleInitiatePairing = async () => {
     setIsConnecting(true);
     setQrCodeUrl(null);
+    setStatus('connecting');
+
+    const resolveQrUrl = (dataUrl?: string, rawQr?: string) => {
+      if (dataUrl && dataUrl.startsWith('data:image')) return dataUrl;
+      if (rawQr) return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(rawQr)}&size=300x300&margin=10`;
+      return null;
+    };
+
     try {
       const res = await initiateWhatsAppConnect();
-      setStatus('connecting');
+      const directQr = resolveQrUrl(res.qrCodeDataUrl, res.qr);
+      if (directQr) {
+        setQrCodeUrl(directQr);
+        setStatus('qr_ready');
+        setIsConnecting(false);
+        return;
+      }
 
-      // Poll for QR code until available (up to 10 attempts)
+      // Poll for QR code until available (up to 20 attempts = 30 seconds)
       let attempts = 0;
       const qrInterval = setInterval(async () => {
         attempts++;
         const qrRes = await fetchWhatsAppQR();
-        if (qrRes.qrCodeDataUrl) {
-          setQrCodeUrl(qrRes.qrCodeDataUrl);
+        const foundQr = resolveQrUrl(qrRes.qrCodeDataUrl, qrRes.qr);
+
+        if (foundQr) {
+          setQrCodeUrl(foundQr);
           setStatus('qr_ready');
+          setIsConnecting(false);
           clearInterval(qrInterval);
-        } else if (attempts >= 10) {
+        } else if (qrRes.status === 'connected') {
+          setStatus('connected');
+          setIsConnecting(false);
           clearInterval(qrInterval);
+          checkStatus(true);
+        } else if (attempts >= 20) {
+          clearInterval(qrInterval);
+          setIsConnecting(false);
+          if (!qrCodeUrl) {
+            setStatus('disconnected');
+          }
         }
       }, 1500);
     } catch (err: any) {
-      messageBox.showError(err.message || 'Failed to initiate pairing');
-    } finally {
       setIsConnecting(false);
+      setStatus('disconnected');
+      messageBox.showError(err.message || 'Failed to initiate pairing');
     }
   };
 
@@ -414,7 +440,7 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
                   </button>
                 </div>
               </div>
-            ) : isQrReady || isConnecting ? (
+            ) : (isQrReady || isConnecting || status === 'connecting') ? (
               <div className="space-y-4">
                 <div className={`flex flex-col items-center justify-center p-6 rounded-2xl border text-center space-y-4 relative ${
                   isDark ? 'bg-white/[0.02] border-white/[0.11]' : 'bg-slate-50 border-slate-200'
