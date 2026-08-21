@@ -12,6 +12,13 @@ import {
   sendWhatsAppMessage, 
   sendWhatsAppTaskAlert,
   fetchWhatsAppAuditLogs,
+  setWhatsAppCredentials,
+  getStoredSessionId,
+  setStoredSessionId,
+  getStoredPasscode,
+  setStoredPasscode,
+  DEFAULT_WHATSAPP_SESSION_ID,
+  DEFAULT_WHATSAPP_PASSCODE,
   WhatsAppStatusResponse, 
   WhatsAppAuditMessage,
   WHATSAPP_API_BASE_URL 
@@ -19,18 +26,31 @@ import {
 import { 
   X, CheckCircle2, AlertTriangle, Key, ShieldCheck, 
   RotateCw, QrCode, Smartphone, Sparkles, Send, RefreshCw,
-  LogOut, MessageSquare, BellRing, ListChecks, CheckCircle, Clock, Shield
+  LogOut, MessageSquare, BellRing, ListChecks, CheckCircle, Clock, Shield, Lock
 } from 'lucide-react';
 
 interface WhatsAppConnectModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialSessionId?: string;
 }
 
-export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOpen, onClose }) => {
-  const { user, userProfile, refreshProfile } = useAuth();
+export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOpen, onClose, initialSessionId }) => {
+  const { user, userProfile } = useAuth();
   const { isDark } = useTheme();
   const messageBox = useMessageBox();
+
+  const [sessionId, setSessionId] = useState<string>(() => {
+    return getStoredSessionId(initialSessionId || (userProfile as any)?.whatsappSessionId);
+  });
+
+  const [passcode, setPasscode] = useState<string>(() => {
+    return getStoredPasscode((userProfile as any)?.whatsappSessionPasscode);
+  });
+
+  const [isEditingSession, setIsEditingSession] = useState(false);
+  const [sessionInput, setSessionInput] = useState(sessionId);
+  const [passcodeInput, setPasscodeInput] = useState(passcode);
 
   const [activeTab, setActiveTab] = useState<'qr' | 'test' | 'logs'>('qr');
   const [status, setStatus] = useState<string>('disconnected');
@@ -39,6 +59,7 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
   const [isFetchingStatus, setIsFetchingStatus] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isSyncingCredentials, setIsSyncingCredentials] = useState(false);
 
   // Test message states
   const [testPhone, setTestPhone] = useState('');
@@ -54,11 +75,19 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
 
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Poll connection status
-  const checkStatus = async (silent = false) => {
+  // Sync state if initialSessionId changes
+  useEffect(() => {
+    if (initialSessionId && initialSessionId.trim()) {
+      setSessionId(initialSessionId.trim());
+      setSessionInput(initialSessionId.trim());
+    }
+  }, [initialSessionId]);
+
+  // Poll connection status for active session
+  const checkStatus = async (silent = false, targetSession = sessionId, targetPasscode = passcode) => {
     if (!silent) setIsFetchingStatus(true);
     try {
-      const res: WhatsAppStatusResponse = await fetchWhatsAppStatus();
+      const res: WhatsAppStatusResponse = await fetchWhatsAppStatus(targetSession, targetPasscode);
       setStatus(res.status || 'disconnected');
       
       if (res.qrCodeDataUrl) {
@@ -68,14 +97,14 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
       if (res.user || res.userInfo) {
         setUserInfo(res.userInfo || {
           name: res.user?.name,
-          phone: res.user?.id?.replace(/@.*$/, ''),
+          phone: res.user?.phone || res.user?.id?.replace(/@.*$/, ''),
           id: res.user?.id
         });
       } else {
         setUserInfo(null);
       }
 
-      if (res.status === 'connected') {
+      if (res.status === 'connected' || res.status === 'READY') {
         setQrCodeUrl(null);
       }
     } catch (err) {
@@ -85,20 +114,34 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
     }
   };
 
-  // Trigger QR pairing handshake
+  // Trigger QR pairing handshake for this session
   const handleInitiatePairing = async () => {
     setIsConnecting(true);
     setQrCodeUrl(null);
     setStatus('connecting');
 
-    const resolveQrUrl = (dataUrl?: string, rawQr?: string) => {
-      if (dataUrl && dataUrl.startsWith('data:image')) return dataUrl;
-      if (rawQr) return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(rawQr)}&size=300x300&margin=10`;
-      return null;
-    };
-
     try {
-      const res = await initiateWhatsAppConnect();
+      // First check if current session is already active & authenticated
+      const currentStatus = await fetchWhatsAppStatus(sessionId, passcode);
+      if (currentStatus.status === 'connected' || currentStatus.status === 'READY' || currentStatus.user || currentStatus.userInfo) {
+        setStatus('connected');
+        setUserInfo(currentStatus.userInfo || {
+          name: currentStatus.user?.name,
+          phone: currentStatus.user?.phone,
+          id: currentStatus.user?.id
+        });
+        setIsConnecting(false);
+        messageBox.showSuccess(`WhatsApp session "${sessionId}" is already connected & ready!`);
+        return;
+      }
+
+      const resolveQrUrl = (dataUrl?: string, rawQr?: string) => {
+        if (dataUrl && dataUrl.startsWith('data:image')) return dataUrl;
+        if (rawQr) return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(rawQr)}&size=300x300&margin=10`;
+        return null;
+      };
+
+      const res = await initiateWhatsAppConnect(sessionId, passcode);
       const directQr = resolveQrUrl(res.qrCodeDataUrl, res.qr);
       if (directQr) {
         setQrCodeUrl(directQr);
@@ -107,11 +150,19 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
         return;
       }
 
-      // Poll for QR code until available (up to 20 attempts = 30 seconds)
+      // If connect endpoint is not supported or returned error, re-check status
+      if (res.status === 'error') {
+        const fallback = await fetchWhatsAppStatus(sessionId, passcode);
+        setStatus(fallback.status || 'disconnected');
+        setIsConnecting(false);
+        return;
+      }
+
+      // Poll for QR code until available (up to 10 attempts)
       let attempts = 0;
       const qrInterval = setInterval(async () => {
         attempts++;
-        const qrRes = await fetchWhatsAppQR();
+        const qrRes = await fetchWhatsAppQR(sessionId, passcode);
         const foundQr = resolveQrUrl(qrRes.qrCodeDataUrl, qrRes.qr);
 
         if (foundQr) {
@@ -119,17 +170,15 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
           setStatus('qr_ready');
           setIsConnecting(false);
           clearInterval(qrInterval);
-        } else if (qrRes.status === 'connected') {
+        } else if (qrRes.status === 'connected' || qrRes.status === 'READY') {
           setStatus('connected');
           setIsConnecting(false);
           clearInterval(qrInterval);
-          checkStatus(true);
-        } else if (attempts >= 20) {
+          checkStatus(true, sessionId, passcode);
+        } else if (attempts >= 10 || qrRes.status === 'disconnected') {
           clearInterval(qrInterval);
           setIsConnecting(false);
-          if (!qrCodeUrl) {
-            setStatus('disconnected');
-          }
+          checkStatus(true, sessionId, passcode);
         }
       }, 1500);
     } catch (err: any) {
@@ -143,12 +192,12 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
   const handleLogoutSession = async () => {
     setIsLoggingOut(true);
     try {
-      const res = await logoutWhatsApp();
+      const res = await logoutWhatsApp(sessionId, passcode);
       if (res.success) {
         setStatus('disconnected');
         setQrCodeUrl(null);
         setUserInfo(null);
-        messageBox.showSuccess('WhatsApp session disconnected & logged out successfully.');
+        messageBox.showSuccess(`WhatsApp session "${sessionId}" disconnected successfully.`);
       } else {
         messageBox.showError(res.message || 'Failed to logout session.');
       }
@@ -159,11 +208,11 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
     }
   };
 
-  // Load audit logs
-  const loadAuditLogs = async () => {
+  // Load audit logs for active session
+  const loadAuditLogs = async (targetSession = sessionId, targetPasscode = passcode) => {
     setIsLoadingLogs(true);
     try {
-      const res = await fetchWhatsAppAuditLogs(20);
+      const res = await fetchWhatsAppAuditLogs(20, targetSession, targetPasscode);
       if (res.success) {
         setAuditLogs(res.messages || []);
       }
@@ -171,6 +220,50 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
       console.error('Failed to load audit logs:', err);
     } finally {
       setIsLoadingLogs(false);
+    }
+  };
+
+  // Switch / Save session
+  const handleSaveSession = async (newSession: string, newPass: string) => {
+    const cleanSession = newSession.trim().replace(/[^a-zA-Z0-9_-]/g, '_') || DEFAULT_WHATSAPP_SESSION_ID;
+    const cleanPass = newPass.trim() || DEFAULT_WHATSAPP_PASSCODE;
+    setSessionId(cleanSession);
+    setSessionInput(cleanSession);
+    setPasscode(cleanPass);
+    setPasscodeInput(cleanPass);
+    setStoredSessionId(cleanSession);
+    setStoredPasscode(cleanPass);
+    setIsEditingSession(false);
+    setStatus('disconnected');
+    setQrCodeUrl(null);
+    setUserInfo(null);
+    checkStatus(false, cleanSession, cleanPass);
+    loadAuditLogs(cleanSession, cleanPass);
+    messageBox.showSuccess(`Updated WhatsApp Session credentials: ${cleanSession}`);
+  };
+
+  // Sync custom credentials to Cloud Firestore / Lambda API
+  const handleSyncCustomCredentials = async () => {
+    if (!sessionInput.trim() || !passcodeInput.trim()) {
+      messageBox.showError('Please enter both Session ID and Passcode.');
+      return;
+    }
+    setIsSyncingCredentials(true);
+    try {
+      const res = await setWhatsAppCredentials(sessionInput.trim(), passcodeInput.trim(), sessionId, passcode);
+      if (res.success) {
+        setSessionId(res.sessionId || sessionInput.trim());
+        setPasscode(res.passcode || passcodeInput.trim());
+        setIsEditingSession(false);
+        checkStatus(false, res.sessionId || sessionInput.trim(), res.passcode || passcodeInput.trim());
+        messageBox.showSuccess('✅ WhatsApp Session credentials synchronized successfully!');
+      } else {
+        messageBox.showError(res.message || 'Failed to sync credentials to API.');
+      }
+    } catch (err: any) {
+      messageBox.showError(err.message || 'Error syncing credentials.');
+    } finally {
+      setIsSyncingCredentials(false);
     }
   };
 
@@ -187,10 +280,10 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
 
     setIsSendingTest(true);
     try {
-      const res = await sendWhatsAppMessage(testPhone.trim(), testMessage.trim());
+      const res = await sendWhatsAppMessage(testPhone.trim(), testMessage.trim(), { sessionId });
       if (res.success) {
-        messageBox.showSuccess(`🎉 WhatsApp test message sent successfully to ${testPhone}!`);
-        loadAuditLogs();
+        messageBox.showSuccess(`🎉 WhatsApp test message sent successfully from session [${sessionId}] to ${testPhone}!`);
+        loadAuditLogs(sessionId);
       } else {
         messageBox.showError(`❌ Send Failed: ${res.error || 'Unknown error'}`);
       }
@@ -215,12 +308,13 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
         taskName: testTaskName,
         status: testTaskStatus,
         duration: '1m 20s',
-        details: 'Candidate completed AI Technical Video Interview with score 88%.'
+        details: 'Candidate completed AI Technical Video Interview with score 88%.',
+        sessionId
       });
 
       if (res.success) {
         messageBox.showSuccess(`✅ Task Alert sent successfully to ${testPhone}!`);
-        loadAuditLogs();
+        loadAuditLogs(sessionId);
       } else {
         messageBox.showError(`❌ Alert Failed: ${res.error || 'Unknown error'}`);
       }
@@ -291,6 +385,117 @@ export const WhatsAppConnectModal: React.FC<WhatsAppConnectModalProps> = ({ isOp
           >
             <X size={20} />
           </button>
+        </div>
+
+        {/* User Multi-Tenant Session & Passcode Bar */}
+        <div className={`p-3.5 rounded-2xl border flex flex-col gap-3 text-xs transition-colors ${
+          isDark ? 'bg-white/[0.03] border-white/[0.09]' : 'bg-slate-50 border-slate-200'
+        }`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 shrink-0">
+                <Key size={14} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-slate-400">Session ID:</span>
+                  <span className="font-mono font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 truncate max-w-[180px]">
+                    {sessionId}
+                  </span>
+                  <span className="font-semibold text-slate-400 ml-1">Passcode:</span>
+                  <span className="font-mono font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                    {passcode ? '••••••' : 'Not Set'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+              {!isEditingSession ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSessionInput(sessionId);
+                      setPasscodeInput(passcode);
+                      setIsEditingSession(true);
+                    }}
+                    className={`h-7 px-2.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
+                      isDark ? 'border-white/10 text-slate-300 hover:bg-white/10' : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    Edit Credentials
+                  </button>
+                  {(sessionId !== DEFAULT_WHATSAPP_SESSION_ID || passcode !== DEFAULT_WHATSAPP_PASSCODE) && (
+                    <button
+                      type="button"
+                      onClick={() => handleSaveSession(DEFAULT_WHATSAPP_SESSION_ID, DEFAULT_WHATSAPP_PASSCODE)}
+                      title="Reset to default production credentials"
+                      className="h-7 px-2 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 text-xs font-medium cursor-pointer"
+                    >
+                      Reset Default
+                    </button>
+                  )}
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          {isEditingSession && (
+            <div className={`pt-2.5 border-t flex flex-col sm:flex-row items-stretch sm:items-center gap-2 ${isDark ? 'border-white/10' : 'border-slate-200'}`}>
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <input
+                  type="text"
+                  value={sessionInput}
+                  onChange={(e) => setSessionInput(e.target.value)}
+                  placeholder="Session ID (e.g. interviewxpert)"
+                  className={`h-8 px-2.5 rounded-lg border text-xs font-mono w-full focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                    isDark ? 'bg-[#141414] border-white/20 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
+                />
+                <input
+                  type="text"
+                  value={passcodeInput}
+                  onChange={(e) => setPasscodeInput(e.target.value)}
+                  placeholder="Passcode (e.g. 420945)"
+                  className={`h-8 px-2.5 rounded-lg border text-xs font-mono w-32 focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                    isDark ? 'bg-[#141414] border-white/20 text-white' : 'bg-white border-slate-300 text-slate-900'
+                  }`}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0 justify-end">
+                <button
+                  type="button"
+                  onClick={() => handleSaveSession(sessionInput, passcodeInput)}
+                  className="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all cursor-pointer"
+                >
+                  Save Local
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSyncCustomCredentials}
+                  disabled={isSyncingCredentials}
+                  title="Update & sync session ID and passcode to Cloud Firestore"
+                  className="h-8 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSyncingCredentials ? 'Syncing...' : 'Sync to API'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSessionInput(sessionId);
+                    setPasscodeInput(passcode);
+                    setIsEditingSession(false);
+                  }}
+                  className={`h-8 px-2 rounded-lg border text-xs ${
+                    isDark ? 'border-white/10 text-slate-400 hover:bg-white/5' : 'border-slate-200 text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Live Status Header Banner */}

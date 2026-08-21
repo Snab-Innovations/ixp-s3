@@ -23,9 +23,11 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   React.useEffect(() => {
     let isMounted = true;
+    const userSessionId = user?.uid ? `user_${user.uid.slice(0, 12)}` : undefined;
+
     const checkRealWaStatus = async () => {
       try {
-        const res = await fetchWhatsAppStatus();
+        const res = await fetchWhatsAppStatus(userSessionId);
         const isConnected = res.status === 'connected' || res.status === 'CONNECTED' || res.status === 'AUTHENTICATED' || res.status === 'READY' || !!res.userInfo;
         if (isMounted) setWaRealStatus(isConnected ? 'CONNECTED' : 'DISCONNECTED');
       } catch (err) {
@@ -39,7 +41,7 @@ const LayoutContent: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       isMounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [user?.uid]);
 
   const handleLogout = async () => {
     try {

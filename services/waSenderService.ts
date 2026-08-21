@@ -1,16 +1,17 @@
 // WhatsApp Messaging Service
-// Configured for Serverless WhatsApp API: https://whatsapp-serverless.vercel.app
+// Configured for Multi-Session WhatsApp REST API Gateway on AWS Lambda
 
 import { formatExperienceDisplay } from './sesService';
 import { renderTemplateText, getRecruiterTemplates, WhatsAppTemplateConfig, DEFAULT_JOB_DETAILS_ITEMS, formatDeadlineDisplay } from './templateService';
 
+export const DEFAULT_WHATSAPP_GATEWAY_URL = 'https://whatsapp-sending-api.onrender.com';
+export const DEFAULT_WHATSAPP_SESSION_ID = 'interviewxpert';
+export const DEFAULT_WHATSAPP_PASSCODE = '420945';
+
 function getCleanWhatsAppApiUrl(): string {
   const envUrl = (import.meta.env.VITE_WHATSAPP_API_URL || '').trim();
-  if (!envUrl || envUrl.includes('onrender.com') || envUrl.includes('whatsapp-sending-api') || envUrl.includes('whatsapp-task-manager')) {
-    return 'https://whatsapp-serverless.vercel.app';
-  }
-  // Strip any trailing /api, /api/messages/send, or trailing slashes
-  return envUrl.replace(/\/api(\/.*)?$/, '').replace(/\/+$/, '') || 'https://whatsapp-serverless.vercel.app';
+  const rawUrl = envUrl || DEFAULT_WHATSAPP_GATEWAY_URL;
+  return rawUrl.replace(/\/api(\/.*)?$/, '').replace(/\/+$/, '') || DEFAULT_WHATSAPP_GATEWAY_URL;
 }
 
 export const WHATSAPP_API_BASE_URL = getCleanWhatsAppApiUrl();
@@ -18,12 +19,13 @@ export const WHATSAPP_API_BASE_URL = getCleanWhatsAppApiUrl();
 export interface SendWhatsAppResponse {
   success: boolean;
   data?: any;
+  messageId?: string;
   formattedMessage?: string;
   error?: string;
 }
 
 export interface WhatsAppStatusResponse {
-  status: 'connected' | 'connecting' | 'disconnected' | 'qr_ready' | 'AUTHENTICATED' | 'CONNECTED' | string;
+  status: 'connected' | 'connecting' | 'disconnected' | 'qr_ready' | 'AUTHENTICATED' | 'CONNECTED' | 'READY' | string;
   sessionId?: string;
   qrCodeDataUrl?: string | null;
   qr?: string | null;
@@ -36,7 +38,12 @@ export interface WhatsAppStatusResponse {
     name?: string;
     phone?: string;
     id?: string;
+    pushname?: string;
+    wid?: string;
+    platform?: string;
   } | null;
+  hasPasscode?: boolean;
+  isLocked?: boolean;
   lastUpdated?: string;
   error?: string | null;
 }
@@ -87,14 +94,85 @@ export function formatPhoneForWhatsApp(phone: string): string {
 }
 
 /**
+ * Resolves the active session ID for WhatsApp operations.
+ * Prioritizes passed session ID > saved user preference > default.
+ */
+export function getStoredSessionId(customOrUserUid?: string): string {
+  if (customOrUserUid && customOrUserUid.trim()) {
+    return customOrUserUid.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+  }
+  const saved = typeof window !== 'undefined' ? (localStorage.getItem('ix_whatsapp_session_id') || localStorage.getItem('wa_session_id')) : null;
+  if (saved && saved.trim()) {
+    return saved.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+  }
+  return DEFAULT_WHATSAPP_SESSION_ID;
+}
+
+export function setStoredSessionId(sessionId: string): void {
+  if (typeof window !== 'undefined') {
+    if (sessionId && sessionId.trim()) {
+      const clean = sessionId.trim().replace(/[^a-zA-Z0-9_-]/g, '_');
+      localStorage.setItem('ix_whatsapp_session_id', clean);
+      localStorage.setItem('wa_session_id', clean);
+    } else {
+      localStorage.removeItem('ix_whatsapp_session_id');
+      localStorage.removeItem('wa_session_id');
+    }
+  }
+}
+
+/**
+ * Resolves the active security passcode for WhatsApp operations.
+ * Prioritizes passed passcode > saved local preference > default.
+ */
+export function getStoredPasscode(customPasscode?: string): string {
+  if (customPasscode && customPasscode.trim()) {
+    return customPasscode.trim();
+  }
+  const saved = typeof window !== 'undefined' ? (localStorage.getItem('ix_whatsapp_passcode') || localStorage.getItem('wa_session_passcode')) : null;
+  if (saved && saved.trim()) {
+    return saved.trim();
+  }
+  return DEFAULT_WHATSAPP_PASSCODE;
+}
+
+export function setStoredPasscode(passcode: string): void {
+  if (typeof window !== 'undefined') {
+    if (passcode && passcode.trim()) {
+      localStorage.setItem('ix_whatsapp_passcode', passcode.trim());
+      localStorage.setItem('wa_session_passcode', passcode.trim());
+    } else {
+      localStorage.removeItem('ix_whatsapp_passcode');
+      localStorage.removeItem('wa_session_passcode');
+    }
+  }
+}
+
+/**
+ * Returns HTTP authentication headers for WhatsApp Serverless API.
+ */
+export function getWhatsAppHeaders(sessionId?: string, passcode?: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    'x-session-id': getStoredSessionId(sessionId),
+    'x-session-passcode': getStoredPasscode(passcode),
+  };
+}
+
+/**
  * Initiates the QR pairing handshake on the WhatsApp serverless instance.
  * Endpoint: POST /api/connect
  */
-export async function initiateWhatsAppConnect(): Promise<{ status: string; message?: string; qr?: string; qrCodeDataUrl?: string }> {
+export async function initiateWhatsAppConnect(
+  sessionId?: string,
+  passcode?: string
+): Promise<{ status: string; message?: string; qr?: string; qrCodeDataUrl?: string }> {
+  const activeSessionId = getStoredSessionId(sessionId);
   try {
     const res = await fetch(`${WHATSAPP_API_BASE_URL}/api/connect`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getWhatsAppHeaders(sessionId, passcode),
+      body: JSON.stringify({ sessionId: activeSessionId })
     });
     const data = await res.json();
     return data;
@@ -106,12 +184,17 @@ export async function initiateWhatsAppConnect(): Promise<{ status: string; messa
 
 /**
  * Retrieves the active QR code Base64 Data URL and status.
- * Endpoint: GET /api/qr
+ * Endpoint: GET /api/qr?sessionId=...
  */
-export async function fetchWhatsAppQR(): Promise<{ status: string; qr?: string; qrCodeDataUrl?: string; message?: string }> {
+export async function fetchWhatsAppQR(
+  sessionId?: string,
+  passcode?: string
+): Promise<{ status: string; qr?: string; qrCodeDataUrl?: string; message?: string }> {
+  const activeSessionId = getStoredSessionId(sessionId);
   try {
-    const res = await fetch(`${WHATSAPP_API_BASE_URL}/api/qr`, {
+    const res = await fetch(`${WHATSAPP_API_BASE_URL}/api/qr?sessionId=${encodeURIComponent(activeSessionId)}`, {
       method: 'GET',
+      headers: getWhatsAppHeaders(sessionId, passcode),
     });
     const data = await res.json();
     return data;
@@ -123,66 +206,117 @@ export async function fetchWhatsAppQR(): Promise<{ status: string; qr?: string; 
 
 /**
  * Fetches WhatsApp connection status and linked user info.
- * Endpoint: GET /api/status
+ * Endpoint: GET /api/status?sessionId=...
  */
 export async function fetchWhatsAppStatus(
-  _sessionId?: string,
-  _passcode?: string
+  sessionId?: string,
+  passcode?: string
 ): Promise<WhatsAppStatusResponse> {
-  const endpoints = [
-    `${WHATSAPP_API_BASE_URL}/api/status`,
-    'https://whatsapp-serverless.vercel.app/api/status',
-  ];
+  const activeSessionId = getStoredSessionId(sessionId);
+  const targetUrl = `${WHATSAPP_API_BASE_URL}/api/status?sessionId=${encodeURIComponent(activeSessionId)}`;
 
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: 'GET',
-      });
+  try {
+    const res = await fetch(targetUrl, {
+      method: 'GET',
+      headers: getWhatsAppHeaders(sessionId, passcode)
+    });
 
-      if (res.ok) {
-        const data = await res.json();
+    if (res.ok) {
+      const data = await res.json();
 
-        // Normalize user info for compatibility
-        const userObj = data.user || null;
-        return {
-          status: data.status,
-          sessionId: data.sessionId || 'default-session',
-          qrCodeDataUrl: data.qrCodeDataUrl || null,
-          user: userObj,
-          userInfo: userObj ? {
-            name: userObj.name || 'WhatsApp User',
-            phone: userObj.id?.replace(/@.*$/, '') || '',
-            id: userObj.id || ''
-          } : null,
-          error: null
-        };
-      }
-    } catch (err: any) {
-      // Continue trying
+      // Normalize user info for compatibility
+      const rawUser = data.userInfo || data.user || null;
+      const normalizedUser = rawUser ? {
+        name: rawUser.pushname || rawUser.name || 'InterviewXpert HR',
+        phone: rawUser.phone || rawUser.wid?.replace(/@.*$/, '') || rawUser.id?.replace(/@.*$/, '') || '',
+        id: rawUser.wid || rawUser.id || ''
+      } : null;
+
+      return {
+        status: data.status === 'READY' ? 'connected' : data.status,
+        sessionId: data.sessionId || activeSessionId,
+        qrCodeDataUrl: data.qrCodeDataUrl || null,
+        qr: data.qr || null,
+        user: normalizedUser,
+        userInfo: normalizedUser,
+        hasPasscode: data.hasPasscode,
+        isLocked: data.isLocked,
+        error: null
+      };
     }
+  } catch (err: any) {
+    console.warn('[WhatsApp API] Error fetching status:', err?.message || err);
   }
 
   return { 
     status: 'disconnected', 
-    error: 'WhatsApp API service is currently unreachable.' 
+    sessionId: activeSessionId,
+    error: 'WhatsApp API gateway is currently unreachable.' 
   };
 }
 
 /**
- * Disconnects WhatsApp and wipes the session credentials from Firestore.
- * Endpoint: POST /api/logout
+ * Updates custom Session ID and Passcode on the backend.
+ * Endpoint: POST /api/auth/set-credentials
  */
-export async function logoutWhatsApp(): Promise<{ success: boolean; message: string }> {
+export async function setWhatsAppCredentials(
+  newSessionId: string,
+  newPasscode: string,
+  currentSessionId?: string,
+  currentPasscode?: string
+): Promise<{ success: boolean; message: string; sessionId?: string; passcode?: string }> {
+  try {
+    const res = await fetch(`${WHATSAPP_API_BASE_URL}/api/auth/set-credentials`, {
+      method: 'POST',
+      headers: getWhatsAppHeaders(currentSessionId, currentPasscode),
+      body: JSON.stringify({
+        newSessionId: newSessionId.trim(),
+        newPasscode: newPasscode.trim()
+      })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      setStoredSessionId(data.sessionId || newSessionId);
+      setStoredPasscode(data.passcode || newPasscode);
+      return {
+        success: true,
+        message: data.message || 'Session ID & Passcode updated successfully & synced!',
+        sessionId: data.sessionId || newSessionId,
+        passcode: data.passcode || newPasscode
+      };
+    }
+    return {
+      success: false,
+      message: data.message || data.error || 'Failed to update session credentials'
+    };
+  } catch (err: any) {
+    console.error('[WhatsApp API] Error updating credentials:', err);
+    return {
+      success: false,
+      message: err.message || 'Network error updating WhatsApp credentials.'
+    };
+  }
+}
+
+/**
+ * Disconnects WhatsApp and wipes the session credentials.
+ * Endpoint: POST /api/logout (or /api/unlink)
+ */
+export async function logoutWhatsApp(
+  sessionId?: string,
+  passcode?: string
+): Promise<{ success: boolean; message: string }> {
+  const activeSessionId = getStoredSessionId(sessionId);
   try {
     const res = await fetch(`${WHATSAPP_API_BASE_URL}/api/logout`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getWhatsAppHeaders(sessionId, passcode),
+      body: JSON.stringify({ sessionId: activeSessionId })
     });
     const data = await res.json();
     return {
       success: data.success ?? true,
-      message: data.message || 'Logged out and cleared WhatsApp session.'
+      message: data.message || 'WhatsApp session unlinked and logged out.'
     };
   } catch (err: any) {
     console.error('[WhatsApp API] Error logging out:', err);
@@ -195,12 +329,18 @@ export async function logoutWhatsApp(): Promise<{ success: boolean; message: str
 
 /**
  * Fetches recent sent messages and their delivery statuses from Firestore Outbox.
- * Endpoint: GET /api/messages?limit=20
+ * Endpoint: GET /api/messages?limit=20&sessionId=...
  */
-export async function fetchWhatsAppAuditLogs(limit: number = 20): Promise<WhatsAppAuditResponse> {
+export async function fetchWhatsAppAuditLogs(
+  limit: number = 20,
+  sessionId?: string,
+  passcode?: string
+): Promise<WhatsAppAuditResponse> {
+  const activeSessionId = getStoredSessionId(sessionId);
   try {
-    const res = await fetch(`${WHATSAPP_API_BASE_URL}/api/messages?limit=${limit}`, {
+    const res = await fetch(`${WHATSAPP_API_BASE_URL}/api/messages?limit=${limit}&sessionId=${encodeURIComponent(activeSessionId)}`, {
       method: 'GET',
+      headers: getWhatsAppHeaders(sessionId, passcode)
     });
     if (res.ok) {
       const data = await res.json();
@@ -227,22 +367,27 @@ export async function sendWhatsAppTaskAlert(params: {
   status: 'SUCCESS' | 'FAILED' | 'WARNING' | string;
   duration?: string;
   details?: string;
+  sessionId?: string;
+  passcode?: string;
 }): Promise<SendWhatsAppResponse> {
   const formattedPhone = formatPhoneForWhatsApp(params.phone);
   if (!formattedPhone) {
     return { success: false, error: 'Invalid or missing phone number.' };
   }
 
+  const activeSessionId = getStoredSessionId(params.sessionId);
   try {
     const response = await fetch(`${WHATSAPP_API_BASE_URL}/api/send-task-alert`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getWhatsAppHeaders(params.sessionId, params.passcode),
       body: JSON.stringify({
+        to: formattedPhone,
         phone: formattedPhone,
         taskName: params.taskName,
         status: params.status,
         duration: params.duration || 'N/A',
         details: params.details || '',
+        sessionId: activeSessionId
       }),
     });
 
@@ -258,13 +403,13 @@ export async function sendWhatsAppTaskAlert(params: {
 }
 
 /**
- * Sends a custom WhatsApp message to a phone number.
- * Endpoint: POST /api/send-message
+ * Sends a WhatsApp message to a phone number.
+ * Endpoint: POST /api/messages/send (or /api/send-message)
  */
 export async function sendWhatsAppMessage(
   phone: string,
   text: string,
-  _credentials?: { sessionId?: string; passcode?: string }
+  credentials?: { sessionId?: string; passcode?: string }
 ): Promise<SendWhatsAppResponse> {
   const formattedPhone = formatPhoneForWhatsApp(phone);
   if (!formattedPhone) {
@@ -272,25 +417,34 @@ export async function sendWhatsAppMessage(
     return { success: false, error: 'Invalid or missing phone number (must include valid country code).' };
   }
 
-  const apiUrl = `${WHATSAPP_API_BASE_URL}/api/send-message`;
+  const activeSessionId = getStoredSessionId(credentials?.sessionId);
+  const headers = getWhatsAppHeaders(credentials?.sessionId, credentials?.passcode);
+  const apiUrl = `${WHATSAPP_API_BASE_URL}/api/messages/send`;
+
   try {
     console.log('[WhatsApp API] Sending message to:', formattedPhone, 'via:', apiUrl);
     const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
+        to: formattedPhone,
         phone: formattedPhone,
         message: text,
+        sessionId: activeSessionId
       }),
     });
 
     const data = await response.json().catch(() => ({}));
     if (response.ok && data.success !== false) {
-      return { success: true, data: data.data || data };
+      return { success: true, data: data.data || data, messageId: data.messageId };
     } else {
-      return { success: false, error: data.error || data.message || `Failed to send (HTTP ${response.status})` };
+      let errMsg = data.message || data.error;
+      if (!errMsg) {
+        if (response.status === 401) errMsg = '401 Unauthorized: Invalid or missing x-session-passcode.';
+        else if (response.status === 503) errMsg = '503 Service Unavailable: WhatsApp socket is not connected (QR scan required).';
+        else errMsg = `Failed to send (HTTP ${response.status})`;
+      }
+      return { success: false, error: errMsg };
     }
   } catch (err: any) {
     return { success: false, error: err.message || 'Network failure sending WhatsApp message.' };
