@@ -3000,7 +3000,7 @@ const ActiveInterviewSession: React.FC<{
   const answerDeadlineRef = useRef<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [timeLeft, setTimeLeft] = useState(QUESTION_TIME_MS / 1000);
-  const [countdown, setCountdown] = useState(5);
+  const [countdown, setCountdown] = useState(10);
   const [processingVideo, setProcessingVideo] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
@@ -3407,7 +3407,7 @@ const ActiveInterviewSession: React.FC<{
       if (isLastQuestion) {
         onFinish();
       } else {
-        setCountdown(5);
+        setCountdown(10);
         setTimeLeft(QUESTION_TIME_MS / 1000);
       }
     };
