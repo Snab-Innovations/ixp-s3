@@ -545,7 +545,6 @@ console.log(msg.choices[0].message.content);`}</pre>
                 { name: 'VITE_BEDROCK_MODEL_DEFAULT', val: import.meta.env.VITE_BEDROCK_MODEL_DEFAULT },
                 { name: 'VITE_AWS_S3_BUCKET_NAME', val: import.meta.env.VITE_AWS_S3_BUCKET_NAME },
                 { name: 'VITE_AWS_S3_REGION', val: import.meta.env.VITE_AWS_S3_REGION },
-                { name: 'VITE_AWS_S3_ACCESS_KEY_ID', val: import.meta.env.VITE_AWS_S3_ACCESS_KEY_ID },
                 { name: 'VITE_BREVO_API_KEY', val: import.meta.env.VITE_BREVO_API_KEY },
                 { name: 'VITE_ASSEMBLYAI_API_KEY', val: import.meta.env.VITE_ASSEMBLYAI_API_KEY },
                 { name: 'VITE_SARVAM_API_KEY', val: import.meta.env.VITE_SARVAM_API_KEY }

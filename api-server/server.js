@@ -776,6 +776,67 @@ app.post('/api/send-email', async (req, res) => {
   }
 });
 
+// Amazon Polly Text-to-Speech Endpoint (Aditi Indian Bilingual Voice)
+app.post('/api/tts-polly', async (req, res) => {
+  try {
+    const { text, lang = 'hi-IN' } = req.body || {};
+    if (!text || !text.trim()) {
+      return res.status(400).json({ success: false, error: 'Parameter text is required.' });
+    }
+
+    const { PollyClient, SynthesizeSpeechCommand } = require('@aws-sdk/client-polly');
+    const accessKeyId = (process.env.AWS_ACCESS_KEY_ID || process.env.VITE_AWS_ACCESS_KEY_ID || process.env.VITE_AWS_S3_ACCESS_KEY_ID || '').replace(/['"]/g, '').trim();
+    const secretAccessKey = (process.env.AWS_SECRET_ACCESS_KEY || process.env.VITE_AWS_SECRET_ACCESS_KEY || process.env.VITE_AWS_S3_SECRET_ACCESS_KEY || '').replace(/['"]/g, '').trim();
+    const region = process.env.AWS_POLLY_REGION || process.env.AWS_REGION || process.env.AWS_S3_REGION || process.env.VITE_AWS_S3_REGION || 'ap-south-1';
+
+    if (!accessKeyId || !secretAccessKey) {
+      return res.status(500).json({
+        success: false,
+        error: 'AWS credentials not configured on server.'
+      });
+    }
+
+    const pollyClient = new PollyClient({
+      region,
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
+    });
+
+    const isHindi = /[\u0900-\u097F]/.test(text) || (lang || '').toLowerCase().startsWith('hi') || (lang || '').toLowerCase().startsWith('mr');
+    const languageCode = isHindi ? 'hi-IN' : 'en-IN';
+
+    const command = new SynthesizeSpeechCommand({
+      Engine: 'standard',
+      LanguageCode: languageCode,
+      OutputFormat: 'mp3',
+      Text: text.trim(),
+      VoiceId: 'Aditi',
+    });
+
+    const response = await pollyClient.send(command);
+
+    if (!response.AudioStream) {
+      return res.status(500).json({ success: false, error: 'AWS Polly returned empty audio stream.' });
+    }
+
+    const audioBytes = await response.AudioStream.transformToByteArray();
+    const audioBuffer = Buffer.from(audioBytes);
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Length', audioBuffer.length);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.status(200).send(audioBuffer);
+  } catch (error) {
+    console.error('Error in /api/tts-polly:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'AWS Polly speech synthesis failed on server.'
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: "healthy", service: "InterviewXpert REST Integration API" });

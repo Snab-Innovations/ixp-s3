@@ -8,13 +8,10 @@ interface ImportMetaEnv {
     readonly VITE_OPENAI_API_KEY: string;
     readonly VITE_AWS_S3_REGION: string;
     readonly VITE_AWS_S3_BUCKET_NAME: string;
-    readonly VITE_AWS_S3_ACCESS_KEY_ID: string;
-    readonly VITE_AWS_S3_SECRET_ACCESS_KEY: string;
     readonly VITE_OPENROUTER_API_KEY: string;
     readonly VITE_OPENROUTER_MODEL: string;
     readonly VITE_GEMINI_API_KEY: string;
     readonly VITE_GEMINI_MODEL: string;
-    readonly VITE_ANTHROPIC_API_KEY: string;
     readonly VITE_ANTHROPIC_BASE_URL: string;
     readonly VITE_ANTHROPIC_WORKSPACE_ID: string;
     readonly VITE_AWS_BEDROCK_REGION: string;

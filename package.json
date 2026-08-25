@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
+    "@aws-sdk/client-polly": "^3.1117.0",
     "@aws-sdk/client-s3": "^3.1101.0",
     "@aws-sdk/client-sesv2": "^3.1101.0",
     "clsx": "^2.1.1",

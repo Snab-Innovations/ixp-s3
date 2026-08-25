@@ -25,6 +25,8 @@ function localServerlessPlugin(env: Record<string, string>): Plugin {
           handlerModule = await import('./api/send-email.js');
         } else if (pathname === '/api/s3-manage') {
           handlerModule = await import('./api/s3-manage.js');
+        } else if (pathname === '/api/tts-polly') {
+          handlerModule = await import('./api/tts-polly.js');
         } else if (pathname === '/api/jobs' || pathname.startsWith('/api/jobs/') || pathname === '/api/jobs/receive') {
           handlerModule = await import('./api/jobs.js');
         }
@@ -41,6 +43,17 @@ function localServerlessPlugin(env: Record<string, string>): Plugin {
         (res as any).json = function (data: any) {
           this.setHeader('Content-Type', 'application/json');
           this.end(JSON.stringify(data));
+          return this;
+        };
+        (res as any).send = function (data: any) {
+          if (Buffer.isBuffer(data)) {
+            this.end(data);
+          } else if (typeof data === 'object') {
+            this.setHeader('Content-Type', 'application/json');
+            this.end(JSON.stringify(data));
+          } else {
+            this.end(String(data));
+          }
           return this;
         };
 
@@ -96,8 +109,7 @@ export default defineConfig(({ mode }) => {
         target: 'esnext',
       },
       define: {
-        'process.env.ANTHROPIC_API_KEY': JSON.stringify(env.VITE_ANTHROPIC_API_KEY || env.ANTHROPIC_API_KEY),
-        'process.env.ANTHROPIC_BASE_URL': JSON.stringify(env.VITE_ANTHROPIC_BASE_URL || env.ANTHROPIC_BASE_URL),
+        'process.env.ANTHROPIC_BASE_URL': JSON.stringify(env.VITE_ANTHROPIC_BASE_URL || env.ANTHROPIC_BASE_URL || ''),
         'process.env.ANTHROPIC_WORKSPACE_ID': JSON.stringify(env.VITE_ANTHROPIC_WORKSPACE_ID || env.ANTHROPIC_WORKSPACE_ID || 'default'),
       },
       resolve: {

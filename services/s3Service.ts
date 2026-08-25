@@ -8,8 +8,6 @@ import {
 
 const REGION = import.meta.env.VITE_AWS_S3_REGION || 'ap-south-1';
 const BUCKET_NAME = import.meta.env.VITE_AWS_S3_BUCKET_NAME || 'interviewxpert-storage';
-const ACCESS_KEY_ID = import.meta.env.VITE_AWS_S3_ACCESS_KEY_ID || '';
-const SECRET_ACCESS_KEY = import.meta.env.VITE_AWS_S3_SECRET_ACCESS_KEY || '';
 
 export interface S3FileItem {
   key: string;

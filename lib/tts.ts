@@ -319,8 +319,11 @@ const playAudioStreamTTS = async (textToSpeak: string, langTag: string, options?
   return true;
 };
 
+import { synthesizeWithPolly, stopPollyAudio } from '../services/pollyService';
+
 /**
- * Primary Speak Function
+ * Primary Speak Function: Powered by AWS Polly Aditi Indian Bilingual Voice Engine
+ * Specs: VoiceId: Aditi | Engine: standard | LanguageCode: hi-IN / en-IN | OutputFormat: mp3
  */
 async function speak(text: string, options?: SpeakOptions): Promise<void> {
   speak.stop();
@@ -337,49 +340,28 @@ async function speak(text: string, options?: SpeakOptions): Promise<void> {
 
   const lang = detectLang(cleaned, options?.lang);
 
-  // 1. Try High-Quality OpenAI Speech API if key configured
-  const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-  if (OPENAI_API_KEY && cleaned.length < 4000) {
-    try {
-      const response = await fetch("https://api.openai.com/v1/audio/speech", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${OPENAI_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ model: "tts-1", input: cleaned, voice: "alloy" })
-      });
+  // 1. Primary Engine: AWS Polly (VoiceId: Aditi, Engine: standard, LanguageCode: hi-IN/en-IN, OutputFormat: mp3)
+  try {
+    const pollySuccess = await synthesizeWithPolly(cleaned, {
+      lang,
+      rate: options?.rate ?? 0.95,
+      onEnd: () => {
+        currentlySpeaking = false;
+        options?.onEnd?.();
+      },
+      onError: () => {
+        currentlySpeaking = false;
+      },
+    });
 
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        currentAudio = audio;
-        if (options?.rate) audio.playbackRate = options.rate;
-
-        return new Promise<void>((resolve) => {
-          audio.onended = () => {
-            currentlySpeaking = false;
-            options?.onEnd?.();
-            resolve();
-          };
-          audio.onerror = () => {
-            currentlySpeaking = false;
-            options?.onError?.(new Error('Audio playback error'));
-            resolve();
-          };
-          audio.play().catch(() => {
-            currentlySpeaking = false;
-            resolve();
-          });
-        });
-      }
-    } catch (e) {
-      // Ignore and fallback
+    if (pollySuccess) {
+      return;
     }
+  } catch (pollyErr) {
+    console.warn('AWS Polly Aditi synthesis fallback triggered:', pollyErr);
   }
 
-  // 2. Complete Reliable Web Speech API Native Synthesis
+  // 2. Fallback: Web Speech API Native Synthesis with Indian HD Voice Prioritization
   return new Promise<void>(async (resolve) => {
     await playNativeTTS(cleaned, lang, options, () => {
       currentlySpeaking = false;
@@ -480,6 +462,7 @@ speak.stop = (): void => {
   currentlySpeaking = false;
   currentUtterance = null;
   stopKeepAlive();
+  stopPollyAudio();
 
   if (currentAudio) {
     try {
