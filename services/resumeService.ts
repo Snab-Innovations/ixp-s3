@@ -47,6 +47,23 @@ export interface ParsedResumeProfile {
   linkedinUrl: string;
   portfolioUrl: string;
   additionalText?: string;
+  // Additional Candidate Registration & Profile Fields
+  dob?: string;
+  dateOfBirth?: string;
+  maritalStatus?: string;
+  currentCity?: string;
+  city?: string;
+  nativePlace?: string;
+  qualificationBasic?: string;
+  qualificationPG?: string;
+  highestEducation?: string;
+  isFresher?: boolean;
+  experienceYears?: number | string;
+  experienceMonths?: number | string;
+  currentCompanyName?: string;
+  company?: string;
+  designation?: string;
+  role?: string;
   currentSalary?: string;
   expectedSalary?: string;
   employmentStatus?: string;
@@ -55,6 +72,7 @@ export interface ParsedResumeProfile {
   noticePeriodDays?: string;
   noticePeriodVal?: string;
   noticePeriodUnit?: string;
+  reasonForJobChange?: string;
   parsingMethod: 'deterministic' | 'hybrid';
   parserVersion: number;
 }
@@ -96,6 +114,50 @@ export interface CandidateMatch extends ResumeDumpRecord {
 const PARSER_VERSION = 2;
 const MAX_RESUME_TEXT_CHARS = 25_000;
 const EMAIL_REGEX = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i;
+
+/**
+ * High-speed, non-AI deterministic email extraction from raw text (< 1ms execution time).
+ * Handles standard emails, labeled email patterns, obfuscations ([at] / [dot]), and PDF text spacing artifacts.
+ */
+export function extractEmailFromText(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+
+  // 1. Direct regex match on standard email pattern
+  const directMatch = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+  if (directMatch && directMatch[1]) {
+    const email = directMatch[1].trim().toLowerCase();
+    if (email.length >= 5 && !/\.(png|jpg|jpeg|gif|pdf|docx?|svg|webp)$/i.test(email)) {
+      return email;
+    }
+  }
+
+  // 2. Labeled email pattern (e.g. Email: foo@bar.com, Contact: foo@bar.com)
+  const labeledMatch = text.match(/(?:email|e-mail|mail|contact\s+email)[\s.:#]*([a-zA-Z0-9._%+-]+(?:\s*@\s*|\s*\[at\]\s*)[a-zA-Z0-9.-]+(?:\s*\.\s*|\s*\[dot\]\s*)[a-zA-Z]{2,})/i);
+  if (labeledMatch && labeledMatch[1]) {
+    const cleaned = labeledMatch[1]
+      .replace(/\s*\[at\]\s*/gi, '@')
+      .replace(/\s*\[dot\]\s*/gi, '.')
+      .replace(/\s+/g, '')
+      .toLowerCase();
+    if (cleaned.includes('@') && cleaned.includes('.')) return cleaned;
+  }
+
+  // 3. Spaced email pattern in PDF text extractions (e.g., "john . doe @ gmail . com")
+  const spacedMatch = text.match(/([a-zA-Z0-9._%+-]+(?:\s+\.\s+[a-zA-Z0-9._%+-]+)*\s*@\s*[a-zA-Z0-9.-]+\s*\.\s*[a-zA-Z]{2,})/i);
+  if (spacedMatch && spacedMatch[1]) {
+    const cleaned = spacedMatch[1].replace(/\s+/g, '').toLowerCase();
+    if (cleaned.includes('@') && cleaned.includes('.')) return cleaned;
+  }
+
+  // 4. Header scan (first 3000 chars) with normalized whitespace
+  const headerText = text.slice(0, 3000).replace(/\s+/g, ' ');
+  const headerMatch = headerText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+  if (headerMatch && headerMatch[1]) {
+    return headerMatch[1].trim().toLowerCase();
+  }
+
+  return '';
+}
 const PHONE_REGEX = /(?:\+?\d{1,4}[\s.-]?)?(?:[6-9]\d{4}[\s.-]?\d{5}|(?:\(?\d{2,4}\)?[\s.-]?)?\d{3,5}[\s.-]?\d{4,5})/;
 const URL_REGEX = /https?:\/\/[^\s)]+/gi;
 const DATE_RANGE_REGEX = /(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|\d{1,2})?[\s/'-]*(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:present|current|now|(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|\d{1,2})?[\s/'-]*(?:19|20)\d{2})/i;
@@ -425,7 +487,7 @@ export const deterministicParse = (text: string, fallbackFileName: string): Pars
   const location = topLines.find((line) => /\b(?:india|maharashtra|pune|mumbai|delhi|bengaluru|bangalore|hyderabad|chennai|kolkata|noida|gurugram|gurgaon|nashik|nagpur|remote)\b/i.test(line)
     && !EMAIL_REGEX.test(line) && !PHONE_REGEX.test(line) && line.length <= 100) || '';
 
-  const email = cleanText.match(EMAIL_REGEX)?.[1]?.toLowerCase() || '';
+  const email = extractEmailFromText(cleanText);
   const phone = formatExtractedPhone(extractPhoneFromText(cleanText));
   const detectedG = detectCandidateGender({ name, email, summary, resumeText: cleanText });
   const gender = detectedG === 'female' ? 'Female' : detectedG === 'male' ? 'Male' : 'Unspecified';
@@ -512,12 +574,100 @@ export const normalizeStandardCityName = (rawLocation: string): string => {
   return resolveStrictListedCity(rawLocation);
 };
 
+export const fetchExistingResumeDumpByEmail = async (email: string): Promise<ResumeDumpRecord | null> => {
+  const cleanEmail = normalizeResumeEmail(email);
+  if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) return null;
+
+  try {
+    let snap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanEmail), limit(1))).catch(() => null);
+    if (!snap || snap.empty) {
+      snap = await getDocs(query(collection(db, 'resumeDump'), where('email', '==', cleanEmail), limit(1))).catch(() => null);
+    }
+    if (snap && !snap.empty) {
+      const data = snap.docs[0].data() as ResumeDumpRecord;
+      return { ...data, id: snap.docs[0].id };
+    }
+  } catch (err) {
+    console.warn('Error querying existing resume dump by email:', err);
+  }
+  return null;
+};
+
 export const analyzeResumeText = async (
   text: string,
   fallbackFileName: string,
   overrides: Partial<Pick<ParsedResumeProfile, 'name' | 'email' | 'phone'>> = {}
 ): Promise<ParsedResumeProfile> => {
   const fallback = deterministicParse(text, fallbackFileName);
+
+  // 1. FIRST, check email in resume dump database. If email exists, reuse all fields from existing dump & skip AI analysis!
+  const candidateEmail = (overrides.email || fallback.email || '').trim().toLowerCase();
+
+  if (candidateEmail && candidateEmail.includes('@') && candidateEmail.includes('.')) {
+    const existingRecord = await fetchExistingResumeDumpByEmail(candidateEmail);
+    if (existingRecord) {
+      console.log(`[ResumeParser] Existing resume dump candidate found for email "${candidateEmail}". Bypassing AI analysis and reusing existing dump fields.`);
+
+      const existingSkills = Array.isArray(existingRecord.skills) && existingRecord.skills.length > 0
+        ? existingRecord.skills
+        : fallback.skills;
+
+      const profileFromDump: ParsedResumeProfile = {
+        name: overrides.name || existingRecord.name || fallback.name,
+        email: candidateEmail || existingRecord.email || fallback.email,
+        phone: overrides.phone || formatExtractedPhone(existingRecord.phone) || fallback.phone,
+        gender: existingRecord.gender || fallback.gender,
+        dob: existingRecord.dob || existingRecord.dateOfBirth || '',
+        dateOfBirth: existingRecord.dateOfBirth || existingRecord.dob || '',
+        maritalStatus: existingRecord.maritalStatus || '',
+        location: normalizeStandardCityName(existingRecord.location || existingRecord.currentCity || existingRecord.city || fallback.location),
+        currentCity: existingRecord.currentCity || existingRecord.location || existingRecord.city || fallback.location,
+        city: existingRecord.city || existingRecord.location || fallback.location,
+        nativePlace: existingRecord.nativePlace || '',
+        domain: existingRecord.domain || fallback.domain,
+        preferredDomains: existingRecord.preferredDomains || [],
+        qualificationBasic: existingRecord.qualificationBasic || (typeof existingRecord.education === 'string' ? existingRecord.education : ''),
+        qualificationPG: existingRecord.qualificationPG || '',
+        highestEducation: existingRecord.highestEducation || existingRecord.qualificationBasic || '',
+        currentTitle: existingRecord.currentTitle || existingRecord.designation || existingRecord.role || fallback.currentTitle,
+        designation: existingRecord.designation || existingRecord.currentTitle || fallback.currentTitle,
+        role: existingRecord.role || existingRecord.currentTitle || fallback.currentTitle,
+        currentCompanyName: existingRecord.currentCompanyName || existingRecord.company || '',
+        company: existingRecord.company || existingRecord.currentCompanyName || '',
+        summary: existingRecord.summary || existingRecord.professionalSummary || fallback.summary,
+        totalExperienceYears: existingRecord.totalExperienceYears ?? existingRecord.experienceYears ?? fallback.totalExperienceYears,
+        experienceYears: existingRecord.experienceYears ?? existingRecord.totalExperienceYears ?? fallback.totalExperienceYears,
+        experienceMonths: existingRecord.experienceMonths ?? 0,
+        isFresher: existingRecord.isFresher ?? (existingRecord.totalExperienceYears === 0),
+        skills: existingSkills,
+        experience: Array.isArray(existingRecord.experience) ? existingRecord.experience : fallback.experience,
+        education: Array.isArray(existingRecord.education) && existingRecord.education.length > 0 ? existingRecord.education : fallback.education,
+        certifications: Array.isArray(existingRecord.certifications) ? existingRecord.certifications : fallback.certifications,
+        languages: Array.isArray(existingRecord.languages) ? existingRecord.languages : fallback.languages,
+        keywords: Array.isArray(existingRecord.keywords) ? existingRecord.keywords : fallback.keywords,
+        linkedinUrl: existingRecord.linkedinUrl || fallback.linkedinUrl,
+        portfolioUrl: existingRecord.portfolioUrl || fallback.portfolioUrl,
+        additionalText: existingRecord.additionalText || fallback.additionalText,
+        currentSalary: existingRecord.currentSalary || '',
+        expectedSalary: existingRecord.expectedSalary || '',
+        employmentStatus: existingRecord.employmentStatus || '',
+        isWorking: existingRecord.isWorking,
+        noticePeriod: existingRecord.noticePeriod || '',
+        noticePeriodDays: existingRecord.noticePeriodDays || '',
+        noticePeriodVal: existingRecord.noticePeriodVal || '',
+        noticePeriodUnit: existingRecord.noticePeriodUnit || '',
+        reasonForJobChange: existingRecord.reasonForJobChange || '',
+        parsingMethod: 'deterministic',
+        parserVersion: PARSER_VERSION,
+      };
+
+      return {
+        ...profileFromDump,
+        ...Object.fromEntries(Object.entries(overrides).filter(([, value]) => Boolean(value)))
+      };
+    }
+  }
+
   if (normalizeWhitespace(text).length < 80) return { ...fallback, ...overrides };
 
   try {
@@ -683,6 +833,31 @@ export const fastParseResumeFileLocally = async (
   const profile = deterministicParse(textToAnalyze, file.name);
   if (additionalText.trim()) {
     profile.additionalText = additionalText.trim();
+  }
+
+  // Check email in resume dump database first
+  const candidateEmail = (overrides.email || profile.email || '').trim().toLowerCase();
+  if (candidateEmail && candidateEmail.includes('@') && candidateEmail.includes('.')) {
+    const existingRecord = await fetchExistingResumeDumpByEmail(candidateEmail);
+    if (existingRecord) {
+      console.log(`[FastResumeParser] Existing resume dump candidate found for email "${candidateEmail}". Skipping AI.`);
+      const dumpProfile: ParsedResumeProfile = {
+        ...profile,
+        name: overrides.name || existingRecord.name || profile.name,
+        email: candidateEmail,
+        phone: overrides.phone || formatExtractedPhone(existingRecord.phone) || profile.phone,
+        gender: existingRecord.gender || profile.gender,
+        location: normalizeStandardCityName(existingRecord.location || (existingRecord as any).currentCity || (existingRecord as any).city || profile.location),
+        currentTitle: existingRecord.currentTitle || (existingRecord as any).designation || profile.currentTitle,
+        summary: existingRecord.summary || (existingRecord as any).professionalSummary || profile.summary,
+        totalExperienceYears: existingRecord.totalExperienceYears ?? (existingRecord as any).experienceYears ?? profile.totalExperienceYears,
+        skills: Array.isArray(existingRecord.skills) && existingRecord.skills.length > 0 ? existingRecord.skills : profile.skills,
+        experience: Array.isArray(existingRecord.experience) ? existingRecord.experience : profile.experience,
+        education: Array.isArray(existingRecord.education) && existingRecord.education.length > 0 ? existingRecord.education : profile.education,
+        ...Object.fromEntries(Object.entries(overrides).filter(([, value]) => Boolean(value)))
+      };
+      return { profile: dumpProfile, resumeText: resumeText.slice(0, MAX_RESUME_TEXT_CHARS) };
+    }
   }
 
   // 2. If deterministic parse found plenty of skills (>= 6), return immediately!

@@ -10,6 +10,7 @@ import { InterviewOverviewSkeleton } from '../components/ui/interview-loading-sk
 import { Interview } from '../types';
 import EditJobModal from './EditJob';
 import { FormattedJobDescription } from '../utils/jobDescriptionFormatter';
+import { ListenJDButton } from '../components/ListenJDButton';
 
 const formatDate = (value: any) => {
   if (!value) return 'N/A';
@@ -458,14 +459,21 @@ const InterviewOverview: React.FC = () => {
             <h2 className="geist-section-title text-slate-900 dark:text-white">Job description</h2>
             <p className="geist-small mt-0.5 text-slate-500 dark:text-[#8f8f8f]">Preview and overview of role requirements.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowFullDescription(true)}
-            className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-transparent px-3 font-medium text-slate-700 dark:text-[#d4d4d4] transition-colors hover:bg-slate-200 dark:hover:bg-white/[0.06] hover:text-slate-900 dark:hover:text-white"
-          >
-            <i className="fas fa-expand-alt text-[11px]"></i>
-            <span>Full view</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <ListenJDButton
+              title={interview.title}
+              description={description}
+              size="sm"
+            />
+            <button
+              type="button"
+              onClick={() => setShowFullDescription(true)}
+              className="geist-caption inline-flex h-8 items-center justify-center gap-2 rounded-[6px] border border-slate-200 dark:border-white/[0.11] bg-slate-100 dark:bg-transparent px-3 font-medium text-slate-700 dark:text-[#d4d4d4] transition-colors hover:bg-slate-200 dark:hover:bg-white/[0.06] hover:text-slate-900 dark:hover:text-white"
+            >
+              <i className="fas fa-expand-alt text-[11px]"></i>
+              <span>Full view</span>
+            </button>
+          </div>
         </div>
         <div className="px-4 py-5 sm:px-6 lg:px-7">
           <FormattedJobDescription

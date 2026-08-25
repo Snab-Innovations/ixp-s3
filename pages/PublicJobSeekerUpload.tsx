@@ -22,6 +22,7 @@ import Logo from '../components/Logo';
 import { calculateJobMatchScore, JobMatchResult, CandidateMatchProfile } from '../services/jobMatchService';
 import { FormattedJobDescription } from '../utils/jobDescriptionFormatter';
 import { splitEducationRequirements, checkSingleRequirementMatch } from '../utils/educationMatcher';
+import { ListenJDButton } from '../components/ListenJDButton';
 
 const matchExtractedLocationToPresentCity = (rawLocation: string): string => {
   if (!rawLocation || typeof rawLocation !== 'string') return '';
@@ -2987,7 +2988,14 @@ export default function PublicJobSeekerUpload() {
 
             {/* Full Job Description */}
             <div className="space-y-1.5">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Job Description & Responsibilities</h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-400">Job Description & Responsibilities</h4>
+                <ListenJDButton
+                  title={selectedJobForModal.job.title}
+                  description={selectedJobForModal.job.description || ''}
+                  size="sm"
+                />
+              </div>
               <div className={`p-3 rounded-2xl border max-h-56 overflow-y-auto ${
                 isDark ? 'bg-white/5 border-white/10 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'
               }`}>

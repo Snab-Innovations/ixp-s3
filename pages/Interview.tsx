@@ -19,6 +19,8 @@ import { saveCandidateConsent } from '../services/candidateConsent';
 import { LocationCityInput } from '../components/LocationCityInput';
 import { EducationInput } from '../components/EducationInput';
 import { isEducationMatching } from '../utils/educationMatcher';
+import { ListenJDButton } from '../components/ListenJDButton';
+import { FormattedJobDescription } from '../utils/jobDescriptionFormatter';
 
 
 // Setup PDF.js worker to enable PDF parsing
@@ -305,60 +307,89 @@ const CandidateInfoForm: React.FC<{
           phone: phone || undefined,
         });
 
-        let filledCount = 0;
+        let extractedEmail = profile.email ? profile.email.toLowerCase().trim() : (email ? email.toLowerCase().trim() : '');
 
-        if (profile.name && profile.name !== 'Unknown Candidate') {
-          setName(profile.name);
-          filledCount++;
-        }
-        if (profile.email) {
-          setEmail(profile.email.toLowerCase());
-          filledCount++;
-        }
-        if (profile.phone) {
-          setPhone(profile.phone);
-          filledCount++;
-        }
-        if (profile.gender && profile.gender !== 'Unspecified') {
-          setGender(profile.gender);
-          filledCount++;
-        }
-        if (profile.location) {
-          setCurrentCity(profile.location);
-          filledCount++;
-        }
-        if (profile.currentTitle) {
-          setDesignation(profile.currentTitle);
-          filledCount++;
-        }
-        if ((profile as any).currentCompany) {
-          setCurrentCompanyName((profile as any).currentCompany);
-          filledCount++;
-        }
-        if (profile.totalExperienceYears !== undefined && profile.totalExperienceYears !== null) {
-          if (profile.totalExperienceYears === 0) {
-            setIsFresher(true);
-            setTotalExperienceYears('0');
-          } else {
-            setIsFresher(false);
-            setTotalExperienceYears(profile.totalExperienceYears.toString());
+        // 1. First, check if email is already present in database (resumeDumpCandidates / resumeDump)
+        let foundRecord: any = null;
+        if (extractedEmail && extractedEmail.includes('@') && extractedEmail.includes('.')) {
+          let snap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('email', '==', extractedEmail), limit(1))).catch(() => null);
+          if (!snap || snap.empty) {
+            snap = await getDocs(query(collection(db, 'resumeDump'), where('email', '==', extractedEmail), limit(1))).catch(() => null);
           }
-          filledCount++;
+          if (snap && !snap.empty) {
+            foundRecord = snap.docs[0].data();
+            setFoundDumpCandidate(foundRecord);
+          }
         }
-        if (profile.education && profile.education.length > 0) {
-          const topEdu = profile.education[0];
-          const eduStr = topEdu.degree || topEdu.institution || '';
-          if (eduStr) {
+
+        // If candidate profile exists in database, autofill from saved database record!
+        if (foundRecord) {
+          if (foundRecord.name) setName(foundRecord.name);
+          if (foundRecord.email) setEmail(foundRecord.email.toLowerCase());
+          if (foundRecord.phone) setPhone(foundRecord.phone);
+          if (foundRecord.gender) {
+            const rawG = foundRecord.gender.toString().trim().toLowerCase();
+            if (rawG.includes('female') || rawG === 'f') setGender('Female');
+            else if (rawG.includes('male') || rawG === 'm') setGender('Male');
+            else if (rawG.includes('other')) setGender('Other');
+          }
+          if (foundRecord.currentCity || foundRecord.location || foundRecord.city) setCurrentCity(foundRecord.currentCity || foundRecord.location || foundRecord.city);
+          if (foundRecord.nativePlace) setNativePlace(foundRecord.nativePlace);
+          if (foundRecord.dob) setDob(foundRecord.dob);
+          if (foundRecord.maritalStatus) setMaritalStatus(foundRecord.maritalStatus);
+          if (foundRecord.qualificationBasic || foundRecord.education) {
+            const eduStr = typeof foundRecord.education === 'string' ? foundRecord.education : (foundRecord.qualificationBasic || '');
             setQualificationBasic(eduStr);
-            filledCount++;
           }
-        }
-        if (profile.skills && profile.skills.length > 0) {
-          setHighlightedSkillsForJob(profile.skills.slice(0, 10).join(', '));
-          filledCount++;
-        }
+          if (foundRecord.qualificationPG) setQualificationPG(foundRecord.qualificationPG);
+          if (foundRecord.totalExperienceYears !== undefined || foundRecord.experienceYears !== undefined || foundRecord.experience !== undefined) {
+            const expVal = foundRecord.totalExperienceYears ?? foundRecord.experienceYears ?? foundRecord.experience;
+            if (typeof expVal === 'number' || typeof expVal === 'string') {
+              const numExp = parseFloat(expVal.toString());
+              if (!isNaN(numExp)) {
+                if (numExp === 0) setIsFresher(true);
+                else setIsFresher(false);
+                setTotalExperienceYears(numExp.toString());
+              }
+            }
+          }
+          if (foundRecord.currentCompanyName || foundRecord.company) setCurrentCompanyName(foundRecord.currentCompanyName || foundRecord.company);
+          if (foundRecord.designation || foundRecord.currentTitle || foundRecord.role) setDesignation(foundRecord.designation || foundRecord.currentTitle || foundRecord.role);
+          if (foundRecord.currentSalary) setCurrentSalary(foundRecord.currentSalary.toString());
+          if (foundRecord.noticePeriodDays) setNoticePeriodDays(foundRecord.noticePeriodDays.toString());
+          if (foundRecord.reasonForJobChange) setReasonForJobChange(foundRecord.reasonForJobChange);
+          if (foundRecord.skills && Array.isArray(foundRecord.skills)) setHighlightedSkillsForJob(foundRecord.skills.join(', '));
+          if (foundRecord.resumeUrl || foundRecord.resumeURL) setUploadedResumeUrl(foundRecord.resumeUrl || foundRecord.resumeURL);
 
-        setAutofillNotice(`Resume parsed successfully! Auto-filled form details.`);
+          setAutofillNotice(`Found saved candidate profile in database! Details autofilled automatically.`);
+        } else {
+          // 2. If new candidate, extract core present fields cleanly (DO NOT fill fake/extra fields)
+          if (profile.name && profile.name !== 'Unknown Candidate') setName(profile.name);
+          if (profile.email) setEmail(profile.email.toLowerCase());
+          if (profile.phone) setPhone(profile.phone);
+          if (profile.gender && profile.gender !== 'Unspecified') setGender(profile.gender);
+          if (profile.location) setCurrentCity(profile.location);
+          if (profile.education && profile.education.length > 0) {
+            const topEdu = profile.education[0];
+            const eduStr = topEdu.degree || topEdu.institution || '';
+            if (eduStr) setQualificationBasic(eduStr);
+          }
+          if (profile.skills && profile.skills.length > 0) {
+            setHighlightedSkillsForJob(profile.skills.slice(0, 10).join(', '));
+          }
+          // Only set experience if explicitly present in resume
+          if (profile.totalExperienceYears !== undefined && profile.totalExperienceYears !== null) {
+            if (profile.totalExperienceYears === 0) {
+              setIsFresher(true);
+              setTotalExperienceYears('0');
+            } else {
+              setIsFresher(false);
+              setTotalExperienceYears(profile.totalExperienceYears.toString());
+            }
+          }
+
+          setAutofillNotice(`Resume parsed successfully! Auto-filled contact details and skills.`);
+        }
       }
 
       setIsUploadingResume(true);
@@ -760,27 +791,57 @@ const CandidateInfoForm: React.FC<{
 
           {formStep === 1 && (
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-              {/* Mandatory Resume Upload First Banner */}
-              <div className="candidate-resume-first-card p-5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white rounded-2xl shadow-md border border-blue-400/30 relative overflow-hidden">
+              {/* Mandatory Resume Upload First Banner - Day & Night Theme Adaptive */}
+              <div className="candidate-resume-first-card p-4 sm:p-5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 dark:from-slate-900 dark:via-indigo-950 dark:to-purple-950 text-white rounded-2xl shadow-xl border border-blue-400/40 dark:border-indigo-500/40 relative overflow-hidden transition-all duration-300">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-md text-white flex items-center justify-center font-black text-xl flex-shrink-0">
+                    <div className="w-11 h-11 rounded-xl bg-white/20 dark:bg-white/10 backdrop-blur-md text-white flex items-center justify-center font-black text-xl flex-shrink-0 border border-white/20 shadow-inner">
                       <i className="fas fa-file-invoice text-xl"></i>
                     </div>
                     <div>
-                      <h3 className="text-sm sm:text-base font-extrabold text-white mb-0.5">
-                        Step 1: Upload Resume <span className="text-red-300 font-bold">*</span> (Mandatory)
-                      </h3>
-                      <p className="text-xs text-blue-100 font-medium leading-tight">Upload your resume (PDF, DOCX, TXT) to instantly auto-fill form details.</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm sm:text-base font-black text-white mb-0.5 tracking-tight">
+                          Step 1: Upload Resume <span className="text-red-300 dark:text-red-400 font-extrabold">*</span> (Mandatory)
+                        </h3>
+                        {(resumeFile || uploadedResumeUrl || existingResumeUrl || (foundDumpCandidate && (foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL))) && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 border border-emerald-300/40 text-[10px] sm:text-[11px] font-black uppercase tracking-wider">
+                            <i className="fas fa-check-circle text-emerald-300 text-xs"></i> Saved Resume Loaded
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-blue-100 dark:text-indigo-200/90 font-medium leading-tight mt-0.5">
+                        Upload your resume (PDF, DOCX, TXT) to instantly auto-fill form details.
+                      </p>
                     </div>
                   </div>
 
                   <label
                     htmlFor="resume-first-upload-input"
-                    className={`px-4 py-2.5 rounded-xl bg-white text-blue-700 font-extrabold hover:bg-blue-50 transition-all shadow-md text-xs cursor-pointer flex items-center gap-2 whitespace-nowrap active:scale-95 ${isParsingResumeFirst ? 'opacity-80 cursor-not-allowed' : ''}`}
+                    className={`px-4 py-2.5 rounded-xl font-black text-xs cursor-pointer flex items-center gap-2 whitespace-nowrap active:scale-95 transition-all shadow-lg select-none ${
+                      isParsingResumeFirst 
+                        ? 'bg-blue-100 text-blue-800 opacity-80 cursor-not-allowed' 
+                        : (resumeFile || uploadedResumeUrl || existingResumeUrl || (foundDumpCandidate && (foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL)))
+                          ? 'bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white shadow-emerald-500/30 dark:shadow-emerald-950/60 border border-emerald-300/50'
+                          : 'bg-white hover:bg-blue-50 text-blue-700 dark:bg-white dark:text-blue-900 shadow-blue-500/20'
+                    }`}
                   >
-                    <i className={isParsingResumeFirst ? "fas fa-spinner fa-spin text-blue-600" : (resumeFile || uploadedResumeUrl || existingResumeUrl || (foundDumpCandidate && (foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL))) ? "fas fa-check-circle text-emerald-600" : "fas fa-cloud-upload-alt text-blue-600"}></i>
-                    <span>{isParsingResumeFirst ? 'Parsing & Auto-filling...' : resumeFile ? resumeFile.name : (existingResumeUrl || (foundDumpCandidate && (foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL))) ? 'Saved Resume Loaded' : 'Upload Resume File *'}</span>
+                    <i className={
+                      isParsingResumeFirst 
+                        ? "fas fa-spinner fa-spin text-blue-600" 
+                        : (resumeFile || uploadedResumeUrl || existingResumeUrl || (foundDumpCandidate && (foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL))) 
+                          ? "fas fa-check-circle text-white text-sm" 
+                          : "fas fa-cloud-upload-alt text-blue-600"
+                    }></i>
+                    <span>
+                      {isParsingResumeFirst 
+                        ? 'Parsing & Auto-filling...' 
+                        : resumeFile 
+                          ? `✓ ${resumeFile.name}` 
+                          : (existingResumeUrl || (foundDumpCandidate && (foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL))) 
+                            ? '✓ Saved Resume Loaded' 
+                            : 'Upload Resume File *'
+                      }
+                    </span>
                   </label>
                   <input
                     id="resume-first-upload-input"
@@ -797,8 +858,8 @@ const CandidateInfoForm: React.FC<{
                 </div>
 
                 {autofillNotice && (
-                  <div className="mt-3 pt-2.5 border-t border-white/20 text-xs font-semibold text-emerald-200 flex items-center gap-2">
-                    <i className="fas fa-magic text-emerald-300"></i>
+                  <div className="mt-3 pt-2.5 border-t border-white/20 dark:border-white/10 text-xs font-bold text-emerald-200 dark:text-emerald-300 flex items-center gap-2">
+                    <i className="fas fa-magic text-emerald-300 text-sm"></i>
                     <span>{autofillNotice}</span>
                   </div>
                 )}
@@ -806,28 +867,30 @@ const CandidateInfoForm: React.FC<{
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Email Address <span className="text-red-500">*</span></label>
+                    <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block">Email Address <span className="text-red-500">*</span></label>
                     {isSearchingResumeDump && (
                       <span className="text-[11px] text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/40 px-2.5 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 animate-pulse">
                         <i className="fas fa-circle-notch fa-spin"></i> Checking saved resume...
                       </span>
                     )}
                   </div>
-                  <input type="email" placeholder="Email Address (e.g. john@example.com)" required value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none" />
+                  <input type="email" placeholder="Email Address (e.g. john@example.com)" required value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Full Name <span className="text-red-500">*</span></label>
-                  <input type="text" placeholder="John Doe" required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none" />
+                  <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 block">Full Name <span className="text-red-500">*</span></label>
+                  <input type="text" placeholder="John Doe" required value={name} onChange={e => setName(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl dark:bg-gray-700/50 dark:border-gray-600 focus:ring-2 focus:ring-blue-500 outline-none text-gray-900 dark:text-white" />
                 </div>
               </div>
 
               {foundDumpCandidate && (
-                <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700/60 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs text-emerald-900 dark:text-emerald-200 animate-in fade-in duration-300">
-                  <div className="flex items-center gap-2.5 font-bold">
-                    <i className="fas fa-check-circle text-emerald-600 dark:text-emerald-400 text-lg"></i>
+                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700/80 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs text-emerald-900 dark:text-emerald-100 shadow-md animate-in fade-in duration-300">
+                  <div className="flex items-center gap-3 font-bold">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-extrabold text-base flex-shrink-0 shadow-md">
+                      <i className="fas fa-check"></i>
+                    </div>
                     <div>
-                      <p className="font-extrabold text-xs">Saved Resume & Profile Found for <span className="underline">{foundDumpCandidate.email}</span></p>
-                      <p className="text-[11px] font-normal text-emerald-800 dark:text-emerald-300">Details autofilled automatically. You can review or edit below.</p>
+                      <p className="font-black text-xs sm:text-sm">Saved Resume Profile Found for <span className="underline font-extrabold">{foundDumpCandidate.email}</span></p>
+                      <p className="text-[11px] font-medium text-emerald-800 dark:text-emerald-300 mt-0.5">Details autofilled automatically from database. Review or edit below.</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -835,7 +898,7 @@ const CandidateInfoForm: React.FC<{
                       <button
                         type="button"
                         onClick={() => setPreviewModalUrl(uploadedResumeUrl || foundDumpCandidate.resumeUrl || foundDumpCandidate.resumeURL)}
-                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 transition-all shadow-sm text-xs cursor-pointer"
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white font-extrabold flex items-center gap-1.5 transition-all shadow-md text-xs cursor-pointer active:scale-95"
                       >
                         <i className="fas fa-eye text-sm"></i>
                         <span>View Saved Resume</span>
@@ -1122,12 +1185,12 @@ const CandidateInfoForm: React.FC<{
             </div>
           )}
 
-          <div className="flex gap-4 mt-6">
+          <div className="sticky bottom-0 z-30 pt-3.5 pb-3.5 px-4 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-gray-200 dark:border-gray-800 flex gap-4 mt-6 rounded-xl shadow-2xl">
             {formStep > 1 && (
               <button 
                 type="button" 
                 onClick={handlePrevious} 
-                className="w-1/3 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 p-3.5 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="w-1/3 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 p-3.5 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
               >
                 Previous
               </button>
@@ -1137,14 +1200,14 @@ const CandidateInfoForm: React.FC<{
               <button 
                 type="button" 
                 onClick={handleNext} 
-                className={`${formStep > 1 ? 'w-2/3' : 'w-full'} bg-blue-600 text-white p-3.5 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5`}
+                className={`${formStep > 1 ? 'w-2/3' : 'w-full'} bg-blue-600 text-white p-3.5 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5 cursor-pointer`}
               >
                 Next Step
               </button>
             ) : (
               <button 
                 type="submit" 
-                className="w-2/3 bg-green-600 text-white p-3.5 rounded-xl font-bold hover:bg-green-700 shadow-lg shadow-green-500/30 transition-all transform hover:-translate-y-0.5"
+                className="w-2/3 bg-green-600 text-white p-3.5 rounded-xl font-bold hover:bg-green-700 shadow-lg shadow-green-500/30 transition-all transform hover:-translate-y-0.5 cursor-pointer"
               >
                 Proceed to Interview
               </button>
@@ -1655,16 +1718,16 @@ const InterviewReadinessOnboarding: React.FC<{
             </div>
 
             <div className="readiness-content-panel">
-              <p className="readiness-text">Keep the camera view simple and clear before the interview begins.</p>
+              <p className="readiness-text">Center face in camera frame.</p>
 
               <div className="readiness-note-list">
-                <div className="readiness-note-item">Face inside the frame</div>
-                <div className="readiness-note-item">Sit straight</div>
-                <div className="readiness-note-item">Look toward the camera</div>
+                <div className="readiness-note-item">Face in frame</div>
+                <div className="readiness-note-item">Sit upright</div>
+                <div className="readiness-note-item">Look at camera</div>
               </div>
 
               <div className={`readiness-status ${cameraReady ? 'is-success' : 'is-danger'}`}>
-                {cameraReady ? 'Camera is ready.' : permissionError || 'Waiting for camera access. If blocked, check your phone/browser settings to allow permissions.'}
+                {cameraReady ? 'Camera is ready.' : permissionError || 'Camera access needed. Check browser permissions.'}
               </div>
             </div>
           </div>
@@ -1673,7 +1736,7 @@ const InterviewReadinessOnboarding: React.FC<{
         {activeStage === 1 && (
           <div className="readiness-stage">
             <div className="readiness-content-panel readiness-content-panel-wide">
-              <p className="readiness-text">Read this line once. The meter should move while you speak.</p>
+              <p className="readiness-text">Speak aloud to test microphone.</p>
 
               <div className="readiness-phrase-card">{micPrompt}</div>
 
@@ -1691,13 +1754,13 @@ const InterviewReadinessOnboarding: React.FC<{
                   ></div>
                 </div>
                 <div className="readiness-meter-text">
-                  <span>{voiceDetected ? 'Microphone detected' : 'Waiting for speech'}</span>
+                  <span>{voiceDetected ? 'Mic detected' : 'Waiting for speech'}</span>
                   <strong>{Math.round(micLevel * 100)}%</strong>
                 </div>
               </div>
 
               <div className={`readiness-status ${voiceDetected ? 'is-success' : 'is-neutral'}`}>
-                {voiceDetected ? 'Microphone is working.' : 'Speak for a moment to continue.'}
+                {voiceDetected ? 'Microphone working.' : 'Speak to continue.'}
               </div>
             </div>
           </div>
@@ -1706,7 +1769,7 @@ const InterviewReadinessOnboarding: React.FC<{
         {activeStage === 2 && (
           <div className="readiness-stage">
             <div className="readiness-content-panel readiness-content-panel-wide">
-              <p className="readiness-text">We are checking the current connection quality.</p>
+              <p className="readiness-text">Checking connection speed.</p>
 
               <div className="readiness-network-grid">
                 <div className="readiness-network-item">
@@ -1741,7 +1804,7 @@ const InterviewReadinessOnboarding: React.FC<{
         {activeStage === 3 && (
           <div className="readiness-stage">
             <div className="readiness-content-panel readiness-content-panel-wide">
-              <p className="readiness-text">Everything is ready. Here is the interview format.</p>
+              <p className="readiness-text">Ready to begin interview:</p>
 
               <div className="readiness-summary-list">
                 {summaryPoints.map(point => (
@@ -2085,9 +2148,7 @@ const InterviewWelcomeScreen: React.FC<{
             <h5 className="text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
               <i className="fas fa-align-left text-blue-500"></i> Role Description Summary
             </h5>
-            <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed whitespace-pre-line line-clamp-4">
-              {interview.description}
-            </p>
+            <FormattedJobDescription description={interview.description} maxLines={4} className="text-xs" />
           </div>
         )}
       </div>
@@ -2724,31 +2785,31 @@ const CandidateInterviewFlow: React.FC = () => {
 
     return (
       <Container>
-        <div className="w-full max-w-3xl mx-auto px-4 py-2 animate-in fade-in slide-in-from-bottom-6 duration-500">
+        <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 py-3 sm:py-6 animate-in fade-in slide-in-from-bottom-6 duration-500">
           {/* Header Banner */}
-          <div className="text-center mb-8">
-            <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-bold border border-blue-100 dark:border-blue-800/50 mb-3 uppercase tracking-wider">
+          <div className="text-center mb-6 sm:mb-8">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 text-xs font-extrabold border border-blue-100 dark:border-blue-800/60 mb-3 uppercase tracking-wider">
               <i className="fas fa-briefcase"></i> Job Description Review
             </span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white leading-tight">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white leading-tight">
               {interview.title}
             </h2>
             {interview.department && (
-              <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mt-1.5">
+              <p className="text-xs sm:text-sm font-semibold text-gray-500 dark:text-gray-400 mt-1.5">
                 Department: {interview.department}
               </p>
             )}
           </div>
 
-          {/* Key Parameters Cards Grid - Capable for Mobile */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 mb-8">
+          {/* Key Parameters Cards Grid - Responsive for Mobile */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 sm:gap-3.5 mb-6 sm:mb-8">
             {/* Salary / CTC */}
-            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-emerald-500/30 hover:shadow-md">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-2.5">
-                <i className="fas fa-indian-rupee-sign text-lg"></i>
+            <div className="bg-white dark:bg-slate-900/80 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-200/80 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-emerald-500/40">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-2">
+                <i className="fas fa-indian-rupee-sign text-sm sm:text-lg"></i>
               </div>
-              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Salary / CTC</span>
-              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5 truncate max-w-full">
+              <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Salary / CTC</span>
+              <span className="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-gray-100 mt-0.5 truncate max-w-full">
                 {(interview as any).salary 
                   ? (typeof (interview as any).salary === 'number' ? `₹${((interview as any).salary / 100000).toFixed(1)} LPA` : (interview as any).salary)
                   : ((interview as any).salaryRange || (interview as any).ctc || '₹3.5 LPA - ₹6.0 LPA')}
@@ -2756,101 +2817,109 @@ const CandidateInterviewFlow: React.FC = () => {
             </div>
 
             {/* Location */}
-            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-rose-500/30 hover:shadow-md">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center mb-2.5">
-                <i className="fas fa-location-dot text-lg"></i>
+            <div className="bg-white dark:bg-slate-900/80 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-200/80 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-rose-500/40">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center mb-2">
+                <i className="fas fa-location-dot text-sm sm:text-lg"></i>
               </div>
-              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Location</span>
-              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5 truncate max-w-full">
+              <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Location</span>
+              <span className="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-gray-100 mt-0.5 truncate max-w-full">
                 {(interview as any).location || (interview as any).jobLocation || (interview as any).city || 'Pune / On-Site'}
               </span>
             </div>
 
             {/* Experience */}
-            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-blue-500/30 hover:shadow-md">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-2.5">
-                <i className="fas fa-user-graduate text-lg"></i>
+            <div className="bg-white dark:bg-slate-900/80 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-200/80 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-blue-500/40">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-2">
+                <i className="fas fa-user-graduate text-sm sm:text-lg"></i>
               </div>
-              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Experience</span>
-              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5 truncate max-w-full">
+              <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Experience</span>
+              <span className="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-gray-100 mt-0.5 truncate max-w-full">
                 {(interview as any).experienceRequired || (interview as any).experienceLevel || (interview as any).minExperience || (interview as any).experience || '0 - 2 Years'}
               </span>
             </div>
 
             {/* Job Type */}
-            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-amber-500/30 hover:shadow-md">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-2.5">
-                <i className="fas fa-user-clock text-lg"></i>
+            <div className="bg-white dark:bg-slate-900/80 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-200/80 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-amber-500/40">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-2">
+                <i className="fas fa-user-clock text-sm sm:text-lg"></i>
               </div>
-              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Job Type</span>
-              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5 truncate max-w-full">
+              <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Job Type</span>
+              <span className="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-gray-100 mt-0.5 truncate max-w-full">
                 {(interview as any).employmentType || (interview as any).jobType || 'Full-Time'}
               </span>
             </div>
 
             {/* Duration */}
-            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-indigo-500/30 hover:shadow-md">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-2.5">
-                <i className="fas fa-clock text-lg"></i>
+            <div className="bg-white dark:bg-slate-900/80 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-200/80 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-indigo-500/40">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-2">
+                <i className="fas fa-clock text-sm sm:text-lg"></i>
               </div>
-              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Duration</span>
-              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5">{interview.duration || 15} mins</span>
+              <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Duration</span>
+              <span className="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-gray-100 mt-0.5">{interview.duration || 15} mins</span>
             </div>
 
             {/* Difficulty */}
-            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-purple-500/30 hover:shadow-md">
-              <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center mb-2.5">
-                <i className="fas fa-tachometer-alt text-lg"></i>
+            <div className="bg-white dark:bg-slate-900/80 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-200/80 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-purple-500/40">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center mb-2">
+                <i className="fas fa-tachometer-alt text-sm sm:text-lg"></i>
               </div>
-              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Difficulty</span>
-              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5">{interview.difficulty || 'Medium'}</span>
+              <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Difficulty</span>
+              <span className="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-gray-100 mt-0.5">{interview.difficulty || 'Medium'}</span>
             </div>
 
             {/* Strictness */}
-            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-rose-500/30 hover:shadow-md">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center mb-2.5">
-                <i className="fas fa-shield-alt text-lg"></i>
+            <div className="bg-white dark:bg-slate-900/80 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-200/80 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-rose-500/40">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center mb-2">
+                <i className="fas fa-shield-alt text-sm sm:text-lg"></i>
               </div>
-              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Strictness</span>
-              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5">{interview.strictness || 'Medium'}</span>
+              <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Strictness</span>
+              <span className="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-gray-100 mt-0.5">{interview.strictness || 'Medium'}</span>
             </div>
 
             {/* Language */}
-            <div className="bg-white dark:bg-white/5 p-4 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-cyan-500/30 hover:shadow-md">
-              <div className="w-10 h-10 rounded-xl bg-cyan-50 dark:bg-cyan-950/40 text-cyan-600 dark:text-cyan-400 flex items-center justify-center mb-2.5">
-                <i className="fas fa-globe text-lg"></i>
+            <div className="bg-white dark:bg-slate-900/80 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-gray-200/80 dark:border-white/10 shadow-sm flex flex-col items-center text-center transition-all duration-300 hover:border-cyan-500/40">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-cyan-50 dark:bg-cyan-950/50 text-cyan-600 dark:text-cyan-400 flex items-center justify-center mb-2">
+                <i className="fas fa-globe text-sm sm:text-lg"></i>
               </div>
-              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Language</span>
-              <span className="text-sm font-extrabold text-gray-800 dark:text-gray-200 mt-0.5">{formatLanguageName(interviewState.language)}</span>
+              <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Language</span>
+              <span className="text-xs sm:text-sm font-extrabold text-gray-900 dark:text-gray-100 mt-0.5">{formatLanguageName(interviewState.language)}</span>
             </div>
           </div>
 
           {/* Job Description details box */}
-          <div className="bg-white dark:bg-white/5 rounded-2xl border border-gray-200/60 dark:border-white/10 shadow-sm p-6 sm:p-8 mb-8">
-            <h3 className="text-base font-bold text-gray-900 dark:text-white uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-gray-100 dark:border-white/5 pb-3">
-              <i className="fas fa-file-alt text-blue-500"></i> Role & Responsibilities
-            </h3>
+          <div className="bg-white dark:bg-slate-900/80 rounded-2xl border border-gray-200/80 dark:border-white/10 shadow-md p-4 sm:p-6 md:p-8 mb-6 sm:mb-8">
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/10 pb-3.5 mb-4 flex-wrap gap-2.5">
+              <h3 className="text-sm sm:text-base font-extrabold text-gray-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <i className="fas fa-file-alt text-blue-500"></i> Role & Responsibilities
+              </h3>
+              <ListenJDButton
+                title={interview.title}
+                description={interview.description || ''}
+                lang={interviewState.language || 'en'}
+                size="md"
+              />
+            </div>
             
-            <div className="max-h-[350px] overflow-y-auto pr-3 custom-scrollbar text-sm text-gray-600 dark:text-gray-300 leading-relaxed space-y-4 whitespace-pre-wrap select-text selection:bg-blue-500/35">
-              {interview.description || "No job description details provided."}
+            <div className="max-h-[420px] overflow-y-auto pr-2 custom-scrollbar leading-relaxed text-sm sm:text-base text-gray-800 dark:text-gray-200 select-text selection:bg-blue-500/35 touch-pan-y">
+              <FormattedJobDescription description={interview.description} />
             </div>
           </div>
 
           {/* Action Callouts & Next button */}
-          <div className="bg-blue-50/50 dark:bg-blue-950/20 rounded-2xl border border-blue-100 dark:border-blue-900/30 p-5 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="sticky bottom-0 z-30 bg-blue-50/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-2xl border border-blue-300 dark:border-blue-700/60 p-4 sm:p-5 mb-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl">
             <div className="flex items-center gap-3 text-center sm:text-left">
-              <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex-shrink-0 flex items-center justify-center mx-auto sm:mx-0">
+              <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex-shrink-0 flex items-center justify-center mx-auto sm:mx-0">
                 <i className="fas fa-info-circle text-lg"></i>
               </div>
               <div>
-                <h4 className="text-sm font-bold text-blue-900 dark:text-blue-200">Ready to begin?</h4>
-                <p className="text-xs text-blue-700/80 dark:text-blue-300/80 mt-0.5">Please review the details above. The next step will verify your audio and video.</p>
+                <h4 className="text-sm font-bold text-blue-950 dark:text-blue-200">Ready to begin?</h4>
+                <p className="text-xs text-blue-800/90 dark:text-blue-300/90 mt-0.5">Please review the details above. The next step will verify your audio and video.</p>
               </div>
             </div>
             
             <button 
               onClick={() => setStep('instructions')}
-              className="w-full sm:w-auto px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 group whitespace-nowrap"
+              className="w-full sm:w-auto px-7 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 group whitespace-nowrap cursor-pointer"
             >
               Proceed to Hardware Check
               <i className="fas fa-arrow-right text-sm transition-transform group-hover:translate-x-1"></i>
@@ -2863,8 +2932,8 @@ const CandidateInterviewFlow: React.FC = () => {
 
   if (step === 'instructions') {
     return (
-      <Container>
-        <div className="flex items-center justify-center min-h-[70vh] w-full px-4">
+      <div className="w-full max-w-4xl mx-auto px-1 sm:px-4 py-2 sm:py-6">
+        <div className="flex items-center justify-center w-full px-0">
           <InterviewReadinessOnboarding
             interview={interview}
             state={interviewState}
@@ -2874,7 +2943,7 @@ const CandidateInterviewFlow: React.FC = () => {
             }}
           />
         </div>
-      </Container>
+      </div>
     );
   }
 
@@ -3422,13 +3491,13 @@ const ActiveInterviewSession: React.FC<{
         </div>
       )}
 
-      {/* Main content: camera (left) + question (right) */}
+      {/* Main content: camera/avatar (left/top) + question (right/bottom) */}
       <div className="interview-room-grid flex-1 flex flex-col md:flex-row gap-2 md:gap-3 p-2 md:p-3 overflow-hidden min-h-0">
 
-        {/* Left panel: AI Interviewer & camera feed */}
-        <div className="interview-room-camera-column w-full md:w-5/12 flex flex-col gap-1.5 md:gap-3 shrink-0 md:shrink md:min-h-0">
-          {/* AI Interviewer Avatar Card */}
-          <div className="interview-room-avatar-card relative min-h-[150px] h-[28vh] md:h-auto md:flex-1 bg-slate-900 dark:bg-slate-950 rounded-xl md:rounded-2xl overflow-hidden border border-gray-200/10 dark:border-white/5 shadow-2xl flex flex-col items-center justify-center p-5">
+        {/* Left/Top panel: AI Interviewer & camera feed */}
+        <div className="interview-room-camera-column w-full md:w-5/12 flex flex-col sm:flex-row md:flex-col gap-1.5 md:gap-3 shrink-0 md:shrink md:min-h-0">
+          {/* AI Interviewer Avatar Card - Hidden on mobile screen for cleaner camera feed & full question space */}
+          <div className="interview-room-avatar-card hidden md:flex relative h-auto py-2.5 px-3 md:py-5 md:px-5 md:flex-1 bg-slate-900 dark:bg-slate-950 rounded-xl md:rounded-2xl overflow-hidden border border-gray-200/10 dark:border-white/5 shadow-xl flex-col items-center justify-center">
             <style>{`
               @keyframes soundbar {
                 0%, 100% { height: 20%; }
@@ -3444,12 +3513,12 @@ const ActiveInterviewSession: React.FC<{
             <div className="absolute inset-0 bg-gradient-to-br from-blue-600/10 via-transparent to-purple-600/10 pointer-events-none"></div>
             
             {/* Advanced AI Hologram Visualizer */}
-            <div className="relative w-24 h-24 md:w-36 md:h-36 flex items-center justify-center">
+            <div className="relative w-16 h-16 sm:w-20 sm:h-20 md:w-36 md:h-36 flex items-center justify-center">
               {/* Outer orbit/ring with rotating dash */}
               <div className={`absolute inset-0 rounded-full border border-dashed border-blue-500/40 ${isSpeaking ? 'animate-spin' : 'animate-[spin_20s_linear_infinite]'} opacity-60`}></div>
               
               {/* Middle glowing shell */}
-              <div className={`absolute inset-3 rounded-full border border-purple-500/20 bg-purple-500/5 transition-all duration-700 ${
+              <div className={`absolute inset-2 md:inset-3 rounded-full border border-purple-500/20 bg-purple-500/5 transition-all duration-700 ${
                 isSpeaking ? 'scale-105 opacity-80 shadow-[0_0_25px_rgba(168,85,247,0.3)]' : 'scale-100 opacity-40 shadow-none'
               }`}></div>
 
@@ -3476,7 +3545,7 @@ const ActiveInterviewSession: React.FC<{
               </svg>
 
               {/* Centered Hologram Core with Recruiter Image */}
-              <div className={`relative w-16 h-16 md:w-22 md:h-22 rounded-full overflow-hidden border-2 border-blue-500/50 flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.3)] z-20 transition-all duration-300 ${
+              <div className={`relative w-12 h-12 sm:w-14 sm:h-14 md:w-22 md:h-22 rounded-full overflow-hidden border-2 border-blue-500/50 flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.3)] z-20 transition-all duration-300 ${
                 isSpeaking ? 'scale-105 border-purple-500 shadow-[0_0_30px_rgba(168,85,247,0.5)]' : ''
               }`}>
                 <img 
@@ -3488,7 +3557,7 @@ const ActiveInterviewSession: React.FC<{
             </div>
 
             {/* Small speech frequency wave bars under avatar */}
-            <div className="h-4 flex items-end gap-0.5 mt-2.5 z-10">
+            <div className="h-3 md:h-4 flex items-end gap-0.5 mt-1.5 md:mt-2.5 z-10">
               {isSpeaking ? (
                 <>
                   <span className="w-0.5 bg-blue-400 rounded-full animate-[soundbar_0.8s_ease-in-out_infinite]" style={{ height: '40%' }}></span>
@@ -3509,64 +3578,40 @@ const ActiveInterviewSession: React.FC<{
             </div>
 
             {/* Speaking/Listening Status Indicator */}
-            <div className="mt-3 md:mt-4 text-center z-10 flex flex-col items-center">
-              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] md:text-xs font-bold transition-all duration-300 ${
+            <div className="mt-1.5 md:mt-4 text-center z-10 flex flex-col items-center">
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 md:px-3 md:py-1 rounded-full text-[10px] md:text-xs font-extrabold transition-all duration-300 ${
                 isSpeaking 
-                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
+                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 animate-pulse' 
                   : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
               }`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${isSpeaking ? 'bg-blue-400 animate-ping' : 'bg-emerald-400'}`}></span>
-                {isSpeaking ? 'AI Speaking' : 'Listening...'}
+                {isSpeaking ? 'AI Recruiter Speaking...' : 'Listening...'}
               </span>
-              <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2 z-20">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (getMuteTTS()) return;
-                    unlockTTSAudio();
-                    speak.stop();
-                    setIsSpeaking(true);
-                    const langMap: Record<string, string> = { en: 'en', hi: 'hi-IN', mr: 'mr-IN' };
-                    const ttsLang = langMap[state.language] || 'en';
-                    speak(currentQ, {
-                      lang: ttsLang,
-                      onEnd: () => setIsSpeaking(false),
-                      onError: () => setIsSpeaking(false),
-                    });
-                  }}
-                  className="px-3 py-1 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-extrabold shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                  title="Click to replay question voice"
-                >
-                  <i className="fas fa-volume-up"></i>
-                  <span>Replay Voice</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={toggleMuteVoice}
-                  className={`px-3 py-1 rounded-full text-[11px] font-extrabold shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer border ${
-                    isVoiceMuted
-                      ? 'bg-red-500/20 text-red-400 border-red-500/40 hover:bg-red-500/30'
-                      : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
-                  }`}
-                  title={isVoiceMuted ? "Unmute AI Voice" : "Mute AI Voice"}
-                >
-                  <i className={`fas ${isVoiceMuted ? 'fa-volume-mute text-red-400' : 'fa-volume-up text-blue-400'}`}></i>
-                  <span>{isVoiceMuted ? 'Voice Muted' : 'Mute AI Voice'}</span>
-                </button>
-              </div>
-              <p className="text-[10px] md:text-xs text-slate-400 mt-1 font-bold uppercase tracking-widest">AI Recruiter</p>
             </div>
           </div>
 
           {/* Camera Card */}
-          <div className="interview-room-camera-card relative min-h-[140px] h-[25vh] md:h-auto md:flex-1 md:min-h-[200px] bg-gray-900 rounded-xl md:rounded-2xl overflow-hidden border border-gray-700/50 shadow-xl">
+          <div className="interview-room-camera-card relative min-h-[140px] h-[22vh] sm:h-auto sm:flex-1 md:min-h-[180px] bg-gray-900 rounded-xl md:rounded-2xl overflow-hidden border border-gray-700/50 shadow-xl shrink-0">
+            {/* Mobile AI Recruiter Floating Badge Overlay */}
+            <div className="md:hidden absolute top-2.5 left-2.5 z-20 flex items-center gap-2 px-2.5 py-1 rounded-full bg-slate-950/85 backdrop-blur-md border border-purple-500/40 shadow-lg text-white">
+              <div className="relative w-5 h-5 rounded-full overflow-hidden border border-purple-400/60 shrink-0">
+                <img src="/recruiter_avatar.png" alt="AI Recruiter" className="w-full h-full object-cover" />
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] font-bold">
+                <span className={`w-1.5 h-1.5 rounded-full ${isSpeaking ? 'bg-purple-400 animate-ping' : 'bg-emerald-400'}`}></span>
+                <span className={isSpeaking ? 'text-purple-300 font-extrabold' : 'text-emerald-300 font-semibold'}>
+                  {isSpeaking ? 'AI Speaking...' : 'AI Listening'}
+                </span>
+              </div>
+            </div>
+
             <video ref={videoRef} autoPlay muted playsInline className="interview-room-camera-video w-full h-full object-cover transform scale-x-[-1]" />
 
             {/* Countdown Overlay (scoped to camera) */}
             {sessionReady && countdown > 0 && (
               <div className="interview-room-countdown absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center z-20 rounded-xl md:rounded-2xl">
-                <p className="text-white/80 text-xs md:text-sm font-light mb-1 tracking-widest uppercase">Get Ready</p>
-                <span className="text-4xl md:text-6xl font-black text-white">{countdown}</span>
+                <p className="text-white/80 text-[10px] sm:text-xs md:text-sm font-light mb-0.5 tracking-widest uppercase">Get Ready</p>
+                <span className="text-3xl sm:text-4xl md:text-6xl font-black text-white">{countdown}</span>
               </div>
             )}
 
@@ -3574,25 +3619,25 @@ const ActiveInterviewSession: React.FC<{
             {processingVideo && <TicTacToe />}
 
             {/* Gradient bottom edge */}
-            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-gray-900/80 to-transparent pointer-events-none"></div>
+            <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-gray-900/80 to-transparent pointer-events-none"></div>
           </div>
 
           {/* Status Bar Below Camera */}
-          <div className="interview-room-meta flex items-center justify-between px-2 md:px-4 py-1.5 md:py-2.5 bg-white dark:bg-gray-800/60 rounded-lg md:rounded-xl border border-gray-200 dark:border-gray-700/50 shadow-sm">
-            <div className="flex items-center gap-2 md:gap-3">
+          <div className="interview-room-meta flex items-center justify-between px-2 md:px-4 py-1 md:py-2.5 bg-white dark:bg-gray-800/60 rounded-lg md:rounded-xl border border-gray-200 dark:border-gray-700/50 shadow-sm">
+            <div className="flex items-center gap-1.5 md:gap-3">
               {/* REC Indicator */}
               {isRecording ? (
-                <div className="interview-room-badge is-recording flex items-center gap-1 md:gap-1.5 bg-red-500/15 text-red-600 dark:text-red-400 px-2 md:px-2.5 py-0.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold uppercase tracking-wider">
-                  <div className="w-1.5 md:w-2 h-1.5 md:h-2 bg-red-500 rounded-full"></div>
+                <div className="interview-room-badge is-recording flex items-center gap-1 md:gap-1.5 bg-red-500/15 text-red-600 dark:text-red-400 px-2 md:px-2.5 py-0.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-extrabold uppercase tracking-wider">
+                  <div className="w-1.5 md:w-2 h-1.5 md:h-2 bg-red-500 rounded-full animate-ping"></div>
                   REC
                 </div>
               ) : !cameraReady ? (
-                <div className="interview-room-badge is-pending flex items-center gap-1 md:gap-1.5 bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 px-2 md:px-2.5 py-0.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-bold uppercase tracking-wider">
+                <div className="interview-room-badge is-pending flex items-center gap-1 md:gap-1.5 bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 px-2 md:px-2.5 py-0.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-extrabold uppercase tracking-wider">
                   <div className="w-1.5 md:w-2 h-1.5 md:h-2 bg-yellow-500 rounded-full"></div>
                   INITIALIZING
                 </div>
               ) : (
-                <div className="interview-room-badge flex items-center gap-1 md:gap-1.5 bg-gray-100 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400 px-2 md:px-2.5 py-0.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-medium">
+                <div className="interview-room-badge flex items-center gap-1 md:gap-1.5 bg-gray-100 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400 px-2 md:px-2.5 py-0.5 md:py-1 rounded-md md:rounded-lg text-[10px] md:text-[11px] font-semibold">
                   <div className="w-1.5 md:w-2 h-1.5 md:h-2 bg-gray-400 rounded-full"></div>
                   STANDBY
                 </div>
@@ -3604,53 +3649,54 @@ const ActiveInterviewSession: React.FC<{
           </div>
         </div>
 
-        {/* Right panel: question + controls */}
+        {/* Right/Bottom panel: Question Card + Voice Controls */}
         <div className="interview-room-question-column w-full md:w-7/12 flex flex-col gap-2 md:gap-3 min-h-0 flex-1">
           {/* Question Card */}
-          <div className="interview-room-question-card flex-1 flex flex-col bg-white dark:bg-gray-800/60 rounded-xl md:rounded-2xl border border-gray-200 dark:border-gray-700/50 shadow-xl overflow-hidden min-h-0">
+          <div className="interview-room-question-card flex-1 flex flex-col bg-white dark:bg-slate-900/90 rounded-xl md:rounded-2xl border border-gray-200/90 dark:border-white/10 shadow-xl overflow-hidden min-h-0">
 
             {/* Question Header: Counter + Timer */}
-            <div className="interview-room-question-header flex items-center justify-between px-3 md:px-6 py-2.5 md:py-4 border-b border-gray-100 dark:border-gray-700/50 shrink-0">
+            <div className="interview-room-question-header flex items-center justify-between px-3.5 md:px-6 py-2.5 md:py-4 border-b border-gray-100 dark:border-white/10 shrink-0">
               <div className="flex items-center gap-2 md:gap-3">
-                <div className="interview-room-question-icon w-6 h-6 md:w-8 md:h-8 rounded-md md:rounded-lg bg-blue-500/10 dark:bg-blue-500/15 flex items-center justify-center">
-                  <i className="fas fa-list-ol text-blue-500 text-xs md:text-sm"></i>
+                <div className="interview-room-question-icon w-7 h-7 md:w-9 md:h-9 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <i className="fas fa-list-ol text-xs md:text-sm"></i>
                 </div>
                 <div>
-                  <p className="text-[9px] md:text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest font-medium">Question</p>
-                  <p className="text-sm md:text-lg font-bold text-gray-800 dark:text-white">
+                  <p className="text-[9px] md:text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-widest font-bold">Question</p>
+                  <p className="text-sm md:text-lg font-black text-gray-900 dark:text-white">
                     {state.currentQuestionIndex + 1} <span className="text-gray-400 dark:text-gray-500 text-xs md:text-sm font-normal">/ {state.questions.length}</span>
                   </p>
                 </div>
               </div>
               {/* Timer */}
-              <div className={`interview-room-timer flex items-center gap-1.5 md:gap-2 px-2.5 md:px-4 py-1.5 md:py-2 rounded-lg md:rounded-xl font-mono font-bold text-xs md:text-sm transition-colors ${timeLeft < 30
-                ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
-                : 'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-700/50 dark:text-white dark:border-gray-600'
+              <div className={`interview-room-timer flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-1.5 md:py-2 rounded-lg md:rounded-xl font-mono font-black text-xs md:text-sm transition-colors ${timeLeft < 30
+                ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-950/50 dark:text-red-400 dark:border-red-800/80 animate-pulse'
+                : 'bg-gray-50 text-gray-800 border-gray-200 dark:bg-gray-800/80 dark:text-white dark:border-gray-700'
                 } border shadow-sm`}>
-                <div className={`w-1.5 md:w-2 h-1.5 md:h-2 rounded-full ${isRecording ? 'bg-red-500' : 'bg-gray-400 dark:bg-gray-500'}`}></div>
-                <i className="fas fa-clock text-[10px] md:text-xs opacity-60"></i>
+                <div className={`w-2 h-2 rounded-full ${isRecording ? 'bg-red-500 animate-ping' : 'bg-gray-400 dark:bg-gray-500'}`}></div>
+                <i className="fas fa-clock text-xs opacity-60"></i>
                 {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
               </div>
             </div>
 
-            {/* Question Body */}
-            <div className="interview-room-question-body flex-1 overflow-y-auto px-3 md:px-6 py-3 md:py-6 flex items-start">
+            {/* Question Body - Highly Readable for Mobile & Laptop */}
+            <div className="interview-room-question-body flex-1 overflow-y-auto px-4 md:px-7 py-4 md:py-7 flex items-start touch-pan-y custom-scrollbar">
               <div className="w-full">
-                <p className="interview-room-question-label text-[10px] md:text-xs text-blue-500 dark:text-blue-400 font-semibold uppercase tracking-widest mb-2 md:mb-3">
-                  <i className="fas fa-microphone-alt mr-1"></i> Answer this question
+                <p className="interview-room-question-label text-[10px] md:text-xs text-blue-600 dark:text-blue-400 font-extrabold uppercase tracking-widest mb-2.5 md:mb-4 flex items-center gap-1.5">
+                  <i className="fas fa-microphone-alt"></i> Speak your response clearly below
                 </p>
-                <h2 className="text-base md:text-2xl font-semibold leading-relaxed text-gray-800 dark:text-gray-100">
+                <h2 className="text-base sm:text-xl md:text-2xl font-black leading-relaxed sm:leading-relaxed text-gray-900 dark:text-white selection:bg-blue-500/30">
                   {currentQ}
                 </h2>
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="interview-room-question-actions flex items-center justify-between gap-2 md:gap-3 px-3 md:px-6 py-2.5 md:py-4 border-t border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/30 shrink-0">
-              <div className="flex items-center gap-2">
+            {/* Action Buttons & Voice Controls */}
+            <div className="interview-room-question-actions flex flex-row items-center justify-between gap-2 px-3.5 md:px-6 py-2.5 md:py-4 border-t border-gray-100 dark:border-white/10 bg-gray-50/70 dark:bg-slate-900/50 shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     if (getMuteTTS()) return;
                     unlockTTSAudio();
                     speak.stop();
@@ -3663,24 +3709,42 @@ const ActiveInterviewSession: React.FC<{
                       onError: () => setIsSpeaking(false),
                     });
                   }}
-                  className="px-3.5 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    if (getMuteTTS()) return;
+                    unlockTTSAudio();
+                    speak.stop();
+                    setIsSpeaking(true);
+                    const langMap: Record<string, string> = { en: 'en', hi: 'hi-IN', mr: 'mr-IN' };
+                    const ttsLang = langMap[state.language] || 'en';
+                    speak(currentQ, {
+                      lang: ttsLang,
+                      onEnd: () => setIsSpeaking(false),
+                      onError: () => setIsSpeaking(false),
+                    });
+                  }}
+                  className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 select-none ${
+                    isSpeaking
+                      ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/30 animate-pulse'
+                      : 'bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/80'
+                  }`}
                   title="Replay Voice Aloud"
                 >
-                  <i className="fas fa-volume-up text-indigo-600 dark:text-indigo-400"></i>
-                  <span>Replay Voice</span>
+                  <i className={`fas ${isSpeaking ? 'fa-pause' : 'fa-volume-high'} text-xs`}></i>
+                  <span>{isSpeaking ? 'Speaking...' : 'Replay Voice'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={toggleMuteVoice}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm border ${
+                  className={`px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm border active:scale-95 select-none ${
                     isVoiceMuted
                       ? 'bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800/80 hover:bg-red-100'
-                      : 'bg-gray-100 dark:bg-gray-700/60 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-600 hover:bg-gray-200'
+                      : 'bg-gray-100 dark:bg-gray-800/80 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-200'
                   }`}
                   title={isVoiceMuted ? "Unmute AI Voice" : "Mute AI Voice"}
                 >
-                  <i className={`fas ${isVoiceMuted ? 'fa-volume-mute text-red-500' : 'fa-volume-xmark text-gray-500'}`}></i>
-                  <span>{isVoiceMuted ? 'Voice Muted' : 'Mute Voice'}</span>
+                  <i className={`fas ${isVoiceMuted ? 'fa-volume-xmark text-red-500' : 'fa-volume-high text-gray-400'}`}></i>
+                  <span className="hidden sm:inline">{isVoiceMuted ? 'Voice Muted' : 'Mute Voice'}</span>
                 </button>
               </div>
 
@@ -3688,18 +3752,18 @@ const ActiveInterviewSession: React.FC<{
               {isRecording ? (
                 <button
                   onClick={stopRecording}
-                  className="interview-room-primary-button flex items-center gap-2 px-4 md:px-6 py-2 md:py-2.5 rounded-lg md:rounded-xl font-bold text-xs md:text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/20 transform transition hover:scale-[1.02] active:scale-95"
+                  className="interview-room-primary-button flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl font-extrabold text-xs sm:text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/25 active:scale-95 cursor-pointer"
                 >
                   Next
                   <i className="fas fa-arrow-right"></i>
                 </button>
               ) : processingVideo || isStopping ? (
-                <div className="interview-room-state-chip flex items-center gap-2 px-4 md:px-6 py-2 md:py-2.5 rounded-lg md:rounded-xl text-xs md:text-sm font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600">
+                <div className="interview-room-state-chip flex items-center gap-2 px-3.5 sm:px-6 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
                   <i className="fas fa-circle-notch fa-spin"></i>
                   Loading next...
                 </div>
               ) : (
-                <div className="interview-room-state-chip is-muted flex items-center gap-2 px-4 md:px-6 py-2 md:py-2.5 rounded-lg md:rounded-xl text-xs md:text-sm font-medium text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700/30 border border-gray-200 dark:border-gray-600">
+                <div className="interview-room-state-chip is-muted flex items-center gap-2 px-3.5 sm:px-6 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700">
                   <i className="fas fa-hourglass-half"></i>
                   Ready
                 </div>

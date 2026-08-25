@@ -1237,6 +1237,43 @@ const InterviewReport: React.FC = () => {
                                 )}
                             </div>
 
+                            {/* Professional & Work Details */}
+                            <div className="space-y-2 mt-2">
+                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Professional & Work Details</h3>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="flex flex-col p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
+                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Experience</span>
+                                        <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                                            {submission.candidateInfo.isFresher ? 'Fresher' : `${submission.candidateInfo.totalExperienceYears ?? submission.candidateInfo.experienceYears ?? 0} Yrs`}
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-col p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
+                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Designation</span>
+                                        <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{submission.candidateInfo.designation || submission.candidateInfo.currentTitle || 'N/A'}</span>
+                                    </div>
+                                    <div className="flex flex-col p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
+                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Current Company</span>
+                                        <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{submission.candidateInfo.currentCompanyName || submission.candidateInfo.company || 'N/A'}</span>
+                                    </div>
+                                    <div className="flex flex-col p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
+                                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Notice Period</span>
+                                        <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{submission.candidateInfo.noticePeriodDays ? `${submission.candidateInfo.noticePeriodDays} Days` : (submission.candidateInfo.noticePeriod || 'N/A')}</span>
+                                    </div>
+                                    {submission.candidateInfo.currentSalary && (
+                                        <div className="flex flex-col p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
+                                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Current Salary</span>
+                                            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{submission.candidateInfo.currentSalary}</span>
+                                        </div>
+                                    )}
+                                    {submission.candidateInfo.reasonForJobChange && (
+                                        <div className="flex flex-col col-span-2 p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
+                                            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Reason for Job Change</span>
+                                            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{submission.candidateInfo.reasonForJobChange}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
 
                             {/* Additional Details */}
                             <div className="space-y-2 mt-2">

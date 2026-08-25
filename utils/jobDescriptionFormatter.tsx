@@ -46,9 +46,21 @@ export function cleanJobDescriptionHtml(rawHtml?: string | null): string {
   if (!rawHtml || typeof rawHtml !== 'string') return '';
 
   let html = rawHtml
-    // Remove inline color / background style overrides so theme is strictly respected
-    .replace(/style="[^"]*?(?:color|background)[^"]*?"/gi, '')
-    .replace(/style='[^']*?(?:color|background)[^']*?'/gi, '')
+    // Decode escaped HTML entities if present (e.g. &lt;p&gt;)
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    // Remove inline color / background / font style overrides so theme is strictly respected
+    .replace(/style="[^"]*?"/gi, '')
+    .replace(/style='[^']*?'/gi, '')
+    // Remove non-standard attributes like helvetica="" neue=""
+    .replace(/<([a-z1-6]+)\s+[^>]*>/gi, (match, tag) => {
+      const lowerTag = tag.toLowerCase();
+      if (lowerTag === 'a') {
+        const hrefMatch = match.match(/href=["']([^"']+)["']/i);
+        return hrefMatch ? `<a href="${hrefMatch[1]}" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 underline">` : '<a>';
+      }
+      return `<${lowerTag}>`;
+    })
     // Remove deprecated <font> tags
     .replace(/<\/?font[^>]*>/gi, '')
     // Decode common entities that break rendering
@@ -60,15 +72,17 @@ export function cleanJobDescriptionHtml(rawHtml?: string | null): string {
     .replace(/&bull;/gi, '•')
     // Turn excessive separator lines into a clean styled hr
     .replace(/={5,}|-{5,}|_{5,}/g, '<hr class="my-3 border-gray-300 dark:border-white/10" />')
+    // Style paragraphs cleanly
+    .replace(/<p>/gi, '<p class="mb-2 text-slate-800 dark:text-slate-200 leading-relaxed font-sans text-sm sm:text-base">')
     // Ensure lists have proper spacing and theme text
-    .replace(/<ul>/gi, '<ul class="list-disc pl-5 my-2 space-y-1.5 text-slate-800 dark:text-slate-200">')
-    .replace(/<ol>/gi, '<ol class="list-decimal pl-5 my-2 space-y-1.5 text-slate-800 dark:text-slate-200">')
+    .replace(/<ul>/gi, '<ul class="list-disc pl-5 my-2 space-y-1.5 text-slate-800 dark:text-slate-200 font-sans text-sm sm:text-base">')
+    .replace(/<ol>/gi, '<ol class="list-decimal pl-5 my-2 space-y-1.5 text-slate-800 dark:text-slate-200 font-sans text-sm sm:text-base">')
     .replace(/<li>/gi, '<li class="text-slate-800 dark:text-slate-200 leading-relaxed">')
     // Ensure bold headings have proper styling
     .replace(/<strong>/gi, '<strong class="font-bold text-slate-900 dark:text-white">')
     .replace(/<b>/gi, '<b class="font-bold text-slate-900 dark:text-white">');
 
-  return html;
+  return html.trim();
 }
 
 interface FormattedJobDescriptionProps {
@@ -90,7 +104,16 @@ export const FormattedJobDescription: React.FC<FormattedJobDescriptionProps> = (
     return <p className={`geist-caption text-gray-500 dark:text-[#6b7280] ${className}`}>No detailed description provided.</p>;
   }
 
-  const raw = description.trim();
+  // Pre-process & decode string
+  let raw = description.trim();
+  if (raw.includes('&lt;') && raw.includes('&gt;')) {
+    raw = raw
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&');
+  }
+
   const hasHtmlTags = /<[a-z][\s\S]*>/i.test(raw);
 
   const styleProps: React.CSSProperties = maxLines
@@ -111,7 +134,7 @@ export const FormattedJobDescription: React.FC<FormattedJobDescriptionProps> = (
     const cleanedHtml = cleanJobDescriptionHtml(raw);
     return (
       <div
-        className={`formatted-jd-content text-slate-800 dark:text-slate-200 leading-relaxed text-xs sm:text-sm space-y-2 ${className}`}
+        className={`formatted-jd-content text-slate-800 dark:text-slate-200 leading-relaxed text-sm sm:text-base space-y-2 ${className}`}
         style={styleProps}
         dangerouslySetInnerHTML={{ __html: cleanedHtml }}
       />
@@ -122,7 +145,7 @@ export const FormattedJobDescription: React.FC<FormattedJobDescriptionProps> = (
   const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
   return (
-    <div className={`text-slate-800 dark:text-slate-200 leading-relaxed text-xs sm:text-sm space-y-2 ${className}`} style={styleProps}>
+    <div className={`text-slate-800 dark:text-slate-200 leading-relaxed text-sm sm:text-base space-y-2 ${className}`} style={styleProps}>
       {lines.map((line, idx) => {
         if (/^[=_-]{5,}$/.test(line)) {
           return <hr key={idx} className="my-2.5 border-gray-300 dark:border-white/10" />;
@@ -138,7 +161,7 @@ export const FormattedJobDescription: React.FC<FormattedJobDescriptionProps> = (
         }
         if (line.endsWith(':') || /^(responsibilities|requirements|qualifications|about the role|key skills|job summary):?$/i.test(line)) {
           return (
-            <h4 key={idx} className="font-bold text-slate-900 dark:text-white mt-3 mb-1 text-xs sm:text-sm">
+            <h4 key={idx} className="font-extrabold text-slate-900 dark:text-white mt-3 mb-1 text-sm sm:text-base">
               {line}
             </h4>
           );

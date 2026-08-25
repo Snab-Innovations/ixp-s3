@@ -3133,31 +3133,76 @@ const ResumeDump: React.FC = () => {
                   </div>
                 </div>
 
-                {(skillsPanelCandidate.currentSalary || skillsPanelCandidate.expectedSalary || skillsPanelCandidate.noticePeriod || skillsPanelCandidate.noticePeriodDays || skillsPanelCandidate.employmentStatus) && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs p-3 rounded-[8px] bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Status</span>
-                      <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">{skillsPanelCandidate.employmentStatus || 'N/A'}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Notice Period</span>
-                      <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">{skillsPanelCandidate.noticePeriod || (skillsPanelCandidate.noticePeriodDays ? `${skillsPanelCandidate.noticePeriodDays} Days` : 'N/A')}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Gender & Marital</span>
-                      <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
-                        {(skillsPanelCandidate as any).gender || 'Not specified'}
-                        {skillsPanelCandidate.maritalStatus ? ` · ${skillsPanelCandidate.maritalStatus}` : ''}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Salary (Cur / Exp)</span>
-                      <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
-                        {skillsPanelCandidate.currentSalary || 'N/A'} / {skillsPanelCandidate.expectedSalary || 'N/A'}
-                      </span>
-                    </div>
+                {/* Candidate Detailed Registration & Professional Information */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs p-3.5 rounded-[10px] bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Gender & Marital</span>
+                    <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
+                      {skillsPanelCandidate.gender || 'Not specified'}
+                      {skillsPanelCandidate.maritalStatus ? ` · ${skillsPanelCandidate.maritalStatus}` : ''}
+                    </span>
                   </div>
-                )}
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">DOB / Age</span>
+                    <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
+                      {skillsPanelCandidate.dob || skillsPanelCandidate.dateOfBirth || (skillsPanelCandidate as any).age ? `${skillsPanelCandidate.dob || skillsPanelCandidate.dateOfBirth || ''} ${ (skillsPanelCandidate as any).age ? `(${ (skillsPanelCandidate as any).age} yrs)` : ''}` : 'N/A'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">City & Native Place</span>
+                    <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
+                      {skillsPanelCandidate.currentCity || skillsPanelCandidate.location || 'N/A'}
+                      {skillsPanelCandidate.nativePlace ? ` (Native: ${skillsPanelCandidate.nativePlace})` : ''}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Highest Qualification</span>
+                    <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
+                      {skillsPanelCandidate.qualificationBasic || skillsPanelCandidate.highestEducation || (Array.isArray(skillsPanelCandidate.education) && skillsPanelCandidate.education[0]?.degree) || 'N/A'}
+                      {skillsPanelCandidate.qualificationPG ? ` / ${skillsPanelCandidate.qualificationPG}` : ''}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Current Company</span>
+                    <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
+                      {skillsPanelCandidate.currentCompanyName || skillsPanelCandidate.company || 'N/A'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Designation</span>
+                    <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
+                      {skillsPanelCandidate.designation || skillsPanelCandidate.currentTitle || 'N/A'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Experience / Status</span>
+                    <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
+                      {skillsPanelCandidate.isFresher ? 'Fresher' : `${skillsPanelCandidate.totalExperienceYears ?? 0} Yrs ${skillsPanelCandidate.experienceMonths ? `${skillsPanelCandidate.experienceMonths} M` : ''}`} ({skillsPanelCandidate.employmentStatus || 'N/A'})
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Salary (Cur / Exp)</span>
+                    <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
+                      {skillsPanelCandidate.currentSalary || 'N/A'} / {skillsPanelCandidate.expectedSalary || 'N/A'}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Notice Period</span>
+                    <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
+                      {skillsPanelCandidate.noticePeriod || (skillsPanelCandidate.noticePeriodDays ? `${skillsPanelCandidate.noticePeriodDays} Days` : 'N/A')}
+                    </span>
+                  </div>
+                  {skillsPanelCandidate.reasonForJobChange && (
+                    <div className="col-span-3">
+                      <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block">Reason for Job Change</span>
+                      <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
+                        {skillsPanelCandidate.reasonForJobChange}
+                      </span>
+                    </div>
+                  )}
+                </div>
 
                 {/* Target Industry Sectors & Functional Departments */}
                 <div className="p-3.5 rounded-[12px] bg-slate-50 dark:bg-white/[0.03] border border-gray-200 dark:border-white/[0.08] space-y-2.5">

@@ -1517,11 +1517,46 @@ html:not(.dark) .text-blue-400 {
   border-color: rgb(239 68 68 / 0.22);
 }
 
+.readiness-stage {
+  min-height: auto;
+  border-radius: 22px;
+  border: 1px solid rgb(var(--border-rgb) / 0.85);
+  background: rgb(var(--background-rgb) / 0.42);
+  padding: clamp(1rem, 2vw, 1.25rem);
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 1rem;
+}
+
+.readiness-camera-stage {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.95fr) minmax(280px, 1fr);
+  gap: 1rem;
+}
+
+.readiness-camera-panel,
+.readiness-content-panel {
+  border-radius: 20px;
+  border: 1px solid rgb(var(--border-rgb) / 0.82);
+  background: rgb(var(--card-rgb) / 0.78);
+}
+
 .readiness-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 50;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
+  padding: 1rem 1.25rem;
+  margin-top: 1rem;
+  background: rgba(13, 17, 23, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(59, 130, 246, 0.4);
+  border-radius: 18px;
+  box-shadow: 0 -10px 32px rgba(0, 0, 0, 0.6), 0 0 20px rgba(37, 99, 235, 0.2);
 }
 
 .readiness-actions-left,
@@ -1532,26 +1567,43 @@ html:not(.dark) .text-blue-400 {
 
 .readiness-primary-btn,
 .readiness-secondary-btn {
-  padding: 0.9rem 1.2rem;
-  min-width: 132px;
+  padding: 0.9rem 1.4rem;
+  min-width: 140px;
+  font-weight: 800;
+  font-size: 0.95rem;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
 }
 
 .readiness-primary-btn {
-  color: var(--primary-foreground);
-  background: linear-gradient(135deg, rgb(var(--primary-rgb)), rgb(59 130 246));
-  box-shadow: 0 16px 32px rgb(var(--primary-rgb) / 0.18);
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #2563eb, #3b82f6) !important;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.4);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
 }
 
-.readiness-primary-btn:hover:not(:disabled),
-.readiness-secondary-btn:hover:not(:disabled),
-.readiness-audio-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
+.readiness-primary-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1d4ed8, #2563eb) !important;
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.6);
+  transform: translateY(-2px);
+}
+
+.readiness-secondary-btn {
+  color: #f3f4f6 !important;
+  background: rgba(30, 41, 59, 0.9) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+}
+
+.readiness-secondary-btn:hover:not(:disabled) {
+  background: rgba(51, 65, 85, 1) !important;
+  transform: translateY(-2px);
 }
 
 .readiness-primary-btn:disabled,
 .readiness-secondary-btn:disabled,
 .readiness-audio-btn:disabled {
-  opacity: 0.45;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
@@ -2484,75 +2536,190 @@ html.dark {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .candidate-form-kicker,
   .access-screen-kicker,
   .readiness-label {
     width: 100%;
-    justify-content: center;
+    justify-content: flex-start;
+    font-size: 0.72rem !important;
   }
 
-  .readiness-topbar-right,
-  .readiness-actions-left,
-  .readiness-actions-right {
-    flex-direction: column;
-    gap: 0.75rem;
+  .readiness-shell {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
-  .readiness-primary-btn,
-  .readiness-secondary-btn,
-  .readiness-audio-btn,
-  .interview-completion-secondary {
-    width: 100%;
+  .readiness-frame {
+    padding: 0.35rem !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    border-radius: 0 !important;
   }
 
-  .readiness-camera-mask-box {
-    width: min(84%, 300px);
-    height: min(58%, 180px);
-    border-radius: 24px;
-    background-size:
-      38px 1px,
-      1px 38px,
-      38px 1px,
-      1px 38px,
-      38px 1px,
-      1px 38px,
-      38px 1px,
-      1px 38px;
+  .readiness-topbar {
+    margin-bottom: 0.5rem !important;
+    gap: 0.5rem !important;
+    padding: 0 0.25rem !important;
+  }
+
+  .readiness-heading {
+    font-size: 1.15rem !important;
+    font-weight: 800 !important;
+    line-height: 1.3 !important;
+    margin: 0.15rem 0 !important;
+  }
+
+  .readiness-text {
+    font-size: 0.82rem !important;
+    line-height: 1.35 !important;
+    margin-bottom: 0.4rem !important;
+  }
+
+  .readiness-stage {
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    margin-bottom: 0.5rem !important;
+    width: 100% !important;
+  }
+
+  .readiness-camera-panel,
+  .readiness-content-panel {
+    padding: 0.75rem !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: rgba(15, 23, 42, 0.75) !important;
+    border-radius: 14px !important;
+    box-shadow: none !important;
+    width: 100% !important;
+  }
+
+  .readiness-network-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.45rem !important;
   }
 
   .readiness-network-item {
+    padding: 0.55rem 0.65rem !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 10px !important;
+    background: rgba(255, 255, 255, 0.03) !important;
     flex-direction: column;
     align-items: flex-start;
   }
 
+  .readiness-network-item span {
+    font-size: 0.64rem !important;
+    margin-bottom: 0.15rem !important;
+    letter-spacing: 0.03em !important;
+  }
+
   .readiness-network-item strong {
+    font-size: 0.85rem !important;
+    font-weight: 700 !important;
     text-align: left;
   }
 
-  .readiness-frame {
-    padding: 0.9rem;
+  .readiness-status {
+    padding: 0.55rem 0.75rem !important;
+    font-size: 0.78rem !important;
+    border-radius: 10px !important;
+    line-height: 1.35 !important;
+    font-weight: 600 !important;
   }
 
-  .readiness-heading {
-    font-size: clamp(1.3rem, 7vw, 1.7rem) !important;
+  .readiness-phrase-card {
+    padding: 0.6rem 0.75rem !important;
+    font-size: 0.86rem !important;
+    line-height: 1.4 !important;
+    border-radius: 10px !important;
   }
 
-  .readiness-stage {
-    padding: 0.85rem;
-    border-radius: 20px;
+  .readiness-note-item,
+  .readiness-summary-item {
+    padding: 0.55rem 0.75rem !important;
+    font-size: 0.8rem !important;
+    border-radius: 10px !important;
   }
 
   .readiness-camera-frame,
   .readiness-camera-video {
-    min-height: 220px;
+    min-height: 200px !important;
+    height: 200px !important;
   }
 
-  .readiness-note-item,
-  .readiness-summary-item,
-  .readiness-phrase-card,
-  .readiness-status {
-    font-size: 0.92rem;
+  .readiness-camera-mask-box {
+    width: min(84%, 280px);
+    height: min(58%, 160px);
+    border-radius: 20px;
+  }
+
+  .readiness-topbar-right {
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+
+  .readiness-actions {
+    position: sticky !important;
+    bottom: 0 !important;
+    z-index: 100 !important;
+    padding: 0.65rem 0.75rem !important;
+    margin-top: 0.5rem !important;
+    border-radius: 14px !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+    background: rgba(11, 15, 25, 0.97) !important;
+    backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(59, 130, 246, 0.35) !important;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.7) !important;
+  }
+
+  .readiness-actions-left {
+    flex-direction: row !important;
+    width: auto !important;
+    gap: 0.5rem !important;
+  }
+
+  .readiness-actions-right {
+    flex-direction: row !important;
+    flex: 1 !important;
+    width: 100% !important;
+    gap: 0.5rem !important;
+  }
+
+  .readiness-primary-btn {
+    width: 100% !important;
+    padding: 0.7rem 1rem !important;
+    min-width: auto !important;
+    font-size: 0.88rem !important;
+    font-weight: 800 !important;
+    border-radius: 10px !important;
+    min-height: 44px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .readiness-secondary-btn {
+    padding: 0.65rem 1rem !important;
+    min-width: auto !important;
+    font-size: 0.84rem !important;
+    font-weight: 700 !important;
+    border-radius: 10px !important;
+    min-height: 40px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 
   .interview-room-shell {
@@ -2561,32 +2728,58 @@ html.dark {
   }
 
   .interview-room-grid {
-    padding: 0.65rem !important;
-    gap: 0.65rem !important;
+    padding: 0.5rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .interview-room-avatar-card {
+    display: none !important;
   }
 
   .interview-room-camera-card {
-    height: min(36vh, 250px) !important;
-    min-height: 190px !important;
-    border-radius: 18px !important;
+    height: 22vh !important;
+    min-height: 140px !important;
+    max-height: 180px !important;
+    border-radius: 14px !important;
   }
 
   .interview-room-meta,
   .interview-room-question-card,
   .interview-room-question-actions {
-    border-radius: 18px !important;
+    border-radius: 14px !important;
+  }
+
+  .interview-room-question-column {
+    flex: 1 !important;
+    min-height: 0 !important;
+  }
+
+  .interview-room-question-card {
+    flex: 1 !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
   }
 
   .interview-room-question-header,
   .interview-room-question-body,
   .interview-room-question-actions {
-    padding-left: 0.9rem !important;
-    padding-right: 0.9rem !important;
+    padding-left: 0.85rem !important;
+    padding-right: 0.85rem !important;
+  }
+
+  .interview-room-question-body {
+    padding-top: 0.85rem !important;
+    padding-bottom: 0.85rem !important;
+    flex: 1 !important;
+    overflow-y: auto !important;
   }
 
   .interview-room-question-body h2 {
-    font-size: 0.98rem !important;
-    line-height: 1.55;
+    font-size: 1.15rem !important;
+    line-height: 1.5 !important;
+    font-weight: 800 !important;
+    color: #ffffff !important;
   }
 
   .interview-room-overlay-card {
