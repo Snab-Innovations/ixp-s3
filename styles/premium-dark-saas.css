@@ -3152,7 +3152,8 @@ html.dark {
 }
 
 /* Pending Status Badges & Pills in Day Mode */
-:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="amber"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-amber"],
+:root:not(.dark) .recruiter-shell .recruiter-workspace span[class*="amber"]:not([class*="text-amber"]):not([class*="bg-transparent"]),
 :root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-[#181104]"],
 :root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-[#141005]"],
 :root:not(.dark) .recruiter-shell .recruiter-workspace [class*="bg-[#1a1205]"],
@@ -3170,6 +3171,7 @@ html.dark {
 :root:not(.dark) .recruiter-shell .recruiter-workspace [class*="text-amber"],
 :root:not(.dark) .recruiter-shell .recruiter-workspace [class*="text-[#f59e0b]"],
 :root:not(.dark) .recruiter-shell .recruiter-workspace [class*="text-[#fbbf24]"] {
+  background-color: transparent !important;
   color: #b45309 !important;
 }
 

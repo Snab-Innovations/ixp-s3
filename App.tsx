@@ -54,6 +54,7 @@ import ActiveJobsPage from './pages/ActiveJobs';
 import RecruiterAllJobs from './pages/RecruiterAllJobs';
 import PublicJobSeekerUpload from './pages/PublicJobSeekerUpload';
 import RecruiterTemplatesPage from './pages/RecruiterTemplates';
+import HotLeads from './pages/HotLeads';
 
 const DefaultRouteLoader = () => (
   <div className="flex items-center justify-center min-h-screen bg-background text-foreground">
@@ -250,6 +251,7 @@ const App: React.FC = () => {
                   {/* Recruiter Routes */}
                   <Route path="recruiter/jobs" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterDashboardSkeleton />}><RecruiterDashboard /></ProtectedRoute>} />
                   <Route path="recruiter/all-jobs" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><RecruiterAllJobs /></ProtectedRoute>} />
+                  <Route path="recruiter/hot-leads" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><HotLeads /></ProtectedRoute>} />
                   <Route path="recruiter/interviews" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><RecruiterInterviews /></ProtectedRoute>} />
                   <Route path="recruiter/job/:jobId/edit" element={<ProtectedRoute role="recruiter"><EditJob /></ProtectedRoute>} />
                   <Route path="recruiter/invites" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><InvitedCandidates /></ProtectedRoute>} />

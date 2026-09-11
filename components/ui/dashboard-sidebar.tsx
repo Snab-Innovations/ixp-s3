@@ -7,6 +7,7 @@ import {
   Users,
   Video,
   MessageSquare,
+  Flame,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -52,6 +53,13 @@ const recruiterNavGroups: NavGroupData[] = [
           path === '/recruiter/interviews' ||
           path.startsWith('/recruiter/interview/responses') ||
           (path.startsWith('/recruiter/interview/') && !path.startsWith('/recruiter/interview/create')),
+      },
+      {
+        id: 'hot-leads',
+        title: 'Hot Leads',
+        icon: Flame,
+        href: '/recruiter/hot-leads',
+        match: (path) => path === '/recruiter/hot-leads',
       },
       {
         id: 'resume-dump',
