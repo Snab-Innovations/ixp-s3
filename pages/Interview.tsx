@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { doc, getDoc, collection, serverTimestamp, updateDoc, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { uploadToCloudinary, generateInterviewQuestions, requestTranscription, fetchTranscriptText, generateFeedback } from '../services/api';
+import { uploadToCloudinary, generateInterviewQuestions, requestTranscription, fetchTranscriptText, generateFeedback, sanitizeQuestionLength } from '../services/api';
 import { resolveJobOrInterviewDocument } from '../services/jobResolutionService';
 import { speak, unlockTTSAudio, setMuteTTS, getMuteTTS } from '../lib/tts';
 import { Interview, InterviewState } from '../types';
@@ -120,6 +120,7 @@ const parsePdfToText = async (fileOrBlob: File | Blob): Promise<string> => {
 };
 
 const QUESTION_TIME_MS = 2 * 60 * 1000; // 2 minutes
+const QUESTION_PREP_COUNTDOWN_SEC = 8; // 8-second countdown before recording starts
 const TRANSCRIPT_POLL_ATTEMPTS = 20;
 const TRANSCRIPT_POLL_DELAY_MS = 3000;
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -2618,12 +2619,13 @@ const CandidateInterviewFlow: React.FC = () => {
 
       for (const q of rawAllQuestions) {
         if (!q || typeof q !== 'string') continue;
-        const trimmed = q.trim();
+        const sanitized = sanitizeQuestionLength(q.trim());
+        if (!sanitized) continue;
         // Normalize key to deduplicate questions (e.g. repeated work experience intro)
-        const normalizedKey = trimmed.toLowerCase().replace(/[^a-z0-9\u0900-\u097F]/g, '');
+        const normalizedKey = sanitized.toLowerCase().replace(/[^a-z0-9\u0900-\u097F]/g, '');
         if (normalizedKey && !seenQuestionKeys.has(normalizedKey)) {
           seenQuestionKeys.add(normalizedKey);
-          questions.push(trimmed);
+          questions.push(sanitized);
         }
       }
 
@@ -3000,7 +3002,7 @@ const ActiveInterviewSession: React.FC<{
   const answerDeadlineRef = useRef<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [timeLeft, setTimeLeft] = useState(QUESTION_TIME_MS / 1000);
-  const [countdown, setCountdown] = useState(10);
+  const [countdown, setCountdown] = useState(QUESTION_PREP_COUNTDOWN_SEC);
   const [processingVideo, setProcessingVideo] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
@@ -3018,7 +3020,8 @@ const ActiveInterviewSession: React.FC<{
     }
   };
 
-  const currentQ = state.questions[state.currentQuestionIndex];
+  const rawQ = state.questions[state.currentQuestionIndex];
+  const currentQ = rawQ ? sanitizeQuestionLength(rawQ) : '';
 
   const [tabWarning, setTabWarning] = useState<string | null>(null);
   const tabWarningTimerRef = useRef<any>(null);
@@ -3407,7 +3410,7 @@ const ActiveInterviewSession: React.FC<{
       if (isLastQuestion) {
         onFinish();
       } else {
-        setCountdown(10);
+        setCountdown(QUESTION_PREP_COUNTDOWN_SEC);
         setTimeLeft(QUESTION_TIME_MS / 1000);
       }
     };
@@ -3684,7 +3687,7 @@ const ActiveInterviewSession: React.FC<{
                 <p className="interview-room-question-label text-[10px] md:text-xs text-blue-600 dark:text-blue-400 font-extrabold uppercase tracking-widest mb-2.5 md:mb-4 flex items-center gap-1.5">
                   <i className="fas fa-microphone-alt"></i> Speak your response clearly below
                 </p>
-                <h2 className="text-base sm:text-xl md:text-2xl font-black leading-relaxed sm:leading-relaxed text-gray-900 dark:text-white selection:bg-blue-500/30">
+                <h2 className="text-sm sm:text-base md:text-lg font-bold leading-relaxed text-gray-900 dark:text-white selection:bg-blue-500/30">
                   {currentQ}
                 </h2>
               </div>

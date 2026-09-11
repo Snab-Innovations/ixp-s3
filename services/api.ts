@@ -50,9 +50,48 @@ export const generateOpenAITTS = async (text: string) => {
 };
 
 // ── Interview Question Generation ─────────────────────────────────────────────
-export const DEFAULT_WORK_EXPERIENCE_QUESTION_EN = "Please tell us about your work experience. For each company, tell us your job title, what work you did every day, and your main responsibilities.";
-export const DEFAULT_WORK_EXPERIENCE_QUESTION_HI = "कृपया अपने कार्य अनुभव के बारे में बताएं। प्रत्येक कंपनी के लिए, अपना पद (Job Title), प्रतिदिन किया जाने वाला कार्य और अपनी मुख्य जिम्मेदारियां बताएं।";
-export const DEFAULT_WORK_EXPERIENCE_QUESTION_MR = "कृपया आपल्या कामाच्या अनुभवाबद्दल सांगा. प्रत्येक कंपनीसाठी, तुमचे पद (Job Title), तुम्ही रोज काय काम करायचे आणि तुमच्या मुख्य जबाबदाऱ्या सांगा.";
+export const DEFAULT_WORK_EXPERIENCE_QUESTION_EN = "Please briefly introduce yourself and summarize your relevant work experience.";
+export const DEFAULT_WORK_EXPERIENCE_QUESTION_HI = "कृपया अपना संक्षिप्त परिचय दें और अपने कार्य अनुभव के बारे में बताएं।";
+export const DEFAULT_WORK_EXPERIENCE_QUESTION_MR = "कृपया आपली थोडक्यात ओळख करून द्या आणि कामाच्या अनुभवाबद्दल सांगा.";
+
+export const sanitizeQuestionLength = (question: string): string => {
+  if (!question || typeof question !== 'string') return '';
+  let trimmed = question.trim();
+  // Remove markdown quotes if wrapped
+  trimmed = trimmed.replace(/^["'`]+|["'`]+$/g, '').trim();
+
+  // If already short, return directly
+  if (trimmed.length <= 140) return trimmed;
+
+  // Split into sentences (handling ., ?, !, and Devanagari danda ।)
+  const sentences = trimmed.split(/(?<=[.?!।])\s+/).filter(Boolean);
+  if (sentences.length > 1) {
+    if (sentences[0].length >= 30 && sentences[0].length <= 140) {
+      return sentences[0];
+    }
+    if (sentences[0].length + sentences[1].length + 1 <= 160) {
+      return `${sentences[0]} ${sentences[1]}`;
+    }
+    trimmed = sentences[0];
+  }
+
+  // If still overly long, trim gracefully at clause or word boundary
+  if (trimmed.length > 150) {
+    const clauseBreakIndex = trimmed.slice(0, 145).lastIndexOf(',');
+    if (clauseBreakIndex > 50) {
+      trimmed = trimmed.slice(0, clauseBreakIndex).trim();
+      if (!/[.?!।]$/.test(trimmed)) trimmed += '?';
+    } else {
+      const lastSpaceIndex = trimmed.slice(0, 140).lastIndexOf(' ');
+      if (lastSpaceIndex > 40) {
+        trimmed = trimmed.slice(0, lastSpaceIndex).trim();
+        if (!/[.?!।]$/.test(trimmed)) trimmed += '?';
+      }
+    }
+  }
+
+  return trimmed;
+};
 
 export interface CandidateProfileForQuestions {
   name?: string;
@@ -81,10 +120,10 @@ export const generateInterviewQuestions = async (
 
   if (languageCode === 'mr') {
     langInstruction = `Language: Marathi (Devanagari script).
-IMPORTANT: Use simple, everyday Marathi that common people speak. Do NOT use heavy/literary Marathi words. If any word is difficult or technical (like "quality management", "KPI", "compliance", "production planning" etc.), keep that word in English and write the rest in easy Marathi. The question should feel natural like a normal conversation, not like a textbook.`;
+IMPORTANT: Use simple, everyday Marathi. Keep technical terms in English. Keep questions very short, simple, and direct.`;
   } else if (languageCode === 'hi') {
     langInstruction = `Language: Hindi (Devanagari script).
-IMPORTANT: Use simple, everyday Hindi that common people speak. Do NOT use heavy/Shudh Hindi words. If any word is difficult or technical (like "quality management", "KPI", "compliance", "production planning" etc.), keep that word in English and write the rest in easy Hindi. The question should feel natural like a normal conversation, not like a textbook.`;
+IMPORTANT: Use simple, everyday Hindi. Keep technical terms in English. Keep questions very short, simple, and direct.`;
   } else {
     langInstruction = 'Language: English.';
   }
@@ -115,9 +154,11 @@ IMPORTANT: Use simple, everyday Hindi that common people speak. Do NOT use heavy
     ? `[Candidate Profile Summary]\n${profileSummaryLines}\n\n[Full Resume Text]\n${resumeTextContent.trim()}`
     : `[Candidate Profile Summary]\n${profileSummaryLines}`;
 
-  const sys = `You are an expert HR interviewer. Your tone is warm, professional, respectful, and conversational.
+  const sys = `You are an expert HR interviewer. Your tone is warm, professional, and conversational.
 Rules:
-- Generate questions that are 100% personalized to THIS candidate based on BOTH the Job Description (JD) and their Resume/profile.
+- Generate questions personalized to THIS candidate based on the Job Description (JD) and Resume.
+- STRICT LENGTH LIMIT: Every question MUST be SHORT, CRISP, AND CONCISE (maximum 15 to 25 words, 1-2 short sentences max).
+- NEVER generate long paragraphs, complex sub-questions, or rambling backstories.
 - Output ONLY a valid JSON object: {"questions":["Question 1", "Question 2", ...]}`;
 
   const prompt =
@@ -132,19 +173,19 @@ ${langInstruction}
 
 Generate exactly ${Math.max(1, numQuestions)} personalized interview questions.
 
-CRITICAL INSTRUCTIONS FOR PERSONALIZED QUESTIONS:
-1. QUESTION 1 (Personalized Introduction & Background):
-   - Personalize Question 1 specifically for ${candName || 'this candidate'}.
-   - Greet the candidate by name (if provided) and ask them to introduce themselves and walk through their work experience or background (mentioning their role as ${candDesignation || 'their past role'} at ${candCompany || 'their past company'} or degree in ${candQual || 'their field'} if known) and how it prepares them for this "${jobTitle}" position.
+CRITICAL INSTRUCTIONS:
+- LENGTH REQUIREMENT: Keep EVERY question SHORT and DIRECT (15 to 25 words maximum). Candidates answer in a timed video interview, so each question must be fast to read and hear. Do NOT ask multi-part compound questions.
 
-2. QUESTIONS 2 to ${Math.max(1, numQuestions)} (Resume + JD Deep-Dive Verification):
-   - EVERY question MUST be deeply customized to THIS candidate by cross-referencing specific details from their resume/profile (past roles, specific companies, projects, tools, frameworks, degrees, or claimed achievements) against the core requirements in the JD.
-   - For example:
-     * "On your resume at ${candCompany || '[Company]'}, you mentioned using [Tool/Tech]. In our JD, we need [JD Requirement]. How did you apply [Tool/Tech] in your past project and how will you apply it here?"
-     * "You listed [Skill/Project] on your resume. Walk me through a challenging situation you faced with [Skill/Project] and how you resolved it."
-   - DO NOT ask generic candidate-agnostic textbook questions (e.g. "What is React?", "Tell me about a time you had a conflict").
-   - Every candidate applying for this job MUST receive completely distinct questions tailored strictly to THEIR individual resume.
-   - Keep questions clear, practical, conversational, and direct.`;
+1. QUESTION 1 (Short Intro):
+   - "Hi ${candName || 'there'}, please briefly introduce yourself and highlight your experience relevant to the ${jobTitle} role." (Keep it to 1-2 short sentences).
+
+2. QUESTIONS 2 to ${Math.max(1, numQuestions)} (Short Focused Technical & Role Verification):
+   - Ask ONE short, direct question verifying a key skill, tool, or project from their resume against the JD requirements.
+   - Examples of good short questions:
+     * "How did you utilize [Tool/Skill from resume] at ${candCompany || 'your past company'}?"
+     * "Can you describe a key project where you applied [Core Skill]?"
+     * "In this role we require [JD requirement]. What is your practical experience with it?"
+   - Keep every question under 25 words. Direct, punchy, and conversational.`;
 
   try {
     const parsed = await grokGenerateWithResumeJson<{ questions?: string[] }>(
@@ -164,17 +205,17 @@ CRITICAL INSTRUCTIONS FOR PERSONALIZED QUESTIONS:
     const seen = new Set<string>();
     for (const q of parsedQuestions) {
       if (!q || typeof q !== 'string') continue;
-      const trimmed = q.trim();
-      const key = trimmed.toLowerCase();
+      const sanitized = sanitizeQuestionLength(q);
+      const key = sanitized.toLowerCase();
       if (!seen.has(key)) {
         seen.add(key);
-        uniqueQuestions.push(trimmed);
+        uniqueQuestions.push(sanitized);
       }
     }
 
     if (uniqueQuestions.length === 0) {
       const fallbackIntro = candName
-        ? `Hello ${candName}, welcome! Please tell us about your work experience as ${candDesignation || 'a professional'} at ${candCompany || 'your previous company'} and why you are interested in the ${jobTitle} role.`
+        ? `Hello ${candName}, please briefly tell us about your experience and why you are interested in the ${jobTitle} role.`
         : DEFAULT_WORK_EXPERIENCE_QUESTION_EN;
       uniqueQuestions.push(fallbackIntro);
     }
@@ -289,7 +330,8 @@ Based on the Job Description, the candidate's resume (provided in context), and 
 - [Comment on strongest/weakest technical answer]
 - [Overall technical skills assessment]
 
-**Communication Skills:**
+**Communication Skills Analysis:**
+Overall Communication Rating: [SCORE]/10
 Fluency in English / Hindi / Marathi: [Excellent | Good | Average | Poor] - [1-sentence reason]
 Clarity of Speech: [Excellent | Good | Average | Poor] - [1-sentence reason]
 Confidence Level: [High | Medium | Low] - [1-sentence reason]
@@ -301,7 +343,6 @@ Ability to Explain Experience: [Excellent | Good | Average | Poor] - [1-sentence
 Response Speed & Presence of Mind: [Excellent | Good | Average | Poor] - [1-sentence reason]
 Telephone Etiquette: [Excellent | Good | Average | Poor] - [1-sentence reason]
 Interpersonal Skills: [Excellent | Good | Average | Poor] - [1-sentence reason]
-Overall Communication Rating: [SCORE]/10
 Detailed Style Analysis: [A brief paragraph summarizing their communication style, strengths, and feedback]
 
 **Overall Evaluation:**

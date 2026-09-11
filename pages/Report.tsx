@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom';
 import { jsPDF } from 'jspdf';
 import DayNightToggle from '../components/DayNightToggle';
 import { useMessageBox } from '../components/MessageBox';
-import { ArrowLeft, Download, Share2, User, FileText, MessageSquare, Brain, Shield, Video, VideoOff, Eye, EyeOff, CheckCircle, XCircle, Briefcase, MapPin, GraduationCap, DollarSign, Calendar, Award, Link as LinkIcon, Maximize2, Minimize2 } from 'lucide-react';
+import { ArrowLeft, Download, Share2, User, FileText, MessageSquare, Brain, Shield, Video, VideoOff, Eye, EyeOff, CheckCircle, XCircle, Briefcase, MapPin, GraduationCap, DollarSign, Calendar, Award, Link as LinkIcon, Maximize2, Minimize2, Globe, Volume2, Sparkles, BookOpen, Headphones, UserCheck, Mic, Zap, Phone, Users, CheckCircle2 } from 'lucide-react';
 
 // New component for radial score display
 const ScoreCircle: React.FC<{ score: number; denom: number; color: 'green' | 'yellow' | 'red'; label: string }> = ({ score, denom, color, label }) => {
@@ -553,43 +553,110 @@ const InterviewReport: React.FC = () => {
             y += blockH + 6;
         });
 
-        // 5b. COMMUNICATION SKILLS ANALYSIS (NEW)
+        // 5b. COMMUNICATION SKILLS ANALYSIS
         if (hasDetailedComms) {
-            drawSectionHeader("Communication Skills");
+            drawSectionHeader("Communication Skills Analysis");
             
             // Draw Overall Rating info box
-            checkPage(20);
-            drawInfoBox('Overall Communication Rating', `${overallCommsRating}`, margin, y, contentW);
-            y += 20;
+            checkPage(18);
+            pdf.setFillColor(248, 250, 252);
+            pdf.setDrawColor(226, 232, 240);
+            pdf.setLineWidth(0.3);
+            pdf.roundedRect(margin, y, contentW, 14, 2, 2, 'FD');
+            pdf.setFontSize(8.5);
+            pdf.setFont('helvetica', 'bold');
+            pdf.setTextColor(100, 116, 139);
+            pdf.text('OVERALL COMMUNICATION SCORE', margin + 4, y + 5.5);
+            pdf.setFontSize(12);
+            pdf.setFont('helvetica', 'bold');
+            pdf.setTextColor(37, 99, 235);
+            pdf.text(`${overallCommsRating || 'N/A'}`, margin + 4, y + 11.5);
+            y += 18;
 
-            // Draw each parameter
+            // Draw each parameter with dynamic wrapping
             const col1X = margin;
-            const col2X = margin + contentW / 2 + 4;
-            const colW = contentW / 2 - 4;
+            const col2X = margin + contentW / 2 + 3;
+            const colW = contentW / 2 - 3;
             
             const params = Object.entries(communicationDetails);
-            for (let i = 0; i < params.length; i++) {
-                checkPage(20);
-                const [key, item] = params[i];
-                const labelMap: Record<string, string> = {
-                    fluency: 'Fluency in Languages',
-                    clarity: 'Clarity of Speech',
-                    confidence: 'Confidence Level',
-                    grammar: 'Grammar & Vocab',
-                    listening: 'Listening Skills',
-                    tone: 'Professional Tone',
-                    accent: 'Pronunciation / Accent',
-                    explainExp: 'Explain Experience',
-                    presence: 'Presence of Mind',
-                    etiquette: 'Telephone Etiquette',
-                    interpersonal: 'Interpersonal Skills'
+            const labelMap: Record<string, string> = {
+                fluency: 'Fluency in Languages',
+                clarity: 'Clarity of Speech',
+                confidence: 'Confidence Level',
+                grammar: 'Grammar & Vocabulary',
+                listening: 'Listening Skills',
+                tone: 'Professional Tone',
+                accent: 'Pronunciation / Accent',
+                explainExp: 'Explain Experience',
+                presence: 'Presence of Mind',
+                etiquette: 'Telephone Etiquette',
+                interpersonal: 'Interpersonal Skills'
+            };
+
+            for (let i = 0; i < params.length; i += 2) {
+                const p1 = params[i];
+                const p2 = params[i + 1];
+
+                const calcBoxH = (item?: { rating: string; comment: string }) => {
+                    if (!item) return 16;
+                    const commentLines = item.comment ? pdf.splitTextToSize(item.comment, colW - 6) : [];
+                    return Math.max(16, 9 + commentLines.length * 3.5 + 2);
                 };
-                
-                const xPos = i % 2 === 0 ? col1X : col2X;
-                drawInfoBox(labelMap[key] || key, `${item.rating}${item.comment ? ' - ' + item.comment : ''}`, xPos, y, colW);
-                if (i % 2 !== 0 || i === params.length - 1) {
-                    y += 20;
+
+                const rowH = Math.max(calcBoxH(p1 ? p1[1] : undefined), calcBoxH(p2 ? p2[1] : undefined));
+                checkPage(rowH + 4);
+
+                // Draw left box
+                pdf.setFillColor(248, 250, 252);
+                pdf.setDrawColor(226, 232, 240);
+                pdf.setLineWidth(0.3);
+                pdf.roundedRect(col1X, y, colW, rowH, 2, 2, 'FD');
+
+                pdf.setFontSize(7.5);
+                pdf.setFont('helvetica', 'bold');
+                pdf.setTextColor(100, 116, 139);
+                pdf.text((labelMap[p1[0]] || p1[0]).toUpperCase(), col1X + 3, y + 4.5);
+
+                pdf.setFontSize(8.5);
+                pdf.setFont('helvetica', 'bold');
+                pdf.setTextColor(15, 23, 42);
+                pdf.text(`Rating: ${p1[1].rating}`, col1X + 3, y + 8.5);
+
+                if (p1[1].comment) {
+                    pdf.setFontSize(7);
+                    pdf.setFont('helvetica', 'normal');
+                    pdf.setTextColor(71, 85, 105);
+                    const commentLines = pdf.splitTextToSize(p1[1].comment, colW - 6);
+                    pdf.text(commentLines, col1X + 3, y + 12.5);
                 }
+
+                // Draw right box if exists
+                if (p2) {
+                    pdf.setFillColor(248, 250, 252);
+                    pdf.setDrawColor(226, 232, 240);
+                    pdf.setLineWidth(0.3);
+                    pdf.roundedRect(col2X, y, colW, rowH, 2, 2, 'FD');
+
+                    pdf.setFontSize(7.5);
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setTextColor(100, 116, 139);
+                    pdf.text((labelMap[p2[0]] || p2[0]).toUpperCase(), col2X + 3, y + 4.5);
+
+                    pdf.setFontSize(8.5);
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setTextColor(15, 23, 42);
+                    pdf.text(`Rating: ${p2[1].rating}`, col2X + 3, y + 8.5);
+
+                    if (p2[1].comment) {
+                        pdf.setFontSize(7);
+                        pdf.setFont('helvetica', 'normal');
+                        pdf.setTextColor(71, 85, 105);
+                        const commentLines = pdf.splitTextToSize(p2[1].comment, colW - 6);
+                        pdf.text(commentLines, col2X + 3, y + 12.5);
+                    }
+                }
+
+                y += rowH + 3;
             }
             y += 4;
 
@@ -713,54 +780,95 @@ const InterviewReport: React.FC = () => {
     }
 
     // Parse Detailed Communication Skills if present
-    const commsBlockMatch = feedback.match(/\*\*Communication Skills:\*\*([\s\S]*?)(?=\*\*Overall Evaluation:\*\*|\*\*Verdict:\*\*|\*\*Scores:\*\*|$)/i);
+    const commsHeaderRegex = /(?:\*{0,2}(?:3\.\s*)?Communication Skills(?:\s*Analysis)?\*{0,2}:?)/i;
+    const commsBlockMatch = feedback.match(new RegExp(commsHeaderRegex.source + "([\\s\\S]*?)(?=(?:\\*{0,2}(?:4\\.\\s*)?Overall Evaluation\\*{0,2}:?|\\*{0,2}(?:5\\.\\s*)?Verdict\\*{0,2}:?|\\*{0,2}(?:6\\.\\s*)?Scores\\*{0,2}:?|$))", "i"))
+      || feedback.match(/(?:Overall (?:Communication )?Rating:[\s\S]*?)(?=(?:\*{0,2}Overall Evaluation|\*{0,2}Verdict|$))/i)
+      || feedback.match(/(?:Fluency in English[\s\S]*?)(?=(?:\*{0,2}Overall Evaluation|\*{0,2}Verdict|$))/i);
+
     const communicationDetails: Record<string, { rating: string; comment: string }> = {};
     let overallCommsRating = 'N/A';
     let detailedStyleAnalysis = 'N/A';
     let hasDetailedComms = false;
 
     if (commsBlockMatch && commsBlockMatch[1]) {
-        hasDetailedComms = true;
         const blockText = commsBlockMatch[1];
         
-        const params = [
-            { key: 'fluency', label: 'Fluency in English / Hindi / Marathi', pattern: /(?:Fluency in English \/ Hindi \/ Marathi):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'clarity', label: 'Clarity of Speech', pattern: /(?:Clarity of Speech):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'confidence', label: 'Confidence Level', pattern: /(?:Confidence Level):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'grammar', label: 'Grammar & Vocabulary', pattern: /(?:Grammar & Vocabulary):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'listening', label: 'Listening Skills', pattern: /(?:Listening Skills):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'tone', label: 'Professional Tone', pattern: /(?:Professional Tone):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'accent', label: 'Pronunciation \/ Accent Neutrality', pattern: /(?:Pronunciation \/ Accent Neutrality):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'explainExp', label: 'Ability to Explain Experience', pattern: /(?:Ability to Explain Experience):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'presence', label: 'Response Speed & Presence of Mind', pattern: /(?:Response Speed & Presence of Mind):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'etiquette', label: 'Telephone Etiquette', pattern: /(?:Telephone Etiquette):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im },
-            { key: 'interpersonal', label: 'Interpersonal Skills', pattern: /(?:Interpersonal Skills):\s*([^-]*?)(?:\s*-\s*([^\n]*))?$/im }
+        // Extract Overall Rating (handles `Overall Rating:\n**4/10**`, `Overall Communication Rating: 4/10`, etc.)
+        const overallRatingMatch = blockText.match(/Overall (?:Communication )?Rating:\s*(?:\n\s*)?(?:\*\*)?([0-9]+(?:\.[0-9]+)?\s*(?:\/\s*10)?)(?:\*\*)?/i)
+          || blockText.match(/Overall (?:Communication )?Rating:\s*([^\n]+)/i);
+        if (overallRatingMatch) {
+            let r = overallRatingMatch[1].replace(/\*\*/g, '').trim();
+            if (/^[0-9]+(?:\.[0-9]+)?$/.test(r)) r = `${r}/10`;
+            overallCommsRating = r;
+        }
+
+        const paramsConfig = [
+            { key: 'fluency', label: 'Fluency in English / Hindi / Marathi', nameRegex: /Fluency(?: in English \/ Hindi \/ Marathi)?/i },
+            { key: 'clarity', label: 'Clarity of Speech', nameRegex: /Clarity of Speech/i },
+            { key: 'confidence', label: 'Confidence Level', nameRegex: /Confidence Level/i },
+            { key: 'grammar', label: 'Grammar & Vocabulary', nameRegex: /Grammar\s*(?:&|and)\s*Vocabulary/i },
+            { key: 'listening', label: 'Listening Skills', nameRegex: /Listening Skills/i },
+            { key: 'tone', label: 'Professional Tone', nameRegex: /Professional Tone/i },
+            { key: 'accent', label: 'Pronunciation / Accent Neutrality', nameRegex: /Pronunciation\s*(?:\/|\s)\s*Accent(?:\s*Neutrality)?/i },
+            { key: 'explainExp', label: 'Ability to Explain Experience', nameRegex: /(?:Ability to\s+)?Explain(?:\s+Past)?\s+Experience/i },
+            { key: 'presence', label: 'Response Speed & Presence of Mind', nameRegex: /Response Speed\s*(?:&|and)\s*Presence of Mind/i },
+            { key: 'etiquette', label: 'Telephone Etiquette', nameRegex: /Telephone Etiquette/i },
+            { key: 'interpersonal', label: 'Interpersonal Skills', nameRegex: /Interpersonal Skills/i },
+            { key: 'detailedStyleAnalysis', label: 'Detailed Style Analysis', nameRegex: /Detailed Style Analysis/i, isStyle: true }
         ];
 
-        params.forEach(p => {
-            const lines = blockText.split('\n');
-            let matched = false;
-            for (const line of lines) {
-                const m = line.match(p.pattern);
-                if (m) {
-                    communicationDetails[p.key] = {
-                        rating: m[1]?.trim() || 'N/A',
-                        comment: m[2]?.trim() || ''
+        const markers: { key: string; label: string; index: number; length: number; isStyle?: boolean }[] = [];
+        for (const p of paramsConfig) {
+            const m = blockText.match(p.nameRegex);
+            if (m && typeof m.index === 'number') {
+                markers.push({ key: p.key, label: p.label, index: m.index, length: m[0].length, isStyle: p.isStyle });
+            }
+        }
+        markers.sort((a, b) => a.index - b.index);
+
+        if (markers.length > 0) {
+            hasDetailedComms = true;
+            for (let i = 0; i < markers.length; i++) {
+                const curr = markers[i];
+                const next = markers[i + 1];
+                const chunk = blockText.slice(curr.index + curr.length, next ? next.index : undefined).trim();
+
+                if (curr.isStyle) {
+                    detailedStyleAnalysis = chunk.replace(/^[:\s]+/, '').replace(/^Detailed Style Analysis:?/i, '').trim();
+                    continue;
+                }
+
+                const cleanChunk = chunk.replace(/^[:\s]+/, '');
+                const matchRatingComment = cleanChunk.match(/^(?:\*\*)?([A-Za-z0-9\s&+/]+?)(?:\*\*)?\s*(?:[–—\-:]|\s-\s|\s–\s|\s—\s)\s*([\s\S]*)$/);
+                if (matchRatingComment) {
+                    communicationDetails[curr.key] = {
+                        rating: matchRatingComment[1].replace(/\*\*/g, '').trim(),
+                        comment: matchRatingComment[2].trim().replace(/\s*\n\s*/g, ' ')
                     };
-                    matched = true;
-                    break;
+                } else {
+                    const lines = cleanChunk.split('\n').map(l => l.trim()).filter(Boolean);
+                    const firstLine = (lines[0] || '').replace(/\*\*/g, '').trim();
+                    communicationDetails[curr.key] = {
+                        rating: firstLine || 'N/A',
+                        comment: lines.slice(1).join(' ').trim().replace(/\s*\n\s*/g, ' ')
+                    };
                 }
             }
-            if (!matched) {
+        }
+
+        // Fill any missing keys with N/A
+        paramsConfig.forEach(p => {
+            if (!p.isStyle && !communicationDetails[p.key]) {
                 communicationDetails[p.key] = { rating: 'N/A', comment: '' };
             }
         });
+    }
 
-        const overallRatingMatch = blockText.match(/Overall Communication Rating:\s*([^\n]*)/i);
-        overallCommsRating = overallRatingMatch ? overallRatingMatch[1].trim() : 'N/A';
-
-        const styleMatch = blockText.match(/Detailed Style Analysis:\s*([\s\S]*)/i);
-        detailedStyleAnalysis = styleMatch ? styleMatch[1].trim() : 'N/A';
+    // If detailed communications exist, ensure fallback communicationSkills doesn't duplicate the block
+    if (hasDetailedComms && communicationSkills && communicationSkills !== 'N/A') {
+        if (/Fluency|Clarity of Speech|Overall Rating|Confidence Level/i.test(communicationSkills)) {
+            communicationSkills = 'Detailed Communication Skills evaluated below.';
+        }
     }
 
     const verdictMatch = feedback.match(/\*\*Verdict:\*\*\s*(.*)/);
@@ -1056,72 +1164,158 @@ const InterviewReport: React.FC = () => {
                     </div>
 
                     {/* Detailed Communication Skills Card */}
-                    {hasDetailedComms && (
-                        <div className="bg-white dark:bg-white/5 rounded-2xl p-6 md:p-8 border border-gray-200 dark:border-white/10 shadow-sm transition-all duration-300">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-gray-100 dark:border-white/5 pb-4">
-                                <h2 className="text-xl font-bold flex items-center gap-3">
-                                    <MessageSquare size={24} className="text-primary"/> Communication Skills Analysis
-                                </h2>
-                                <div className="flex items-center gap-2 bg-primary/10 text-primary font-bold px-4 py-2 rounded-xl border border-primary/20">
-                                    <span className="text-xs uppercase tracking-wider text-primary/70">Overall Rating:</span>
-                                    <span className="text-lg">{overallCommsRating}</span>
-                                </div>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                {Object.entries(communicationDetails).map(([key, item]) => {
-                                    const labelMap: Record<string, string> = {
-                                        fluency: 'Fluency in English / Hindi / Marathi',
-                                        clarity: 'Clarity of Speech',
-                                        confidence: 'Confidence Level',
-                                        grammar: 'Grammar & Vocabulary',
-                                        listening: 'Listening Skills',
-                                        tone: 'Professional Tone',
-                                        accent: 'Pronunciation / Accent Neutrality',
-                                        explainExp: 'Ability to Explain Experience',
-                                        presence: 'Response Speed & Presence of Mind',
-                                        etiquette: 'Telephone Etiquette',
-                                        interpersonal: 'Interpersonal Skills'
-                                    };
-                                    
-                                    const r = item.rating.toLowerCase();
-                                    let badgeColor = 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700';
-                                    if (r.includes('excellent') || r.includes('high') || r.includes('professional') || r.includes('neutral')) {
-                                        badgeColor = 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800/30';
-                                    } else if (r.includes('good') || r.includes('medium') || r.includes('light accent')) {
-                                        badgeColor = 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/30';
-                                    } else if (r.includes('average') || r.includes('casual') || r.includes('normal')) {
-                                        badgeColor = 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800/30';
-                                    } else if (r.includes('poor') || r.includes('low') || r.includes('unprofessional') || r.includes('heavy accent')) {
-                                        badgeColor = 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/30';
-                                    }
+                    {hasDetailedComms && (() => {
+                        const numericRating = parseFloat(overallCommsRating) || 0;
+                        let ratingTheme = {
+                            badgeBg: 'bg-amber-50 dark:bg-amber-950/40',
+                            border: 'border-amber-200/90 dark:border-amber-800/60',
+                            text: 'text-amber-700 dark:text-amber-300',
+                            status: 'Moderate / Needs Refinement'
+                        };
+                        if (numericRating >= 8) {
+                            ratingTheme = {
+                                badgeBg: 'bg-emerald-50 dark:bg-emerald-950/40',
+                                border: 'border-emerald-200/90 dark:border-emerald-800/60',
+                                text: 'text-emerald-700 dark:text-emerald-300',
+                                status: 'Exceptional / Highly Fluent'
+                            };
+                        } else if (numericRating >= 6) {
+                            ratingTheme = {
+                                badgeBg: 'bg-blue-50 dark:bg-blue-950/40',
+                                border: 'border-blue-200/90 dark:border-blue-800/60',
+                                text: 'text-blue-700 dark:text-blue-300',
+                                status: 'Good / Professional'
+                            };
+                        } else if (numericRating > 0 && numericRating < 4) {
+                            ratingTheme = {
+                                badgeBg: 'bg-rose-50 dark:bg-rose-950/40',
+                                border: 'border-rose-200/90 dark:border-rose-800/60',
+                                text: 'text-rose-700 dark:text-rose-300',
+                                status: 'Needs Improvement'
+                            };
+                        }
 
-                                    return (
-                                        <div key={key} className="flex flex-col p-4 bg-gray-50/50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5 shadow-sm hover:border-primary/20 dark:hover:border-primary/20 transition-all duration-200">
-                                            <div className="flex justify-between items-start gap-2 mb-1.5">
-                                                <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{labelMap[key]}</span>
-                                                <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${badgeColor}`}>
-                                                    {item.rating}
+                        const commsIconMap: Record<string, React.ReactNode> = {
+                            fluency: <Globe size={16} className="text-blue-500" />,
+                            clarity: <Volume2 size={16} className="text-indigo-500" />,
+                            confidence: <Sparkles size={16} className="text-amber-500" />,
+                            grammar: <BookOpen size={16} className="text-emerald-500" />,
+                            listening: <Headphones size={16} className="text-violet-500" />,
+                            tone: <UserCheck size={16} className="text-cyan-500" />,
+                            accent: <Mic size={16} className="text-pink-500" />,
+                            explainExp: <FileText size={16} className="text-teal-500" />,
+                            presence: <Zap size={16} className="text-yellow-500" />,
+                            etiquette: <Phone size={16} className="text-rose-500" />,
+                            interpersonal: <Users size={16} className="text-purple-500" />
+                        };
+
+                        const getRatingBadge = (rating: string) => {
+                            const r = (rating || '').toLowerCase();
+                            if (r.includes('excellent') || r.includes('high') || r.includes('professional') || r.includes('neutral') || r.includes('good')) {
+                                return 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/50';
+                            }
+                            if (r.includes('average') || r.includes('casual') || r.includes('medium') || r.includes('light accent') || r.includes('normal')) {
+                                return 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/50';
+                            }
+                            if (r.includes('poor') || r.includes('low') || r.includes('unprepared') || r.includes('limited') || r.includes('slow') || r.includes('unprofessional') || r.includes('heavy accent')) {
+                                return 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200/80 dark:border-rose-800/50';
+                            }
+                            return 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700';
+                        };
+
+                        const labelMap: Record<string, string> = {
+                            fluency: 'Fluency in English / Hindi / Marathi',
+                            clarity: 'Clarity of Speech',
+                            confidence: 'Confidence Level',
+                            grammar: 'Grammar & Vocabulary',
+                            listening: 'Listening Skills',
+                            tone: 'Professional Tone',
+                            accent: 'Pronunciation / Accent Neutrality',
+                            explainExp: 'Ability to Explain Experience',
+                            presence: 'Response Speed & Presence of Mind',
+                            etiquette: 'Telephone Etiquette',
+                            interpersonal: 'Interpersonal Skills'
+                        };
+
+                        return (
+                            <div className="bg-white dark:bg-white/5 rounded-2xl p-6 md:p-8 border border-gray-200 dark:border-white/10 shadow-sm transition-all duration-300">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-gray-100 dark:border-white/5 pb-5">
+                                    <div className="flex items-center gap-3.5">
+                                        <div className="w-11 h-11 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20 shadow-xs shrink-0">
+                                            <MessageSquare size={22} />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                                Communication Skills Analysis
+                                            </h2>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mt-0.5">
+                                                Spoken fluency, diction clarity, professional presence & demeanor
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {overallCommsRating && overallCommsRating !== 'N/A' && (
+                                        <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border shadow-xs ${ratingTheme.badgeBg} ${ratingTheme.border}`}>
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-70">
+                                                    Overall Rating
+                                                </span>
+                                                <span className={`text-xs font-bold ${ratingTheme.text}`}>
+                                                    {ratingTheme.status}
                                                 </span>
                                             </div>
-                                            {item.comment && (
-                                                <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed font-medium mt-1">
-                                                    {item.comment}
-                                                </p>
-                                            )}
+                                            <div className={`text-2xl font-black tracking-tight ${ratingTheme.text} pl-3 border-l border-current/20`}>
+                                                {overallCommsRating}
+                                            </div>
                                         </div>
-                                    );
-                                })}
-                            </div>
-
-                            {detailedStyleAnalysis && detailedStyleAnalysis !== 'N/A' && (
-                                <div className="mt-6 pt-4 border-t border-gray-100 dark:border-white/5">
-                                    <strong className="text-gray-800 dark:text-gray-200 block mb-2 text-sm uppercase tracking-wider font-bold">Style Analysis:</strong>
-                                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">{detailedStyleAnalysis}</p>
+                                    )}
                                 </div>
-                            )}
-                        </div>
-                    )}
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mb-6">
+                                    {Object.entries(communicationDetails).map(([key, item]) => {
+                                        const icon = commsIconMap[key] || <MessageSquare size={16} className="text-primary" />;
+                                        const badgeStyle = getRatingBadge(item.rating);
+
+                                        return (
+                                            <div key={key} className="flex flex-col p-4 bg-gray-50/70 dark:bg-black/20 hover:bg-gray-50 dark:hover:bg-white/[0.04] rounded-xl border border-gray-100 dark:border-white/5 shadow-xs transition-all duration-200">
+                                                <div className="flex items-start justify-between gap-3 mb-2">
+                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                        <span className="p-1.5 rounded-lg bg-white dark:bg-white/10 shadow-xs border border-gray-200/60 dark:border-white/10 shrink-0">
+                                                            {icon}
+                                                        </span>
+                                                        <span className="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-200 truncate">
+                                                            {labelMap[key] || key}
+                                                        </span>
+                                                    </div>
+                                                    <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-md border shrink-0 tracking-wide ${badgeStyle}`}>
+                                                        {item.rating}
+                                                    </span>
+                                                </div>
+                                                {item.comment && (
+                                                    <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed font-normal mt-1 pl-0.5">
+                                                        {item.comment}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {detailedStyleAnalysis && detailedStyleAnalysis !== 'N/A' && (
+                                    <div className="mt-6 pt-5 border-t border-gray-100 dark:border-white/5">
+                                        <div className="p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30">
+                                            <div className="flex items-center gap-2 mb-2 text-indigo-700 dark:text-indigo-400 font-bold text-xs uppercase tracking-wider">
+                                                <Sparkles size={16} /> Detailed Spoken Style & Persona Analysis
+                                            </div>
+                                            <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 leading-relaxed font-medium whitespace-pre-wrap">
+                                                {detailedStyleAnalysis}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
 
                     {/* Professional Details Card */}
                     {submission.candidateInfo && (
