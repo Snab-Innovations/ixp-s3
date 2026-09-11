@@ -174,7 +174,14 @@ app.post('/api/jobs/receive', authenticateApiKey, async (req, res) => {
   const accessCode = jobNo || payload.accessCode || Math.random().toString(36).substring(2, 8).toUpperCase();
   const status = payload.status || "Active";
   const entryBy = payload.entryBy || payload.recruiterName || "";
-  const deadline = (payload.deadlineDate || payload.deadline || payload.applyDeadline || payload.interviewDeadline || payload.endDate || payload.interviewDates || "").toString().trim();
+  // When a job is received via API, ignore any incoming deadline and set deadline 10 days after creation day
+  const creationDate = new Date();
+  const deadlineDateObj = new Date(creationDate);
+  deadlineDateObj.setDate(deadlineDateObj.getDate() + 10);
+  const yyyy = deadlineDateObj.getFullYear();
+  const mm = String(deadlineDateObj.getMonth() + 1).padStart(2, '0');
+  const dd = String(deadlineDateObj.getDate()).padStart(2, '0');
+  const deadline = `${yyyy}-${mm}-${dd}`;
   const deadlineDate = deadline;
   const numQuestions = Number(payload.numQuestions || 5);
   const difficulty = payload.difficulty || "Medium";
@@ -208,7 +215,8 @@ app.post('/api/jobs/receive', authenticateApiKey, async (req, res) => {
         location,
         status,
         deadline,
-        deadlineDate
+        deadlineDate,
+        applyDeadline: deadline
       }
     });
   }
@@ -282,7 +290,10 @@ app.post('/api/jobs/receive', authenticateApiKey, async (req, res) => {
         recruiterUID,
         company,
         location,
-        status
+        status,
+        deadline,
+        deadlineDate,
+        applyDeadline: deadline
       }
     });
 

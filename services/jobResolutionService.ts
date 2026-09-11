@@ -223,6 +223,60 @@ export function predictSectorAndRoleHeuristic(params: {
 }
 
 /**
+ * Calculates deadline as exactly 10 days after the job's creation date.
+ * If no valid creation date exists, defaults to 10 days from today.
+ * Returns ISO date format: 'YYYY-MM-DD'.
+ */
+export function calculateDeadlineAfter10Days(createdAtVal?: any): string {
+  let baseDate: Date;
+  if (createdAtVal) {
+    if (createdAtVal instanceof Date && !isNaN(createdAtVal.getTime())) {
+      baseDate = new Date(createdAtVal.getTime());
+    } else if (typeof createdAtVal?.toDate === 'function') {
+      try {
+        baseDate = createdAtVal.toDate();
+      } catch {
+        baseDate = new Date();
+      }
+    } else if (typeof createdAtVal?.toMillis === 'function') {
+      try {
+        baseDate = new Date(createdAtVal.toMillis());
+      } catch {
+        baseDate = new Date();
+      }
+    } else if (typeof createdAtVal?.seconds === 'number') {
+      baseDate = new Date(createdAtVal.seconds * 1000);
+    } else if (typeof createdAtVal === 'number' && !isNaN(createdAtVal)) {
+      baseDate = new Date(createdAtVal);
+    } else if (typeof createdAtVal === 'string' && createdAtVal.trim()) {
+      const trimmed = createdAtVal.trim();
+      const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        baseDate = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0);
+      } else {
+        const parsed = Date.parse(trimmed);
+        baseDate = !isNaN(parsed) ? new Date(parsed) : new Date();
+      }
+    } else {
+      baseDate = new Date();
+    }
+  } else {
+    baseDate = new Date();
+  }
+
+  if (isNaN(baseDate.getTime())) {
+    baseDate = new Date();
+  }
+
+  const deadlineDate = new Date(baseDate.getTime());
+  deadlineDate.setDate(deadlineDate.getDate() + 10);
+  const yyyy = deadlineDate.getFullYear();
+  const mm = String(deadlineDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(deadlineDate.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
  * Normalizes external API job payloads (e.g. PHP/JSON arrays with recruiterUID, industryName, roleName,
  * skills array, education array, typed location, city, entryBy, etc.) into database-aligned objects.
  */
@@ -346,6 +400,10 @@ export function normalizeApiJobPayload(rawPayload: any): Record<string, any> {
     recruiterUID,
     entryBy,
     recruiterName: entryBy,
+    // When job is fetched or received by API, ignore any API deadline and calculate deadline 10 days after creation day
+    deadline: calculateDeadlineAfter10Days(rawPayload.createdAt || rawPayload.created_at || rawPayload.postedAt || rawPayload.posted_at || rawPayload.entryDate || rawPayload.date || rawPayload.timestamp),
+    deadlineDate: calculateDeadlineAfter10Days(rawPayload.createdAt || rawPayload.created_at || rawPayload.postedAt || rawPayload.posted_at || rawPayload.entryDate || rawPayload.date || rawPayload.timestamp),
+    applyDeadline: calculateDeadlineAfter10Days(rawPayload.createdAt || rawPayload.created_at || rawPayload.postedAt || rawPayload.posted_at || rawPayload.entryDate || rawPayload.date || rawPayload.timestamp),
   };
 }
 
@@ -591,6 +649,8 @@ export async function fetchJobFetchedApiJobs(targetRecruiterUID: string = DEFAUL
     if (!Array.isArray(rawJobs)) return [];
 
     return rawJobs.map((rawJob: any) => {
+      const rawCreatedAt = rawJob.createdAt || rawJob.created_at || rawJob.postedAt || rawJob.posted_at || rawJob.entryDate || rawJob.date;
+      const deadline = calculateDeadlineAfter10Days(rawCreatedAt);
       const normalized = normalizeApiJobPayload({
         ...rawJob,
         recruiterUID: rawJob.recruiterUID || targetRecruiterUID
@@ -598,6 +658,9 @@ export async function fetchJobFetchedApiJobs(targetRecruiterUID: string = DEFAUL
       return {
         id: rawJob.id || String(rawJob.accessCode || rawJob.jobNo),
         ...normalized,
+        deadline,
+        deadlineDate: deadline,
+        applyDeadline: deadline,
       };
     });
   } catch (error) {

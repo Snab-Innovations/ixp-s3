@@ -95,6 +95,47 @@ function predictSectorAndRole(title = '', description = '', skills = [], company
   };
 }
 
+function calculateDeadlineAfter10Days(createdAtVal) {
+  let baseDate;
+  if (createdAtVal) {
+    if (createdAtVal instanceof Date && !isNaN(createdAtVal.getTime())) {
+      baseDate = new Date(createdAtVal.getTime());
+    } else if (typeof createdAtVal?.toDate === 'function') {
+      try { baseDate = createdAtVal.toDate(); } catch { baseDate = new Date(); }
+    } else if (typeof createdAtVal?.toMillis === 'function') {
+      try { baseDate = new Date(createdAtVal.toMillis()); } catch { baseDate = new Date(); }
+    } else if (typeof createdAtVal?.seconds === 'number') {
+      baseDate = new Date(createdAtVal.seconds * 1000);
+    } else if (typeof createdAtVal === 'number' && !isNaN(createdAtVal)) {
+      baseDate = new Date(createdAtVal);
+    } else if (typeof createdAtVal === 'string' && createdAtVal.trim()) {
+      const trimmed = createdAtVal.trim();
+      const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) {
+        baseDate = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0);
+      } else {
+        const parsed = Date.parse(trimmed);
+        baseDate = !isNaN(parsed) ? new Date(parsed) : new Date();
+      }
+    } else {
+      baseDate = new Date();
+    }
+  } else {
+    baseDate = new Date();
+  }
+
+  if (isNaN(baseDate.getTime())) {
+    baseDate = new Date();
+  }
+
+  const deadlineDate = new Date(baseDate.getTime());
+  deadlineDate.setDate(deadlineDate.getDate() + 10);
+  const yyyy = deadlineDate.getFullYear();
+  const mm = String(deadlineDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(deadlineDate.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 const inMemoryJobs = new Map();
 
 export default async function handler(req, res) {
@@ -142,21 +183,32 @@ export default async function handler(req, res) {
   // ── 1. GET: List All Jobs or Fetch Single Job ──
   if (req.method === 'GET') {
     try {
+      const adjustJobDeadline = (job) => {
+        if (!job) return job;
+        const computedDeadline = calculateDeadlineAfter10Days(job.createdAt || job.created_at || job.postedAt || job.posted_at);
+        return {
+          ...job,
+          deadline: computedDeadline,
+          deadlineDate: computedDeadline,
+          applyDeadline: computedDeadline
+        };
+      };
+
       // Single Job Fetch
       if (targetId || targetJobNo) {
         if (targetId && inMemoryJobs.has(targetId)) {
-          return res.status(200).json({ success: true, data: inMemoryJobs.get(targetId) });
+          return res.status(200).json({ success: true, data: adjustJobDeadline(inMemoryJobs.get(targetId)) });
         }
         for (const job of inMemoryJobs.values()) {
           if (targetJobNo && String(job.jobNo) === targetJobNo) {
-            return res.status(200).json({ success: true, data: job });
+            return res.status(200).json({ success: true, data: adjustJobDeadline(job) });
           }
         }
 
         if (targetId) {
           const snap = await getDoc(doc(db, 'interviews', targetId));
           if (snap.exists()) {
-            return res.status(200).json({ success: true, data: { id: snap.id, ...snap.data() } });
+            return res.status(200).json({ success: true, data: adjustJobDeadline({ id: snap.id, ...snap.data() }) });
           }
         }
         if (targetJobNo) {
@@ -164,7 +216,7 @@ export default async function handler(req, res) {
           const snap = await getDocs(q);
           if (!snap.empty) {
             const d = snap.docs[0];
-            return res.status(200).json({ success: true, data: { id: d.id, ...d.data() } });
+            return res.status(200).json({ success: true, data: adjustJobDeadline({ id: d.id, ...d.data() }) });
           }
         }
       }
@@ -188,10 +240,10 @@ export default async function handler(req, res) {
         allJobs = allJobs.filter(j => (j.status || 'active').toLowerCase() === filterStatus);
       }
 
-      return res.status(200).json(allJobs);
+      return res.status(200).json(allJobs.map(adjustJobDeadline));
     } catch (err) {
       console.error('Error in GET /api/jobs:', err);
-      return res.status(200).json(Array.from(inMemoryJobs.values()));
+      return res.status(200).json(Array.from(inMemoryJobs.values()).map(adjustJobDeadline));
     }
   }
 
@@ -459,7 +511,9 @@ export default async function handler(req, res) {
     const jobId = jobNo || payload.id || payload.interviewId || Math.random().toString(36).substring(2, 15);
     const accessCode = jobNo || payload.accessCode || Math.random().toString(36).substring(2, 8).toUpperCase();
     const entryBy = payload.entryBy || payload.recruiterName || '';
-    const deadline = (payload.deadlineDate || payload.deadline || payload.applyDeadline || '').toString().trim();
+    const createdAt = new Date().toISOString();
+    // When job is created/received by API, ignore any incoming API deadline and set deadline 10 days after creation day
+    const deadline = calculateDeadlineAfter10Days(payload.createdAt || createdAt);
 
     const origin = req.headers['origin'] || (req.headers['host'] ? `https://${req.headers['host']}` : 'https://interviewxpert.in');
     const interviewLink = `${origin}/#/interview/${jobId}`;
@@ -501,8 +555,9 @@ export default async function handler(req, res) {
       recruiterUID,
       deadline,
       deadlineDate: deadline,
+      applyDeadline: deadline,
       interviewLink,
-      createdAt: new Date().toISOString(),
+      createdAt,
       numQuestions: Number(payload.numQuestions || 5),
       difficulty: payload.difficulty || 'Medium',
       strictness: payload.strictness || 'Medium',
@@ -536,7 +591,9 @@ export default async function handler(req, res) {
         company,
         location,
         status: 'Active',
-        deadline
+        deadline,
+        deadlineDate: deadline,
+        applyDeadline: deadline
       }
     });
 

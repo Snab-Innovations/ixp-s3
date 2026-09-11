@@ -12,7 +12,7 @@ import { parseCandidateDocument, parseBulkCandidateTextInput } from '../services
 import { ingestResumeFile, saveResumeDumpCandidate, checkMandatoryCriteriaMatch } from '../services/resumeService';
 import { sendInterviewWhatsAppInvite, formatPhoneForWhatsApp, buildWhatsAppInviteText, openWhatsAppWebInvite, sendBulkWhatsAppInvites } from '../services/waSenderService';
 import EditJobModal from './EditJob';
-import { normalizeJobData, fetchJobFetchedApiJobs } from '../services/jobResolutionService';
+import { normalizeJobData, fetchJobFetchedApiJobs, calculateDeadlineAfter10Days } from '../services/jobResolutionService';
 import WhatsAppConnectModal from '../components/WhatsAppConnectModal';
 import { useTheme } from '../context/ThemeContext';
 import { useBackgroundSend } from '../context/BackgroundSendContext';
@@ -851,8 +851,9 @@ const RecruiterAllJobs: React.FC = () => {
           city: i.city || existing?.city || 'Nashik',
           companyName: i.companyName || i.company || existing?.companyName || existing?.company || 'Company',
           createdAt: i.createdAt || existing?.createdAt,
-          deadline: i.deadlineDate || i.deadline || i.applyDeadline || existing?.deadline,
-          deadlineDate: i.deadlineDate || i.deadline || i.applyDeadline || existing?.deadline,
+          deadline: calculateDeadlineAfter10Days(i.createdAt || existing?.createdAt),
+          deadlineDate: calculateDeadlineAfter10Days(i.createdAt || existing?.createdAt),
+          applyDeadline: calculateDeadlineAfter10Days(i.createdAt || existing?.createdAt),
           customFields: i.customFields || existing?.customFields || [],
           genderRequirement: i.genderRequirement || i.gender || existing?.genderRequirement || 'Any',
           strictness: i.strictness || existing?.strictness || 'Low',
