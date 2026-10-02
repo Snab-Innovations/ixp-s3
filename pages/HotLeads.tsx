@@ -11,6 +11,7 @@ import {
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useMessageBox } from '../components/MessageBox';
+import { useTheme } from '../context/ThemeContext';
 import {
   Flame,
   Search,
@@ -25,7 +26,6 @@ import {
   Briefcase,
   CheckSquare,
   Square,
-  Plus,
   ArrowLeft,
   RotateCw,
   Copy,
@@ -90,6 +90,7 @@ export interface HotLeadItem {
 
 export default function HotLeads() {
   const { user, userProfile } = useAuth();
+  const { isDark } = useTheme();
   const messageBox = useMessageBox();
 
   const [loading, setLoading] = useState(true);
@@ -298,22 +299,60 @@ export default function HotLeads() {
     };
 
     // A. Query Recruiter Jobs & Interviews
+    let interviewsList: any[] = [];
+    let directJobsList: any[] = [];
+
+    const updateMergedJobs = () => {
+      const mergedMap = new Map<string, any>();
+      directJobsList.forEach((j) => mergedMap.set(j.id, j));
+      interviewsList.forEach((i) => {
+        const existing = mergedMap.get(i.id);
+        mergedMap.set(i.id, {
+          ...existing,
+          ...i,
+          jobNo: i.jobNo || existing?.jobNo || '',
+          jobNumber: i.jobNumber || existing?.jobNumber || i.jobNo || existing?.jobNo || '',
+          accessCode: i.accessCode || existing?.accessCode || (i.jobNo ? String(i.jobNo) : ''),
+          title: i.title ? i.title.replace(/\s+Interview$/i, '').trim() : existing?.title || 'Untitled Role',
+        });
+      });
+      jobsList = Array.from(mergedMap.values());
+      setJobs(jobsList);
+      mergeAllData();
+    };
+
     const jobsQ = isAdmin
       ? query(collection(db, 'interviews'))
       : resolvedTeamId && resolvedTeamId !== userUid
       ? query(collection(db, 'interviews'), where('teamId', '==', resolvedTeamId))
       : query(collection(db, 'interviews'), where('recruiterUID', '==', userUid));
 
+    const directJobsQ = isAdmin
+      ? query(collection(db, 'jobs'))
+      : resolvedTeamId && resolvedTeamId !== userUid
+      ? query(collection(db, 'jobs'), where('teamId', '==', resolvedTeamId))
+      : query(collection(db, 'jobs'), where('recruiterUID', '==', userUid));
+
     const unsubJobs = onSnapshot(
       jobsQ,
       (snap) => {
-        jobsList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setJobs(jobsList);
-        mergeAllData();
+        interviewsList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        updateMergedJobs();
       },
       (err) => {
-        console.error('Error fetching jobs in HotLeads:', err);
+        console.error('Error fetching interviews in HotLeads:', err);
         setLoading(false);
+      }
+    );
+
+    const unsubDirectJobs = onSnapshot(
+      directJobsQ,
+      (snap) => {
+        directJobsList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        updateMergedJobs();
+      },
+      (err) => {
+        console.error('Error fetching direct jobs in HotLeads:', err);
       }
     );
 
@@ -345,6 +384,7 @@ export default function HotLeads() {
 
     return () => {
       unsubJobs();
+      unsubDirectJobs();
       unsubApps();
       unsubResp();
     };
@@ -375,16 +415,26 @@ export default function HotLeads() {
       // Search term
       if (searchTerm.trim()) {
         const queryLower = searchTerm.toLowerCase();
+        const cleanNum = queryLower.replace(/^[#\s]+/, '').trim();
         const matchesName = lead.candidateName.toLowerCase().includes(queryLower);
         const matchesEmail = lead.candidateEmail.toLowerCase().includes(queryLower);
         const matchesPhone = lead.candidatePhone.toLowerCase().includes(queryLower);
         const matchesJob = lead.jobTitle.toLowerCase().includes(queryLower);
-        if (!matchesName && !matchesEmail && !matchesPhone && !matchesJob) return false;
+        const job = jobs.find((j) => j.id === lead.jobId);
+        const jobNo = String(job?.jobNo || job?.jobNumber || lead.accessCode || '').toLowerCase();
+        const matchesJobNo = Boolean(
+          cleanNum && (
+            jobNo.includes(cleanNum) ||
+            lead.jobId.toLowerCase().includes(cleanNum) ||
+            (lead.accessCode && lead.accessCode.toLowerCase().includes(cleanNum))
+          )
+        );
+        if (!matchesName && !matchesEmail && !matchesPhone && !matchesJob && !matchesJobNo) return false;
       }
 
       return true;
     });
-  }, [leads, activeTab, selectedJobId, scoreFilter, searchTerm]);
+  }, [leads, activeTab, selectedJobId, scoreFilter, searchTerm, jobs]);
 
   // ── KPI Metrics ──
   const stats = useMemo(() => {
@@ -431,18 +481,34 @@ export default function HotLeads() {
   const selectedJobTitle = useMemo(() => {
     if (selectedJobId === 'all') return `All Jobs (${jobs.length})`;
     const found = jobs.find((j) => j.id === selectedJobId);
-    return found ? (found.title || 'Untitled Role') : 'Selected Job';
+    if (!found) return 'Selected Job';
+    const jobNum = found.jobNo || found.jobNumber || found.accessCode;
+    const prefix = jobNum ? `#${jobNum} • ` : '';
+    return `${prefix}${found.title || 'Untitled Role'}`;
   }, [selectedJobId, jobs]);
 
   const filteredJobsForDropdown = useMemo(() => {
     if (!jobSearchQuery.trim()) return jobs;
     const query = jobSearchQuery.toLowerCase().trim();
+    const cleanNum = query.replace(/^job\s*#?|^#\s*/i, '').trim();
     return jobs.filter((j) => {
       const title = (j.title || '').toLowerCase();
-      const department = (j.department || j.category || '').toLowerCase();
+      const department = (j.department || j.category || j.roleCategory || '').toLowerCase();
       const company = (j.companyName || j.company || '').toLowerCase();
-      const id = (j.id || '').toLowerCase();
-      return title.includes(query) || department.includes(query) || company.includes(query) || id.includes(query);
+      const jobNo = String(j.jobNo || j.jobNumber || '').toLowerCase();
+      const accessCode = String(j.accessCode || '').toLowerCase();
+      const id = String(j.id || '').toLowerCase();
+
+      return (
+        title.includes(query) ||
+        department.includes(query) ||
+        company.includes(query) ||
+        id.includes(query) ||
+        (cleanNum && jobNo.includes(cleanNum)) ||
+        (cleanNum && accessCode.includes(cleanNum)) ||
+        (cleanNum && id.includes(cleanNum)) ||
+        (query.startsWith('#') && (jobNo.includes(cleanNum) || accessCode.includes(cleanNum) || id.includes(cleanNum)))
+      );
     });
   }, [jobs, jobSearchQuery]);
 
@@ -689,98 +755,91 @@ export default function HotLeads() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#000] text-white font-sans pt-1 sm:pt-1.5">
+    <div className="flex min-h-screen flex-col bg-gray-50 dark:bg-[#000] text-gray-900 dark:text-white font-sans pt-1 sm:pt-1.5 transition-colors">
       {/* ── 1. Top Section Header (Matches RecruiterAllJobs / ResumeDump) ── */}
-      <section className="shrink-0 border-b border-white/[0.11] bg-[#000]">
+      <section className="shrink-0 border-b border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#000] transition-colors">
         <div className="flex flex-col gap-2.5 px-4 py-2.5 sm:px-6 sm:py-3 lg:px-7 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="flex items-center gap-3">
               <Link
                 to="/recruiter/jobs"
-                className="geist-caption inline-flex h-7 items-center gap-1.5 rounded-[5px] border border-white/[0.11] bg-white/[0.03] px-2.5 text-xs font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
+                className="geist-caption inline-flex h-7 items-center gap-1.5 rounded-[5px] border border-gray-300 dark:border-white/[0.14] bg-white dark:bg-white/[0.04] px-2.5 text-xs font-medium text-gray-800 dark:text-[#d4d4d4] shadow-xs dark:shadow-none transition-all hover:bg-gray-50 dark:hover:bg-white/[0.08] hover:border-gray-400 dark:hover:border-white/[0.25] hover:text-gray-900 dark:hover:text-white"
               >
-                <ArrowLeft className="w-3 h-3" />
+                <ArrowLeft className="w-3 h-3 text-gray-500 dark:text-[#8f8f8f]" />
                 <span>Dashboard</span>
               </Link>
-              <span className="geist-label uppercase text-[#6b7280] text-[10px] tracking-wider font-semibold">Candidate Pipeline</span>
+              <span className="geist-label uppercase text-gray-500 dark:text-[#6b7280] text-[10px] tracking-wider font-semibold">Candidate Pipeline</span>
             </div>
-            <h1 className="geist-page-title mt-1 text-white flex items-center gap-2">
+            <h1 className="geist-page-title mt-1 text-gray-900 dark:text-white flex items-center gap-2">
               <Flame className="w-5 h-5 text-amber-500 fill-amber-500/20 animate-pulse" />
               <span>Hot Leads & Responses</span>
             </h1>
-            <p className="geist-small mt-0.5 text-[#8f8f8f] max-w-3xl text-xs">
+            <p className="geist-small mt-0.5 text-gray-600 dark:text-[#8f8f8f] max-w-3xl text-xs">
               Track candidate applications across all posted jobs, view AI interview responses at a glance, and send one-click WhatsApp and Email reminders for pending submissions.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+          <div className="flex items-center gap-2 pt-0.5">
             <Link
               to="/recruiter/all-jobs"
-              className="geist-caption inline-flex h-7 sm:h-8 items-center gap-1.5 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-xs font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
+              className="geist-caption inline-flex h-8 items-center gap-2 rounded-[6px] border border-gray-300 dark:border-white/[0.14] bg-white dark:bg-white/[0.04] px-3.5 text-xs font-medium text-gray-800 dark:text-[#d4d4d4] shadow-xs dark:shadow-none transition-all hover:bg-gray-50 dark:hover:bg-white/[0.08] hover:border-gray-400 dark:hover:border-white/[0.25] hover:text-gray-900 dark:hover:text-white"
             >
-              <Briefcase className="w-3.5 h-3.5" />
+              <Briefcase className="w-3.5 h-3.5 text-gray-600 dark:text-[#a3a3a3]" />
               <span>All Jobs</span>
-            </Link>
-            <Link
-              to="/recruiter/interview/create"
-              className="geist-caption inline-flex h-7 sm:h-8 items-center justify-center gap-1.5 rounded-[6px] border border-white bg-white px-3 text-xs font-semibold text-black transition-colors hover:bg-[#eaeaea]"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Create Job</span>
             </Link>
           </div>
         </div>
       </section>
 
       {/* ── 2. KPI Metrics Bar (Matches RecruiterDashboard Stat Tiles) ── */}
-      <section className="border-b border-white/[0.11] bg-[#000]">
-        <div className="grid grid-cols-1 divide-y divide-white/[0.11] sm:grid-cols-3 sm:divide-y-0 sm:divide-x">
+      <section className="border-b border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#000] transition-colors">
+        <div className="grid grid-cols-1 divide-y divide-gray-200 dark:divide-white/[0.11] sm:grid-cols-3 sm:divide-y-0 sm:divide-x">
           <div className="px-4 py-4 sm:px-6 lg:px-7">
-            <p className="geist-label uppercase text-[10px] text-[#8f8f8f] font-semibold tracking-wider flex items-center gap-1.5">
-              <User className="size-3 text-[#8f8f8f]" />
+            <p className="geist-label uppercase text-[10px] text-gray-500 dark:text-[#8f8f8f] font-semibold tracking-wider flex items-center gap-1.5">
+              <User className="size-3 text-gray-400 dark:text-[#8f8f8f]" />
               <span>Total Hot Leads</span>
             </p>
-            <div className="geist-page-title mt-1.5 text-white font-bold">{stats.total}</div>
-            <p className="geist-small mt-0.5 text-[11px] text-[#6b7280]">All candidate applicants across jobs</p>
+            <div className="geist-page-title mt-1.5 text-gray-900 dark:text-white font-bold">{stats.total}</div>
+            <p className="geist-small mt-0.5 text-[11px] text-gray-500 dark:text-[#6b7280]">All candidate applicants across jobs</p>
           </div>
 
           <div className="px-4 py-4 sm:px-6 lg:px-7">
-            <p className="geist-label uppercase text-[10px] text-emerald-400 font-semibold tracking-wider flex items-center gap-1.5">
-              <CheckCircle2 className="size-3 text-emerald-400" />
+            <p className="geist-label uppercase text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold tracking-wider flex items-center gap-1.5">
+              <CheckCircle2 className="size-3 text-emerald-600 dark:text-emerald-400" />
               <span>Responses Received</span>
             </p>
-            <div className="geist-page-title mt-1.5 text-white font-bold">{stats.responded}</div>
-            <p className="geist-small mt-0.5 text-[11px] text-[#6b7280]">Completed AI video interviews</p>
+            <div className="geist-page-title mt-1.5 text-gray-900 dark:text-white font-bold">{stats.responded}</div>
+            <p className="geist-small mt-0.5 text-[11px] text-gray-500 dark:text-[#6b7280]">Completed AI video interviews</p>
           </div>
 
           <div className="px-4 py-4 sm:px-6 lg:px-7">
-            <p className="geist-label uppercase text-[10px] text-amber-500 dark:text-amber-400 font-semibold tracking-wider flex items-center gap-1.5 !bg-transparent">
-              <Clock className="size-3 text-amber-500 dark:text-amber-400 !bg-transparent" />
+            <p className="geist-label uppercase text-[10px] text-amber-600 dark:text-amber-400 font-semibold tracking-wider flex items-center gap-1.5 !bg-transparent">
+              <Clock className="size-3 text-amber-600 dark:text-amber-400 !bg-transparent" />
               <span className="!bg-transparent">Awaiting Interview</span>
             </p>
-            <div className="geist-page-title mt-1.5 text-white font-bold">{stats.pending}</div>
-            <p className="geist-small mt-0.5 text-[11px] text-[#6b7280]">Ready for WhatsApp & Email follow-up</p>
+            <div className="geist-page-title mt-1.5 text-gray-900 dark:text-white font-bold">{stats.pending}</div>
+            <p className="geist-small mt-0.5 text-[11px] text-gray-500 dark:text-[#6b7280]">Ready for WhatsApp & Email follow-up</p>
           </div>
         </div>
       </section>
 
       {/* ── 3. Controls & Filter Section (Matches Platform Toolbar) ── */}
-      <section className="border-b border-white/[0.11] bg-[#000] px-4 py-3.5 sm:px-6 lg:px-7">
+      <section className="border-b border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#000] px-4 py-3.5 sm:px-6 lg:px-7 transition-colors">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           
           {/* Segmented Filter Pills */}
-          <div className="flex shrink-0 items-center gap-1.5 rounded-[6px] border border-white/[0.16] bg-white/[0.04] p-0.5 overflow-x-auto">
+          <div className="flex shrink-0 items-center gap-1.5 rounded-[6px] border border-gray-200 dark:border-white/[0.16] bg-gray-100 dark:bg-white/[0.04] p-0.5 overflow-x-auto">
             <button
               type="button"
               onClick={() => setActiveTab('all')}
               className={`geist-caption inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-[4px] px-3 font-medium transition-colors ${
                 activeTab === 'all'
-                  ? 'bg-white text-black font-semibold'
-                  : 'text-[#d4d4d4] hover:bg-white/[0.08] hover:text-white'
+                  ? 'bg-white dark:bg-white text-gray-900 dark:text-black font-semibold shadow-sm'
+                  : 'text-gray-600 dark:text-[#d4d4d4] hover:bg-gray-200/60 dark:hover:bg-white/[0.08] hover:text-gray-900 dark:hover:text-white'
               }`}
             >
               <span>All Leads</span>
-              <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${activeTab === 'all' ? 'bg-black/15 text-black' : 'bg-white/10 text-[#8f8f8f]'}`}>
+              <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${activeTab === 'all' ? 'bg-gray-200 dark:bg-black/15 text-gray-800 dark:text-black' : 'bg-gray-200/60 dark:bg-white/10 text-gray-600 dark:text-[#8f8f8f]'}`}>
                 {stats.total}
               </span>
             </button>
@@ -788,15 +847,15 @@ export default function HotLeads() {
             <button
               type="button"
               onClick={() => setActiveTab('pending')}
-              className={`geist-caption inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-[4px] px-3 font-medium transition-colors !bg-transparent ${
+              className={`geist-caption inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-[4px] px-3 font-medium transition-colors ${
                 activeTab === 'pending'
-                  ? '!bg-white !text-black font-semibold'
-                  : 'text-[#d4d4d4] hover:bg-white/[0.08] hover:text-white'
+                  ? 'bg-white dark:bg-white text-gray-900 dark:text-black font-semibold shadow-sm'
+                  : 'text-gray-600 dark:text-[#d4d4d4] hover:bg-gray-200/60 dark:hover:bg-white/[0.08] hover:text-gray-900 dark:hover:text-white'
               }`}
             >
-              <Clock className="w-3.5 h-3.5 text-amber-500 !bg-transparent" />
-              <span className="!bg-transparent">Needs Reminder</span>
-              <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${activeTab === 'pending' ? 'bg-black/15 text-black' : 'bg-white/10 text-[#8f8f8f]'}`}>
+              <Clock className="w-3.5 h-3.5 text-amber-500" />
+              <span>Needs Reminder</span>
+              <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${activeTab === 'pending' ? 'bg-gray-200 dark:bg-black/15 text-gray-800 dark:text-black' : 'bg-gray-200/60 dark:bg-white/10 text-gray-600 dark:text-[#8f8f8f]'}`}>
                 {stats.pending}
               </span>
             </button>
@@ -806,13 +865,13 @@ export default function HotLeads() {
               onClick={() => setActiveTab('responded')}
               className={`geist-caption inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-[4px] px-3 font-medium transition-colors ${
                 activeTab === 'responded'
-                  ? 'bg-white text-black font-semibold'
-                  : 'text-[#d4d4d4] hover:bg-white/[0.08] hover:text-white'
+                  ? 'bg-white dark:bg-white text-gray-900 dark:text-black font-semibold shadow-sm'
+                  : 'text-gray-600 dark:text-[#d4d4d4] hover:bg-gray-200/60 dark:hover:bg-white/[0.08] hover:text-gray-900 dark:hover:text-white'
               }`}
             >
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
               <span>Responses Received</span>
-              <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${activeTab === 'responded' ? 'bg-black/15 text-black' : 'bg-emerald-500/20 text-emerald-400'}`}>
+              <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${activeTab === 'responded' ? 'bg-gray-200 dark:bg-black/15 text-gray-800 dark:text-black' : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'}`}>
                 {stats.responded}
               </span>
             </button>
@@ -822,13 +881,13 @@ export default function HotLeads() {
           <div className="flex flex-wrap items-center gap-2">
             {/* Search Box */}
             <div className="relative w-full sm:w-[220px] lg:w-[260px]">
-              <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[#8f8f8f]" strokeWidth={1.8} />
+              <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-gray-400 dark:text-[#8f8f8f]" strokeWidth={1.8} />
               <input
                 type="text"
-                placeholder="Search candidate, email, phone..."
+                placeholder="Search candidate, job #, email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-[#050505] pl-9 pr-3 text-white outline-none placeholder:text-[#6b7280] focus:border-white/[0.24]"
+                className="geist-caption h-9 w-full rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#050505] pl-9 pr-3 text-gray-900 dark:text-white outline-none placeholder:text-gray-400 dark:placeholder:text-[#6b7280] focus:border-blue-500 dark:focus:border-white/[0.24] transition-colors"
               />
             </div>
 
@@ -842,17 +901,17 @@ export default function HotLeads() {
                     setTimeout(() => jobSearchInputRef.current?.focus(), 50);
                   }
                 }}
-                className={`geist-caption h-9 rounded-[6px] border px-2.5 text-xs text-white outline-none transition-colors flex items-center justify-between gap-2 min-w-[170px] max-w-[240px] sm:max-w-[280px] cursor-pointer ${
+                className={`geist-caption h-9 rounded-[6px] border px-2.5 text-xs outline-none transition-colors flex items-center justify-between gap-2 min-w-[170px] max-w-[240px] sm:max-w-[280px] cursor-pointer ${
                   isJobDropdownOpen
-                    ? 'border-white/[0.35] bg-white/[0.06]'
+                    ? 'border-blue-500/50 dark:border-white/[0.35] bg-blue-50/40 dark:bg-white/[0.06] text-gray-900 dark:text-white'
                     : selectedJobId !== 'all'
-                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                    : 'border-white/[0.11] bg-[#050505] hover:border-white/[0.24]'
+                    ? 'border-emerald-500/50 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-medium'
+                    : 'border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#050505] text-gray-700 dark:text-white hover:border-gray-300 dark:hover:border-white/[0.24]'
                 }`}
                 title={selectedJobTitle}
               >
                 <div className="flex items-center gap-1.5 min-w-0 flex-1 text-left">
-                  <Briefcase className={`size-3 shrink-0 ${selectedJobId !== 'all' ? 'text-emerald-400' : 'text-[#8f8f8f]'}`} />
+                  <Briefcase className={`size-3 shrink-0 ${selectedJobId !== 'all' ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-[#8f8f8f]'}`} />
                   <span className="truncate">{selectedJobTitle}</span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -865,32 +924,32 @@ export default function HotLeads() {
                         setSelectedJobId('all');
                         setJobSearchQuery('');
                       }}
-                      className="rounded p-0.5 text-[#8f8f8f] hover:text-white hover:bg-white/10"
+                      className="rounded p-0.5 text-gray-400 dark:text-[#8f8f8f] hover:text-gray-700 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/10"
                       title="Clear job filter"
                     >
                       <X className="size-3" />
                     </span>
                   )}
                   <ChevronDown
-                    className={`size-3 text-[#8f8f8f] transition-transform duration-200 ${
-                      isJobDropdownOpen ? 'rotate-180 text-white' : ''
+                    className={`size-3 text-gray-400 dark:text-[#8f8f8f] transition-transform duration-200 ${
+                      isJobDropdownOpen ? 'rotate-180 text-gray-700 dark:text-white' : ''
                     }`}
                   />
                 </div>
               </button>
 
               {isJobDropdownOpen && (
-                <div className="absolute left-0 top-full mt-1.5 z-50 w-[290px] sm:w-[320px] rounded-[8px] border border-white/[0.15] bg-[#0d0d10] shadow-2xl backdrop-blur-xl overflow-hidden">
+                <div className="absolute left-0 top-full mt-1.5 z-50 w-[300px] sm:w-[340px] rounded-[8px] border border-gray-200 dark:border-white/[0.15] bg-white dark:bg-[#0d0d10] shadow-xl dark:shadow-2xl backdrop-blur-xl overflow-hidden">
                   {/* Search input inside dropdown */}
-                  <div className="relative border-b border-white/[0.08] p-2 bg-white/[0.02]">
-                    <Search className="absolute left-4 top-1/2 size-3.5 -translate-y-1/2 text-[#8f8f8f]" />
+                  <div className="relative border-b border-gray-100 dark:border-white/[0.08] p-2 bg-gray-50/50 dark:bg-white/[0.02]">
+                    <Search className="absolute left-4 top-1/2 size-3.5 -translate-y-1/2 text-gray-400 dark:text-[#8f8f8f]" />
                     <input
                       ref={jobSearchInputRef}
                       type="text"
-                      placeholder="Search jobs by title, department..."
+                      placeholder="Search by job # (e.g. #12), title, dept..."
                       value={jobSearchQuery}
                       onChange={(e) => setJobSearchQuery(e.target.value)}
-                      className="h-8 w-full rounded-[5px] border border-white/[0.1] bg-black/60 pl-8 pr-7 text-xs text-white placeholder:text-[#6b7280] outline-none focus:border-white/[0.28]"
+                      className="h-8 w-full rounded-[5px] border border-gray-200 dark:border-white/[0.1] bg-white dark:bg-black/60 pl-8 pr-7 text-xs text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-[#6b7280] outline-none focus:border-blue-500 dark:focus:border-white/[0.28]"
                     />
                     {jobSearchQuery && (
                       <button
@@ -899,7 +958,7 @@ export default function HotLeads() {
                           setJobSearchQuery('');
                           jobSearchInputRef.current?.focus();
                         }}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8f8f8f] hover:text-white"
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-[#8f8f8f] hover:text-gray-700 dark:hover:text-white"
                       >
                         <X className="size-3" />
                       </button>
@@ -907,7 +966,7 @@ export default function HotLeads() {
                   </div>
 
                   {/* List of jobs */}
-                  <div className="max-h-[260px] overflow-y-auto divide-y divide-white/[0.04]">
+                  <div className="max-h-[260px] overflow-y-auto divide-y divide-gray-100 dark:divide-white/[0.04]">
                     {/* All Jobs option */}
                     <button
                       type="button"
@@ -916,16 +975,18 @@ export default function HotLeads() {
                         setIsJobDropdownOpen(false);
                         setJobSearchQuery('');
                       }}
-                      className={`w-full text-left px-3 py-2.5 text-xs flex items-center justify-between gap-2 hover:bg-white/[0.05] transition-colors ${
-                        selectedJobId === 'all' ? 'bg-white/[0.08] text-white font-semibold' : 'text-[#d4d4d4]'
+                      className={`w-full text-left px-3 py-2.5 text-xs flex items-center justify-between gap-2 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors ${
+                        selectedJobId === 'all'
+                          ? 'bg-gray-100 dark:bg-white/[0.08] text-gray-900 dark:text-white font-semibold'
+                          : 'text-gray-700 dark:text-[#d4d4d4]'
                       }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="truncate">All Jobs ({jobs.length})</span>
+                        <span className="truncate font-medium">All Jobs ({jobs.length})</span>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-[10px] text-[#8f8f8f] font-mono">{leads.length} leads</span>
-                        {selectedJobId === 'all' && <Check className="size-3.5 text-emerald-400" />}
+                        <span className="text-[10px] text-gray-500 dark:text-[#8f8f8f] font-mono">{leads.length} leads</span>
+                        {selectedJobId === 'all' && <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />}
                       </div>
                     </button>
 
@@ -934,6 +995,7 @@ export default function HotLeads() {
                       filteredJobsForDropdown.map((j) => {
                         const count = leadCountByJob.get(j.id) || 0;
                         const isSelected = selectedJobId === j.id;
+                        const jobNum = j.jobNo || j.jobNumber || j.accessCode;
                         return (
                           <button
                             key={j.id}
@@ -943,31 +1005,40 @@ export default function HotLeads() {
                               setIsJobDropdownOpen(false);
                               setJobSearchQuery('');
                             }}
-                            className={`w-full text-left px-3 py-2.5 text-xs flex items-center justify-between gap-2 hover:bg-white/[0.05] transition-colors ${
-                              isSelected ? 'bg-white/[0.08] text-white font-semibold' : 'text-[#d4d4d4]'
+                            className={`w-full text-left px-3 py-2.5 text-xs flex items-center justify-between gap-2 hover:bg-gray-50 dark:hover:bg-white/[0.05] transition-colors ${
+                              isSelected
+                                ? 'bg-gray-100 dark:bg-white/[0.08] text-gray-900 dark:text-white font-semibold'
+                                : 'text-gray-700 dark:text-[#d4d4d4]'
                             }`}
                           >
                             <div className="min-w-0 flex-1">
-                              <div className="truncate font-medium">{j.title || 'Untitled Role'}</div>
-                              <div className="text-[10px] text-[#8f8f8f] truncate mt-0.5">
+                              <div className="flex items-center gap-1.5">
+                                {jobNum && (
+                                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/[0.08] text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-white/[0.08] shrink-0">
+                                    #{jobNum}
+                                  </span>
+                                )}
+                                <span className="truncate font-medium">{j.title || 'Untitled Role'}</span>
+                              </div>
+                              <div className="text-[10px] text-gray-500 dark:text-[#8f8f8f] truncate mt-0.5">
                                 {j.department || j.category || j.companyName || 'General'}
                               </div>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
                               {count > 0 ? (
-                                <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-200/50 dark:border-transparent">
                                   {count} leads
                                 </span>
                               ) : (
-                                <span className="text-[10px] text-[#6b7280] font-mono">0 leads</span>
+                                <span className="text-[10px] text-gray-400 dark:text-[#6b7280] font-mono">0 leads</span>
                               )}
-                              {isSelected && <Check className="size-3.5 text-emerald-400" />}
+                              {isSelected && <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" />}
                             </div>
                           </button>
                         );
                       })
                     ) : (
-                      <div className="px-3 py-6 text-center text-xs text-[#8f8f8f]">
+                      <div className="px-3 py-6 text-center text-xs text-gray-500 dark:text-[#8f8f8f]">
                         No jobs matching &ldquo;{jobSearchQuery}&rdquo;
                       </div>
                     )}
@@ -980,12 +1051,12 @@ export default function HotLeads() {
             <select
               value={scoreFilter}
               onChange={(e) => setScoreFilter(e.target.value as any)}
-              className="geist-caption h-9 rounded-[6px] border border-white/[0.11] bg-[#050505] px-2.5 text-xs text-white outline-none focus:border-white/[0.24] cursor-pointer max-w-[170px]"
+              className="geist-caption h-9 rounded-[6px] border border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#050505] px-2.5 text-xs text-gray-800 dark:text-white outline-none focus:border-blue-500 dark:focus:border-white/[0.24] cursor-pointer max-w-[170px]"
             >
-              <option value="all" className="bg-[#111]">All Score Ranges</option>
-              <option value="high" className="bg-[#111]">Top Score (7.5 - 10)</option>
-              <option value="mid" className="bg-[#111]">Medium (5.0 - 7.4)</option>
-              <option value="low" className="bg-[#111]">Low (&lt; 5.0)</option>
+              <option value="all" className="bg-white dark:bg-[#111] text-gray-900 dark:text-white">All Score Ranges</option>
+              <option value="high" className="bg-white dark:bg-[#111] text-gray-900 dark:text-white">Top Score (7.5 - 10)</option>
+              <option value="mid" className="bg-white dark:bg-[#111] text-gray-900 dark:text-white">Medium (5.0 - 7.4)</option>
+              <option value="low" className="bg-white dark:bg-[#111] text-gray-900 dark:text-white">Low (&lt; 5.0)</option>
             </select>
 
             {/* Bulk Reminder Action */}
@@ -994,7 +1065,7 @@ export default function HotLeads() {
                 type="button"
                 onClick={handleSendBulkReminders}
                 disabled={bulkSending}
-                className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border border-amber-500/40 bg-amber-500/10 px-3 font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border border-amber-500/40 bg-amber-500/10 px-3 font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
               >
                 {bulkSending ? <RotateCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                 <span>Send Reminders ({selectedLeadIds.length})</span>
@@ -1006,14 +1077,14 @@ export default function HotLeads() {
 
       {/* ── 4. Main Leads Table (Matches RecruiterAllJobs / ResumeDump Table) ── */}
       <div className="px-4 py-6 sm:px-6 lg:px-7">
-        <div className="rounded-[8px] border border-white/[0.11] bg-[#000] overflow-hidden">
+        <div className="rounded-[8px] border border-gray-200 dark:border-white/[0.11] bg-white dark:bg-[#000] overflow-hidden shadow-sm dark:shadow-none transition-colors">
           {filteredLeads.length === 0 ? (
             <div className="py-16 text-center">
-              <div className="size-12 rounded-full border border-white/[0.11] bg-white/[0.03] flex items-center justify-center mx-auto mb-3 text-amber-500">
+              <div className="size-12 rounded-full border border-gray-200 dark:border-white/[0.11] bg-gray-50 dark:bg-white/[0.03] flex items-center justify-center mx-auto mb-3 text-amber-500">
                 <Flame className="w-6 h-6" />
               </div>
-              <h3 className="geist-subheading text-white">No candidate leads found</h3>
-              <p className="geist-small mt-1 text-[#8f8f8f] max-w-sm mx-auto">
+              <h3 className="geist-subheading text-gray-900 dark:text-white">No candidate leads found</h3>
+              <p className="geist-small mt-1 text-gray-500 dark:text-[#8f8f8f] max-w-sm mx-auto">
                 {searchTerm || selectedJobId !== 'all' || scoreFilter !== 'all'
                   ? 'No applicants match the selected filters. Try clearing your search or filter options.'
                   : 'When candidates apply for your posted jobs or submit AI video interviews, they will automatically appear here as hot leads!'}
@@ -1023,13 +1094,13 @@ export default function HotLeads() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-white/[0.11] bg-[#050505]">
+                  <tr className="border-b border-gray-200 dark:border-white/[0.11] bg-gray-50 dark:bg-[#050505]">
                     {activeTab !== 'responded' && (
                       <th className="geist-label w-10 px-3 py-2.5 text-center">
                         <button
                           type="button"
                           onClick={handleSelectAllPending}
-                          className="text-[#8f8f8f] hover:text-white transition-colors"
+                          className="text-gray-400 dark:text-[#8f8f8f] hover:text-gray-700 dark:hover:text-white transition-colors"
                           title="Select all pending leads"
                         >
                           {selectedLeadIds.length > 0 && selectedLeadIds.length === filteredLeads.filter((l) => !l.hasSubmitted).length ? (
@@ -1040,32 +1111,34 @@ export default function HotLeads() {
                         </button>
                       </th>
                     )}
-                    <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[10px] tracking-wider font-semibold text-[#8f8f8f]">
+                    <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f]">
                       Candidate Lead
                     </th>
-                    <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[10px] tracking-wider font-semibold text-[#8f8f8f]">
+                    <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f]">
                       Applied Job Role
                     </th>
-                    <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[10px] tracking-wider font-semibold text-[#8f8f8f]">
+                    <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f]">
                       Application & Deadline
                     </th>
-                    <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[10px] tracking-wider font-semibold text-[#8f8f8f]">
+                    <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f]">
                       Interview Status & Score
                     </th>
-                    <th className="geist-label whitespace-nowrap px-4 py-2.5 text-right uppercase text-[10px] tracking-wider font-semibold text-[#8f8f8f]">
+                    <th className="geist-label whitespace-nowrap px-4 py-2.5 text-right uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f]">
                       Actions & Follow-Up
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/[0.07]">
+                <tbody className="divide-y divide-gray-100 dark:divide-white/[0.07]">
                   {filteredLeads.map((lead) => {
                     const isSelected = selectedLeadIds.includes(lead.id);
+                    const job = jobs.find((j) => j.id === lead.jobId);
+                    const jobNum = job?.jobNo || job?.jobNumber || lead.accessCode;
 
                     return (
                       <tr
                         key={lead.id}
                         className={`transition-colors duration-150 ${
-                          isSelected ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'
+                          isSelected ? 'bg-gray-100/70 dark:bg-white/[0.04]' : 'hover:bg-gray-50/70 dark:hover:bg-white/[0.02]'
                         }`}
                       >
                         {/* Checkbox for pending */}
@@ -1075,7 +1148,7 @@ export default function HotLeads() {
                               <button
                                 type="button"
                                 onClick={() => toggleSelectLead(lead.id)}
-                                className="text-[#8f8f8f] hover:text-white transition-colors"
+                                className="text-gray-400 dark:text-[#8f8f8f] hover:text-gray-700 dark:hover:text-white transition-colors"
                               >
                                 {isSelected ? (
                                   <CheckSquare className="size-3.5 text-amber-500" />
@@ -1092,24 +1165,24 @@ export default function HotLeads() {
                         {/* Candidate Details */}
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-3">
-                            <div className="size-8 shrink-0 rounded-full border border-white/[0.12] bg-[#111] text-xs font-semibold text-[#d4d4d4] flex items-center justify-center">
+                            <div className="size-8 shrink-0 rounded-full border border-gray-200 dark:border-white/[0.12] bg-gray-100 dark:bg-[#111] text-xs font-semibold text-gray-700 dark:text-[#d4d4d4] flex items-center justify-center">
                               {lead.candidateName.charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <div className="geist-caption truncate text-xs font-semibold text-white flex items-center gap-2">
+                              <div className="geist-caption truncate text-xs font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                                 <span>{lead.candidateName}</span>
                                 {lead.hasSubmitted && (
-                                  <span className="rounded-[4px] border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.2 text-[9px] font-bold text-emerald-400">
+                                  <span className="rounded-[4px] border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.2 text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
                                     INTERVIEWED
                                   </span>
                                 )}
                               </div>
-                              <div className="geist-small text-[11px] text-[#8f8f8f] truncate font-mono mt-0.5">
+                              <div className="geist-small text-[11px] text-gray-500 dark:text-[#8f8f8f] truncate font-mono mt-0.5">
                                 {lead.candidateEmail}
                               </div>
                               {lead.candidatePhone && (
-                                <div className="geist-small text-[10px] text-[#6b7280] font-mono flex items-center gap-1 mt-0.5">
-                                  <Phone className="size-2.5 text-[#8f8f8f]" />
+                                <div className="geist-small text-[10px] text-gray-400 dark:text-[#6b7280] font-mono flex items-center gap-1 mt-0.5">
+                                  <Phone className="size-2.5 text-gray-400 dark:text-[#8f8f8f]" />
                                   <span>{lead.candidatePhone}</span>
                                 </div>
                               )}
@@ -1123,23 +1196,33 @@ export default function HotLeads() {
                             {lead.jobId ? (
                               <Link
                                 to={`/recruiter/interview/${lead.jobId}/responses`}
-                                className="geist-caption text-xs font-semibold text-white hover:text-blue-400 dark:hover:text-blue-400 transition-colors inline-flex items-center gap-1 group max-w-[240px]"
+                                className="geist-caption text-xs font-semibold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors inline-flex items-center gap-1 group max-w-[240px]"
                                 title={`View all candidate responses for ${lead.jobTitle}`}
                               >
+                                {jobNum && (
+                                  <span className="text-[10px] font-mono font-semibold px-1 py-0.2 rounded bg-gray-100 dark:bg-white/[0.08] text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-white/[0.08] shrink-0">
+                                    #{jobNum}
+                                  </span>
+                                )}
                                 <span className="truncate group-hover:underline underline-offset-2">{lead.jobTitle}</span>
-                                <ExternalLink className="size-3 shrink-0 text-[#8f8f8f] group-hover:text-blue-400 transition-colors" />
+                                <ExternalLink className="size-3 shrink-0 text-gray-400 dark:text-[#8f8f8f] group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
                               </Link>
                             ) : (
-                              <div className="geist-caption text-xs font-medium text-white truncate max-w-[240px]">
-                                {lead.jobTitle}
+                              <div className="geist-caption text-xs font-medium text-gray-900 dark:text-white truncate max-w-[240px] flex items-center gap-1">
+                                {jobNum && (
+                                  <span className="text-[10px] font-mono font-semibold px-1 py-0.2 rounded bg-gray-100 dark:bg-white/[0.08] text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-white/[0.08] shrink-0">
+                                    #{jobNum}
+                                  </span>
+                                )}
+                                <span className="truncate">{lead.jobTitle}</span>
                               </div>
                             )}
-                            <div className="geist-small text-[11px] text-[#8f8f8f] truncate max-w-[240px]">
+                            <div className="geist-small text-[11px] text-gray-500 dark:text-[#8f8f8f] truncate max-w-[240px]">
                               {lead.companyName}
                             </div>
                             {lead.accessCode && (
-                              <div className="geist-small text-[10px] text-[#6b7280] font-mono">
-                                Code: <span className="text-[#d4d4d4]">{lead.accessCode}</span>
+                              <div className="geist-small text-[10px] text-gray-400 dark:text-[#6b7280] font-mono">
+                                Code: <span className="text-gray-600 dark:text-[#d4d4d4] font-medium">{lead.accessCode}</span>
                               </div>
                             )}
                           </div>
@@ -1148,14 +1231,14 @@ export default function HotLeads() {
                         {/* Application & Deadline */}
                         <td className="px-4 py-3.5">
                           <div className="space-y-0.5">
-                            <div className="geist-small text-[11px] text-[#8f8f8f]">
-                              Applied: <span className="text-white font-medium">{formatDate(lead.appliedAt)}</span>
+                            <div className="geist-small text-[11px] text-gray-500 dark:text-[#8f8f8f]">
+                              Applied: <span className="text-gray-900 dark:text-white font-medium">{formatDate(lead.appliedAt)}</span>
                             </div>
-                            <div className="geist-small text-[10px] text-[#6b7280]">
-                              Deadline: <span className="text-[#8f8f8f] dark:text-[#a1a1aa] font-mono !bg-transparent">{formatDate(lead.deadline)}</span>
+                            <div className="geist-small text-[10px] text-gray-400 dark:text-[#6b7280]">
+                              Deadline: <span className="text-gray-500 dark:text-[#a1a1aa] font-mono !bg-transparent">{formatDate(lead.deadline)}</span>
                             </div>
                             {lead.hasSubmitted && (
-                              <div className="geist-small text-[10px] text-emerald-400 flex items-center gap-1">
+                              <div className="geist-small text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                                 <CheckCircle2 className="size-3" />
                                 <span>Submitted: {formatDate(lead.submittedAt)}</span>
                               </div>
@@ -1171,10 +1254,10 @@ export default function HotLeads() {
                                 <span
                                   className={`rounded-[4px] border px-2 py-0.5 text-[11px] font-mono font-bold ${
                                     lead.numericScore && lead.numericScore >= 7.5
-                                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
+                                      ? 'border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
                                       : lead.numericScore && lead.numericScore >= 5.0
-                                      ? 'border-amber-500/40 bg-amber-500/10 text-amber-400'
-                                      : 'border-red-500/40 bg-red-500/10 text-red-400'
+                                      ? 'border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400'
+                                      : 'border-red-500/40 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400'
                                   }`}
                                 >
                                   Score: {lead.score || `${lead.numericScore?.toFixed(1)}/10`}
@@ -1182,29 +1265,29 @@ export default function HotLeads() {
                                 <span
                                   className={`rounded-[4px] border px-2 py-0.5 text-[10px] font-semibold ${
                                     lead.status === 'Shortlist'
-                                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                                      ? 'border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
                                       : lead.status === 'Reject'
-                                      ? 'border-red-500/30 bg-red-500/10 text-red-400'
-                                      : 'border-blue-500/30 bg-blue-500/10 text-blue-400'
+                                      ? 'border-red-500/30 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400'
+                                      : 'border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400'
                                   }`}
                                 >
                                   {lead.status || 'Completed'}
                                 </span>
                               </div>
                               {lead.summary && (
-                                <p className="geist-small text-[11px] text-[#8f8f8f] truncate max-w-xs" title={lead.summary}>
+                                <p className="geist-small text-[11px] text-gray-500 dark:text-[#8f8f8f] truncate max-w-xs" title={lead.summary}>
                                   {lead.summary}
                                 </p>
                               )}
                             </div>
                           ) : lead.isJobActive ? (
-                            <span className="geist-small inline-flex items-center gap-1.5 rounded-[4px] border border-white/[0.12] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-[#d4d4d4] !bg-transparent">
-                              <Clock className="size-3 text-[#8f8f8f] !bg-transparent" />
+                            <span className="geist-small inline-flex items-center gap-1.5 rounded-[4px] border border-gray-200 dark:border-white/[0.12] bg-gray-50 dark:bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-gray-700 dark:text-[#d4d4d4] !bg-transparent">
+                              <Clock className="size-3 text-amber-500 !bg-transparent" />
                               <span className="!bg-transparent">Pending Response</span>
                             </span>
                           ) : (
-                            <span className="geist-small inline-flex items-center gap-1.5 rounded-[4px] border border-white/[0.08] bg-white/[0.02] px-2 py-0.5 text-[10px] font-medium text-[#71717a] !bg-transparent">
-                              <Clock className="size-3 text-[#71717a] !bg-transparent" />
+                            <span className="geist-small inline-flex items-center gap-1.5 rounded-[4px] border border-gray-200 dark:border-white/[0.08] bg-gray-50 dark:bg-white/[0.02] px-2 py-0.5 text-[10px] font-medium text-gray-400 dark:text-[#71717a] !bg-transparent">
+                              <Clock className="size-3 text-gray-400 dark:text-[#71717a] !bg-transparent" />
                               <span className="!bg-transparent">Job Inactive</span>
                             </span>
                           )}
@@ -1216,7 +1299,7 @@ export default function HotLeads() {
                             <div className="flex items-center justify-end gap-1.5">
                               <Link
                                 to={lead.submissionId ? `/report/${lead.jobId}/${lead.submissionId}` : `/recruiter/interview/${lead.jobId}/responses`}
-                                className="geist-caption inline-flex h-7 items-center justify-center gap-1.5 rounded-[5px] border border-white/[0.15] bg-white/[0.05] px-2.5 text-xs font-medium text-white hover:bg-white/[0.1] transition-colors"
+                                className="geist-caption inline-flex h-7 items-center justify-center gap-1.5 rounded-[5px] border border-gray-200 dark:border-white/[0.15] bg-gray-50 dark:bg-white/[0.05] px-2.5 text-xs font-medium text-gray-800 dark:text-white hover:bg-gray-100 dark:hover:bg-white/[0.1] transition-colors"
                               >
                                 <span>View Report</span>
                                 <ExternalLink className="size-3" />
@@ -1224,7 +1307,7 @@ export default function HotLeads() {
                             </div>
                           ) : !lead.isJobActive ? (
                             <div className="flex items-center justify-end gap-1.5">
-                              <span className="geist-small text-[10px] text-[#71717a] italic">
+                              <span className="geist-small text-[10px] text-gray-400 dark:text-[#71717a] italic">
                                 Job Inactive
                               </span>
                             </div>
@@ -1236,7 +1319,7 @@ export default function HotLeads() {
                                 onClick={() => handleSendWhatsAppReminder(lead)}
                                 disabled={sendingReminderId === `wa_${lead.id}`}
                                 title="Send WhatsApp Reminder"
-                                className="geist-caption inline-flex h-7 items-center justify-center gap-1 rounded-[5px] border border-emerald-500/30 bg-emerald-500/10 px-2 text-xs font-medium text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                                className="geist-caption inline-flex h-7 items-center justify-center gap-1 rounded-[5px] border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
                               >
                                 {sendingReminderId === `wa_${lead.id}` ? (
                                   <RotateCw className="size-3 animate-spin" />
@@ -1252,7 +1335,7 @@ export default function HotLeads() {
                                 onClick={() => handleSendEmailReminder(lead)}
                                 disabled={sendingReminderId === `email_${lead.id}`}
                                 title="Send Email Reminder"
-                                className="geist-caption inline-flex h-7 items-center justify-center gap-1 rounded-[5px] border border-blue-500/30 bg-blue-500/10 px-2 text-xs font-medium text-blue-400 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                                className="geist-caption inline-flex h-7 items-center justify-center gap-1 rounded-[5px] border border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 px-2 text-xs font-medium text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors disabled:opacity-50"
                               >
                                 {sendingReminderId === `email_${lead.id}` ? (
                                   <RotateCw className="size-3 animate-spin" />
@@ -1268,7 +1351,7 @@ export default function HotLeads() {
                                 onClick={() => handleSendBothReminders(lead)}
                                 disabled={sendingReminderId === `both_${lead.id}`}
                                 title="Send both Email and WhatsApp reminders"
-                                className="geist-caption inline-flex h-7 items-center justify-center gap-1 rounded-[5px] border border-amber-500/30 bg-amber-500/10 px-2 text-xs font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                                className="geist-caption inline-flex h-7 items-center justify-center gap-1 rounded-[5px] border border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-2 text-xs font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors disabled:opacity-50"
                               >
                                 {sendingReminderId === `both_${lead.id}` ? (
                                   <RotateCw className="size-3 animate-spin" />
@@ -1283,10 +1366,10 @@ export default function HotLeads() {
                                 type="button"
                                 onClick={() => handleCopyLink(lead.interviewLink, lead.id)}
                                 title="Copy Candidate Interview Link"
-                                className="geist-caption inline-flex h-7 items-center justify-center rounded-[5px] border border-white/[0.11] bg-white/[0.03] px-2 text-xs font-medium text-[#d4d4d4] hover:bg-white/[0.06] hover:text-white transition-colors"
+                                className="geist-caption inline-flex h-7 items-center justify-center rounded-[5px] border border-gray-200 dark:border-white/[0.11] bg-gray-50 dark:bg-white/[0.03] px-2 text-xs font-medium text-gray-600 dark:text-[#d4d4d4] hover:bg-gray-100 dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-white transition-colors"
                               >
                                 {copiedId === lead.id ? (
-                                  <Check className="size-3 text-emerald-400" />
+                                  <Check className="size-3 text-emerald-600 dark:text-emerald-400" />
                                 ) : (
                                   <Copy className="size-3" />
                                 )}
