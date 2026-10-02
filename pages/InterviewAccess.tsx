@@ -10,7 +10,7 @@ import { ChevronDown } from 'lucide-react';
 import { getRateLimitReachedMessage, isRateLimitReached, loadCompanyRateLimitStatus } from '../services/rateLimitService';
 import { stageCandidateConsent } from '../services/candidateConsent';
 
-import { resolveJobOrInterviewDocument } from '../services/jobResolutionService';
+import { resolveJobOrInterviewDocument, isJobStatusActive } from '../services/jobResolutionService';
 
 const InterviewAccess: React.FC = () => {
   const { interviewId } = useParams<{ interviewId: string }>();
@@ -59,13 +59,8 @@ const InterviewAccess: React.FC = () => {
             setError(getRateLimitReachedMessage('interviews'));
           }
           
-          if ((interviewData as any).deadline) {
-            const deadlineDate = new Date((interviewData as any).deadline);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            if (deadlineDate < today) {
-              setIsExpired(true);
-            }
+          if (!isJobStatusActive(interviewData)) {
+            setIsExpired(true);
           }
         } else {
           setError('Interview not found.');

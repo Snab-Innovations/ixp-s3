@@ -223,6 +223,20 @@ export function predictSectorAndRoleHeuristic(params: {
 }
 
 /**
+ * Determines if a job is currently active based on its active/deactive status.
+ * Jobs with status active (or undefined/empty) remain active until explicitly deactivated/closed/expired.
+ */
+export function isJobStatusActive(job: any): boolean {
+  if (!job) return true;
+  if (job.isActive === false) return false;
+  const rawStatus = (job.status || job.state || '').toString().trim().toLowerCase();
+  if (['inactive', 'deactive', 'deactivated', 'closed', 'expired', 'disabled', 'draft'].includes(rawStatus)) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Calculates deadline as exactly 10 days after the job's creation date.
  * If no valid creation date exists, defaults to 10 days from today.
  * Returns ISO date format: 'YYYY-MM-DD'.
@@ -351,12 +365,12 @@ export function normalizeApiJobPayload(rawPayload: any): Record<string, any> {
   const jobNo = rawPayload.jobNo ? String(rawPayload.jobNo).trim() : (rawPayload.job_no ? String(rawPayload.job_no).trim() : '');
   const accessCode = jobNo || (rawPayload.accessCode ? String(rawPayload.accessCode).trim() : 'ACCESS');
 
-  // Status & Expiry handling (Inactive -> expired/hidden, Active -> show job)
-  const rawStatus = (rawPayload.status || 'Active').trim();
-  const statusLower = rawStatus.toLowerCase();
-  const isInactiveOrClosed = ['inactive', 'expired', 'closed', 'disabled', 'deactivated', 'draft'].includes(statusLower);
-  const status = isInactiveOrClosed ? 'Inactive' : 'Active';
-  const isExpired = isInactiveOrClosed;
+  // Status & Expiry handling (Active until explicitly deactive / inactive)
+  const isJobActive = isJobStatusActive(rawPayload);
+  const status = isJobActive ? 'Active' : 'Inactive';
+  const isExpired = !isJobActive;
+
+  const rawDeadline = (rawPayload.deadlineDate || rawPayload.applyDeadline || rawPayload.deadline || '').toString().trim();
 
   return {
     ...rawPayload,
@@ -400,10 +414,9 @@ export function normalizeApiJobPayload(rawPayload: any): Record<string, any> {
     recruiterUID,
     entryBy,
     recruiterName: entryBy,
-    // When job is fetched or received by API, ignore any API deadline and calculate deadline 10 days after creation day
-    deadline: calculateDeadlineAfter10Days(rawPayload.createdAt || rawPayload.created_at || rawPayload.postedAt || rawPayload.posted_at || rawPayload.entryDate || rawPayload.date || rawPayload.timestamp),
-    deadlineDate: calculateDeadlineAfter10Days(rawPayload.createdAt || rawPayload.created_at || rawPayload.postedAt || rawPayload.posted_at || rawPayload.entryDate || rawPayload.date || rawPayload.timestamp),
-    applyDeadline: calculateDeadlineAfter10Days(rawPayload.createdAt || rawPayload.created_at || rawPayload.postedAt || rawPayload.posted_at || rawPayload.entryDate || rawPayload.date || rawPayload.timestamp),
+    deadline: rawDeadline,
+    deadlineDate: rawDeadline,
+    applyDeadline: rawDeadline,
   };
 }
 
@@ -649,8 +662,7 @@ export async function fetchJobFetchedApiJobs(targetRecruiterUID: string = DEFAUL
     if (!Array.isArray(rawJobs)) return [];
 
     return rawJobs.map((rawJob: any) => {
-      const rawCreatedAt = rawJob.createdAt || rawJob.created_at || rawJob.postedAt || rawJob.posted_at || rawJob.entryDate || rawJob.date;
-      const deadline = calculateDeadlineAfter10Days(rawCreatedAt);
+      const deadline = (rawJob.deadlineDate || rawJob.applyDeadline || rawJob.deadline || '').toString().trim();
       const normalized = normalizeApiJobPayload({
         ...rawJob,
         recruiterUID: rawJob.recruiterUID || targetRecruiterUID

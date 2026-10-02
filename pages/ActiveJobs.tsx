@@ -190,12 +190,7 @@ const ActiveJobsPage: React.FC = () => {
         if (['inactive', 'expired', 'closed', 'disabled', 'deactivated', 'draft'].includes(statusLower)) {
           return false;
         }
-        const rawDeadline = job.deadlineDate || job.deadline || job.applyDeadline || job.interviewDates || (job as any).interviewDeadline || (job as any).endDate;
-        const millis = parseDeadlineMillis(rawDeadline);
-        if (!millis) return true;
-        const endOfDay = new Date(millis);
-        endOfDay.setHours(23, 59, 59, 999);
-        return endOfDay.getTime() >= now;
+        return true;
       });
 
       setJobs(activeOnly);

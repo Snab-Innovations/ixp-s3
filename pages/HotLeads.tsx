@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   collection,
@@ -30,6 +30,8 @@ import {
   RotateCw,
   Copy,
   Check,
+  ChevronDown,
+  X,
 } from 'lucide-react';
 import { sendInterviewInvitations } from '../services/brevoService';
 import {
@@ -37,7 +39,7 @@ import {
   openWhatsAppWebInvite,
   buildWhatsAppInviteText,
 } from '../services/waSenderService';
-import { calculateDeadlineAfter10Days } from '../services/jobResolutionService';
+import { isJobStatusActive } from '../services/jobResolutionService';
 import { RecruiterInterviewsSkeleton } from './RecruiterInterviews';
 
 export const parseDeadlineMillis = (deadline: any): number => {
@@ -58,10 +60,8 @@ export const parseDeadlineMillis = (deadline: any): number => {
   return 0;
 };
 
-export const isDeadlineActive = (deadline: any): boolean => {
-  const millis = parseDeadlineMillis(deadline);
-  if (!millis) return true;
-  return millis >= Date.now();
+export const isDeadlineActive = (_deadline?: any): boolean => {
+  return true;
 };
 
 export interface HotLeadItem {
@@ -103,6 +103,10 @@ export default function HotLeads() {
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
   const [bulkSending, setBulkSending] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isJobDropdownOpen, setIsJobDropdownOpen] = useState(false);
+  const [jobSearchQuery, setJobSearchQuery] = useState('');
+  const jobDropdownRef = useRef<HTMLDivElement>(null);
+  const jobSearchInputRef = useRef<HTMLInputElement>(null);
 
   const userUid = user?.uid;
   const userTeamId = userProfile?.teamId;
@@ -134,7 +138,7 @@ export default function HotLeads() {
         if (!email) return;
 
         const uniqueKey = `${email}_${jobId}`;
-        const deadline = job?.deadline || calculateDeadlineAfter10Days(job?.createdAt);
+        const deadline = job?.deadline || job?.deadlineDate || '';
 
         leadsMap.set(uniqueKey, {
           id: uniqueKey,
@@ -147,7 +151,7 @@ export default function HotLeads() {
           accessCode: job?.accessCode || job?.jobNo || '',
           interviewLink: job?.interviewLink || `${window.location.origin}/#/interview/${jobId}`,
           deadline,
-          isJobActive: isDeadlineActive(deadline),
+          isJobActive: isJobStatusActive(job),
           appliedAt: app.appliedAt || app.createdAt,
           hasSubmitted: false,
           source: app.source || 'Job Application',
@@ -156,7 +160,7 @@ export default function HotLeads() {
 
       // 2. Ingest from candidateData and candidateEmails on jobs
       jobsList.forEach((job) => {
-        const deadline = job.deadline || calculateDeadlineAfter10Days(job.createdAt);
+        const deadline = job.deadline || job.deadlineDate || '';
         const candidateDataArr = Array.isArray(job.candidateData) ? job.candidateData : [];
         const candidateEmailsArr = Array.isArray(job.candidateEmails) ? job.candidateEmails : [];
 
@@ -177,7 +181,7 @@ export default function HotLeads() {
               accessCode: job.accessCode || job.jobNo || '',
               interviewLink: job.interviewLink || `${window.location.origin}/#/interview/${job.id}`,
               deadline,
-              isJobActive: isDeadlineActive(deadline),
+              isJobActive: isJobStatusActive(job),
               appliedAt: c.appliedAt || c.invitedAt || job.createdAt,
               hasSubmitted: false,
               source: c.source || 'Invited Candidate',
@@ -202,7 +206,7 @@ export default function HotLeads() {
               accessCode: job.accessCode || job.jobNo || '',
               interviewLink: job.interviewLink || `${window.location.origin}/#/interview/${job.id}`,
               deadline,
-              isJobActive: isDeadlineActive(deadline),
+              isJobActive: isJobStatusActive(job),
               appliedAt: job.createdAt,
               hasSubmitted: false,
               source: 'Direct Lead',
@@ -232,7 +236,7 @@ export default function HotLeads() {
         }
 
         const job = jobMap.get(jobId);
-        const deadline = job?.deadline || calculateDeadlineAfter10Days(job?.createdAt);
+        const deadline = job?.deadline || job?.deadlineDate || '';
 
         if (existingLead) {
           existingLead.hasSubmitted = true;
@@ -242,7 +246,7 @@ export default function HotLeads() {
           existingLead.numericScore = numScore;
           existingLead.status = resp.status || (numScore >= 7.5 ? 'Shortlist' : 'Completed');
           existingLead.summary = resp.feedback?.overallFeedback || resp.feedbackSummary || '';
-          existingLead.isJobActive = isDeadlineActive(deadline);
+          existingLead.isJobActive = isJobStatusActive(job);
           if (resp.candidateInfo?.phone && !existingLead.candidatePhone) {
             existingLead.candidatePhone = resp.candidateInfo.phone;
           }
@@ -258,7 +262,7 @@ export default function HotLeads() {
             accessCode: job?.accessCode || job?.jobNo || '',
             interviewLink: job?.interviewLink || `${window.location.origin}/#/interview/${jobId}`,
             deadline,
-            isJobActive: isDeadlineActive(deadline),
+            isJobActive: isJobStatusActive(job),
             appliedAt: resp.submittedAt || resp.savedAt || resp.createdAt,
             hasSubmitted: true,
             submissionId: resp.id || resp.attemptId,
@@ -273,8 +277,8 @@ export default function HotLeads() {
       });
 
       const list = Array.from(leadsMap.values());
-      // User rule: if deadline passed and interview not given, don't show them in leads at all
-      const validLeads = list.filter((lead) => lead.hasSubmitted || isDeadlineActive(lead.deadline));
+      // Active jobs policy: candidates are active if job is active or if they have already submitted
+      const validLeads = list.filter((lead) => lead.hasSubmitted || lead.isJobActive);
       validLeads.sort((a, b) => {
         const timeA = a.submittedAt?.toMillis
           ? a.submittedAt.toMillis()
@@ -349,8 +353,8 @@ export default function HotLeads() {
   // ── Filtered Leads ──
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
-      // Baseline rule: if deadline passed and interview not given, don't show in leads
-      if (!lead.hasSubmitted && !isDeadlineActive(lead.deadline)) return false;
+      // Baseline rule: if job is inactive/deactivated and interview not given, don't show in leads
+      if (!lead.hasSubmitted && !lead.isJobActive) return false;
 
       // Tab filter
       if (activeTab === 'pending' && lead.hasSubmitted) return false;
@@ -386,17 +390,65 @@ export default function HotLeads() {
   const stats = useMemo(() => {
     const total = leads.length;
     const responded = leads.filter((l) => l.hasSubmitted).length;
-    // Only count pending candidates whose job is currently active (within deadline)
-    const pending = leads.filter((l) => !l.hasSubmitted && isDeadlineActive(l.deadline)).length;
+    // Only count pending candidates whose job is currently active
+    const pending = leads.filter((l) => !l.hasSubmitted && l.isJobActive).length;
     const scores = leads.filter((l) => l.hasSubmitted && l.numericScore !== undefined).map((l) => l.numericScore || 0);
     const avgScore = scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : '—';
 
     return { total, responded, pending, avgScore };
   }, [leads]);
 
+  // Click outside & Escape key handler for job dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (jobDropdownRef.current && !jobDropdownRef.current.contains(event.target as Node)) {
+        setIsJobDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsJobDropdownOpen(false);
+      }
+    };
+    if (isJobDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isJobDropdownOpen]);
+
+  const leadCountByJob = useMemo(() => {
+    const map = new Map<string, number>();
+    leads.forEach((lead) => {
+      map.set(lead.jobId, (map.get(lead.jobId) || 0) + 1);
+    });
+    return map;
+  }, [leads]);
+
+  const selectedJobTitle = useMemo(() => {
+    if (selectedJobId === 'all') return `All Jobs (${jobs.length})`;
+    const found = jobs.find((j) => j.id === selectedJobId);
+    return found ? (found.title || 'Untitled Role') : 'Selected Job';
+  }, [selectedJobId, jobs]);
+
+  const filteredJobsForDropdown = useMemo(() => {
+    if (!jobSearchQuery.trim()) return jobs;
+    const query = jobSearchQuery.toLowerCase().trim();
+    return jobs.filter((j) => {
+      const title = (j.title || '').toLowerCase();
+      const department = (j.department || j.category || '').toLowerCase();
+      const company = (j.companyName || j.company || '').toLowerCase();
+      const id = (j.id || '').toLowerCase();
+      return title.includes(query) || department.includes(query) || company.includes(query) || id.includes(query);
+    });
+  }, [jobs, jobSearchQuery]);
+
   // ── Selection Handlers ──
   const handleSelectAllPending = () => {
-    const pendingIds = filteredLeads.filter((l) => !l.hasSubmitted && isDeadlineActive(l.deadline)).map((l) => l.id);
+    const pendingIds = filteredLeads.filter((l) => !l.hasSubmitted && l.isJobActive).map((l) => l.id);
     if (selectedLeadIds.length === pendingIds.length) {
       setSelectedLeadIds([]);
     } else {
@@ -559,9 +611,9 @@ export default function HotLeads() {
 
   // ── Send Bulk Reminders ──
   const handleSendBulkReminders = async () => {
-    const selectedLeads = leads.filter((l) => selectedLeadIds.includes(l.id) && !l.hasSubmitted && isDeadlineActive(l.deadline));
+    const selectedLeads = leads.filter((l) => selectedLeadIds.includes(l.id) && !l.hasSubmitted && l.isJobActive);
     if (selectedLeads.length === 0) {
-      messageBox.showInfo('Please select at least one pending candidate with an active deadline.');
+      messageBox.showInfo('Please select at least one pending candidate with an active job.');
       return;
     }
 
@@ -780,19 +832,149 @@ export default function HotLeads() {
               />
             </div>
 
-            {/* Job Filter Dropdown */}
-            <select
-              value={selectedJobId}
-              onChange={(e) => setSelectedJobId(e.target.value)}
-              className="geist-caption h-9 rounded-[6px] border border-white/[0.11] bg-[#050505] px-2.5 text-xs text-white outline-none focus:border-white/[0.24] cursor-pointer max-w-[200px]"
-            >
-              <option value="all" className="bg-[#111]">All Jobs ({jobs.length})</option>
-              {jobs.map((j) => (
-                <option key={j.id} value={j.id} className="bg-[#111]">
-                  {j.title || 'Untitled Role'}
-                </option>
-              ))}
-            </select>
+            {/* Searchable Job Filter Dropdown */}
+            <div className="relative" ref={jobDropdownRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsJobDropdownOpen(!isJobDropdownOpen);
+                  if (!isJobDropdownOpen) {
+                    setTimeout(() => jobSearchInputRef.current?.focus(), 50);
+                  }
+                }}
+                className={`geist-caption h-9 rounded-[6px] border px-2.5 text-xs text-white outline-none transition-colors flex items-center justify-between gap-2 min-w-[170px] max-w-[240px] sm:max-w-[280px] cursor-pointer ${
+                  isJobDropdownOpen
+                    ? 'border-white/[0.35] bg-white/[0.06]'
+                    : selectedJobId !== 'all'
+                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                    : 'border-white/[0.11] bg-[#050505] hover:border-white/[0.24]'
+                }`}
+                title={selectedJobTitle}
+              >
+                <div className="flex items-center gap-1.5 min-w-0 flex-1 text-left">
+                  <Briefcase className={`size-3 shrink-0 ${selectedJobId !== 'all' ? 'text-emerald-400' : 'text-[#8f8f8f]'}`} />
+                  <span className="truncate">{selectedJobTitle}</span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {selectedJobId !== 'all' && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedJobId('all');
+                        setJobSearchQuery('');
+                      }}
+                      className="rounded p-0.5 text-[#8f8f8f] hover:text-white hover:bg-white/10"
+                      title="Clear job filter"
+                    >
+                      <X className="size-3" />
+                    </span>
+                  )}
+                  <ChevronDown
+                    className={`size-3 text-[#8f8f8f] transition-transform duration-200 ${
+                      isJobDropdownOpen ? 'rotate-180 text-white' : ''
+                    }`}
+                  />
+                </div>
+              </button>
+
+              {isJobDropdownOpen && (
+                <div className="absolute left-0 top-full mt-1.5 z-50 w-[290px] sm:w-[320px] rounded-[8px] border border-white/[0.15] bg-[#0d0d10] shadow-2xl backdrop-blur-xl overflow-hidden">
+                  {/* Search input inside dropdown */}
+                  <div className="relative border-b border-white/[0.08] p-2 bg-white/[0.02]">
+                    <Search className="absolute left-4 top-1/2 size-3.5 -translate-y-1/2 text-[#8f8f8f]" />
+                    <input
+                      ref={jobSearchInputRef}
+                      type="text"
+                      placeholder="Search jobs by title, department..."
+                      value={jobSearchQuery}
+                      onChange={(e) => setJobSearchQuery(e.target.value)}
+                      className="h-8 w-full rounded-[5px] border border-white/[0.1] bg-black/60 pl-8 pr-7 text-xs text-white placeholder:text-[#6b7280] outline-none focus:border-white/[0.28]"
+                    />
+                    {jobSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setJobSearchQuery('');
+                          jobSearchInputRef.current?.focus();
+                        }}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8f8f8f] hover:text-white"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* List of jobs */}
+                  <div className="max-h-[260px] overflow-y-auto divide-y divide-white/[0.04]">
+                    {/* All Jobs option */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedJobId('all');
+                        setIsJobDropdownOpen(false);
+                        setJobSearchQuery('');
+                      }}
+                      className={`w-full text-left px-3 py-2.5 text-xs flex items-center justify-between gap-2 hover:bg-white/[0.05] transition-colors ${
+                        selectedJobId === 'all' ? 'bg-white/[0.08] text-white font-semibold' : 'text-[#d4d4d4]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="truncate">All Jobs ({jobs.length})</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] text-[#8f8f8f] font-mono">{leads.length} leads</span>
+                        {selectedJobId === 'all' && <Check className="size-3.5 text-emerald-400" />}
+                      </div>
+                    </button>
+
+                    {/* Filtered jobs */}
+                    {filteredJobsForDropdown.length > 0 ? (
+                      filteredJobsForDropdown.map((j) => {
+                        const count = leadCountByJob.get(j.id) || 0;
+                        const isSelected = selectedJobId === j.id;
+                        return (
+                          <button
+                            key={j.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedJobId(j.id);
+                              setIsJobDropdownOpen(false);
+                              setJobSearchQuery('');
+                            }}
+                            className={`w-full text-left px-3 py-2.5 text-xs flex items-center justify-between gap-2 hover:bg-white/[0.05] transition-colors ${
+                              isSelected ? 'bg-white/[0.08] text-white font-semibold' : 'text-[#d4d4d4]'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-medium">{j.title || 'Untitled Role'}</div>
+                              <div className="text-[10px] text-[#8f8f8f] truncate mt-0.5">
+                                {j.department || j.category || j.companyName || 'General'}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {count > 0 ? (
+                                <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                                  {count} leads
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-[#6b7280] font-mono">0 leads</span>
+                              )}
+                              {isSelected && <Check className="size-3.5 text-emerald-400" />}
+                            </div>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="px-3 py-6 text-center text-xs text-[#8f8f8f]">
+                        No jobs matching &ldquo;{jobSearchQuery}&rdquo;
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Score Filter Dropdown */}
             <select
@@ -889,7 +1071,7 @@ export default function HotLeads() {
                         {/* Checkbox for pending */}
                         {activeTab !== 'responded' && (
                           <td className="px-3 py-3.5 text-center">
-                            {!lead.hasSubmitted && isDeadlineActive(lead.deadline) ? (
+                            {!lead.hasSubmitted && lead.isJobActive ? (
                               <button
                                 type="button"
                                 onClick={() => toggleSelectLead(lead.id)}
@@ -1015,7 +1197,7 @@ export default function HotLeads() {
                                 </p>
                               )}
                             </div>
-                          ) : isDeadlineActive(lead.deadline) ? (
+                          ) : lead.isJobActive ? (
                             <span className="geist-small inline-flex items-center gap-1.5 rounded-[4px] border border-white/[0.12] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-[#d4d4d4] !bg-transparent">
                               <Clock className="size-3 text-[#8f8f8f] !bg-transparent" />
                               <span className="!bg-transparent">Pending Response</span>
@@ -1023,7 +1205,7 @@ export default function HotLeads() {
                           ) : (
                             <span className="geist-small inline-flex items-center gap-1.5 rounded-[4px] border border-white/[0.08] bg-white/[0.02] px-2 py-0.5 text-[10px] font-medium text-[#71717a] !bg-transparent">
                               <Clock className="size-3 text-[#71717a] !bg-transparent" />
-                              <span className="!bg-transparent">Deadline Passed</span>
+                              <span className="!bg-transparent">Job Inactive</span>
                             </span>
                           )}
                         </td>
@@ -1040,10 +1222,10 @@ export default function HotLeads() {
                                 <ExternalLink className="size-3" />
                               </Link>
                             </div>
-                          ) : !isDeadlineActive(lead.deadline) ? (
+                          ) : !lead.isJobActive ? (
                             <div className="flex items-center justify-end gap-1.5">
                               <span className="geist-small text-[10px] text-[#71717a] italic">
-                                Expired (Job Closed)
+                                Job Inactive
                               </span>
                             </div>
                           ) : (

@@ -183,32 +183,21 @@ export default async function handler(req, res) {
   // ── 1. GET: List All Jobs or Fetch Single Job ──
   if (req.method === 'GET') {
     try {
-      const adjustJobDeadline = (job) => {
-        if (!job) return job;
-        const computedDeadline = calculateDeadlineAfter10Days(job.createdAt || job.created_at || job.postedAt || job.posted_at);
-        return {
-          ...job,
-          deadline: computedDeadline,
-          deadlineDate: computedDeadline,
-          applyDeadline: computedDeadline
-        };
-      };
-
       // Single Job Fetch
       if (targetId || targetJobNo) {
         if (targetId && inMemoryJobs.has(targetId)) {
-          return res.status(200).json({ success: true, data: adjustJobDeadline(inMemoryJobs.get(targetId)) });
+          return res.status(200).json({ success: true, data: inMemoryJobs.get(targetId) });
         }
         for (const job of inMemoryJobs.values()) {
           if (targetJobNo && String(job.jobNo) === targetJobNo) {
-            return res.status(200).json({ success: true, data: adjustJobDeadline(job) });
+            return res.status(200).json({ success: true, data: job });
           }
         }
 
         if (targetId) {
           const snap = await getDoc(doc(db, 'interviews', targetId));
           if (snap.exists()) {
-            return res.status(200).json({ success: true, data: adjustJobDeadline({ id: snap.id, ...snap.data() }) });
+            return res.status(200).json({ success: true, data: { id: snap.id, ...snap.data() } });
           }
         }
         if (targetJobNo) {
@@ -216,7 +205,7 @@ export default async function handler(req, res) {
           const snap = await getDocs(q);
           if (!snap.empty) {
             const d = snap.docs[0];
-            return res.status(200).json({ success: true, data: adjustJobDeadline({ id: d.id, ...d.data() }) });
+            return res.status(200).json({ success: true, data: { id: d.id, ...d.data() } });
           }
         }
       }
@@ -240,10 +229,10 @@ export default async function handler(req, res) {
         allJobs = allJobs.filter(j => (j.status || 'active').toLowerCase() === filterStatus);
       }
 
-      return res.status(200).json(allJobs.map(adjustJobDeadline));
+      return res.status(200).json(allJobs);
     } catch (err) {
       console.error('Error in GET /api/jobs:', err);
-      return res.status(200).json(Array.from(inMemoryJobs.values()).map(adjustJobDeadline));
+      return res.status(200).json(Array.from(inMemoryJobs.values()));
     }
   }
 
@@ -512,8 +501,10 @@ export default async function handler(req, res) {
     const accessCode = jobNo || payload.accessCode || Math.random().toString(36).substring(2, 8).toUpperCase();
     const entryBy = payload.entryBy || payload.recruiterName || '';
     const createdAt = new Date().toISOString();
-    // When job is created/received by API, ignore any incoming API deadline and set deadline 10 days after creation day
-    const deadline = calculateDeadlineAfter10Days(payload.createdAt || createdAt);
+    const deadline = (payload.deadlineDate || payload.deadline || payload.applyDeadline || '').toString().trim();
+    const rawStatus = (payload.status || 'Active').toString().trim();
+    const isDeactivated = ['inactive', 'deactive', 'deactivated', 'closed', 'expired', 'disabled', 'draft'].includes(rawStatus.toLowerCase());
+    const status = isDeactivated ? 'Inactive' : 'Active';
 
     const origin = req.headers['origin'] || (req.headers['host'] ? `https://${req.headers['host']}` : 'https://interviewxpert.in');
     const interviewLink = `${origin}/#/interview/${jobId}`;
@@ -549,7 +540,7 @@ export default async function handler(req, res) {
       strictGenderMatch,
       jobNo: jobNo || jobId,
       accessCode,
-      status: payload.status || 'Active',
+      status,
       entryBy,
       recruiterName: entryBy,
       recruiterUID,
@@ -590,7 +581,7 @@ export default async function handler(req, res) {
         recruiterUID,
         company,
         location,
-        status: 'Active',
+        status,
         deadline,
         deadlineDate: deadline,
         applyDeadline: deadline

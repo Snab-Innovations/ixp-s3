@@ -22,6 +22,7 @@ import { parseCandidateDocument, parseBulkCandidateTextInput } from '../services
 import { logTeamActivity } from '../services/auditService';
 import { useCompanyRateLimits } from '../hooks/useRecruiterRateLimits';
 import { getRateLimitReachedMessage, isRateLimitReached } from '../services/rateLimitService';
+import { isJobStatusActive } from '../services/jobResolutionService';
 
 type TimestampLike =
   | {
@@ -64,12 +65,9 @@ const getInterviewDeadline = (interview: Interview): TimestampLike => {
 };
 
 const getInterviewStatus = (interview: Interview) => {
-  const deadlineMillis = toMillis(getInterviewDeadline(interview));
-  const deadlineEnd = deadlineMillis ? new Date(deadlineMillis) : null;
-  if (deadlineEnd) deadlineEnd.setHours(23, 59, 59, 999);
-  const isExpired = deadlineEnd ? deadlineEnd.getTime() < Date.now() : false;
+  const isJobActive = isJobStatusActive(interview);
 
-  return isExpired
+  return !isJobActive
     ? {
         label: 'Expired',
         dotClass: 'bg-[#ff6b6b]',

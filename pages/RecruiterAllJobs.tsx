@@ -12,7 +12,7 @@ import { parseCandidateDocument, parseBulkCandidateTextInput } from '../services
 import { ingestResumeFile, saveResumeDumpCandidate, checkMandatoryCriteriaMatch } from '../services/resumeService';
 import { sendInterviewWhatsAppInvite, formatPhoneForWhatsApp, buildWhatsAppInviteText, openWhatsAppWebInvite, sendBulkWhatsAppInvites } from '../services/waSenderService';
 import EditJobModal from './EditJob';
-import { normalizeJobData, fetchJobFetchedApiJobs, calculateDeadlineAfter10Days } from '../services/jobResolutionService';
+import { normalizeJobData, fetchJobFetchedApiJobs, isJobStatusActive } from '../services/jobResolutionService';
 import WhatsAppConnectModal from '../components/WhatsAppConnectModal';
 import { useTheme } from '../context/ThemeContext';
 import { useBackgroundSend } from '../context/BackgroundSendContext';
@@ -825,6 +825,7 @@ const RecruiterAllJobs: React.FC = () => {
           recruiterName: i.recruiterName || existing?.recruiterName || '',
           recruiterEmail: i.recruiterEmail || existing?.recruiterEmail || '',
           recruiterUID: i.recruiterUID || existing?.recruiterUID,
+          status: i.status || existing?.status || 'Active',
           hasJobDoc: existing?.hasJobDoc || false,
           hasInterviewDoc: true,
         });
@@ -851,9 +852,10 @@ const RecruiterAllJobs: React.FC = () => {
           city: i.city || existing?.city || 'Nashik',
           companyName: i.companyName || i.company || existing?.companyName || existing?.company || 'Company',
           createdAt: i.createdAt || existing?.createdAt,
-          deadline: calculateDeadlineAfter10Days(i.createdAt || existing?.createdAt),
-          deadlineDate: calculateDeadlineAfter10Days(i.createdAt || existing?.createdAt),
-          applyDeadline: calculateDeadlineAfter10Days(i.createdAt || existing?.createdAt),
+          deadline: existing?.deadline || existing?.deadlineDate || i.deadline || i.deadlineDate || i.applyDeadline || '',
+          deadlineDate: existing?.deadlineDate || existing?.deadline || i.deadlineDate || i.deadline || i.applyDeadline || '',
+          applyDeadline: existing?.applyDeadline || existing?.deadline || i.applyDeadline || i.deadline || '',
+          status: i.status || existing?.status || 'Active',
           customFields: i.customFields || existing?.customFields || [],
           genderRequirement: i.genderRequirement || i.gender || existing?.genderRequirement || 'Any',
           strictness: i.strictness || existing?.strictness || 'Low',
@@ -1007,10 +1009,10 @@ const RecruiterAllJobs: React.FC = () => {
       const matchesType = selectedEmploymentType === 'All' ||
         job.employmentType === selectedEmploymentType;
 
-      const deadlineMillis = parseDeadlineMillis(job.deadline);
-      const isExpired = deadlineMillis > 0 && deadlineMillis < now;
+      const isJobActive = isJobStatusActive(job);
+      const isExpired = !isJobActive;
       const matchesStatus = statusFilter === 'All' ||
-        (statusFilter === 'Active' && !isExpired) ||
+        (statusFilter === 'Active' && isJobActive) ||
         (statusFilter === 'Expired' && isExpired);
 
       return matchesSearch && matchesCategory && matchesType && matchesStatus;
@@ -1477,10 +1479,7 @@ const RecruiterAllJobs: React.FC = () => {
         <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
           <p className="geist-label uppercase text-[#6b7280]">Active Jobs</p>
           <p className="geist-metric mt-2 tabular-nums text-[#83d0a3]">
-            {jobs.filter(j => {
-              const millis = parseDeadlineMillis(j.deadline);
-              return millis === 0 || millis >= Date.now();
-            }).length}
+            {jobs.filter(j => isJobStatusActive(j)).length}
           </p>
         </div>
         <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
@@ -1631,8 +1630,8 @@ const RecruiterAllJobs: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredJobs.map((job) => {
               const skillsList = formatSkillsList(job.skills);
-              const deadlineMillis = parseDeadlineMillis(job.deadline);
-              const isExpired = deadlineMillis > 0 && deadlineMillis < Date.now();
+              const isJobActive = isJobStatusActive(job);
+              const isExpired = !isJobActive;
               const invitedCount = job.candidateEmails?.length || 0;
 
               return (
@@ -1652,7 +1651,7 @@ const RecruiterAllJobs: React.FC = () => {
                         {isExpired ? (
                           <span className="geist-small inline-flex items-center gap-1 rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-2 py-0.5 font-mono text-[#ff8f8f]">
                             <span className="h-1.5 w-1.5 rounded-full bg-[#ff6b6b]" />
-                            Expired
+                            Inactive
                           </span>
                         ) : (
                           <span className="geist-small inline-flex items-center gap-1 rounded-[6px] border border-[#0e2f22] bg-[#071a12] px-2 py-0.5 font-mono text-[#83d0a3]">

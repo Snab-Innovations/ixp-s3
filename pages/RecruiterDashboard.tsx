@@ -15,6 +15,7 @@ import { getRateLimitReachedMessage, isRateLimitReached, RateLimitResource } fro
 import { useMessageBox } from '../components/MessageBox';
 import { RecruiterTeamPanel } from '../components/RecruiterTeamPanel';
 import { StackedTileChart } from '../components/StackedTileChart';
+import { isJobStatusActive, fetchJobFetchedApiJobs } from '../services/jobResolutionService';
 
 type TimestampLike =
   | {
@@ -34,11 +35,14 @@ interface RecruiterJobRecord {
   location?: string;
   category?: string;
   employmentType?: string;
+  status?: string;
+  isActive?: boolean;
   createdAt?: TimestampLike;
   updatedAt?: TimestampLike;
   postedAt?: TimestampLike;
   applyDeadline?: TimestampLike;
   recruiterUID?: string;
+  candidateEmails?: string[];
 }
 
 interface RecruiterInterviewRecord extends Partial<Interview> {
@@ -48,6 +52,8 @@ interface RecruiterInterviewRecord extends Partial<Interview> {
   description?: string;
   department?: string;
   employmentType?: string;
+  status?: string;
+  isActive?: boolean;
   createdAt?: TimestampLike;
   updatedAt?: TimestampLike;
   deadline?: TimestampLike;
@@ -75,6 +81,8 @@ interface DashboardRoleEntry {
   companyName?: string;
   category?: string;
   employmentType?: string;
+  status?: string;
+  isActive?: boolean;
   createdAt?: TimestampLike;
   deadline?: TimestampLike;
   sourceLabel: 'Job Post' | 'Interview' | 'Synced';
@@ -219,6 +227,7 @@ const RecruiterDashboard: React.FC = () => {
   const [interviews, setInterviews] = useState<RecruiterInterviewRecord[]>([]);
   const [tests, setTests] = useState<RecruiterTestRecord[]>([]);
   const [attempts, setAttempts] = useState<InterviewAttemptRecord[]>([]);
+  const [apiJobs, setApiJobs] = useState<any[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [loadingInterviews, setLoadingInterviews] = useState(true);
   const [loadingTests, setLoadingTests] = useState(true);
@@ -229,6 +238,7 @@ const RecruiterDashboard: React.FC = () => {
     if (!user) {
       setJobDocs([]);
       setInterviews([]);
+      setApiJobs([]);
       setTests([]);
       setAttempts([]);
       setLoadingJobs(false);
@@ -242,19 +252,31 @@ const RecruiterDashboard: React.FC = () => {
     setLoadingInterviews(true);
     setLoadingTests(true);
 
-    const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
+    const userUid = user?.uid;
+    const resolvedTeamId = userProfile?.teamId || userProfile?.parentRecruiterId || userUid;
+    const isAdmin = (userProfile?.role || '').toLowerCase() === 'admin';
 
-    const jobsQuery = teamId
-      ? query(collection(db, 'jobs'), where('teamId', '==', teamId))
-      : query(collection(db, 'jobs'), where('recruiterUID', '==', user.uid));
+    fetchJobFetchedApiJobs(userUid || 'pbbMTYxPDaf7jhc9uPEZ34CcWfz2')
+      .then((jobs) => setApiJobs(jobs || []))
+      .catch((err) => console.warn('Failed to fetch jobs from JobFetched API:', err));
 
-    const interviewsQuery = teamId
-      ? query(collection(db, 'interviews'), where('teamId', '==', teamId))
-      : query(collection(db, 'interviews'), where('recruiterUID', '==', user.uid));
+    const jobsQuery = isAdmin
+      ? query(collection(db, 'jobs'))
+      : (resolvedTeamId && resolvedTeamId !== userUid
+        ? query(collection(db, 'jobs'), where('teamId', '==', resolvedTeamId))
+        : query(collection(db, 'jobs'), where('recruiterUID', '==', userUid)));
 
-    const testsQuery = teamId
-      ? query(collection(db, 'tests'), where('teamId', '==', teamId))
-      : query(collection(db, 'tests'), where('recruiterUID', '==', user.uid));
+    const interviewsQuery = isAdmin
+      ? query(collection(db, 'interviews'))
+      : (resolvedTeamId && resolvedTeamId !== userUid
+        ? query(collection(db, 'interviews'), where('teamId', '==', resolvedTeamId))
+        : query(collection(db, 'interviews'), where('recruiterUID', '==', userUid)));
+
+    const testsQuery = isAdmin
+      ? query(collection(db, 'tests'))
+      : (resolvedTeamId && resolvedTeamId !== userUid
+        ? query(collection(db, 'tests'), where('teamId', '==', resolvedTeamId))
+        : query(collection(db, 'tests'), where('recruiterUID', '==', userUid)));
 
     const unsubscribeJobs = onSnapshot(
       jobsQuery,
@@ -394,6 +416,8 @@ const RecruiterDashboard: React.FC = () => {
         companyName: job.companyName,
         category: job.category,
         employmentType: job.employmentType,
+        status: job.status,
+        isActive: job.isActive,
         createdAt: job.createdAt || job.postedAt || job.updatedAt,
         deadline: job.applyDeadline,
         sourceLabel: 'Job Post',
@@ -412,6 +436,8 @@ const RecruiterDashboard: React.FC = () => {
         companyName: existingEntry?.companyName,
         category: interview.department || existingEntry?.category,
         employmentType: interview.employmentType || existingEntry?.employmentType,
+        status: interview.status || existingEntry?.status,
+        isActive: interview.isActive ?? existingEntry?.isActive,
         createdAt: existingEntry?.createdAt || interview.createdAt || interview.updatedAt,
         deadline: existingEntry?.deadline || interview.deadline,
         sourceLabel: existingEntry ? 'Synced' : 'Interview',
@@ -426,6 +452,8 @@ const RecruiterDashboard: React.FC = () => {
           ...interviewEntry,
           title: existingEntry.title || interviewEntry.title,
           location: existingEntry.location || interviewEntry.location,
+          status: interview.status || existingEntry.status,
+          isActive: interview.isActive ?? existingEntry.isActive,
           sourceLabel: 'Synced',
           hasJobDoc: true,
           hasInterviewDoc: true,
@@ -436,8 +464,33 @@ const RecruiterDashboard: React.FC = () => {
       }
     });
 
+    apiJobs.forEach((job: any) => {
+      if (!roleMap.has(job.id)) {
+        roleMap.set(job.id, {
+          id: job.id,
+          title: job.title || 'Untitled Role',
+          location: job.location || job.city || 'Remote',
+          companyName: job.companyName || job.company,
+          category: job.department || job.category || 'General',
+          employmentType: job.employmentType || 'Full-time',
+          status: job.status || 'Active',
+          isActive: job.isActive,
+          createdAt: job.createdAt,
+          deadline: job.deadline || job.applyDeadline,
+          sourceLabel: 'Synced',
+          hasJobDoc: false,
+          hasInterviewDoc: true,
+          candidateEmails: job.candidateEmails || [],
+        });
+      }
+    });
+
     return Array.from(roleMap.values()).sort((left, right) => toMillis(right.createdAt) - toMillis(left.createdAt));
-  }, [interviews, jobDocs]);
+  }, [interviews, jobDocs, apiJobs]);
+
+  const totalInvitedCandidates = useMemo(() => {
+    return dashboardRoles.reduce((acc, r) => acc + (r.candidateEmails?.length || 0), 0);
+  }, [dashboardRoles]);
 
   const attemptsByInterview = useMemo(() => {
     return attempts.reduce((accumulator, attempt) => {
@@ -651,8 +704,8 @@ const RecruiterDashboard: React.FC = () => {
   const loading = loadingJobs || loadingInterviews || loadingTests || loadingAttempts;
 
   const getRoleStatus = (role: DashboardRoleEntry) => {
-    const deadlineMillis = toMillis(role.deadline);
-    if (deadlineMillis && deadlineMillis < Date.now()) {
+    const isJobActive = isJobStatusActive(role);
+    if (!isJobActive) {
       return {
         label: 'Expired',
         className:
@@ -718,21 +771,21 @@ const RecruiterDashboard: React.FC = () => {
 
         <div className="border-t border-white/[0.11]">
           <div className="grid grid-cols-1 divide-y divide-white/[0.11] sm:grid-cols-2 xl:grid-cols-5 xl:divide-x xl:divide-y-0">
-            <div className="min-h-[76px] px-4 py-4 sm:px-6 lg:px-7">
-              <p className="geist-label text-[#6b7280]">Jobs</p>
+            <Link to="/recruiter/all-jobs" className="min-h-[76px] px-4 py-4 transition-colors hover:bg-white/[0.025] sm:px-6 lg:px-7">
+              <p className="geist-label text-[#6b7280]">All Job Postings</p>
               <div className="mt-2 flex items-baseline gap-2.5">
                 <span className="geist-metric text-white">{dashboardRoles.length}</span>
-                <span className="geist-caption text-[#6b7280]">{activeJobPosts.length} active</span>
+                <span className="geist-caption text-[#83d0a3]">{activeJobPosts.length} active</span>
               </div>
-            </div>
+            </Link>
 
-            <div className="min-h-[76px] px-4 py-4 sm:px-6 lg:px-7">
-              <p className="geist-label text-[#6b7280]">Interviews</p>
+            <Link to="/recruiter/hot-leads" className="min-h-[76px] px-4 py-4 transition-colors hover:bg-white/[0.025] sm:px-6 lg:px-7">
+              <p className="geist-label text-[#6b7280]">Responses</p>
               <div className="mt-2 flex items-baseline gap-2.5">
-                <span className="geist-metric text-white">{interviews.length}</span>
-                <span className="geist-caption text-[#6b7280]">{attempts.length} reports</span>
+                <span className="geist-metric text-white">{attempts.length}</span>
+                <span className="geist-caption text-[#6b7280]">{attempts.length === 1 ? '1 report' : `${attempts.length} reports`}</span>
               </div>
-            </div>
+            </Link>
 
             <div className="min-h-[76px] px-4 py-4 sm:px-6 lg:px-7">
               <p className="geist-label text-[#6b7280]">Pending</p>
@@ -750,13 +803,13 @@ const RecruiterDashboard: React.FC = () => {
               </div>
             </Link>
 
-            <div className="min-h-[76px] px-4 py-4 sm:px-6 lg:px-7">
-              <p className="geist-label text-[#6b7280]">Responses</p>
+            <Link to="/recruiter/hot-leads" className="min-h-[76px] px-4 py-4 transition-colors hover:bg-white/[0.025] sm:px-6 lg:px-7">
+              <p className="geist-label text-[#6b7280]">Candidates</p>
               <div className="mt-2 flex items-baseline gap-2.5">
-                <span className="geist-metric text-white">{attempts.length}</span>
-                <span className="geist-caption text-[#6b7280]">submitted</span>
+                <span className="geist-metric text-white">{totalInvitedCandidates}</span>
+                <span className="geist-caption text-[#6b7280]">invited</span>
               </div>
-            </div>
+            </Link>
           </div>
         </div>
       </section>

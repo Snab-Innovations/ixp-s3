@@ -875,6 +875,8 @@ const CreateInterview: React.FC = () => {
 
       await setDoc(doc(db, 'interviews', newRand), {
         ...formData,
+        status: (formData as any).status || 'Active',
+        isActive: true,
         experience: expFormatted,
         manualQuestions,
         customFields,
