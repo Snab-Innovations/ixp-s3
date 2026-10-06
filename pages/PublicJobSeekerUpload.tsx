@@ -60,6 +60,24 @@ export default function PublicJobSeekerUpload() {
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
 
+  useEffect(() => {
+    document.title = "Upload Resume | DSource - AI Interview Platform";
+    const setMetaTag = (attr: string, value: string, content: string) => {
+      let element = document.querySelector(`meta[${attr}='${value}']`) as HTMLMetaElement;
+      if (!element) {
+        element = document.createElement('meta');
+        element.setAttribute(attr, value);
+        document.head.appendChild(element);
+      }
+      element.setAttribute('content', content);
+    };
+
+    setMetaTag('property', 'og:image', 'https://dsource.interviewxpert.in/logodsource.png');
+    setMetaTag('property', 'og:image:secure_url', 'https://dsource.interviewxpert.in/logodsource.png');
+    setMetaTag('property', 'og:url', 'https://dsource.interviewxpert.in/#/upload-resume');
+    setMetaTag('name', 'twitter:image', 'https://dsource.interviewxpert.in/logodsource.png');
+  }, []);
+
   // Mobile Navbar Drawer State
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 

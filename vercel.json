@@ -3,6 +3,10 @@
     {
       "source": "/api/jobs/:jobId",
       "destination": "/api/jobs?jobId=:jobId"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
     }
   ]
 }
