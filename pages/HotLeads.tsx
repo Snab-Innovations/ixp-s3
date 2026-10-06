@@ -6,6 +6,10 @@ import {
   where,
   onSnapshot,
   orderBy,
+  doc,
+  deleteDoc,
+  updateDoc,
+  getDocs,
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -32,6 +36,7 @@ import {
   Check,
   ChevronDown,
   X,
+  Trash2,
 } from 'lucide-react';
 import { sendInterviewInvitations } from '../services/brevoService';
 import {
@@ -113,6 +118,31 @@ export default function HotLeads() {
   const userTeamId = userProfile?.teamId;
   const userParentRecruiterId = userProfile?.parentRecruiterId;
   const isAdmin = userProfile?.role === 'admin';
+
+  // ── Deleted Leads State & Tracking ──
+  const [deletedLeadKeys, setDeletedLeadKeys] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(`ix_deleted_leads_${user?.uid || 'default'}`);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+  const deletedLeadKeysRef = useRef(deletedLeadKeys);
+  deletedLeadKeysRef.current = deletedLeadKeys;
+
+  const saveDeletedKeys = (newKeys: Set<string>) => {
+    setDeletedLeadKeys(newKeys);
+    deletedLeadKeysRef.current = newKeys;
+    try {
+      localStorage.setItem(`ix_deleted_leads_${user?.uid || 'default'}`, JSON.stringify(Array.from(newKeys)));
+    } catch (e) {
+      console.warn('Failed to save deleted leads to localStorage:', e);
+    }
+  };
+
+  const [isDeletingLeads, setIsDeletingLeads] = useState(false);
+  const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null);
 
   // ── 1. Fetch Recruiter Jobs & Applications & Responses ──
   useEffect(() => {
@@ -278,8 +308,8 @@ export default function HotLeads() {
       });
 
       const list = Array.from(leadsMap.values());
-      // Active jobs policy: candidates are active if job is active or if they have already submitted
-      const validLeads = list.filter((lead) => lead.hasSubmitted || lead.isJobActive);
+      // Active jobs policy: candidates are active if job is active or if they have already submitted, and not deleted
+      const validLeads = list.filter((lead) => !deletedLeadKeysRef.current.has(lead.id) && (lead.hasSubmitted || lead.isJobActive));
       validLeads.sort((a, b) => {
         const timeA = a.submittedAt?.toMillis
           ? a.submittedAt.toMillis()
@@ -513,9 +543,20 @@ export default function HotLeads() {
   }, [jobs, jobSearchQuery]);
 
   // ── Selection Handlers ──
+  const handleToggleSelectAll = () => {
+    if (filteredLeads.length === 0) return;
+    const allFilteredIds = filteredLeads.map((l) => l.id);
+    const areAllSelected = allFilteredIds.every((id) => selectedLeadIds.includes(id));
+    if (areAllSelected) {
+      setSelectedLeadIds((prev) => prev.filter((id) => !allFilteredIds.includes(id)));
+    } else {
+      setSelectedLeadIds((prev) => Array.from(new Set([...prev, ...allFilteredIds])));
+    }
+  };
+
   const handleSelectAllPending = () => {
     const pendingIds = filteredLeads.filter((l) => !l.hasSubmitted && l.isJobActive).map((l) => l.id);
-    if (selectedLeadIds.length === pendingIds.length) {
+    if (selectedLeadIds.length === pendingIds.length && pendingIds.length > 0) {
       setSelectedLeadIds([]);
     } else {
       setSelectedLeadIds(pendingIds);
@@ -527,6 +568,10 @@ export default function HotLeads() {
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
   };
+
+  const selectedPendingCount = useMemo(() => {
+    return leads.filter((l) => selectedLeadIds.includes(l.id) && !l.hasSubmitted && l.isJobActive).length;
+  }, [leads, selectedLeadIds]);
 
   // ── Send WhatsApp Reminder ──
   const handleSendWhatsAppReminder = async (lead: HotLeadItem) => {
@@ -727,6 +772,166 @@ export default function HotLeads() {
     setBulkSending(false);
     setSelectedLeadIds([]);
     messageBox.showSuccess(`Bulk reminders sent to ${successCount} of ${selectedLeads.length} candidates!`);
+  };
+
+  // ── Delete Leads Handlers (Single or Bulk) ──
+  const executeDeleteLeads = async (leadsToDelete: HotLeadItem[]) => {
+    if (leadsToDelete.length === 0) return;
+
+    setIsDeletingLeads(true);
+    const idsToDelete = new Set(leadsToDelete.map((l) => l.id));
+
+    // Optimistic UI update
+    setLeads((prev) => prev.filter((l) => !idsToDelete.has(l.id)));
+    setSelectedLeadIds((prev) => prev.filter((id) => !idsToDelete.has(id)));
+
+    const nextDeletedKeys = new Set(deletedLeadKeysRef.current);
+    idsToDelete.forEach((id) => nextDeletedKeys.add(id));
+    saveDeletedKeys(nextDeletedKeys);
+
+    try {
+      const deletePromises: Promise<any>[] = [];
+
+      for (const lead of leadsToDelete) {
+        const email = (lead.candidateEmail || '').toLowerCase().trim();
+        const jobId = lead.jobId;
+
+        // 1. Delete matching applications from candidateApplications collection
+        if (email) {
+          const appsDeletePromise = (async () => {
+            try {
+              const [snap1, snap2] = await Promise.all([
+                getDocs(query(collection(db, 'candidateApplications'), where('candidateEmail', '==', email))).catch(() => null),
+                getDocs(query(collection(db, 'candidateApplications'), where('email', '==', email))).catch(() => null),
+              ]);
+
+              const docsToDelete = new Set<string>();
+              if (snap1) {
+                snap1.docs.forEach((d) => {
+                  const data = d.data();
+                  const dJobId = data.interviewId || data.jobId;
+                  if (!jobId || !dJobId || dJobId === jobId) {
+                    docsToDelete.add(d.id);
+                  }
+                });
+              }
+              if (snap2) {
+                snap2.docs.forEach((d) => {
+                  const data = d.data();
+                  const dJobId = data.interviewId || data.jobId;
+                  if (!jobId || !dJobId || dJobId === jobId) {
+                    docsToDelete.add(d.id);
+                  }
+                });
+              }
+
+              for (const docId of docsToDelete) {
+                await deleteDoc(doc(db, 'candidateApplications', docId)).catch(() => {});
+              }
+            } catch (err) {
+              console.warn('[executeDeleteLeads] candidateApplications delete error:', err);
+            }
+          })();
+          deletePromises.push(appsDeletePromise);
+        }
+
+        // 2. Remove candidate from job candidateEmails and candidateData arrays
+        if (jobId && email) {
+          const jobUpdatePromise = (async () => {
+            try {
+              const jobObj = jobs.find((j) => j.id === jobId);
+              if (jobObj) {
+                const updatedEmails = (jobObj.candidateEmails || []).filter(
+                  (e: string) => String(e).toLowerCase().trim() !== email
+                );
+                const updatedData = ((jobObj as any).candidateData || []).filter(
+                  (c: any) => !c?.email || String(c.email).toLowerCase().trim() !== email
+                );
+
+                const updatePayload = {
+                  candidateEmails: updatedEmails,
+                  candidateData: updatedData,
+                  updatedAt: new Date().toISOString(),
+                };
+
+                await Promise.all([
+                  updateDoc(doc(db, 'interviews', jobId), updatePayload).catch(() => {}),
+                  updateDoc(doc(db, 'jobs', jobId), updatePayload).catch(() => {}),
+                ]);
+              }
+            } catch (err) {
+              console.warn('[executeDeleteLeads] job candidate update error:', err);
+            }
+          })();
+          deletePromises.push(jobUpdatePromise);
+        }
+
+        // 3. Delete candidate response / submission if present
+        if (lead.submissionId) {
+          deletePromises.push(
+            deleteDoc(doc(db, 'candidateResponses', lead.submissionId)).catch(() => {})
+          );
+        } else if (email && jobId) {
+          const respPromise = (async () => {
+            try {
+              const qResp = query(
+                collection(db, 'candidateResponses'),
+                where('interviewId', '==', jobId)
+              );
+              const snap = await getDocs(qResp).catch(() => null);
+              if (snap) {
+                for (const d of snap.docs) {
+                  const data = d.data();
+                  const cEmail = (data.candidateInfo?.email || data.candidateEmail || data.email || '').toLowerCase().trim();
+                  if (cEmail === email) {
+                    await deleteDoc(doc(db, 'candidateResponses', d.id)).catch(() => {});
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn('[executeDeleteLeads] candidateResponses delete error:', err);
+            }
+          })();
+          deletePromises.push(respPromise);
+        }
+      }
+
+      await Promise.all(deletePromises);
+
+      messageBox.showSuccess(
+        leadsToDelete.length === 1
+          ? `Lead for "${leadsToDelete[0].candidateName || leadsToDelete[0].candidateEmail}" deleted successfully!`
+          : `Successfully deleted ${leadsToDelete.length} leads!`
+      );
+    } catch (err: any) {
+      console.error('[executeDeleteLeads] Error:', err);
+      messageBox.showError(`Failed to delete lead: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setIsDeletingLeads(false);
+      setDeletingLeadId(null);
+    }
+  };
+
+  const handleDeleteSingleLead = (lead: HotLeadItem) => {
+    setDeletingLeadId(lead.id);
+    messageBox.showConfirm(
+      `Are you sure you want to delete lead "${lead.candidateName || lead.candidateEmail}"? This will remove their application and invitation records.`,
+      () => executeDeleteLeads([lead]),
+      () => setDeletingLeadId(null)
+    );
+  };
+
+  const handleDeleteSelectedLeads = () => {
+    const selectedLeads = leads.filter((l) => selectedLeadIds.includes(l.id));
+    if (selectedLeads.length === 0) {
+      messageBox.showInfo('Please select at least one lead to delete.');
+      return;
+    }
+
+    messageBox.showConfirm(
+      `Are you sure you want to delete ${selectedLeads.length} selected lead(s)? This action cannot be undone.`,
+      () => executeDeleteLeads(selectedLeads)
+    );
   };
 
   const handleCopyLink = (link: string, id: string) => {
@@ -1059,17 +1264,43 @@ export default function HotLeads() {
               <option value="low" className="bg-white dark:bg-[#111] text-gray-900 dark:text-white">Low (&lt; 5.0)</option>
             </select>
 
-            {/* Bulk Reminder Action */}
-            {activeTab !== 'responded' && selectedLeadIds.length > 0 && (
-              <button
-                type="button"
-                onClick={handleSendBulkReminders}
-                disabled={bulkSending}
-                className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border border-amber-500/40 bg-amber-500/10 px-3 font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
-              >
-                {bulkSending ? <RotateCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                <span>Send Reminders ({selectedLeadIds.length})</span>
-              </button>
+            {/* Bulk Actions when items are selected */}
+            {selectedLeadIds.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Bulk Reminder Action (if pending candidates exist in selection) */}
+                {selectedPendingCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleSendBulkReminders}
+                    disabled={bulkSending}
+                    className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border border-amber-500/40 bg-amber-500/10 px-3 font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                  >
+                    {bulkSending ? <RotateCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    <span>Send Reminders ({selectedPendingCount})</span>
+                  </button>
+                )}
+
+                {/* Bulk Delete Action */}
+                <button
+                  type="button"
+                  onClick={handleDeleteSelectedLeads}
+                  disabled={isDeletingLeads}
+                  className="geist-caption inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border border-red-500/40 bg-red-500/10 px-3 font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50 cursor-pointer"
+                  title="Delete all selected leads"
+                >
+                  {isDeletingLeads ? <RotateCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  <span>Delete Selected ({selectedLeadIds.length})</span>
+                </button>
+
+                {/* Deselect button */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedLeadIds([])}
+                  className="geist-caption inline-flex h-9 items-center justify-center px-2 text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
+                >
+                  Deselect
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -1095,22 +1326,26 @@ export default function HotLeads() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-gray-200 dark:border-white/[0.11] bg-gray-50 dark:bg-[#050505]">
-                    {activeTab !== 'responded' && (
-                      <th className="geist-label w-10 px-3 py-2.5 text-center">
-                        <button
-                          type="button"
-                          onClick={handleSelectAllPending}
-                          className="text-gray-400 dark:text-[#8f8f8f] hover:text-gray-700 dark:hover:text-white transition-colors"
-                          title="Select all pending leads"
-                        >
-                          {selectedLeadIds.length > 0 && selectedLeadIds.length === filteredLeads.filter((l) => !l.hasSubmitted).length ? (
-                            <CheckSquare className="size-3.5 text-amber-500" />
-                          ) : (
-                            <Square className="size-3.5" />
-                          )}
-                        </button>
-                      </th>
-                    )}
+                    <th className="geist-label w-10 px-3 py-2.5 text-center">
+                      <button
+                        type="button"
+                        onClick={handleToggleSelectAll}
+                        className="text-gray-400 dark:text-[#8f8f8f] hover:text-gray-700 dark:hover:text-white transition-colors"
+                        title={
+                          filteredLeads.length > 0 && filteredLeads.every((l) => selectedLeadIds.includes(l.id))
+                            ? 'Deselect all visible leads'
+                            : 'Select all visible leads'
+                        }
+                      >
+                        {filteredLeads.length > 0 && filteredLeads.every((l) => selectedLeadIds.includes(l.id)) ? (
+                          <CheckSquare className="size-3.5 text-blue-600 dark:text-blue-400" />
+                        ) : selectedLeadIds.some((id) => filteredLeads.some((fl) => fl.id === id)) ? (
+                          <CheckSquare className="size-3.5 text-amber-500" />
+                        ) : (
+                          <Square className="size-3.5" />
+                        )}
+                      </button>
+                    </th>
                     <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f]">
                       Candidate Lead
                     </th>
@@ -1141,26 +1376,21 @@ export default function HotLeads() {
                           isSelected ? 'bg-gray-100/70 dark:bg-white/[0.04]' : 'hover:bg-gray-50/70 dark:hover:bg-white/[0.02]'
                         }`}
                       >
-                        {/* Checkbox for pending */}
-                        {activeTab !== 'responded' && (
-                          <td className="px-3 py-3.5 text-center">
-                            {!lead.hasSubmitted && lead.isJobActive ? (
-                              <button
-                                type="button"
-                                onClick={() => toggleSelectLead(lead.id)}
-                                className="text-gray-400 dark:text-[#8f8f8f] hover:text-gray-700 dark:hover:text-white transition-colors"
-                              >
-                                {isSelected ? (
-                                  <CheckSquare className="size-3.5 text-amber-500" />
-                                ) : (
-                                  <Square className="size-3.5" />
-                                )}
-                              </button>
+                        {/* Selection Checkbox for every lead */}
+                        <td className="px-3 py-3.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => toggleSelectLead(lead.id)}
+                            className="text-gray-400 dark:text-[#8f8f8f] hover:text-gray-700 dark:hover:text-white transition-colors cursor-pointer"
+                            title={isSelected ? 'Deselect lead' : 'Select lead'}
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="size-3.5 text-blue-600 dark:text-blue-400" />
                             ) : (
-                              <span className="inline-block size-3.5" />
+                              <Square className="size-3.5" />
                             )}
-                          </td>
-                        )}
+                          </button>
+                        </td>
 
                         {/* Candidate Details */}
                         <td className="px-4 py-3.5">
@@ -1301,12 +1531,38 @@ export default function HotLeads() {
                                 <span>View Report</span>
                                 <ExternalLink className="size-3" />
                               </Link>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSingleLead(lead)}
+                                disabled={isDeletingLeads && deletingLeadId === lead.id}
+                                title={`Delete lead for ${lead.candidateName}`}
+                                className="geist-caption inline-flex h-7 items-center justify-center rounded-[5px] border border-red-500/30 bg-red-50 dark:bg-red-500/10 px-2 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                {isDeletingLeads && deletingLeadId === lead.id ? (
+                                  <RotateCw className="size-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="size-3" />
+                                )}
+                              </button>
                             </div>
                           ) : !lead.isJobActive ? (
                             <div className="flex items-center justify-end gap-1.5">
-                              <span className="geist-small text-[10px] text-gray-400 dark:text-[#71717a] italic">
+                              <span className="geist-small text-[10px] text-gray-400 dark:text-[#71717a] italic mr-1">
                                 Job Inactive
                               </span>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSingleLead(lead)}
+                                disabled={isDeletingLeads && deletingLeadId === lead.id}
+                                title={`Delete lead for ${lead.candidateName}`}
+                                className="geist-caption inline-flex h-7 items-center justify-center rounded-[5px] border border-red-500/30 bg-red-50 dark:bg-red-500/10 px-2 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                {isDeletingLeads && deletingLeadId === lead.id ? (
+                                  <RotateCw className="size-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="size-3" />
+                                )}
+                              </button>
                             </div>
                           ) : (
                             <div className="flex items-center justify-end gap-1.5">
@@ -1369,6 +1625,21 @@ export default function HotLeads() {
                                   <Check className="size-3 text-emerald-600 dark:text-emerald-400" />
                                 ) : (
                                   <Copy className="size-3" />
+                                )}
+                              </button>
+
+                              {/* Delete Lead Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSingleLead(lead)}
+                                disabled={isDeletingLeads && deletingLeadId === lead.id}
+                                title={`Delete lead for ${lead.candidateName}`}
+                                className="geist-caption inline-flex h-7 items-center justify-center rounded-[5px] border border-red-500/30 bg-red-50 dark:bg-red-500/10 px-2 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                {isDeletingLeads && deletingLeadId === lead.id ? (
+                                  <RotateCw className="size-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="size-3" />
                                 )}
                               </button>
                             </div>
