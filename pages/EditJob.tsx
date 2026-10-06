@@ -1241,16 +1241,7 @@ const EditJobModal: React.FC<EditJobModalProps> = ({ jobId, onClose }) => {
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-2 border-b border-gray-200 dark:border-white/[0.11] pb-2">
                   <i className="fa-solid fa-sliders text-black dark:text-white"></i> Interview Rules & Settings
                 </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className={labelClass}>Deadline *</label>
-                    <input 
-                      type="date" required 
-                      className={inputClass}
-                      value={formData.deadline}
-                      onChange={handleFormChange} name="deadline"
-                    />
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
                     <label className={labelClass}>Access Permission</label>
                     <select 

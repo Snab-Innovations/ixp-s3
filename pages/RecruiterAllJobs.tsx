@@ -1705,9 +1705,6 @@ const RecruiterAllJobs: React.FC = () => {
                       <div>
                         Invited: <span className="text-white font-medium">{invitedCount} candidates</span>
                       </div>
-                      <div>
-                        Deadline: <span className="text-white font-medium">{formatDate(job.deadline)}</span>
-                      </div>
                     </div>
 
                     {/* Skills */}

@@ -396,11 +396,9 @@ const CareerHub: React.FC<{ isDarkTheme: boolean }> = ({ isDarkTheme }) => {
     const fetchJobs = async () => {
         setLoadingJobs(true);
         try {
-            const now = Timestamp.now();
             const q = query(
                 collection(db, 'jobs'), 
-                where('applyDeadline', '>', now),
-                orderBy('applyDeadline', 'asc')
+                orderBy('createdAt', 'desc')
             );
             const snapshot = await getDocs(q);
             const fetchedJobs = snapshot.docs
@@ -695,13 +693,7 @@ const CareerHub: React.FC<{ isDarkTheme: boolean }> = ({ isDarkTheme }) => {
                                   </div>
                                   <div className="text-slate-900 dark:text-white font-medium">{selectedJob.employmentType || 'Full-time'}</div>
                               </div>
-                              <div className="bg-slate-50 dark:bg-[#161616] p-4 rounded-xl border border-slate-100 dark:border-white/5">
-                                  <div className="flex items-center gap-2 text-slate-500 dark:text-gray-400 text-xs uppercase font-bold mb-1">
-                                      <Clock className="w-3.5 h-3.5" /> Deadline
-                                  </div>
-                                  <div className="text-slate-900 dark:text-white font-medium">{selectedJob.applyDeadline?.toDate ? selectedJob.applyDeadline.toDate().toLocaleDateString() : 'Open'}</div>
-                              </div>
-                          </div>
+                           </div>
 
                           <div className="space-y-6 text-slate-600 dark:text-gray-300">
                               <div>

@@ -926,9 +926,6 @@ const RecruiterDashboard: React.FC = () => {
                       Posted date
                     </th>
                     <th className="geist-label px-4 py-2.5 text-left uppercase text-[#6b7280]">
-                      Deadline
-                    </th>
-                    <th className="geist-label px-4 py-2.5 text-left uppercase text-[#6b7280]">
                       Status
                     </th>
                   </tr>
@@ -957,9 +954,6 @@ const RecruiterDashboard: React.FC = () => {
                         </td>
                         <td className="geist-label whitespace-nowrap px-4 py-3 text-[#9ca3af]">
                           {formatDate(role.createdAt)}
-                        </td>
-                        <td className="geist-label whitespace-nowrap px-4 py-3 text-[#9ca3af]">
-                          {role.deadline ? formatDate(role.deadline) : 'Open'}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
                           <span

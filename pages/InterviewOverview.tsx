@@ -233,7 +233,6 @@ const InterviewOverview: React.FC = () => {
       ['Status', interview.status || 'Active'],
       ['Created At', formatDate(interview.createdAt)],
       ['Updated At', formatDate(interview.updatedAt)],
-      ['Application Deadline', formatDate(anyInterview.deadline || anyInterview.applyDeadline)],
       ['System Document ID', interview.id],
     ] as Array<[string, any]>;
   }, [interview, responsesCount]);

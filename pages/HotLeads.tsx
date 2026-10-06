@@ -1118,7 +1118,7 @@ export default function HotLeads() {
                       Applied Job Role
                     </th>
                     <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f]">
-                      Application & Deadline
+                      Application Details
                     </th>
                     <th className="geist-label whitespace-nowrap px-4 py-2.5 uppercase text-[10px] tracking-wider font-semibold text-gray-500 dark:text-[#8f8f8f]">
                       Interview Status & Score
@@ -1233,9 +1233,6 @@ export default function HotLeads() {
                           <div className="space-y-0.5">
                             <div className="geist-small text-[11px] text-gray-500 dark:text-[#8f8f8f]">
                               Applied: <span className="text-gray-900 dark:text-white font-medium">{formatDate(lead.appliedAt)}</span>
-                            </div>
-                            <div className="geist-small text-[10px] text-gray-400 dark:text-[#6b7280]">
-                              Deadline: <span className="text-gray-500 dark:text-[#a1a1aa] font-mono !bg-transparent">{formatDate(lead.deadline)}</span>
                             </div>
                             {lead.hasSubmitted && (
                               <div className="geist-small text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">

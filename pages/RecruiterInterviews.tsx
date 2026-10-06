@@ -1435,13 +1435,12 @@ const RecruiterInterviews: React.FC = () => {
         ) : (
           <>
             {/* Column Headers */}
-            <div className="hidden shrink-0 items-center gap-4 border-b border-white/[0.11] bg-[#000] px-4 py-2 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_90px_110px_90px_80px_80px_230px] lg:px-7">
+            <div className="hidden shrink-0 items-center gap-4 border-b border-white/[0.11] bg-[#000] px-4 py-2 sm:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_90px_110px_90px_80px_230px] lg:px-7">
               <span className="geist-label uppercase text-[#6b7280]">Name</span>
               <span className="geist-label text-center uppercase text-[#6b7280]">Status</span>
               <span className="geist-label text-center uppercase text-[#6b7280]">Department</span>
               <span className="geist-label text-center uppercase text-[#6b7280]">Difficulty</span>
               <span className="geist-label text-center uppercase text-[#6b7280]">ID</span>
-              <span className="geist-label text-center uppercase text-[#6b7280]">Deadline</span>
               <span className="geist-label text-right uppercase text-[#6b7280]">Actions</span>
             </div>
 
@@ -1451,12 +1450,11 @@ const RecruiterInterviews: React.FC = () => {
                 const candidateCount = (interview.candidateEmails || []).length;
                 const status = getInterviewStatus(interview);
                 const shortId = interview.id.substring(0, 7);
-                const deadlineText = formatDate(getInterviewDeadline(interview));
 
                 return (
                   <article 
                     key={interview.id} 
-                    className="grid gap-3 border-b border-white/[0.08] px-4 py-3 transition-colors hover:bg-white/[0.025] sm:px-6 lg:grid-cols-[minmax(0,1fr)_90px_110px_90px_80px_80px_230px] lg:items-center lg:gap-4 lg:px-7"
+                    className="grid gap-3 border-b border-white/[0.08] px-4 py-3 transition-colors hover:bg-white/[0.025] sm:px-6 lg:grid-cols-[minmax(0,1fr)_90px_110px_90px_80px_230px] lg:items-center lg:gap-4 lg:px-7"
                   >
                     {/* Name */}
                     <div className="min-w-0">
@@ -1501,11 +1499,6 @@ const RecruiterInterviews: React.FC = () => {
                       <span className="geist-label text-[#6b7280]">{shortId}</span>
                     </div>
 
-                    {/* Deadline */}
-                    <div className="flex items-center justify-between gap-3 lg:justify-center">
-                      <span className="geist-label uppercase text-[#6b7280] lg:hidden">Deadline</span>
-                      <span className="geist-small text-[#8f8f8f]">{deadlineText}</span>
-                    </div>
 
                     {/* Actions */}
                     <div className="flex items-center justify-end gap-2 shrink-0">

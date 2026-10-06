@@ -1344,17 +1344,6 @@ const CreateInterview: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className={labelClass}>Application Deadline (Autoset: 5 Days Default)</label>
-                <input
-                  name="deadline"
-                  type="date"
-                  required
-                  className={inputClass}
-                  value={formData.deadline}
-                  onChange={handleFormChange}
-                />
-              </div>
 
               <div>
                 <label className={labelClass}>Salary / Compensation <span className="text-red-500 dark:text-red-400">*</span></label>
@@ -1706,10 +1695,6 @@ const CreateInterview: React.FC = () => {
             <p className={helperTextClass}>Add candidate emails directly or extract them from uploaded resumes.</p>
 
             <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
-              <div>
-                <label className={labelClass}>Application deadline</label>
-                <input name="deadline" type="date" className={inputClass} value={formData.deadline} onChange={handleFormChange} />
-              </div>
 
               <div className="xl:col-span-2">
                 <label className={labelClass}>Candidate Email & WhatsApp Phone (Provide Email, Phone, or Both)</label>

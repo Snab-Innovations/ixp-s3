@@ -126,16 +126,14 @@ export function getDesignerEmailTemplate(
   isReminder: boolean = false,
   options?: JobDetailsOptions
 ): string {
-  const deadline = options?.deadlineDate || options?.deadline || 'Within 48 Hours';
-
   const context: Record<string, string> = {
     candidate_name: candidateName,
     job_title: jobTitle,
     company_name: 'Dsource',
     interview_link: interviewLink,
     access_code: accessCode,
-    interview_deadline: deadline,
-    deadline: deadline,
+    interview_deadline: '',
+    deadline: '',
     location: options?.location || 'As specified in Job Description',
     qualification: options?.qualification || options?.education || 'As per Job Description',
     experience: formatExperienceDisplay(options),
@@ -150,7 +148,7 @@ export function getDesignerEmailTemplate(
   const custom = options?.customTemplate;
   const badgeText = custom?.badgeText
     ? renderTemplateText(custom.badgeText, context)
-    : (isReminder ? "INTERVIEW DEADLINE REMINDER" : "YOU ARE SHORTLISTED FOR THIS ROUND");
+    : (isReminder ? "INTERVIEW PENDING REMINDER" : "YOU ARE SHORTLISTED FOR THIS ROUND");
 
   const headline = custom?.headline
     ? renderTemplateText(custom.headline, context)
@@ -159,8 +157,8 @@ export function getDesignerEmailTemplate(
   const bodyText = custom?.body
     ? renderTemplateText(custom.body, context)
     : (isReminder
-        ? `This is a friendly reminder that you have been <strong>shortlisted for ${jobTitle}</strong> at <strong>Dsource</strong>, but your AI Video Interview is still pending.<br/><br/>Please complete your interview before the deadline: <strong>${deadline}</strong> to move forward in the selection process.`
-        : `Congratulations! 🎉<br/><br/>We are excited to inform you that your profile has been <strong>shortlisted for this interview round</strong> for the <strong>${jobTitle}</strong> role at <strong>Dsource</strong>.<br/><br/>You can complete your 15-minute AI Video Interview anytime from your phone or laptop before the deadline.`);
+        ? `This is a friendly reminder that you have been <strong>shortlisted for ${jobTitle}</strong> at <strong>Dsource</strong>, but your AI Video Interview is still pending.<br/><br/>Please complete your interview at your convenience to move forward in the selection process.`
+        : `Congratulations! 🎉<br/><br/>We are excited to inform you that your profile has been <strong>shortlisted for this interview round</strong> for the <strong>${jobTitle}</strong> role at <strong>Dsource</strong>.<br/><br/>You can complete your 15-minute AI Video Interview anytime from your phone or laptop at your convenience.`);
 
   const ctaText = custom?.ctaButtonText
     ? renderTemplateText(custom.ctaButtonText, context)

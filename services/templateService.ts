@@ -12,7 +12,6 @@ export interface JobDetailItem {
 
 export const DEFAULT_JOB_DETAILS_ITEMS: JobDetailItem[] = [
   { id: 'post', label: 'Job Post', icon: '•', value: '{{job_title}}', enabled: true },
-  { id: 'deadline', label: 'Completion Deadline', icon: '•', value: '{{interview_deadline}}', enabled: true },
   { id: 'employmentType', label: 'Employment Type', icon: '•', value: '{{employment_type}}', enabled: true },
   { id: 'location', label: 'Location', icon: '•', value: '{{location}}', enabled: true },
   { id: 'qualification', label: 'Qualification', icon: '•', value: '{{qualification}}', enabled: true },
@@ -87,7 +86,6 @@ export const DYNAMIC_VARIABLES = [
   { tag: '{{interview_link}}', label: 'Assessment Link', example: 'https://dsource.in/#/interview/inv-12345' },
   { tag: '{{access_code}}', label: 'Access Code', example: 'DX-8921' },
   { tag: '{{interview_code}}', label: 'Interview Code (Alias)', example: 'DX-8921' },
-  { tag: '{{interview_deadline}}', label: 'Interview Deadline', example: 'Within 48 Hours' },
   { tag: '{{location}}', label: 'Job Location', example: 'Mumbai / Hybrid' },
   { tag: '{{qualification}}', label: 'Qualification', example: 'B.Tech / B.E. / MCA' },
   { tag: '{{experience}}', label: 'Experience Required', example: '3 - 5 Years' },
@@ -108,7 +106,7 @@ export const TEMPLATE_PRESETS = [
       subject: 'Congratulations {{candidate_name}}! You’ve Been Shortlisted for {{job_title}} | {{company_name}}',
       badgeText: 'SHORTLISTED CANDIDATE',
       headline: 'Dear {{candidate_name}},',
-      body: 'Congratulations! After reviewing your profile, you have been <strong>shortlisted for the {{job_title}} position at {{company_name}}</strong>. As the next step in our hiring process, we’d like to invite you to complete a 15–20 minute AI Video Interview at your convenience. Unlike a traditional HR screening call, you can complete this interview anytime before the deadline using your mobile or laptop.<br/><br/>- <strong>No need to schedule an HR call</strong><br/>- <strong>Available 24×7—complete it at your convenience</strong><br/>- <strong>Takes only 15–20 minutes</strong><br/>- <strong>Your responses are reviewed by our recruitment team</strong><br/>- <strong>Successful candidates will be contacted for the next hiring stage</strong>',
+      body: 'Congratulations! After reviewing your profile, you have been <strong>shortlisted for the {{job_title}} position at {{company_name}}</strong>. As the next step in our hiring process, we’d like to invite you to complete a 15–20 minute AI Video Interview at your convenience. Unlike a traditional HR screening call, you can complete this interview anytime using your mobile or laptop.<br/><br/>- <strong>No need to schedule an HR call</strong><br/>- <strong>Available 24×7—complete it at your convenience</strong><br/>- <strong>Takes only 15–20 minutes</strong><br/>- <strong>Your responses are reviewed by our recruitment team</strong><br/>- <strong>Successful candidates will be contacted for the next hiring stage</strong>',
       showJobDetails: true,
       jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
       jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
@@ -124,13 +122,13 @@ export const TEMPLATE_PRESETS = [
     },
     whatsapp: {
       headline: '*CONGRATULATIONS! YOU ARE SHORTLISTED*',
-      body: 'Dear *{{candidate_name}}*,\n\nGreat news! After reviewing your profile, you have been *shortlisted for the {{job_title}} position at {{company_name}}*.\n\nPlease complete your 15–20 minute AI Video Interview from your phone or laptop at your convenience.\n\n*Completion Deadline:* *{{interview_deadline}}*\n- No need to schedule an HR call\n- Available 24×7—complete at your convenience\n- Takes only 15–20 minutes\n- Responses reviewed by recruitment team\n- Successful candidates move to next hiring stage',
+      body: 'Dear *{{candidate_name}}*,\n\nGreat news! After reviewing your profile, you have been *shortlisted for the {{job_title}} position at {{company_name}}*.\n\nPlease complete your 15–20 minute AI Video Interview from your phone or laptop at your convenience.\n\n- No need to schedule an HR call\n- Available 24×7—complete at your convenience\n- Takes only 15–20 minutes\n- Responses reviewed by recruitment team\n- Successful candidates move to next hiring stage',
       showJobDetails: true,
       jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
       jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
       showCredentials: true,
       showRecruiterContact: true,
-      instructions: '*Instructions before starting:*\n• Use a laptop or mobile with camera & mic.\n• Keep a stable internet connection.\n• Complete before: *{{interview_deadline}}*',
+      instructions: '*Instructions before starting:*\n• Use a laptop or mobile with camera & mic.\n• Keep a stable internet connection.\n• Attempt at your convenience',
       signoff: 'Best of luck!\n\n*{{company_name}} Recruitment Team*'
     }
   },
@@ -152,14 +150,13 @@ export const TEMPLATE_PRESETS = [
       instructions: [
         'Ensure a quiet environment without background distractions.',
         'Camera and microphone must remain on during the session.',
-        'Attempt all questions within the given time limits.',
-        'Deadline: {{interview_deadline}}.'
+        'Attempt all questions within the given time limits.'
       ],
       customFooter: 'Questions? Reach out to Recruiter: {{recruiter_name}} ({{recruiter_phone}})'
     },
     whatsapp: {
       headline: '*TECHNICAL ROUND INVITATION*',
-      body: 'Dear *{{candidate_name}}*,\n\nYou have been selected for the *Technical Assessment Round* for the *{{job_title}}* role at *{{company_name}}*.\n\nPlease attempt your evaluation before *{{interview_deadline}}* using the credentials below.',
+      body: 'Dear *{{candidate_name}}*,\n\nYou have been selected for the *Technical Assessment Round* for the *{{job_title}}* role at *{{company_name}}*.\n\nPlease attempt your evaluation at your convenience using the credentials below.',
       showJobDetails: true,
       jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
       jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
@@ -177,7 +174,7 @@ export const TEMPLATE_PRESETS = [
       subject: 'Action Required: Complete Your Interview for {{job_title}} | {{company_name}}',
       badgeText: 'ACTION REQUIRED - INTERVIEW PENDING',
       headline: 'Dear {{candidate_name}},',
-      body: 'Your profile has been shortlisted for <strong>{{job_title}}</strong> at <strong>{{company_name}}</strong>, but we have not yet received your video interview submission.<br/><br/>This 15-minute evaluation is a required step to advance your candidacy to the hiring manager round. Your access link is active until <strong>{{interview_deadline}}</strong>.<br/><br/>- <strong>Time Required:</strong> ~15 Minutes<br/>- <strong>Device:</strong> Mobile or Laptop with Camera & Mic<br/>- <strong>Availability:</strong> Complete anytime before deadline',
+      body: 'Your profile has been shortlisted for <strong>{{job_title}}</strong> at <strong>{{company_name}}</strong>, but we have not yet received your video interview submission.<br/><br/>This 15-minute evaluation is a required step to advance your candidacy to the hiring manager round. Your access link is active and ready for you.<br/><br/>- <strong>Time Required:</strong> ~15 Minutes<br/>- <strong>Device:</strong> Mobile or Laptop with Camera & Mic<br/>- <strong>Availability:</strong> Complete anytime at your convenience',
       showJobDetails: true,
       jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
       jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
@@ -193,46 +190,46 @@ export const TEMPLATE_PRESETS = [
     },
     whatsapp: {
       headline: '*ACTION REQUIRED: INTERVIEW PENDING*',
-      body: 'Dear *{{candidate_name}}*,\n\nYour profile has been shortlisted for *{{job_title}}* at *{{company_name}}*, but your video interview is still pending.\n\nPlease complete this 15-minute evaluation before *{{interview_deadline}}* to keep your application active and proceed to the next hiring stage.\n\n- Time required: ~15 Minutes\n- Complete anytime before deadline\n- Phone or laptop compatible',
+      body: 'Dear *{{candidate_name}}*,\n\nYour profile has been shortlisted for *{{job_title}}* at *{{company_name}}*, but your video interview is still pending.\n\nPlease complete this 15-minute evaluation at your convenience to keep your application active and proceed to the next hiring stage.\n\n- Time required: ~15 Minutes\n- Complete anytime at your convenience\n- Phone or laptop compatible',
       showJobDetails: true,
       jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
       jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
       showCredentials: true,
       showRecruiterContact: true,
-      instructions: '*Instructions:*\n• Use a phone or laptop with working camera & mic.\n• Complete before: *{{interview_deadline}}*',
+      instructions: '*Instructions:*\n• Use a phone or laptop with working camera & mic.\n• Complete at your convenience',
       signoff: 'Best regards,\n*{{company_name}} Recruitment Team*'
     }
   },
   {
     id: 'finalDeadlineReminder',
-    label: 'Final Deadline Reminder (Urgent)',
-    description: 'Urgent reminder before candidate access code and link expires',
+    label: 'Final Reminder (Urgent)',
+    description: 'Urgent reminder regarding pending interview submission',
     email: {
-      subject: 'Final Reminder: Interview Slot Closing Soon for {{job_title}} | {{company_name}}',
-      badgeText: 'FINAL REMINDER - CLOSING SOON',
+      subject: 'Final Reminder: Interview Pending for {{job_title}} | {{company_name}}',
+      badgeText: 'FINAL REMINDER - INTERVIEW PENDING',
       headline: 'Dear {{candidate_name}},',
-      body: 'This is our final reminder regarding your application for the <strong>{{job_title}}</strong> position at <strong>{{company_name}}</strong>.<br/><br/>Your interview access code will expire on <strong>{{interview_deadline}}</strong>. If you are interested in moving forward, please complete your assessment before the cutoff time.<br/><br/>- <strong>Completion Cutoff:</strong> {{interview_deadline}}<br/>- <strong>Status:</strong> Shortlisted Candidate',
+      body: 'This is a final reminder regarding your application for the <strong>{{job_title}}</strong> position at <strong>{{company_name}}</strong>.<br/><br/>If you are interested in moving forward, please complete your online assessment at your earliest convenience.<br/><br/>- <strong>Status:</strong> Shortlisted Candidate',
       showJobDetails: true,
       jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
       jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
       showCredentialsBox: true,
-      ctaButtonText: 'Launch Final Assessment ->',
+      ctaButtonText: 'Launch Assessment ->',
       accentColor: '#0f172a',
       instructions: [
-        'Complete assessment before the cutoff deadline.',
+        'Complete assessment at your earliest convenience.',
         'Takes approximately 15 minutes.'
       ],
       customFooter: 'Need Technical Assistance? Call Dsource Support: {{support_phone}}'
     },
     whatsapp: {
-      headline: '*FINAL REMINDER: INTERVIEW CLOSING SOON*',
-      body: 'Dear *{{candidate_name}}*,\n\nFinal reminder regarding your application for *{{job_title}}* at *{{company_name}}*.\n\nYour online interview link will expire on *{{interview_deadline}}*. Please complete your assessment today to avoid missing out on this position.\n\n- Cutoff: *{{interview_deadline}}*\n- Duration: 15-20 minutes',
+      headline: '*FINAL REMINDER: INTERVIEW PENDING*',
+      body: 'Dear *{{candidate_name}}*,\n\nFinal reminder regarding your application for *{{job_title}}* at *{{company_name}}*.\n\nPlease complete your assessment at your convenience to proceed to the next round.\n\n- Duration: 15-20 minutes\n- Available 24x7',
       showJobDetails: true,
       jobDetailsFields: DEFAULT_JOB_DETAILS_FIELDS,
       jobDetailItems: DEFAULT_JOB_DETAILS_ITEMS,
       showCredentials: true,
       showRecruiterContact: true,
-      instructions: '*Instructions:*\n• Complete before: *{{interview_deadline}}*',
+      instructions: '*Instructions:*\n• Complete at your convenience from phone or laptop',
       signoff: 'Best regards,\n*{{company_name}} Recruitment Team*'
     }
   },
@@ -288,79 +285,19 @@ export const DEFAULT_RECRUITER_TEMPLATES: RecruiterTemplates = {
  * Replaces dynamic placeholders like {{candidate_name}} with actual context values.
  */
 export function formatDeadlineDisplay(deadlineInput?: any): string {
-  if (!deadlineInput) {
-    const d = new Date();
-    d.setDate(d.getDate() + 5);
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    return `${day}/${month}/${year}`;
-  }
-
-  const str = String(deadlineInput).trim();
-
-  // If already in DD/MM/YYYY format
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) {
-    return str;
-  }
-
-  // If in YYYY-MM-DD format
-  const ymdMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (ymdMatch) {
-    const [, y, m, d] = ymdMatch;
-    return `${d}/${m}/${y}`;
-  }
-
-  // Try parsing Date / Timestamp / Milliseconds
-  let millis = 0;
-  if (deadlineInput instanceof Date) {
-    millis = deadlineInput.getTime();
-  } else if (typeof deadlineInput === 'object' && typeof deadlineInput.toMillis === 'function') {
-    millis = deadlineInput.toMillis();
-  } else if (typeof deadlineInput === 'object' && typeof deadlineInput.toDate === 'function') {
-    millis = deadlineInput.toDate().getTime();
-  } else if (typeof deadlineInput === 'object' && typeof deadlineInput.seconds === 'number') {
-    millis = deadlineInput.seconds * 1000;
-  } else {
-    const parsed = Date.parse(str);
-    if (!isNaN(parsed)) millis = parsed;
-  }
-
-  if (millis > 0) {
-    const d = new Date(millis);
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = d.getFullYear();
-    return `${day}/${month}/${year}`;
-  }
-
-  // If input string is custom non-empty text, return it
-  if (str && !str.toLowerCase().includes('48 hours')) {
-    return str;
-  }
-
-  // Default +5 days cutoff date
-  const d = new Date();
-  d.setDate(d.getDate() + 5);
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = d.getFullYear();
-  return `${day}/${month}/${year}`;
+  return '';
 }
 
 export function renderTemplateText(templateText: string, context: Record<string, string>): string {
   if (!templateText) return '';
   let result = templateText;
 
-  const rawDeadline = context.interview_deadline || context.deadline || context.deadlineDate || context.applyDeadline;
-  const formattedDeadline = formatDeadlineDisplay(rawDeadline);
-  
   const cleanContext: Record<string, string> = {
     ...context,
-    interview_deadline: formattedDeadline,
-    deadline: formattedDeadline,
-    deadlineDate: formattedDeadline,
-    deadline_date: formattedDeadline
+    interview_deadline: '',
+    deadline: '',
+    deadlineDate: '',
+    deadline_date: ''
   };
   
   // Replace standard placeholders
@@ -370,7 +307,7 @@ export function renderTemplateText(templateText: string, context: Record<string,
     result = result.replace(pattern, value);
   });
 
-  // Provide sensible fallbacks for un-replaced placeholders & replace legacy hardcoded text
+  // Provide sensible fallbacks for un-replaced placeholders & strip legacy deadline mentions
   result = result
     .replace(/\{\{candidate_name\}\}/gi, cleanContext.candidate_name || 'Candidate')
     .replace(/\{\{candidate_email\}\}/gi, cleanContext.candidate_email || '')
@@ -380,9 +317,14 @@ export function renderTemplateText(templateText: string, context: Record<string,
     .replace(/\{\{interview_link\}\}/gi, cleanContext.interview_link || '#')
     .replace(/\{\{access_code\}\}/gi, cleanContext.access_code || cleanContext.interview_code || 'DX-8921')
     .replace(/\{\{interview_code\}\}/gi, cleanContext.interview_code || cleanContext.access_code || 'DX-8921')
-    .replace(/\{\{interview_deadline\}\}/gi, formattedDeadline)
-    .replace(/\{\{deadline\}\}/gi, formattedDeadline)
-    .replace(/Within 48 Hours/gi, formattedDeadline)
+    .replace(/\{\{interview_deadline\}\}/gi, '')
+    .replace(/\{\{deadline\}\}/gi, '')
+    .replace(/Within 48 Hours/gi, '')
+    .replace(/\*Completion Deadline:\* */gi, '')
+    .replace(/Completion Deadline: */gi, '')
+    .replace(/• Complete before:[^\n]*\n?/gi, '')
+    .replace(/Complete before: *\n?/gi, '')
+    .replace(/before the deadline/gi, 'at your convenience')
     .replace(/\{\{location\}\}/gi, cleanContext.location || 'As specified')
     .replace(/\{\{qualification\}\}/gi, cleanContext.qualification || 'As per requirement')
     .replace(/\{\{experience\}\}/gi, cleanContext.experience || 'As per requirement')

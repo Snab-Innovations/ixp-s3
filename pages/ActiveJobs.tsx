@@ -904,9 +904,9 @@ const ActiveJobsPage: React.FC = () => {
                   </div>
 
                   <div className={`flex items-center justify-between gap-2 pt-3 mt-3 border-t relative z-10 ${isDark ? 'border-white/[0.06]' : 'border-slate-200'}`}>
-                    <div className={`flex items-center gap-1 text-[10.5px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      <Calendar size={12} className="shrink-0" />
-                      <span className="truncate">Closes: <strong className={isDark ? 'text-slate-300' : 'text-slate-700'}>{deadlineStr}</strong></span>
+                    <div className={`flex items-center gap-1.5 text-[10.5px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">Actively Hiring</span>
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -1056,9 +1056,10 @@ const ActiveJobsPage: React.FC = () => {
             )}
 
             <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t ${isDark ? 'border-white/[0.1]' : 'border-slate-200'}`}>
-              <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                Deadline: <strong className={isDark ? 'text-white' : 'text-slate-900'}>{formatDeadlineDate(selectedJobModal.deadline)}</strong>
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Open for Candidates</span>
+              </div>
 
               <button
                 onClick={() => { setSelectedJobModal(null); navigate(`/interview/${selectedJobModal.id}`); }}

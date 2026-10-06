@@ -520,7 +520,6 @@ export function buildWhatsAppInviteText(params: {
   options?: WhatsAppInviteOptions;
 }): string {
   const { candidateName = 'Candidate', jobTitle, interviewLink, accessCode, isReminder = false, options } = params;
-  const deadline = formatDeadlineDisplay(options?.deadlineDate || options?.deadline || (options as any)?.interviewDeadline || (options as any)?.applyDeadline);
 
   const context: Record<string, string> = {
     candidate_name: candidateName,
@@ -528,8 +527,8 @@ export function buildWhatsAppInviteText(params: {
     company_name: 'Dsource',
     interview_link: interviewLink,
     access_code: accessCode,
-    interview_deadline: deadline,
-    deadline: deadline,
+    interview_deadline: '',
+    deadline: '',
     location: options?.location || 'As specified in Job Description',
     qualification: options?.qualification || options?.education || 'As per Job Description',
     experience: formatExperienceDisplay(options),
@@ -545,13 +544,13 @@ export function buildWhatsAppInviteText(params: {
 
   const headline = custom?.headline
     ? renderTemplateText(custom.headline, context)
-    : (isReminder ? `*DEADLINE REMINDER*` : `*CONGRATULATIONS! YOU ARE SHORTLISTED*`);
+    : (isReminder ? `*INTERVIEW REMINDER*` : `*CONGRATULATIONS! YOU ARE SHORTLISTED*`);
 
   const body = custom?.body
     ? renderTemplateText(custom.body, context)
     : (isReminder
-        ? `Dear *${candidateName}*,\n\nFriendly reminder: You have been *shortlisted for ${jobTitle}* at *Dsource*, but your AI Video Interview is still pending!\n\n*Completion Deadline:* *${deadline}*\n\nPlease complete your interview before the deadline to keep your application active.`
-        : `Dear *${candidateName}*,\n\nGreat news! Your profile has been *shortlisted for this interview round* for the *${jobTitle}* role at *Dsource*.\n\nPlease complete your 15-minute AI Video Interview from your phone or laptop at your convenience.\n\n*Completion Deadline:* *${deadline}*\n- No HR scheduling needed\n- Complete anytime, anywhere`);
+        ? `Dear *${candidateName}*,\n\nFriendly reminder: You have been *shortlisted for ${jobTitle}* at *Dsource*, but your AI Video Interview is still pending!\n\nPlease complete your interview at your convenience to keep your application active.`
+        : `Dear *${candidateName}*,\n\nGreat news! Your profile has been *shortlisted for this interview round* for the *${jobTitle}* role at *Dsource*.\n\nPlease complete your 15-minute AI Video Interview from your phone or laptop at your convenience.\n\n- No HR scheduling needed\n- Complete anytime, anywhere`);
 
   const showJobDetails = custom ? custom.showJobDetails !== false : true;
   const showCredentials = custom ? custom.showCredentials !== false : true;

@@ -1339,7 +1339,6 @@ const RecruiterTemplatesPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
                 <div><span className="font-semibold text-gray-500 dark:text-gray-400">Candidate:</span> {SAMPLE_CONTEXT.candidate_name}</div>
                 <div><span className="font-semibold text-gray-500 dark:text-gray-400">Job Title:</span> {SAMPLE_CONTEXT.job_title}</div>
-                <div><span className="font-semibold text-gray-500 dark:text-gray-400">Deadline:</span> {SAMPLE_CONTEXT.interview_deadline}</div>
                 <div><span className="font-semibold text-gray-500 dark:text-gray-400">Access Code:</span> {SAMPLE_CONTEXT.access_code}</div>
                 <div><span className="font-semibold text-gray-500 dark:text-gray-400">Location:</span> {SAMPLE_CONTEXT.location}</div>
                 <div><span className="font-semibold text-gray-500 dark:text-gray-400">Qualification:</span> {SAMPLE_CONTEXT.qualification}</div>
