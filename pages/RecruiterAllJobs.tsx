@@ -133,6 +133,15 @@ const formatSkillsList = (skillsRaw: string[] | string | undefined): string[] =>
   return skillsRaw.split(',').map(s => s.trim()).filter(Boolean);
 };
 
+const formatExperienceDisplay = (exp: any): string => {
+  if (exp === undefined || exp === null || exp === '') return 'Not specified';
+  const str = String(exp).trim();
+  if (/yrs?|years?/i.test(str)) {
+    return str;
+  }
+  return `${str} yrs`;
+};
+
 import { calculateJobMatchScore, CandidateMatchProfile } from '../services/jobMatchService';
 
 function getAISuggestedCandidatesForJob(job: any, candidates: any[], alreadyInvitedEmails: string[]) {
@@ -284,6 +293,7 @@ const RecruiterAllJobs: React.FC = () => {
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [invitingJob, setInvitingJob] = useState<AllJobItem | null>(null);
   const [togglingJobId, setTogglingJobId] = useState<string | null>(null);
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
 
   // Invite candidate state
   const [inviteMode, setInviteMode] = useState<'single' | 'bulk' | 'invited' | 'ai_suggest'>('single');
@@ -962,6 +972,76 @@ const RecruiterAllJobs: React.FC = () => {
     };
   }, [userUid, userRole, userTeamId, userParentRecruiterId]);
 
+  // Real-time tracking of candidate applications count per job
+  const [appliedCountMap, setAppliedCountMap] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let applicationsDocs: any[] = [];
+    let responsesDocs: any[] = [];
+
+    const recomputeAppliedMap = () => {
+      const map: Record<string, Set<string>> = {};
+
+      const addCandidateToJob = (key: string | undefined | null, candidateIdentifier: string) => {
+        if (!key || !candidateIdentifier) return;
+        const normalizedKey = String(key).trim();
+        if (!map[normalizedKey]) {
+          map[normalizedKey] = new Set<string>();
+        }
+        map[normalizedKey].add(candidateIdentifier);
+      };
+
+      // 1. Ingest applications from candidateApplications collection
+      applicationsDocs.forEach((app) => {
+        const candidateId = (app.candidateEmail || app.email || app.candidatePhone || app.phone || app.id || '').toLowerCase().trim();
+        if (!candidateId) return;
+
+        if (app.interviewId) addCandidateToJob(app.interviewId, candidateId);
+        if (app.jobId) addCandidateToJob(app.jobId, candidateId);
+        if (app.accessCode) addCandidateToJob(app.accessCode, candidateId);
+        if (app.jobNo) addCandidateToJob(String(app.jobNo), candidateId);
+      });
+
+      // 2. Ingest responses from candidateResponses collection
+      responsesDocs.forEach((resp) => {
+        const candidateId = (resp.candidateEmail || resp.email || resp.candidatePhone || resp.phone || resp.id || '').toLowerCase().trim();
+        if (!candidateId) return;
+
+        if (resp.interviewId) addCandidateToJob(resp.interviewId, candidateId);
+        if (resp.jobId) addCandidateToJob(resp.jobId, candidateId);
+        if (resp.accessCode) addCandidateToJob(resp.accessCode, candidateId);
+        if (resp.jobNo) addCandidateToJob(String(resp.jobNo), candidateId);
+      });
+
+      const resultMap: Record<string, number> = {};
+      Object.keys(map).forEach((k) => {
+        resultMap[k] = map[k].size;
+      });
+      setAppliedCountMap(resultMap);
+    };
+
+    const appsQ = query(collection(db, 'candidateApplications'));
+    const unsubApps = onSnapshot(appsQ, (snap) => {
+      applicationsDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      recomputeAppliedMap();
+    }, (err) => {
+      console.warn('candidateApplications count listener error:', err);
+    });
+
+    const respQ = query(collection(db, 'candidateResponses'));
+    const unsubResp = onSnapshot(respQ, (snap) => {
+      responsesDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      recomputeAppliedMap();
+    }, (err) => {
+      console.warn('candidateResponses count listener error:', err);
+    });
+
+    return () => {
+      unsubApps();
+      unsubResp();
+    };
+  }, []);
+
   const categoriesList = useMemo(() => {
     const set = new Set<string>();
     jobs.forEach(j => {
@@ -1023,6 +1103,41 @@ const RecruiterAllJobs: React.FC = () => {
     });
   }, [jobs, searchQuery, selectedCategory, selectedEmploymentType, statusFilter]);
 
+  const getAppliedCount = (job: AllJobItem): number => {
+    const keys = [
+      job.id,
+      job.accessCode,
+      job.jobNo ? String(job.jobNo) : null
+    ].filter(Boolean) as string[];
+
+    let maxFromMap = 0;
+    for (const k of keys) {
+      if (appliedCountMap[k] && appliedCountMap[k] > maxFromMap) {
+        maxFromMap = appliedCountMap[k];
+      }
+    }
+
+    const candData = Array.isArray((job as any).candidateData) ? (job as any).candidateData : [];
+    const candDataApplied = candData.filter((c: any) =>
+      c && (c.appliedAt || c.status === 'applied' || c.status === 'interested' || c.isApplicant || c.source?.includes('apply'))
+    ).length;
+
+    const directCount = Number(
+      (job as any).appliedCount ||
+      (job as any).applicationsCount ||
+      (job as any).totalApplications ||
+      (job as any).applicantsCount ||
+      (Array.isArray((job as any).candidateApplications) ? (job as any).candidateApplications.length : 0) ||
+      0
+    );
+
+    return Math.max(maxFromMap, candDataApplied, directCount);
+  };
+
+  const totalAppliedCount = useMemo(() => {
+    return jobs.reduce((acc, j) => acc + getAppliedCount(j), 0);
+  }, [jobs, appliedCountMap]);
+
   const canUserDeleteJob = (): boolean => {
     if (!user) return false;
     const role = (userProfile?.role || '').toLowerCase();
@@ -1030,148 +1145,177 @@ const RecruiterAllJobs: React.FC = () => {
     return true;
   };
 
-  const handleDeleteJob = (jobId: string, title: string) => {
+  const handleDeleteJob = (jobId: string, title: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (!canUserDeleteJob()) {
       messageBox.showError("You do not have permission to delete jobs.");
       return;
     }
 
-    messageBox.showConfirm(`Are you sure you want to delete "${title}"?`, async () => {
-      try {
-        const targetJob = jobs.find(j => j.id === jobId);
-        const codeToDelete = targetJob?.accessCode || targetJob?.jobNo || '';
+    messageBox.showConfirm(
+      `Are you sure you want to delete "${title}"? This will permanently remove the job and its interview configurations.`,
+      async () => {
+        setDeletingJobId(jobId);
+        try {
+          const targetJob = jobs.find(j => j.id === jobId);
+          const codeToDelete = targetJob?.accessCode || targetJob?.jobNo || '';
 
-        // 1. Delete by doc ID from both 'jobs' and 'interviews'
-        await Promise.all([
-          deleteDoc(doc(db, 'jobs', jobId)).catch(() => {}),
-          deleteDoc(doc(db, 'interviews', jobId)).catch(() => {})
-        ]);
+          // Optimistic local state update
+          setJobs(prev => prev.filter(j => j.id !== jobId));
 
-        // 2. Cleanup matching docs by jobNo / accessCode across 'jobs' and 'interviews'
-        if (codeToDelete) {
-          try {
-            const [jobsSnap, interviewsSnap] = await Promise.all([
-              getDocs(query(collection(db, 'jobs'), where('jobNo', '==', codeToDelete))),
-              getDocs(query(collection(db, 'interviews'), where('accessCode', '==', codeToDelete)))
-            ]);
-            await Promise.all([
-              ...jobsSnap.docs.map(d => deleteDoc(doc(db, 'jobs', d.id)).catch(() => {})),
-              ...interviewsSnap.docs.map(d => deleteDoc(doc(db, 'interviews', d.id)).catch(() => {}))
-            ]);
-          } catch (e) {
-            console.warn("Secondary cleanup by code warning:", e);
+          // 1. Delete by doc ID from both 'jobs' and 'interviews'
+          await Promise.all([
+            deleteDoc(doc(db, 'jobs', jobId)).catch(() => {}),
+            deleteDoc(doc(db, 'interviews', jobId)).catch(() => {})
+          ]);
+
+          // 2. Cleanup matching docs by jobNo / accessCode across 'jobs' and 'interviews'
+          if (codeToDelete) {
+            try {
+              const [jobsSnap, interviewsSnap] = await Promise.all([
+                getDocs(query(collection(db, 'jobs'), where('jobNo', '==', codeToDelete))),
+                getDocs(query(collection(db, 'interviews'), where('accessCode', '==', codeToDelete)))
+              ]);
+              await Promise.all([
+                ...jobsSnap.docs.map(d => deleteDoc(doc(db, 'jobs', d.id)).catch(() => {})),
+                ...interviewsSnap.docs.map(d => deleteDoc(doc(db, 'interviews', d.id)).catch(() => {}))
+              ]);
+            } catch (e) {
+              console.warn("Secondary cleanup by code warning:", e);
+            }
           }
-        }
 
-        messageBox.showSuccess(`Job "${title}" deleted successfully.`);
-      } catch (err) {
-        console.error("Failed to delete job", err);
-        messageBox.showError("Failed to delete job. Please try again.");
+          // 3. Sync delete with REST API
+          try {
+            await fetch(`/api/jobs?id=${encodeURIComponent(jobId)}`, {
+              method: 'DELETE'
+            });
+          } catch (apiErr) {
+            console.warn("API delete note:", apiErr);
+          }
+
+          messageBox.showSuccess(`Job "${title}" deleted successfully.`);
+        } catch (err) {
+          console.error("Failed to delete job", err);
+          messageBox.showError("Failed to delete job. Please try again.");
+        } finally {
+          setDeletingJobId(null);
+        }
       }
-    });
+    );
   };
 
-  const handleToggleJobStatus = async (job: AllJobItem, e?: React.MouseEvent) => {
+  const handleToggleJobStatus = (job: AllJobItem, e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
     }
     const currentIsActive = isJobStatusActive(job);
     const newStatus = currentIsActive ? 'Inactive' : 'Active';
     const newIsActive = !currentIsActive;
+    const actionVerb = newIsActive ? 'activate' : 'deactivate';
     const actionLabel = newIsActive ? 'activated' : 'deactivated';
 
-    setTogglingJobId(job.id);
+    messageBox.showConfirm(
+      `Are you sure you want to ${actionVerb} "${job.title}"? ${
+        newIsActive
+          ? 'This will make the job active and visible for candidates to take interviews.'
+          : 'This will deactivate the job and candidates will no longer be able to access interviews.'
+      }`,
+      async () => {
+        setTogglingJobId(job.id);
 
-    // 1. Optimistic UI update
-    setJobs(prevJobs =>
-      prevJobs.map(j => {
-        if (j.id === job.id || (job.jobNo && j.jobNo === job.jobNo)) {
-          return {
-            ...j,
-            status: newStatus,
-            isActive: newIsActive
-          };
-        }
-        return j;
-      })
-    );
+        // 1. Optimistic UI update
+        setJobs(prevJobs =>
+          prevJobs.map(j => {
+            if (j.id === job.id || (job.jobNo && j.jobNo === job.jobNo)) {
+              return {
+                ...j,
+                status: newStatus,
+                isActive: newIsActive
+              };
+            }
+            return j;
+          })
+        );
 
-    try {
-      // 2. Sync to Firestore in both collections ('jobs' and 'interviews')
-      const updateData = {
-        status: newStatus,
-        isActive: newIsActive,
-        updatedAt: new Date().toISOString()
-      };
-
-      await Promise.all([
-        updateDoc(doc(db, 'jobs', job.id), updateData).catch(() => {}),
-        updateDoc(doc(db, 'interviews', job.id), updateData).catch(() => {})
-      ]);
-
-      const searchCode = job.jobNo || job.accessCode;
-      if (searchCode && searchCode !== job.id) {
         try {
-          const [jobsSnap, interviewsSnap] = await Promise.all([
-            getDocs(query(collection(db, 'jobs'), where('jobNo', '==', searchCode))).catch(() => null),
-            getDocs(query(collection(db, 'interviews'), where('accessCode', '==', searchCode))).catch(() => null)
-          ]);
-          const updatePromises: Promise<any>[] = [];
-          if (jobsSnap) {
-            jobsSnap.docs.forEach(d => {
-              if (d.id !== job.id) updatePromises.push(updateDoc(d.ref, updateData).catch(() => {}));
-            });
-          }
-          if (interviewsSnap) {
-            interviewsSnap.docs.forEach(d => {
-              if (d.id !== job.id) updatePromises.push(updateDoc(d.ref, updateData).catch(() => {}));
-            });
-          }
-          if (updatePromises.length > 0) {
-            await Promise.all(updatePromises);
-          }
-        } catch (subErr) {
-          console.warn('[handleToggleJobStatus] Secondary sync warning:', subErr);
-        }
-      }
-
-      // 3. Make sure it also syncs with the API endpoint (/api/jobs)
-      try {
-        await fetch('/api/jobs', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: job.id,
-            jobNo: job.jobNo || job.id,
+          // 2. Sync to Firestore in both collections ('jobs' and 'interviews')
+          const updateData = {
             status: newStatus,
             isActive: newIsActive,
-            action: newIsActive ? 'activate' : 'deactivate'
-          })
-        });
-      } catch (apiErr) {
-        console.warn('[handleToggleJobStatus] API sync note:', apiErr);
-      }
+            updatedAt: new Date().toISOString()
+          };
 
-      messageBox.showSuccess(`Job "${job.title}" has been successfully ${actionLabel}!`);
-    } catch (err: any) {
-      console.error('[handleToggleJobStatus] Error toggling status:', err);
-      // Revert optimistic update
-      setJobs(prevJobs =>
-        prevJobs.map(j => {
-          if (j.id === job.id || (job.jobNo && j.jobNo === job.jobNo)) {
-            return {
-              ...j,
-              status: currentIsActive ? 'Active' : 'Inactive',
-              isActive: currentIsActive
-            };
+          await Promise.all([
+            updateDoc(doc(db, 'jobs', job.id), updateData).catch(() => {}),
+            updateDoc(doc(db, 'interviews', job.id), updateData).catch(() => {})
+          ]);
+
+          const searchCode = job.jobNo || job.accessCode;
+          if (searchCode && searchCode !== job.id) {
+            try {
+              const [jobsSnap, interviewsSnap] = await Promise.all([
+                getDocs(query(collection(db, 'jobs'), where('jobNo', '==', searchCode))).catch(() => null),
+                getDocs(query(collection(db, 'interviews'), where('accessCode', '==', searchCode))).catch(() => null)
+              ]);
+              const updatePromises: Promise<any>[] = [];
+              if (jobsSnap) {
+                jobsSnap.docs.forEach(d => {
+                  if (d.id !== job.id) updatePromises.push(updateDoc(d.ref, updateData).catch(() => {}));
+                });
+              }
+              if (interviewsSnap) {
+                interviewsSnap.docs.forEach(d => {
+                  if (d.id !== job.id) updatePromises.push(updateDoc(d.ref, updateData).catch(() => {}));
+                });
+              }
+              if (updatePromises.length > 0) {
+                await Promise.all(updatePromises);
+              }
+            } catch (subErr) {
+              console.warn('[handleToggleJobStatus] Secondary sync warning:', subErr);
+            }
           }
-          return j;
-        })
-      );
-      messageBox.showError(`Failed to update job status: ${err?.message || 'Unknown error'}`);
-    } finally {
-      setTogglingJobId(null);
-    }
+
+          // 3. Make sure it also syncs with the API endpoint (/api/jobs)
+          try {
+            await fetch('/api/jobs', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: job.id,
+                jobNo: job.jobNo || job.id,
+                status: newStatus,
+                isActive: newIsActive,
+                action: newIsActive ? 'activate' : 'deactivate'
+              })
+            });
+          } catch (apiErr) {
+            console.warn('[handleToggleJobStatus] API sync note:', apiErr);
+          }
+
+          messageBox.showSuccess(`Job "${job.title}" has been successfully ${actionLabel}!`);
+        } catch (err: any) {
+          console.error('[handleToggleJobStatus] Error toggling status:', err);
+          // Revert optimistic update
+          setJobs(prevJobs =>
+            prevJobs.map(j => {
+              if (j.id === job.id || (job.jobNo && j.jobNo === job.jobNo)) {
+                return {
+                  ...j,
+                  status: currentIsActive ? 'Active' : 'Inactive',
+                  isActive: currentIsActive
+                };
+              }
+              return j;
+            })
+          );
+          messageBox.showError(`Failed to update job status: ${err?.message || 'Unknown error'}`);
+        } finally {
+          setTogglingJobId(null);
+        }
+      }
+    );
   };
 
   const handleAddCandidate = () => {
@@ -1578,7 +1722,7 @@ const RecruiterAllJobs: React.FC = () => {
       </section>
 
       {/* Metrics Strip */}
-      <section className="grid shrink-0 grid-cols-2 border-b border-white/[0.11] lg:grid-cols-4">
+      <section className="grid shrink-0 grid-cols-2 border-b border-white/[0.11] sm:grid-cols-3 lg:grid-cols-5">
         <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
           <p className="geist-label uppercase text-[#6b7280]">Total Jobs</p>
           <p className="geist-metric mt-2 tabular-nums text-white">{jobs.length}</p>
@@ -1590,12 +1734,18 @@ const RecruiterAllJobs: React.FC = () => {
           </p>
         </div>
         <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
+          <p className="geist-label uppercase text-[#6b7280]">Applied Candidates</p>
+          <p className="geist-metric mt-2 tabular-nums text-blue-400">
+            {totalAppliedCount}
+          </p>
+        </div>
+        <div className="border-r border-white/[0.11] px-4 py-4 sm:px-6 lg:px-7">
           <p className="geist-label uppercase text-[#6b7280]">Invited Candidates</p>
           <p className="geist-metric mt-2 tabular-nums text-white">
             {jobs.reduce((acc, j) => acc + (j.candidateEmails?.length || 0), 0)}
           </p>
         </div>
-        <div className="px-4 py-4 sm:px-6 lg:px-7">
+        <div className="px-4 py-4 sm:px-6 lg:px-7 col-span-2 sm:col-span-1">
           <p className="geist-label uppercase text-[#6b7280]">Departments</p>
           <p className="geist-metric mt-2 tabular-nums text-white">
             {categoriesList.length > 1 ? categoriesList.length - 1 : 0}
@@ -1740,27 +1890,28 @@ const RecruiterAllJobs: React.FC = () => {
               const isJobActive = isJobStatusActive(job);
               const isExpired = !isJobActive;
               const invitedCount = job.candidateEmails?.length || 0;
+              const appliedCount = getAppliedCount(job);
 
               return (
                 <article
                   key={job.id}
                   onClick={() => navigate(`/recruiter/interview/${job.id}/overview`)}
-                  className="group rounded-[6px] border border-white/[0.11] bg-white/[0.02] p-4 transition-all hover:bg-white/[0.04] hover:border-white/[0.22] flex flex-col justify-between cursor-pointer"
+                  className="group rounded-[8px] border border-white/[0.11] bg-white/[0.02] p-4 sm:p-5 transition-all duration-200 hover:bg-white/[0.04] hover:border-white/[0.22] hover:shadow-md flex flex-col justify-between cursor-pointer"
                 >
                   <div>
                     {/* Top Row: Category & Status */}
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="geist-small inline-block rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 py-0.5 font-medium text-[#d4d4d4]">
+                    <div className="flex items-center justify-between gap-2 mb-2.5">
+                      <span className="geist-small inline-block rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2.5 py-0.5 font-medium text-[#d4d4d4] truncate max-w-[65%]">
                         {job.category || job.department || 'General'}
                       </span>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
                           onClick={(e) => handleToggleJobStatus(job, e)}
                           disabled={togglingJobId === job.id}
                           title={isJobActive ? "Click to Deactivate job" : "Click to Activate job"}
-                          className={`geist-small inline-flex items-center gap-1.5 rounded-[6px] px-2 py-0.5 font-mono text-xs transition-all duration-150 cursor-pointer ${
+                          className={`geist-small inline-flex items-center gap-1.5 rounded-[6px] px-2.5 py-0.5 font-mono text-xs transition-all duration-150 cursor-pointer ${
                             isExpired
                               ? "border border-[#3f1d1d] bg-[#180707] text-[#ff8f8f] hover:bg-[#280c0c] hover:border-rose-500/50"
                               : "border border-[#0e2f22] bg-[#071a12] text-[#83d0a3] hover:bg-[#0c3021] hover:border-emerald-500/50"
@@ -1784,50 +1935,55 @@ const RecruiterAllJobs: React.FC = () => {
                       {job.title}
                     </h2>
 
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 geist-small text-[#8f8f8f]">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 geist-small text-[#8f8f8f]">
                       {job.jobNo && (
                         <span className="font-mono text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-[11px]">
                           Job No: {job.jobNo}
                         </span>
                       )}
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-[#6b7280]" />
-                        {job.location || 'Remote'}
+                      <span className="flex items-center gap-1 truncate">
+                        <MapPin className="w-3 h-3 text-[#6b7280] shrink-0" />
+                        <span className="truncate">{job.location || 'Remote'}</span>
                       </span>
                       {job.employmentType && (
-                        <span>• {job.employmentType}</span>
+                        <span className="shrink-0">• {job.employmentType}</span>
                       )}
                     </div>
 
                     {/* Short Description */}
-                    <p className="geist-small mt-2 text-[#8f8f8f] line-clamp-2 hover:text-[#d4d4d4] transition-colors leading-relaxed">
+                    <p className="geist-small mt-2.5 text-[#8f8f8f] line-clamp-2 hover:text-[#d4d4d4] transition-colors leading-relaxed">
                       {getJobDescriptionSnippet(job.description, 160)}
                     </p>
 
-                    {/* Specifications */}
-                    <div className="mt-3 pt-2.5 border-t border-white/[0.08] grid grid-cols-2 gap-2 geist-small text-[#8f8f8f]">
-                      {job.experience !== undefined && job.experience !== '' && (
-                        <div>
-                          Exp: <span className="text-white font-medium">{job.experience} yrs</span>
-                        </div>
-                      )}
-                      {(job.salary || job.salaryRange) && (
-                        <div className="truncate">
-                          Salary: <span className="text-white font-medium">{job.salary || job.salaryRange}</span>
-                        </div>
-                      )}
-                      <div>
-                        Invited: <span className="text-white font-medium">{invitedCount} candidates</span>
+                    {/* Specifications Grid */}
+                    <div className="mt-3.5 pt-2.5 border-t border-white/[0.08] grid grid-cols-2 gap-x-3 gap-y-2 geist-small text-[#8f8f8f]">
+                      <div className="flex items-center gap-1.5 min-w-0" title={`Experience: ${formatExperienceDisplay(job.experience)}`}>
+                        <span className="text-[#6b7280] shrink-0">Exp:</span>
+                        <span className="text-white font-medium truncate">{formatExperienceDisplay(job.experience)}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 min-w-0" title={`Salary: ${job.salary || job.salaryRange || 'Not specified'}`}>
+                        <span className="text-[#6b7280] shrink-0">Salary:</span>
+                        <span className="text-white font-medium truncate">{job.salary || job.salaryRange || 'Not specified'}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 min-w-0" title={`${appliedCount} candidate${appliedCount === 1 ? '' : 's'} applied`}>
+                        <Users className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <span className="text-[#6b7280] shrink-0">Applied:</span>
+                        <span className="text-white font-semibold truncate">{appliedCount} candidate{appliedCount === 1 ? '' : 's'}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 min-w-0" title={`${invitedCount} candidate${invitedCount === 1 ? '' : 's'} invited`}>
+                        <Send className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                        <span className="text-[#6b7280] shrink-0">Invited:</span>
+                        <span className="text-white font-semibold truncate">{invitedCount} candidate{invitedCount === 1 ? '' : 's'}</span>
                       </div>
                     </div>
 
                     {/* Skills */}
                     {skillsList.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2.5">
+                      <div className="flex flex-wrap gap-1.5 mt-3">
                         {skillsList.slice(0, 3).map((skill, sIdx) => (
                           <span
                             key={sIdx}
-                            className="geist-small text-[11px] px-1.5 py-0.5 rounded-[4px] bg-white/[0.04] border border-white/[0.08] text-[#d4d4d4]"
+                            className="geist-small text-[11px] px-2 py-0.5 rounded-[4px] bg-white/[0.04] border border-white/[0.08] text-[#d4d4d4]"
                           >
                             {skill}
                           </span>
@@ -1842,14 +1998,14 @@ const RecruiterAllJobs: React.FC = () => {
                   </div>
 
                   {/* Card Actions */}
-                  <div className="mt-4 pt-3 border-t border-white/[0.08] flex items-center justify-between gap-1.5">
+                  <div className="mt-4 pt-3 border-t border-white/[0.08] flex items-center justify-between gap-2">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setInvitingJob(job);
                       }}
-                      className="geist-caption flex-1 inline-flex h-8 items-center justify-center gap-1 rounded-[6px] border border-white bg-white px-2.5 font-semibold text-black text-xs transition-colors hover:bg-[#eaeaea]"
+                      className="geist-caption flex-1 inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-white bg-white px-3 font-semibold text-black text-xs transition-colors hover:bg-[#eaeaea] shadow-sm"
                       title="Invite candidate"
                     >
                       <UserPlus className="w-3.5 h-3.5" />
@@ -1862,10 +2018,10 @@ const RecruiterAllJobs: React.FC = () => {
                         e.stopPropagation();
                         navigate(`/recruiter/interview/${job.id}/responses`);
                       }}
-                      className="geist-caption inline-flex h-8 items-center justify-center gap-1 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 font-medium text-[#d4d4d4] text-xs transition-colors hover:bg-white/[0.06] hover:text-white"
+                      className="geist-caption inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2.5 font-medium text-[#d4d4d4] text-xs transition-colors hover:bg-white/[0.06] hover:text-white"
                       title="See candidate responses"
                     >
-                      <FileText className="w-3.5 h-3.5" />
+                      <FileText className="w-3.5 h-3.5 text-[#9ca3af]" />
                       <span>Responses</span>
                     </button>
 
@@ -1875,32 +2031,25 @@ const RecruiterAllJobs: React.FC = () => {
                         e.stopPropagation();
                         setEditingJobId(job.id);
                       }}
-                      className="geist-caption inline-flex h-8 items-center justify-center gap-1 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 font-medium text-[#d4d4d4] text-xs transition-colors hover:bg-white/[0.06] hover:text-white"
+                      className="geist-caption inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2.5 font-medium text-[#d4d4d4] text-xs transition-colors hover:bg-white/[0.06] hover:text-white"
                       title="Edit job"
                     >
-                      <Edit className="w-3.5 h-3.5" />
+                      <Edit className="w-3.5 h-3.5 text-[#9ca3af]" />
                       <span>Edit</span>
                     </button>
 
                     <button
                       type="button"
-                      onClick={(e) => handleToggleJobStatus(job, e)}
-                      disabled={togglingJobId === job.id}
-                      className={`geist-caption inline-flex h-8 items-center justify-center gap-1 rounded-[6px] px-2 font-medium text-xs transition-all duration-150 ${
-                        isJobActive
-                          ? "border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 hover:border-amber-400/50"
-                          : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-400/50"
-                      } ${togglingJobId === job.id ? "opacity-60 cursor-not-allowed" : ""}`}
-                      title={isJobActive ? "Click to Deactivate job" : "Click to Activate job"}
+                      onClick={(e) => handleDeleteJob(job.id, job.title, e)}
+                      disabled={deletingJobId === job.id}
+                      className="geist-caption inline-flex h-8 w-8 items-center justify-center rounded-[6px] border border-red-500/25 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:border-red-400/50 text-xs transition-colors disabled:opacity-50 shrink-0"
+                      title="Delete job"
                     >
-                      {togglingJobId === job.id ? (
+                      {deletingJobId === job.id ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : isJobActive ? (
-                        <PowerOff className="w-3.5 h-3.5 text-amber-400" />
                       ) : (
-                        <Power className="w-3.5 h-3.5 text-emerald-400" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       )}
-                      <span>{isJobActive ? "Deactivate" : "Activate"}</span>
                     </button>
                   </div>
                 </article>
