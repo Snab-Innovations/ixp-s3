@@ -321,34 +321,78 @@ app.post('/api/jobs/update', authenticateApiKey, async (req, res) => {
   }
 
   try {
-    const recruiterUID = payload.recruiterUID || "pbbMTYxPDaf7jhc9uPEZ34CcWfz2";
-    const title = (payload.title || "").trim();
-    const description = payload.description || "";
-    const company = (payload.company || payload.companyName || "").trim();
+    let docRef = db ? db.collection('jobs').doc(String(targetId)) : null;
+    let intRef = db ? db.collection('interviews').doc(String(targetId)) : null;
+    let existing = {};
+
+    if (db) {
+      let jobSnap = await docRef.get().catch(() => null);
+      if (!jobSnap || !jobSnap.exists) {
+        const q = await db.collection('jobs').where('jobNo', '==', String(targetId)).get().catch(() => ({ empty: true }));
+        if (q && !q.empty) {
+          docRef = q.docs[0].ref;
+          intRef = db.collection('interviews').doc(q.docs[0].id);
+          existing = q.docs[0].data() || {};
+        } else {
+          const qInt = await db.collection('interviews').where('accessCode', '==', String(targetId)).get().catch(() => ({ empty: true }));
+          if (qInt && !qInt.empty) {
+            docRef = db.collection('jobs').doc(qInt.docs[0].id);
+            intRef = qInt.docs[0].ref;
+            existing = qInt.docs[0].data() || {};
+          }
+        }
+      } else {
+        existing = jobSnap.data() || {};
+      }
+    }
+
+    // Determine status (Active vs Inactive)
+    let status = existing.status || "Active";
+    if (['deactivate', 'deactive', 'inactive', 'close'].includes(String(payload.action).toLowerCase())) {
+      status = 'Inactive';
+    } else if (['activate', 'active'].includes(String(payload.action).toLowerCase())) {
+      status = 'Active';
+    } else if (payload.status !== undefined) {
+      const s = String(payload.status).trim().toLowerCase();
+      if (['inactive', 'deactive', 'deactivated', 'closed', 'expired', 'disabled', 'draft'].includes(s)) {
+        status = 'Inactive';
+      } else {
+        status = 'Active';
+      }
+    } else if (payload.isActive !== undefined) {
+      status = payload.isActive ? 'Active' : 'Inactive';
+    }
+    const isActive = status === 'Active';
+
+    const recruiterUID = payload.recruiterUID || existing.recruiterUID || "pbbMTYxPDaf7jhc9uPEZ34CcWfz2";
+    const title = payload.title !== undefined ? String(payload.title).trim() : (existing.title || "");
+    const description = payload.description !== undefined ? payload.description : (existing.description || "");
+    const company = (payload.company || payload.companyName || existing.company || existing.companyName || "").trim();
     const companyName = company;
-    const industryName = (payload.industryName || payload.sector || "").trim();
-    const roleName = (payload.roleName || payload.roleCategory || "").trim();
-    const department = payload.department || payload.category || roleName || industryName || "General";
+    const industryName = (payload.industryName || payload.sector || existing.industryName || existing.sector || "").trim();
+    const roleName = (payload.roleName || payload.roleCategory || existing.roleName || existing.roleCategory || "").trim();
+    const department = payload.department || payload.category || existing.department || existing.category || roleName || industryName || "General";
     const category = department;
-    const employmentType = payload.employmentType || "Full-time";
-    const location = (payload.location || payload.city || "").trim();
-    const city = (payload.city || "").trim();
-    const minExperience = payload.minExperience !== undefined ? Number(payload.minExperience) : 0;
-    const maxExperience = payload.maxExperience !== undefined ? Number(payload.maxExperience) : minExperience;
-    const experience = payload.experience ? String(payload.experience).trim() : (maxExperience > minExperience ? `${minExperience} - ${maxExperience} Years` : `${minExperience} Years`);
-    const salaryRange = payload.salaryRange || payload.salary || "";
+    const employmentType = payload.employmentType || existing.employmentType || "Full-time";
+    const location = (payload.location !== undefined ? payload.location : (existing.location || payload.city || existing.city || "")).trim();
+    const city = (payload.city !== undefined ? payload.city : (existing.city || location)).trim();
+    const minExperience = payload.minExperience !== undefined ? Number(payload.minExperience) : (existing.minExperience !== undefined ? Number(existing.minExperience) : 0);
+    const maxExperience = payload.maxExperience !== undefined ? Number(payload.maxExperience) : (existing.maxExperience !== undefined ? Number(existing.maxExperience) : minExperience);
+    const experience = payload.experience ? String(payload.experience).trim() : (existing.experience || (maxExperience > minExperience ? `${minExperience} - ${maxExperience} Years` : `${minExperience} Years`));
+    const salaryRange = payload.salaryRange || payload.salary || existing.salaryRange || existing.salary || "";
     const salary = salaryRange;
-    const skills = Array.isArray(payload.skills) ? payload.skills : (typeof payload.skills === 'string' ? payload.skills.split(',').map(s => s.trim()).filter(Boolean) : []);
-    const education = Array.isArray(payload.education) ? payload.education : (typeof payload.education === 'string' ? payload.education.split(',').map(e => e.trim()).filter(Boolean) : (payload.education ? [String(payload.education)] : []));
+    const skills = payload.skills !== undefined ? (Array.isArray(payload.skills) ? payload.skills : (typeof payload.skills === 'string' ? payload.skills.split(',').map(s => s.trim()).filter(Boolean) : [])) : (existing.skills || []);
+    const education = payload.education !== undefined ? (Array.isArray(payload.education) ? payload.education : (typeof payload.education === 'string' ? payload.education.split(',').map(e => e.trim()).filter(Boolean) : (payload.education ? [String(payload.education)] : []))) : (existing.education || []);
     const qualifications = Array.isArray(education) ? education.join(', ') : String(education);
-    const genderRequirement = payload.genderRequirement || payload.gender || "Any";
-    const strictGenderMatch = Boolean(payload.strictGenderMatch);
-    const jobNo = payload.jobNo ? String(payload.jobNo).trim() : String(targetId).trim();
-    const accessCode = jobNo || payload.accessCode || Math.random().toString(36).substring(2, 8).toUpperCase();
-    const status = payload.status || "Active";
-    const entryBy = payload.entryBy || payload.recruiterName || "";
+    const genderRequirement = payload.genderRequirement || payload.gender || existing.genderRequirement || existing.gender || "Any";
+    const strictGenderMatch = payload.strictGenderMatch !== undefined ? Boolean(payload.strictGenderMatch) : Boolean(existing.strictGenderMatch);
+    const jobNo = payload.jobNo ? String(payload.jobNo).trim() : (existing.jobNo || String(targetId).trim());
+    const accessCode = payload.accessCode || existing.accessCode || jobNo;
+    const entryBy = payload.entryBy || payload.recruiterName || existing.entryBy || existing.recruiterName || "";
 
     const updatedJobData = {
+      ...existing,
+      ...payload,
       title,
       description,
       company,
@@ -375,6 +419,7 @@ app.post('/api/jobs/update', authenticateApiKey, async (req, res) => {
       jobNo,
       accessCode,
       status,
+      isActive,
       entryBy,
       recruiterName: entryBy,
       recruiterUID,
@@ -383,18 +428,6 @@ app.post('/api/jobs/update', authenticateApiKey, async (req, res) => {
 
     if (!db) {
       return res.status(200).json({ success: true, message: "Job updated (MOCK MODE).", data: updatedJobData });
-    }
-
-    let docRef = db.collection('jobs').doc(String(targetId));
-    let intRef = db.collection('interviews').doc(String(targetId));
-
-    const jobSnap = await docRef.get();
-    if (!jobSnap.exists) {
-      const q = await db.collection('jobs').where('jobNo', '==', String(targetId)).get().catch(() => ({ empty: true }));
-      if (!q.empty) {
-        docRef = q.docs[0].ref;
-        intRef = db.collection('interviews').doc(q.docs[0].id);
-      }
     }
 
     await Promise.all([
@@ -411,7 +444,7 @@ app.post('/api/jobs/update', authenticateApiKey, async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Job updated successfully inside InterviewXpert!',
+      message: `Job ${status === 'Active' ? 'activated' : 'deactivated'} / updated successfully inside InterviewXpert!`,
       data: {
         id: updatedJobId,
         interviewId: updatedJobId,
@@ -423,52 +456,99 @@ app.post('/api/jobs/update', authenticateApiKey, async (req, res) => {
         company,
         location,
         status,
+        isActive,
         deadline
       }
     });
   } catch (error) {
     console.error("Error updating job via API:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Internal server error updating job.",
-      details: error.message
-    });
   }
 });
 
-app.put('/api/jobs/:id', authenticateApiKey, async (req, res) => {
-  req.body = { ...req.body, id: req.params.id };
-  const targetId = req.params.id;
+/**
+ * Helper to update job status or job details in Firestore
+ */
+async function handleJobUpdate(req, res, targetIdParam) {
+  const payload = req.body || {};
+  const targetId = targetIdParam || payload.id || payload.jobId || payload.jobNo || payload.accessCode;
+
+  if (!targetId) {
+    return res.status(400).json({ success: false, error: "Missing job ID or jobNo parameter." });
+  }
 
   try {
-    const recruiterUID = req.body.recruiterUID || "pbbMTYxPDaf7jhc9uPEZ34CcWfz2";
-    const title = (req.body.title || "").trim();
-    const description = req.body.description || "";
-    const company = (req.body.company || req.body.companyName || "").trim();
+    let docRef = db ? db.collection('jobs').doc(String(targetId)) : null;
+    let intRef = db ? db.collection('interviews').doc(String(targetId)) : null;
+    let existing = {};
+
+    if (db) {
+      let jobSnap = await docRef.get().catch(() => null);
+      if (!jobSnap || !jobSnap.exists) {
+        const q = await db.collection('jobs').where('jobNo', '==', String(targetId)).get().catch(() => ({ empty: true }));
+        if (q && !q.empty) {
+          docRef = q.docs[0].ref;
+          intRef = db.collection('interviews').doc(q.docs[0].id);
+          existing = q.docs[0].data() || {};
+        } else {
+          const qInt = await db.collection('interviews').where('accessCode', '==', String(targetId)).get().catch(() => ({ empty: true }));
+          if (qInt && !qInt.empty) {
+            docRef = db.collection('jobs').doc(qInt.docs[0].id);
+            intRef = qInt.docs[0].ref;
+            existing = qInt.docs[0].data() || {};
+          }
+        }
+      } else {
+        existing = jobSnap.data() || {};
+      }
+    }
+
+    // Determine status (Active vs Inactive)
+    let status = existing.status || "Active";
+    if (['deactivate', 'deactive', 'inactive', 'close'].includes(String(payload.action).toLowerCase())) {
+      status = 'Inactive';
+    } else if (['activate', 'active'].includes(String(payload.action).toLowerCase())) {
+      status = 'Active';
+    } else if (payload.status !== undefined) {
+      const s = String(payload.status).trim().toLowerCase();
+      if (['inactive', 'deactive', 'deactivated', 'closed', 'expired', 'disabled', 'draft'].includes(s)) {
+        status = 'Inactive';
+      } else {
+        status = 'Active';
+      }
+    } else if (payload.isActive !== undefined) {
+      status = payload.isActive ? 'Active' : 'Inactive';
+    }
+    const isActive = status === 'Active';
+
+    const recruiterUID = payload.recruiterUID || existing.recruiterUID || "pbbMTYxPDaf7jhc9uPEZ34CcWfz2";
+    const title = payload.title !== undefined ? String(payload.title).trim() : (existing.title || "");
+    const description = payload.description !== undefined ? payload.description : (existing.description || "");
+    const company = (payload.company || payload.companyName || existing.company || existing.companyName || "").trim();
     const companyName = company;
-    const industryName = (req.body.industryName || req.body.sector || "").trim();
-    const roleName = (req.body.roleName || req.body.roleCategory || "").trim();
-    const department = req.body.department || req.body.category || roleName || industryName || "General";
+    const industryName = (payload.industryName || payload.sector || existing.industryName || existing.sector || "").trim();
+    const roleName = (payload.roleName || payload.roleCategory || existing.roleName || existing.roleCategory || "").trim();
+    const department = payload.department || payload.category || existing.department || existing.category || roleName || industryName || "General";
     const category = department;
-    const employmentType = req.body.employmentType || "Full-time";
-    const location = (req.body.location || req.body.city || "").trim();
-    const city = (req.body.city || "").trim();
-    const minExperience = req.body.minExperience !== undefined ? Number(req.body.minExperience) : 0;
-    const maxExperience = req.body.maxExperience !== undefined ? Number(req.body.maxExperience) : minExperience;
-    const experience = req.body.experience ? String(req.body.experience).trim() : (maxExperience > minExperience ? `${minExperience} - ${maxExperience} Years` : `${minExperience} Years`);
-    const salaryRange = req.body.salaryRange || req.body.salary || "";
+    const employmentType = payload.employmentType || existing.employmentType || "Full-time";
+    const location = (payload.location !== undefined ? payload.location : (existing.location || payload.city || existing.city || "")).trim();
+    const city = (payload.city !== undefined ? payload.city : (existing.city || location)).trim();
+    const minExperience = payload.minExperience !== undefined ? Number(payload.minExperience) : (existing.minExperience !== undefined ? Number(existing.minExperience) : 0);
+    const maxExperience = payload.maxExperience !== undefined ? Number(payload.maxExperience) : (existing.maxExperience !== undefined ? Number(existing.maxExperience) : minExperience);
+    const experience = payload.experience ? String(payload.experience).trim() : (existing.experience || (maxExperience > minExperience ? `${minExperience} - ${maxExperience} Years` : `${minExperience} Years`));
+    const salaryRange = payload.salaryRange || payload.salary || existing.salaryRange || existing.salary || "";
     const salary = salaryRange;
-    const skills = Array.isArray(req.body.skills) ? req.body.skills : (typeof req.body.skills === 'string' ? req.body.skills.split(',').map(s => s.trim()).filter(Boolean) : []);
-    const education = Array.isArray(req.body.education) ? req.body.education : (typeof req.body.education === 'string' ? req.body.education.split(',').map(e => e.trim()).filter(Boolean) : (req.body.education ? [String(req.body.education)] : []));
+    const skills = payload.skills !== undefined ? (Array.isArray(payload.skills) ? payload.skills : (typeof payload.skills === 'string' ? payload.skills.split(',').map(s => s.trim()).filter(Boolean) : [])) : (existing.skills || []);
+    const education = payload.education !== undefined ? (Array.isArray(payload.education) ? payload.education : (typeof payload.education === 'string' ? payload.education.split(',').map(e => e.trim()).filter(Boolean) : (payload.education ? [String(payload.education)] : []))) : (existing.education || []);
     const qualifications = Array.isArray(education) ? education.join(', ') : String(education);
-    const genderRequirement = req.body.genderRequirement || req.body.gender || "Any";
-    const strictGenderMatch = Boolean(req.body.strictGenderMatch);
-    const jobNo = req.body.jobNo ? String(req.body.jobNo).trim() : String(targetId).trim();
-    const accessCode = jobNo || req.body.accessCode || Math.random().toString(36).substring(2, 8).toUpperCase();
-    const status = req.body.status || "Active";
-    const entryBy = req.body.entryBy || req.body.recruiterName || "";
+    const genderRequirement = payload.genderRequirement || payload.gender || existing.genderRequirement || existing.gender || "Any";
+    const strictGenderMatch = payload.strictGenderMatch !== undefined ? Boolean(payload.strictGenderMatch) : Boolean(existing.strictGenderMatch);
+    const jobNo = payload.jobNo ? String(payload.jobNo).trim() : (existing.jobNo || String(targetId).trim());
+    const accessCode = payload.accessCode || existing.accessCode || jobNo;
+    const entryBy = payload.entryBy || payload.recruiterName || existing.entryBy || existing.recruiterName || "";
 
     const updatedJobData = {
+      ...existing,
+      ...payload,
       title,
       description,
       company,
@@ -495,6 +575,7 @@ app.put('/api/jobs/:id', authenticateApiKey, async (req, res) => {
       jobNo,
       accessCode,
       status,
+      isActive,
       entryBy,
       recruiterName: entryBy,
       recruiterUID,
@@ -505,36 +586,47 @@ app.put('/api/jobs/:id', authenticateApiKey, async (req, res) => {
       return res.status(200).json({ success: true, message: "Job updated (MOCK MODE).", data: updatedJobData });
     }
 
-    let docRef = db.collection('jobs').doc(String(targetId));
-    let intRef = db.collection('interviews').doc(String(targetId));
-
-    const jobSnap = await docRef.get();
-    if (!jobSnap.exists) {
-      const q = await db.collection('jobs').where('jobNo', '==', String(targetId)).get().catch(() => ({ empty: true }));
-      if (!q.empty) {
-        docRef = q.docs[0].ref;
-        intRef = db.collection('interviews').doc(q.docs[0].id);
-      }
-    }
-
     await Promise.all([
       docRef.set(updatedJobData, { merge: true }),
       intRef.set(updatedJobData, { merge: true })
     ]);
 
+    const updatedJobId = String(docRef.id || targetId);
+    const updatedJobNo = jobNo || updatedJobId;
+    const origin = process.env.IX_FRONTEND_URL || 'https://dsource.interviewxpert.in';
+    const interviewLink = `${origin}/#/interview/${updatedJobId}`;
+
     return res.status(200).json({
       success: true,
-      message: `Job '${targetId}' updated successfully in Firestore.`,
-      data: updatedJobData
+      message: `Job ${status === 'Active' ? 'activated' : 'deactivated'} / updated successfully in Firestore.`,
+      data: {
+        id: updatedJobId,
+        interviewId: updatedJobId,
+        jobNo: updatedJobNo,
+        accessCode: accessCode || updatedJobNo,
+        interviewLink,
+        title,
+        recruiterUID,
+        company,
+        location,
+        status,
+        isActive
+      }
     });
   } catch (error) {
+    console.error("Error updating job via API:", error);
     return res.status(500).json({
       success: false,
       error: "Internal server error updating job.",
       details: error.message
     });
   }
-});
+}
+
+app.put('/api/jobs/:id', authenticateApiKey, (req, res) => handleJobUpdate(req, res, req.params.id));
+app.patch('/api/jobs/:id', authenticateApiKey, (req, res) => handleJobUpdate(req, res, req.params.id));
+app.patch('/api/jobs', authenticateApiKey, (req, res) => handleJobUpdate(req, res));
+app.post('/api/jobs/status', authenticateApiKey, (req, res) => handleJobUpdate(req, res));
 
 /**
  * ── DELETE JOB BY ID OR JOB NO ──

@@ -49,7 +49,10 @@ import {
   Clock,
   Send,
   Bell,
-  User
+  User,
+  Power,
+  PowerOff,
+  Loader2
 } from 'lucide-react';
 
 
@@ -280,6 +283,7 @@ const RecruiterAllJobs: React.FC = () => {
   // Modals
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const [invitingJob, setInvitingJob] = useState<AllJobItem | null>(null);
+  const [togglingJobId, setTogglingJobId] = useState<string | null>(null);
 
   // Invite candidate state
   const [inviteMode, setInviteMode] = useState<'single' | 'bulk' | 'invited' | 'ai_suggest'>('single');
@@ -1067,6 +1071,109 @@ const RecruiterAllJobs: React.FC = () => {
     });
   };
 
+  const handleToggleJobStatus = async (job: AllJobItem, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    const currentIsActive = isJobStatusActive(job);
+    const newStatus = currentIsActive ? 'Inactive' : 'Active';
+    const newIsActive = !currentIsActive;
+    const actionLabel = newIsActive ? 'activated' : 'deactivated';
+
+    setTogglingJobId(job.id);
+
+    // 1. Optimistic UI update
+    setJobs(prevJobs =>
+      prevJobs.map(j => {
+        if (j.id === job.id || (job.jobNo && j.jobNo === job.jobNo)) {
+          return {
+            ...j,
+            status: newStatus,
+            isActive: newIsActive
+          };
+        }
+        return j;
+      })
+    );
+
+    try {
+      // 2. Sync to Firestore in both collections ('jobs' and 'interviews')
+      const updateData = {
+        status: newStatus,
+        isActive: newIsActive,
+        updatedAt: new Date().toISOString()
+      };
+
+      await Promise.all([
+        updateDoc(doc(db, 'jobs', job.id), updateData).catch(() => {}),
+        updateDoc(doc(db, 'interviews', job.id), updateData).catch(() => {})
+      ]);
+
+      const searchCode = job.jobNo || job.accessCode;
+      if (searchCode && searchCode !== job.id) {
+        try {
+          const [jobsSnap, interviewsSnap] = await Promise.all([
+            getDocs(query(collection(db, 'jobs'), where('jobNo', '==', searchCode))).catch(() => null),
+            getDocs(query(collection(db, 'interviews'), where('accessCode', '==', searchCode))).catch(() => null)
+          ]);
+          const updatePromises: Promise<any>[] = [];
+          if (jobsSnap) {
+            jobsSnap.docs.forEach(d => {
+              if (d.id !== job.id) updatePromises.push(updateDoc(d.ref, updateData).catch(() => {}));
+            });
+          }
+          if (interviewsSnap) {
+            interviewsSnap.docs.forEach(d => {
+              if (d.id !== job.id) updatePromises.push(updateDoc(d.ref, updateData).catch(() => {}));
+            });
+          }
+          if (updatePromises.length > 0) {
+            await Promise.all(updatePromises);
+          }
+        } catch (subErr) {
+          console.warn('[handleToggleJobStatus] Secondary sync warning:', subErr);
+        }
+      }
+
+      // 3. Make sure it also syncs with the API endpoint (/api/jobs)
+      try {
+        await fetch('/api/jobs', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: job.id,
+            jobNo: job.jobNo || job.id,
+            status: newStatus,
+            isActive: newIsActive,
+            action: newIsActive ? 'activate' : 'deactivate'
+          })
+        });
+      } catch (apiErr) {
+        console.warn('[handleToggleJobStatus] API sync note:', apiErr);
+      }
+
+      messageBox.showSuccess(`Job "${job.title}" has been successfully ${actionLabel}!`);
+    } catch (err: any) {
+      console.error('[handleToggleJobStatus] Error toggling status:', err);
+      // Revert optimistic update
+      setJobs(prevJobs =>
+        prevJobs.map(j => {
+          if (j.id === job.id || (job.jobNo && j.jobNo === job.jobNo)) {
+            return {
+              ...j,
+              status: currentIsActive ? 'Active' : 'Inactive',
+              isActive: currentIsActive
+            };
+          }
+          return j;
+        })
+      );
+      messageBox.showError(`Failed to update job status: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setTogglingJobId(null);
+    }
+  };
+
   const handleAddCandidate = () => {
     const trimmedName = currentSingleName.trim();
     const trimmedEmail = currentSingleEmail.trim().toLowerCase();
@@ -1535,7 +1642,7 @@ const RecruiterAllJobs: React.FC = () => {
                       : 'text-[#6b7280] hover:text-[#d4d4d4]'
                   }`}
                 >
-                  {status}
+                  {status === 'Expired' ? 'Inactive' : status}
                 </button>
               ))}
             </div>
@@ -1648,17 +1755,24 @@ const RecruiterAllJobs: React.FC = () => {
                       </span>
 
                       <div className="flex items-center gap-1.5">
-                        {isExpired ? (
-                          <span className="geist-small inline-flex items-center gap-1 rounded-[6px] border border-[#3f1d1d] bg-[#180707] px-2 py-0.5 font-mono text-[#ff8f8f]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[#ff6b6b]" />
-                            Inactive
-                          </span>
-                        ) : (
-                          <span className="geist-small inline-flex items-center gap-1 rounded-[6px] border border-[#0e2f22] bg-[#071a12] px-2 py-0.5 font-mono text-[#83d0a3]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[#50e3c2]" />
-                            Active
-                          </span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => handleToggleJobStatus(job, e)}
+                          disabled={togglingJobId === job.id}
+                          title={isJobActive ? "Click to Deactivate job" : "Click to Activate job"}
+                          className={`geist-small inline-flex items-center gap-1.5 rounded-[6px] px-2 py-0.5 font-mono text-xs transition-all duration-150 cursor-pointer ${
+                            isExpired
+                              ? "border border-[#3f1d1d] bg-[#180707] text-[#ff8f8f] hover:bg-[#280c0c] hover:border-rose-500/50"
+                              : "border border-[#0e2f22] bg-[#071a12] text-[#83d0a3] hover:bg-[#0c3021] hover:border-emerald-500/50"
+                          } ${togglingJobId === job.id ? "opacity-60 cursor-not-allowed" : ""}`}
+                        >
+                          {togglingJobId === job.id ? (
+                            <Loader2 className="h-2.5 w-2.5 animate-spin text-current" />
+                          ) : (
+                            <span className={`h-1.5 w-1.5 rounded-full ${isJobActive ? 'bg-[#50e3c2] animate-pulse' : 'bg-[#ff6b6b]'}`} />
+                          )}
+                          <span>{isJobActive ? 'Active' : 'Inactive'}</span>
+                        </button>
                       </div>
                     </div>
 
@@ -1728,18 +1842,18 @@ const RecruiterAllJobs: React.FC = () => {
                   </div>
 
                   {/* Card Actions */}
-                  <div className="mt-4 pt-3 border-t border-white/[0.08] flex items-center justify-between gap-2">
+                  <div className="mt-4 pt-3 border-t border-white/[0.08] flex items-center justify-between gap-1.5">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setInvitingJob(job);
                       }}
-                      className="geist-caption flex-1 inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-white bg-white px-3 font-semibold text-black transition-colors hover:bg-[#eaeaea]"
+                      className="geist-caption flex-1 inline-flex h-8 items-center justify-center gap-1 rounded-[6px] border border-white bg-white px-2.5 font-semibold text-black text-xs transition-colors hover:bg-[#eaeaea]"
                       title="Invite candidate"
                     >
                       <UserPlus className="w-3.5 h-3.5" />
-                      <span>Invite Candidate</span>
+                      <span className="truncate">Invite</span>
                     </button>
 
                     <button
@@ -1748,7 +1862,7 @@ const RecruiterAllJobs: React.FC = () => {
                         e.stopPropagation();
                         navigate(`/recruiter/interview/${job.id}/responses`);
                       }}
-                      className="geist-caption inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2.5 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
+                      className="geist-caption inline-flex h-8 items-center justify-center gap-1 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 font-medium text-[#d4d4d4] text-xs transition-colors hover:bg-white/[0.06] hover:text-white"
                       title="See candidate responses"
                     >
                       <FileText className="w-3.5 h-3.5" />
@@ -1761,11 +1875,32 @@ const RecruiterAllJobs: React.FC = () => {
                         e.stopPropagation();
                         setEditingJobId(job.id);
                       }}
-                      className="geist-caption inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2.5 font-medium text-[#d4d4d4] transition-colors hover:bg-white/[0.06] hover:text-white"
+                      className="geist-caption inline-flex h-8 items-center justify-center gap-1 rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-2 font-medium text-[#d4d4d4] text-xs transition-colors hover:bg-white/[0.06] hover:text-white"
                       title="Edit job"
                     >
                       <Edit className="w-3.5 h-3.5" />
                       <span>Edit</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => handleToggleJobStatus(job, e)}
+                      disabled={togglingJobId === job.id}
+                      className={`geist-caption inline-flex h-8 items-center justify-center gap-1 rounded-[6px] px-2 font-medium text-xs transition-all duration-150 ${
+                        isJobActive
+                          ? "border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 hover:border-amber-400/50"
+                          : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-400/50"
+                      } ${togglingJobId === job.id ? "opacity-60 cursor-not-allowed" : ""}`}
+                      title={isJobActive ? "Click to Deactivate job" : "Click to Activate job"}
+                    >
+                      {togglingJobId === job.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : isJobActive ? (
+                        <PowerOff className="w-3.5 h-3.5 text-amber-400" />
+                      ) : (
+                        <Power className="w-3.5 h-3.5 text-emerald-400" />
+                      )}
+                      <span>{isJobActive ? "Deactivate" : "Activate"}</span>
                     </button>
                   </div>
                 </article>

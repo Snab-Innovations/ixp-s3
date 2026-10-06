@@ -280,7 +280,7 @@ export default async function handler(req, res) {
   // ── 3. PUT / PATCH / POST: Update Job or Create Job ──
   try {
     const isExplicitUpdateMethod = req.method === 'PUT' || req.method === 'PATCH';
-    const isExplicitUpdateAction = ['update', 'edit', 'deactivate', 'close'].includes(String(payload.action).toLowerCase()) || payload.isUpdate === true || payload.isEdit === true;
+    const isExplicitUpdateAction = ['update', 'edit', 'deactivate', 'activate', 'deactive', 'active', 'close'].includes(String(payload.action).toLowerCase()) || payload.isUpdate === true || payload.isEdit === true;
 
     // Search for pre-existing job in memory or Firestore if target ID/jobNo provided
     let existingJob = null;
@@ -338,7 +338,23 @@ export default async function handler(req, res) {
       const description = payload.description !== undefined ? payload.description : (existingJob?.description || '');
       const company = (payload.company || payload.companyName || existingJob?.company || existingJob?.companyName || 'InterviewXpert Partner').trim();
       const recruiterUID = payload.recruiterUID || existingJob?.recruiterUID || 'pbbMTYxPDaf7jhc9uPEZ34CcWfz2';
-      const status = payload.status || (payload.action === 'deactivate' ? 'Inactive' : (existingJob?.status || 'Active'));
+      
+      let status = existingJob?.status || 'Active';
+      if (['deactivate', 'deactive', 'inactive', 'close'].includes(String(payload.action).toLowerCase())) {
+        status = 'Inactive';
+      } else if (['activate', 'active'].includes(String(payload.action).toLowerCase())) {
+        status = 'Active';
+      } else if (payload.status !== undefined) {
+        const s = String(payload.status).trim().toLowerCase();
+        if (['inactive', 'deactive', 'deactivated', 'closed', 'expired', 'disabled', 'draft'].includes(s)) {
+          status = 'Inactive';
+        } else {
+          status = 'Active';
+        }
+      } else if (payload.isActive !== undefined) {
+        status = payload.isActive ? 'Active' : 'Inactive';
+      }
+      const isActive = status === 'Active';
       
       const location = payload.location !== undefined ? String(payload.location).trim() : (existingJob?.location || payload.city || '');
       const city = payload.city !== undefined ? String(payload.city).trim() : (existingJob?.city || location);
@@ -379,6 +395,7 @@ export default async function handler(req, res) {
         companyName: company,
         recruiterUID,
         status,
+        isActive,
         location,
         city,
         minExperience,
