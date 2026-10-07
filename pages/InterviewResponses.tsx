@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { collection, query, onSnapshot, orderBy, doc, getDoc, runTransaction, updateDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, doc, getDoc, runTransaction, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { resolveJobOrInterviewDocument } from '../services/jobResolutionService';
 import { InterviewSubmission } from '../types';
@@ -358,6 +358,28 @@ const InterviewResponses: React.FC = () => {
     }
   };
 
+  const handleDeleteSubmission = (submission: InterviewSubmission) => {
+    if (!interviewId) return;
+    const candidateName = submission.candidateInfo?.name || submission.candidateInfo?.email || 'this candidate';
+    messageBox.showConfirm(
+      `Are you sure you want to delete the interview response for "${candidateName}"? This action cannot be undone.`,
+      async () => {
+        try {
+          await Promise.all([
+            deleteDoc(doc(db, 'interviews', interviewId, 'attempts', submission.id)),
+            deleteDoc(doc(db, 'candidateResponses', submission.id)).catch(() => {})
+          ]);
+          setSelectedSubmissions(prev => prev.filter(id => id !== submission.id));
+          messageBox.showSuccess(`Response for "${candidateName}" deleted successfully.`);
+        } catch (err: any) {
+          console.error("Error deleting submission:", err);
+          messageBox.showError(err.message || "Failed to delete response.");
+        }
+      },
+      'Delete Candidate Response?'
+    );
+  };
+
   const handleShareClientLink = async () => {
     const link = `${window.location.origin}/#/client-view/${interviewId}`;
     try {
@@ -690,6 +712,15 @@ const InterviewResponses: React.FC = () => {
                     Report
                     <i className="fas fa-arrow-right text-[10px]"></i>
                   </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSubmission(submission)}
+                    className="geist-caption inline-flex h-8 items-center justify-center gap-1.5 rounded-[6px] border border-red-500/20 bg-red-500/10 px-2.5 font-medium text-red-400 transition-colors hover:bg-red-500/20 hover:border-red-500/30"
+                    title="Delete Candidate Response"
+                  >
+                    <i className="fas fa-trash-alt text-[10px]"></i>
+                    <span className="hidden sm:inline">Delete</span>
+                  </button>
                 </div>
               </article>
             );

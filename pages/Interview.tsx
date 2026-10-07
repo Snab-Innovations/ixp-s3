@@ -2402,9 +2402,10 @@ const CandidateInterviewFlow: React.FC = () => {
           }));
         }
 
-        if (savedStep && savedStep !== 'validating') {
+        if (savedStep && savedStep !== 'validating' && savedStep !== 'finish') {
           setStep(savedStep);
         } else {
+          sessionStorage.removeItem(`interview_wizard_step_${interviewId}`);
           setStep('welcome');
         }
 
@@ -3006,6 +3007,14 @@ const ActiveInterviewSession: React.FC<{
   const chunksRef = useRef<Blob[]>([]);
   const answerDeadlineRef = useRef<number | null>(null);
   const recordingStartTimeRef = useRef<number | null>(null);
+  const hasFinishedRef = useRef(false);
+
+  const handleSessionFinish = (result?: { terminated?: boolean }) => {
+    if (hasFinishedRef.current) return;
+    hasFinishedRef.current = true;
+    onFinish(result);
+  };
+
   const [isRecording, setIsRecording] = useState(false);
   const [timeLeft, setTimeLeft] = useState(QUESTION_TIME_MS / 1000);
   const [countdown, setCountdown] = useState(QUESTION_PREP_COUNTDOWN_SEC);
@@ -3178,7 +3187,7 @@ const ActiveInterviewSession: React.FC<{
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
               mediaRecorderRef.current.stop();
             }
-            onFinish({ terminated: true });
+            handleSessionFinish({ terminated: true });
           }
           return newCount;
         });
@@ -3430,7 +3439,7 @@ const ActiveInterviewSession: React.FC<{
       setProcessingVideo(false);
       setIsStopping(false);
       if (isLastQuestion) {
-        onFinish();
+        handleSessionFinish();
       } else {
         setCountdown(QUESTION_PREP_COUNTDOWN_SEC);
         setTimeLeft(QUESTION_TIME_MS / 1000);
@@ -3821,6 +3830,10 @@ const ActiveInterviewSession: React.FC<{
   );
 };
 
+// Global in-flight and completed submission caches across mounts / strict mode
+const activeSubmissionLocks = new Set<string>();
+const completedSubmissionCache = new Map<string, { docId: string; reportUrl: string }>();
+
 // --- Submission Screen ---
 const InterviewSubmission: React.FC<{
   state: InterviewState;
@@ -3843,6 +3856,9 @@ const InterviewSubmission: React.FC<{
     "The first computer bug was a real moth.", "Symbolics.com was the first domain.", "NASA's internet is 91 GB/s.",
     "The Firefox logo is a red panda.", "Email existed before the Web."
   ];
+
+  const candidateEmail = (candidateInfo?.email || '').trim().toLowerCase();
+  const lockKey = `${interviewId}_${candidateEmail || candidateInfo?.phone || 'cand'}`;
 
   const [candidateRating, setCandidateRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
@@ -3871,10 +3887,27 @@ const InterviewSubmission: React.FC<{
   }, [facts.length]);
 
   useEffect(() => {
-    // Guard: only run once - object deps (state, candidateInfo, terminated) cause
-    // React to re-fire this effect on every render, creating duplicate reports.
+    // Guard 1: only run once per component instance
     if (hasSubmittedRef.current) return;
     hasSubmittedRef.current = true;
+
+    // Guard 2: fast-path check if this candidate already completed the interview in memory or session
+    const cached = completedSubmissionCache.get(lockKey);
+    const sessionDocId = sessionStorage.getItem(`interview_completed_${lockKey}`);
+    const completedDocId = cached?.docId || sessionDocId;
+    if (completedDocId) {
+      setReportUrl(`/report/${interviewId}/${completedDocId}`);
+      setShowCompletionPopup(true);
+      setStatus('Successfully Submitted!');
+      return;
+    }
+
+    // Guard 3: prevent concurrent in-flight submissions (e.g. React StrictMode double-mount)
+    if (activeSubmissionLocks.has(lockKey)) {
+      console.warn(`[Interview] Submission already in flight for ${lockKey}, skipping duplicate execution.`);
+      return;
+    }
+    activeSubmissionLocks.add(lockKey);
 
     const finalize = async () => {
       const waitForPendingResponses = async () => {
@@ -3915,6 +3948,31 @@ const InterviewSubmission: React.FC<{
       };
 
       try {
+        // Guard 4: Check Firestore if an attempt already exists for this candidate on this interview
+        if (candidateInfo?.email) {
+          try {
+            const attemptsRef = collection(db, 'interviews', interviewId, 'attempts');
+            const emailQuery = query(attemptsRef, where('candidateInfo.email', '==', candidateInfo.email));
+            const existingSnap = await getDocs(emailQuery);
+            const alreadySubmittedDoc = existingSnap.docs.find(d => !d.data().allowReattempt);
+            if (alreadySubmittedDoc) {
+              console.warn(`[Interview] Existing attempt found (${alreadySubmittedDoc.id}), preventing duplicate save.`);
+              const existingId = alreadySubmittedDoc.id;
+              completedSubmissionCache.set(lockKey, { docId: existingId, reportUrl: `/report/${interviewId}/${existingId}` });
+              sessionStorage.setItem(`interview_completed_${lockKey}`, existingId);
+              sessionStorage.removeItem(`interview_wizard_step_${interviewId}`);
+              sessionStorage.removeItem(`interview_wizard_state_${interviewId}`);
+              setReportUrl(`/report/${interviewId}/${existingId}`);
+              setShowCompletionPopup(true);
+              setStatus('Successfully Submitted!');
+              activeSubmissionLocks.delete(lockKey);
+              return;
+            }
+          } catch (dupCheckErr) {
+            console.warn('[Interview] Pre-submission duplicate check warning:', dupCheckErr);
+          }
+        }
+
         await waitForPendingResponses();
         setStatus("Finalizing transcripts...");
         const finalState = latestStateRef.current;
@@ -4044,10 +4102,17 @@ const InterviewSubmission: React.FC<{
           }).catch(err => console.warn('Final completion dump save fallback warning:', err));
         }
 
+        completedSubmissionCache.set(lockKey, { docId: docRef.id, reportUrl: `/report/${interviewId}/${docRef.id}` });
+        sessionStorage.setItem(`interview_completed_${lockKey}`, docRef.id);
+        sessionStorage.removeItem(`interview_wizard_step_${interviewId}`);
+        sessionStorage.removeItem(`interview_wizard_state_${interviewId}`);
+        activeSubmissionLocks.delete(lockKey);
+
         setReportUrl(`/report/${interviewId}/${docRef.id}`);
         setShowCompletionPopup(true);
         setStatus('Successfully Submitted!');
       } catch (err) { 
+          activeSubmissionLocks.delete(lockKey);
           console.error("Finalization error:", err);
           setStatus("An error occurred while saving your report. Please contact support."); 
       }
