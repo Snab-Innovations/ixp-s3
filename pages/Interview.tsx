@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { doc, getDoc, collection, serverTimestamp, updateDoc, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { uploadToCloudinary, generateInterviewQuestions, requestTranscription, fetchTranscriptText, generateFeedback, sanitizeQuestionLength } from '../services/api';
+import fixWebmDuration from 'fix-webm-duration';
 import { resolveJobOrInterviewDocument } from '../services/jobResolutionService';
 import { speak, unlockTTSAudio, setMuteTTS, getMuteTTS } from '../lib/tts';
 import { Interview, InterviewState } from '../types';
@@ -2693,10 +2694,14 @@ const CandidateInterviewFlow: React.FC = () => {
             <i className="fas fa-triangle-exclamation text-lg" aria-hidden="true"></i>
           </div>
           <h1 className="mt-5 text-2xl font-semibold tracking-[-0.03em] text-gray-950 dark:text-white">Interview unavailable</h1>
-          <p className="mt-3 text-sm leading-6 text-gray-600 dark:text-[#a1a1a1]">{rateLimitStopMessage}</p>
-          <button type="button" onClick={() => navigate('/')} className="mt-6 rounded-[6px] bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#333] dark:bg-white dark:text-black dark:hover:bg-[#eaeaea]">
-            Return home
-          </button>
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button type="button" onClick={() => navigate('/jobs')} className="w-full sm:w-auto rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 cursor-pointer">
+              Browse Open Jobs
+            </button>
+            <button type="button" onClick={() => navigate('/upload-resume')} className="w-full sm:w-auto rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 cursor-pointer">
+              Upload Resume
+            </button>
+          </div>
         </div>
       </Container>
     );
@@ -3000,6 +3005,7 @@ const ActiveInterviewSession: React.FC<{
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const answerDeadlineRef = useRef<number | null>(null);
+  const recordingStartTimeRef = useRef<number | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [timeLeft, setTimeLeft] = useState(QUESTION_TIME_MS / 1000);
   const [countdown, setCountdown] = useState(QUESTION_PREP_COUNTDOWN_SEC);
@@ -3381,10 +3387,26 @@ const ActiveInterviewSession: React.FC<{
       setProcessingVideo(false);
       setCameraError("Recording failed. Please refresh and try again.");
     };
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' });
+    recorder.onstop = async () => {
+      const rawBlob = new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' });
       chunksRef.current = [];
       answerDeadlineRef.current = null;
+
+      const recordedDurationMs = recordingStartTimeRef.current 
+        ? Math.max(1000, Date.now() - recordingStartTimeRef.current) 
+        : 0;
+      recordingStartTimeRef.current = null;
+
+      let finalBlob = rawBlob;
+      // Inject missing duration into WebM EBML header so AssemblyAI / media parsers
+      // don't read duration as Infinity / NaN and fail with "Error: Audio duration is too long."
+      if ((recorder.mimeType || 'video/webm').includes('webm') && recordedDurationMs > 0) {
+        try {
+          finalBlob = await fixWebmDuration(rawBlob, recordedDurationMs);
+        } catch (patchErr) {
+          console.warn("Could not patch WebM duration header:", patchErr);
+        }
+      }
 
       setState(prev => {
         const nextAnswers = [...prev.answers];
@@ -3404,7 +3426,7 @@ const ActiveInterviewSession: React.FC<{
         };
       });
 
-      void processRecordedAnswer(blob, questionIndex, state.language);
+      void processRecordedAnswer(finalBlob, questionIndex, state.language);
       setProcessingVideo(false);
       setIsStopping(false);
       if (isLastQuestion) {
@@ -3417,6 +3439,7 @@ const ActiveInterviewSession: React.FC<{
     mediaRecorderRef.current = recorder;
     try {
       recorder.start();
+      recordingStartTimeRef.current = Date.now();
       answerDeadlineRef.current = Date.now() + QUESTION_TIME_MS;
       setTimeLeft(QUESTION_TIME_MS / 1000);
       setIsRecording(true);
@@ -3878,8 +3901,13 @@ const InterviewSubmission: React.FC<{
           await sleep(TRANSCRIPT_POLL_DELAY_MS);
           const res = await fetchTranscriptText(transcriptId);
 
-          if (res.status === 'completed' || res.status === 'error') {
+          if (res.status === 'completed') {
             return res.text || '(No speech detected)';
+          }
+
+          if (res.status === 'error') {
+            console.warn(`[Transcription] Provider error for ${transcriptId}:`, res.text);
+            return '(Audio answer recorded - transcript unavailable)';
           }
         }
 
@@ -4078,6 +4106,27 @@ const InterviewSubmission: React.FC<{
           <p className="text-xs font-bold text-blue-500 uppercase mb-3 tracking-widest">While we process</p>
           <p className="text-gray-700 dark:text-gray-300 italic text-lg transition-all duration-500">"{facts[factIndex]}"</p>
         </div>
+
+        {(showCompletionPopup || status === 'Successfully Submitted!') && (
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 w-full max-w-md">
+            <button 
+              type="button"
+              onClick={() => navigate('/jobs')} 
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3 px-5 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
+            >
+              <i className="fas fa-briefcase"></i>
+              <span>Explore All Jobs</span>
+            </button>
+            <button 
+              type="button"
+              onClick={() => navigate('/upload-resume')} 
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-5 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
+            >
+              <i className="fas fa-file-arrow-up"></i>
+              <span>Upload Resume</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Thank You Modal Popup with Rating & View More Jobs button */}
@@ -4122,23 +4171,28 @@ const InterviewSubmission: React.FC<{
               )}
             </div>
 
-            {/* Action Buttons */}
+            {/* Action Buttons: View All Jobs & Upload Resume */}
             <div className="space-y-3 mt-6">
-              {/* Primary CTA: View More Job Roles */}
+              {/* Primary CTA: View All Open Jobs */}
               <button 
+                type="button"
                 onClick={() => navigate('/jobs')} 
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold py-3.5 px-5 rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-blue-500/35 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 text-sm"
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold py-3.5 px-5 rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-blue-500/35 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2.5 text-sm cursor-pointer"
               >
-                <i className="fas fa-briefcase"></i>
-                <span>View More Job Roles</span>
-                <i className="fas fa-arrow-right text-xs"></i>
+                <i className="fas fa-briefcase text-base"></i>
+                <span>Explore All Open Jobs</span>
+                <i className="fas fa-arrow-right text-xs ml-1"></i>
               </button>
 
+              {/* Secondary CTA: Upload Resume for More Roles */}
               <button 
-                onClick={() => navigate('/')} 
-                className="w-full bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold py-3 px-4 rounded-xl transition-all text-xs"
+                type="button"
+                onClick={() => navigate('/upload-resume')} 
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3.5 px-5 rounded-xl shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/35 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2.5 text-sm cursor-pointer"
               >
-                Go to Homepage
+                <i className="fas fa-file-arrow-up text-base"></i>
+                <span>Upload Resume for More Jobs</span>
+                <i className="fas fa-chevron-right text-xs ml-1"></i>
               </button>
             </div>
           </div>

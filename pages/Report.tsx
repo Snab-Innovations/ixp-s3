@@ -1903,9 +1903,49 @@ const InterviewReport: React.FC = () => {
                                         <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                                             <FileText size={14} className="text-primary"/> AI Audio Transcript & Text Answer
                                         </h4>
-                                        <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed font-sans">
-                                            {submission.transcriptTexts?.[activeVideoIndex] || 'Transcript not available for this question.'}
-                                        </p>
+                                                {(() => {
+                                                    const rawText = submission.transcriptTexts?.[activeVideoIndex];
+                                                    const isDurationError = rawText && rawText.toLowerCase().includes('audio duration is too long');
+                                                    const isGenericError = rawText && rawText.startsWith('Error:');
+
+                                                    if (isDurationError) {
+                                                        return (
+                                                            <div className="space-y-3">
+                                                                <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-3 text-amber-200">
+                                                                    <Volume2 size={18} className="shrink-0 text-amber-400 mt-0.5" />
+                                                                    <div>
+                                                                        <p className="font-semibold text-xs text-amber-300">Candidate Audio Answer Recorded</p>
+                                                                        <p className="text-xs text-amber-200/80 mt-1 leading-relaxed">
+                                                                            The candidate's video and audio answer was recorded successfully. Please play the video on the left to listen directly to their answer.
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    if (isGenericError) {
+                                                        return (
+                                                            <div className="space-y-3">
+                                                                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 text-red-200">
+                                                                    <Volume2 size={18} className="shrink-0 text-red-400 mt-0.5" />
+                                                                    <div>
+                                                                        <p className="font-semibold text-xs text-red-300">Transcript Unavailable</p>
+                                                                        <p className="text-xs text-red-200/80 mt-1 leading-relaxed">
+                                                                            Automated transcription service could not convert this audio. Please listen directly to the video recording on the left.
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    return (
+                                                        <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed font-sans">
+                                                            {rawText || 'Transcript not available for this question.'}
+                                                        </p>
+                                                    );
+                                                })()}
                                     </div>
                                 </div>
                             </div>

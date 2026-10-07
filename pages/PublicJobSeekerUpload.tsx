@@ -21,7 +21,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo';
 import { calculateJobMatchScore, JobMatchResult, CandidateMatchProfile } from '../services/jobMatchService';
 import { FormattedJobDescription } from '../utils/jobDescriptionFormatter';
-import { splitEducationRequirements, checkSingleRequirementMatch } from '../utils/educationMatcher';
+import { splitEducationRequirements, checkSingleRequirementMatch, normalizeEducationToString } from '../utils/educationMatcher';
 import { ListenJDButton } from '../components/ListenJDButton';
 
 const matchExtractedLocationToPresentCity = (rawLocation: string): string => {
@@ -415,9 +415,16 @@ export default function PublicJobSeekerUpload() {
       const snap = await getDocs(q);
       if (!snap.empty) {
         const found = snap.docs[0].data();
-        setExistingEmailCandidate({ id: snap.docs[0].id, ...found });
+        setExistingEmailCandidate({ id: snap.docs[0].id, ...(found.profile || {}), ...found });
       } else {
-        setExistingEmailCandidate(null);
+        const q2 = query(collection(db, 'resumeDumpCandidates'), where('profile.email', '==', cleanEmail));
+        const snap2 = await getDocs(q2);
+        if (!snap2.empty) {
+          const found2 = snap2.docs[0].data();
+          setExistingEmailCandidate({ id: snap2.docs[0].id, ...(found2.profile || {}), ...found2 });
+        } else {
+          setExistingEmailCandidate(null);
+        }
       }
     } catch (err) {
       console.warn("Email exists check warning:", err);
@@ -428,40 +435,75 @@ export default function PublicJobSeekerUpload() {
 
   // Load existing profile from email match
   const handleLoadExistingProfile = (candData: any) => {
+    const prof = (candData.profile && typeof candData.profile === 'object') ? candData.profile : {};
+
+    const name = candData.name || prof.name || candidateName || 'Job Seeker';
+    const email = candData.email || prof.email || candidateEmail.trim().toLowerCase();
+    const phone = candData.phone || prof.phone || candidatePhone || '';
+    const gender = candData.gender || prof.gender || candidateGender || 'Any';
+    const location = candData.location || prof.location || candidateLocation || 'Nashik';
+    const rawExp = candData.experienceYears ?? candData.totalExperienceYears ?? candData.experience ?? prof.totalExperienceYears ?? (Number(candidateExp) || 0);
+    const expNum = Number(rawExp) || 0;
+    const rawEdu = candData.highestEducation ?? candData.education ?? (prof.education && Array.isArray(prof.education) ? prof.education[0]?.degree : prof.education) ?? candidateEducation ?? 'Graduate';
+    const educationStr = normalizeEducationToString(rawEdu) || 'Graduate';
+    const employmentStatus = candData.employmentStatus || candidateEmploymentStatus || 'Working';
+    const noticePeriod = candData.noticePeriod || `${candidateNoticePeriodVal} ${candidateNoticePeriodUnit}`;
+
+    const currentSal = candData.currentSalary || prof.currentSalary || getFormattedCurrentSalary() || 'As per Industry';
+    const expectedSal = candData.expectedSalary || prof.expectedSalary || getFormattedExpectedSalary() || 'As per Industry';
+
+    const skills = Array.isArray(candData.skills) ? candData.skills : (Array.isArray(prof.skills) ? prof.skills : (extractedSkills || []));
+    const resumeText = candData.resumeText || candData.additionalText || prof.resumeText || '';
+    const resumeUrl = candData.resumeUrl || prof.resumeUrl || '';
+
     const existingDoms: string[] = Array.isArray(candData.domains)
       ? candData.domains
-      : (candData.domain ? candData.domain.split(', ').filter(Boolean) : (candidateDomains.length > 0 ? candidateDomains : detectDomainsFromText(candData.resumeText || candData.title || '')));
-    
+      : (candData.domain ? candData.domain.split(', ').filter(Boolean) : (candidateDomains.length > 0 ? candidateDomains : detectDomainsFromText(resumeText || candData.title || '')));
+
+    // Also populate state so candidate form is consistent
+    if (name) setCandidateName(name);
+    if (email) setCandidateEmail(email);
+    if (phone) setCandidatePhone(phone);
+    if (gender && gender !== 'Any') setCandidateGender(gender);
+    if (location) setCandidateLocation(location);
+    if (expNum !== undefined) setCandidateExp(String(expNum));
+    if (educationStr) setCandidateEducation(educationStr);
+    if (employmentStatus) setCandidateEmploymentStatus(employmentStatus);
+    if (Array.isArray(skills) && skills.length > 0) setExtractedSkills(skills);
+    if (candData.currentSalaryVal) setCandidateCurrentSalaryVal(candData.currentSalaryVal);
+    if (candData.expectedSalaryVal) setCandidateExpectedSalaryVal(candData.expectedSalaryVal);
+
     if (existingDoms.length > 0) {
       setCandidateDomains(existingDoms);
       setCandidateDomain(existingDoms.join(', '));
     }
 
     const profileObj: CandidateMatchProfile = {
-      name: candData.name || candData.profile?.name || candidateName || 'Job Seeker',
-      email: candData.email || candidateEmail.trim().toLowerCase(),
-      phone: candData.phone || candData.profile?.phone || candidatePhone,
-      gender: candData.gender || candData.profile?.gender || candidateGender || 'Any',
-      location: candData.location || candData.profile?.location || candidateLocation || 'Nashik',
+      name,
+      email,
+      phone,
+      gender,
+      location,
       domain: existingDoms.join(', '),
       domains: existingDoms,
-      experience: candData.experienceYears || candData.totalExperienceYears || candData.experience || candidateExp || 0,
-      totalExperienceYears: candData.experienceYears || candData.totalExperienceYears || candData.experience || candidateExp || 0,
-      education: candData.highestEducation || candData.education || (candData.profile?.education ? candData.profile.education[0]?.degree : candidateEducation) || 'Graduate',
-      highestEducation: candData.highestEducation || (candData.profile?.education ? candData.profile.education[0]?.degree : candidateEducation) || 'Graduate',
-      employmentStatus: candData.employmentStatus || candidateEmploymentStatus || 'Working',
-      noticePeriod: candData.noticePeriod || `${candidateNoticePeriodVal} ${candidateNoticePeriodUnit}`,
-      currentSalary: candData.currentSalary || candidateCurrentSalary || 'As per Industry',
-      expectedSalary: candData.expectedSalary || candidateExpectedSalary || 'As per Industry',
-      skills: candData.skills || candData.profile?.skills || extractedSkills || [],
-      resumeText: candData.resumeText || candData.additionalText || '',
-      resumeUrl: candData.resumeUrl || ''
+      experience: expNum,
+      totalExperienceYears: expNum,
+      education: educationStr,
+      highestEducation: educationStr,
+      employmentStatus,
+      noticePeriod,
+      currentSalary: currentSal,
+      expectedSalary: expectedSal,
+      skills,
+      resumeText,
+      resumeUrl
     };
 
     setSubmittedCandidateData(profileObj);
     setOriginalCandidateData({ ...profileObj });
     setIsSubmittedSuccess(true);
     setShowEmailLookup(false);
+    setExistingEmailCandidate(null);
     messageBox.showSuccess(`Welcome back, ${profileObj.name}! Your existing profile has been loaded and matched with active job openings.`);
   };
 
@@ -938,11 +980,14 @@ export default function PublicJobSeekerUpload() {
 
       // 1. Direct query if valid email format
       if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanInput)) {
-        const q = query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanInput));
-        const snap = await getDocs(q);
+        let snap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanInput)));
+        if (snap.empty) {
+          snap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('profile.email', '==', cleanInput)));
+        }
         if (!snap.empty) {
           const d = snap.docs[0];
-          matchedCand = { id: d.id, ...d.data() };
+          const data = d.data();
+          matchedCand = { id: d.id, ...(data.profile || {}), ...data };
         }
       }
 
@@ -1019,11 +1064,15 @@ export default function PublicJobSeekerUpload() {
 
     // Check if candidate email is ALREADY REGISTERED - do not duplicate, show matched jobs directly!
     try {
-      const q = query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanSubmitEmail));
-      const snap = await getDocs(q);
+      let snap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanSubmitEmail)));
+      if (snap.empty) {
+        snap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('profile.email', '==', cleanSubmitEmail)));
+      }
       if (!snap.empty) {
-        const matchedCand: any = { id: snap.docs[0].id, ...snap.docs[0].data() };
-        messageBox.showSuccess(`Welcome back, ${matchedCand.name || matchedCand.profile?.name || 'Job Seeker'}! We found your existing profile registered under ${cleanSubmitEmail}. Showing your best matched job openings.`);
+        const d = snap.docs[0];
+        const data = d.data();
+        const matchedCand: any = { id: d.id, ...(data.profile || {}), ...data };
+        messageBox.showSuccess(`Welcome back, ${matchedCand.name || 'Job Seeker'}! We found your existing profile registered under ${cleanSubmitEmail}. Showing your best matched job openings.`);
         handleLoadExistingProfile(matchedCand);
         return;
       }

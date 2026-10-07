@@ -416,16 +416,43 @@ export function matchesEduFamily(candidateFamily: EduFamily, requiredFamily: Edu
 }
 
 /**
+ * Safely normalizes candidate education (which may be a string, array of education objects,
+ * single object, or undefined) into a clean string for comparison.
+ */
+export function normalizeEducationToString(candidateEdu: any): string {
+  if (!candidateEdu) return '';
+  if (typeof candidateEdu === 'string') return candidateEdu.trim();
+  if (Array.isArray(candidateEdu)) {
+    return candidateEdu
+      .map(item => {
+        if (!item) return '';
+        if (typeof item === 'string') return item.trim();
+        if (typeof item === 'object') {
+          return (item.degree || item.name || item.qualification || item.title || item.highestEducation || '').trim();
+        }
+        return String(item).trim();
+      })
+      .filter(Boolean)
+      .join(', ');
+  }
+  if (typeof candidateEdu === 'object') {
+    return (candidateEdu.degree || candidateEdu.name || candidateEdu.qualification || candidateEdu.title || candidateEdu.highestEducation || '').trim();
+  }
+  return String(candidateEdu).trim();
+}
+
+/**
  * Checks if a candidate's qualification satisfies a single education requirement option.
  */
-export function checkSingleRequirementMatch(candidateEdu: string, reqOption: string): boolean {
-  if (!reqOption || !reqOption.trim()) return true;
-  if (!candidateEdu || !candidateEdu.trim()) return false;
+export function checkSingleRequirementMatch(candidateEdu: any, reqOption: string): boolean {
+  if (!reqOption || typeof reqOption !== 'string' || !reqOption.trim()) return true;
+  const candEduStr = normalizeEducationToString(candidateEdu);
+  if (!candEduStr) return false;
 
-  const candFamily = classifyEducationString(candidateEdu);
+  const candFamily = classifyEducationString(candEduStr);
   const reqFamily = classifyEducationString(reqOption);
 
-  return matchesEduFamily(candFamily, reqFamily, candidateEdu, reqOption);
+  return matchesEduFamily(candFamily, reqFamily, candEduStr, reqOption);
 }
 
 /**
@@ -467,7 +494,7 @@ export function splitEducationRequirements(requiredEdu: string | string[] | unde
  * Returns detailed match breakdown of all required education options vs candidate education.
  * Highlights which specific options matched the candidate.
  */
-export function getEducationMatchDetails(candidateEdu: string, requiredEdu: string | string[] | undefined | null): {
+export function getEducationMatchDetails(candidateEdu: any, requiredEdu: string | string[] | undefined | null): {
   allOptions: string[];
   matchedOptions: string[];
   isMatch: boolean;
@@ -477,7 +504,7 @@ export function getEducationMatchDetails(candidateEdu: string, requiredEdu: stri
     return { allOptions: ['Any Qualification'], matchedOptions: ['Any Qualification'], isMatch: true };
   }
 
-  const candTrim = (candidateEdu || '').trim();
+  const candTrim = normalizeEducationToString(candidateEdu);
   if (!candTrim) {
     const isAny = allOptions.some(o => /^(any|all|open|n\/a|none|not specified|as per job description|as per jd)$/i.test(o));
     return { allOptions, matchedOptions: isAny ? allOptions : [], isMatch: isAny };
@@ -497,10 +524,11 @@ export function getEducationMatchDetails(candidateEdu: string, requiredEdu: stri
  * Supports multi-qualification options separated by comma, slash, semicolon, or "or".
  * If ONE option matches, returns true (100% Match).
  */
-export function isEducationMatching(candidateEdu: string, requiredEdu: string | string[]): boolean {
+export function isEducationMatching(candidateEdu: any, requiredEdu: string | string[]): boolean {
   if (!requiredEdu) return true;
-  if (!candidateEdu || !candidateEdu.trim()) return false;
+  const candTrim = normalizeEducationToString(candidateEdu);
+  if (!candTrim) return false;
 
-  const { isMatch } = getEducationMatchDetails(candidateEdu, requiredEdu);
+  const { isMatch } = getEducationMatchDetails(candTrim, requiredEdu);
   return isMatch;
 }

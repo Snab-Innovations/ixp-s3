@@ -764,9 +764,12 @@ const TakeTest: React.FC = () => {
             </div>
           )}
 
-          <div className="flex justify-center mt-6">
-            <button onClick={() => navigate('/')} className="rounded-[6px] bg-black px-8 py-3 text-sm font-medium text-white transition-colors hover:bg-[#333] dark:bg-white dark:text-black dark:hover:bg-[#eaeaea]">
-              Return to Portal
+          <div className="flex flex-col sm:flex-row justify-center gap-3 mt-6">
+            <button onClick={() => navigate('/jobs')} className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700 cursor-pointer">
+              Explore All Jobs
+            </button>
+            <button onClick={() => navigate('/upload-resume')} className="rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 cursor-pointer">
+              Upload Resume
             </button>
           </div>
 
@@ -785,22 +788,22 @@ const TakeTest: React.FC = () => {
                   
                   <div className="flex flex-col gap-3">
                     <button 
-                      onClick={() => navigate('/')}
-                      className="w-full rounded-[6px] bg-black py-3.5 text-sm font-medium text-white transition-colors hover:bg-[#333] dark:bg-white dark:text-black dark:hover:bg-[#eaeaea]"
+                      onClick={() => navigate('/jobs')}
+                      className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3.5 text-sm font-bold text-white transition-all hover:from-blue-700 hover:to-indigo-700 shadow-md cursor-pointer"
                     >
-                      Return to Portal
+                      <i className="fa-solid fa-briefcase mr-2"></i> Explore All Open Jobs
+                    </button>
+                    <button 
+                      onClick={() => navigate('/upload-resume')}
+                      className="w-full rounded-xl bg-emerald-600 py-3.5 text-sm font-bold text-white transition-all hover:bg-emerald-700 shadow-md cursor-pointer"
+                    >
+                      <i className="fa-solid fa-file-arrow-up mr-2"></i> Upload Resume for More Jobs
                     </button>
                     <button 
                       onClick={() => navigate('/submit-review')}
-                      className="flex w-full items-center justify-center gap-2 rounded-[6px] border border-black/[0.08] bg-white py-3.5 text-sm font-medium text-black transition-colors hover:bg-black/[0.03] dark:border-white/[0.11] dark:bg-[#050505] dark:text-white dark:hover:bg-white/[0.06]"
+                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-black/[0.08] bg-white py-3 text-sm font-medium text-black transition-colors hover:bg-black/[0.03] dark:border-white/[0.11] dark:bg-[#050505] dark:text-white dark:hover:bg-white/[0.06] cursor-pointer"
                     >
-                      <i className="fa-solid fa-star"></i> Give Review
-                    </button>
-                    <button 
-                      onClick={() => setShowPromoPopup(false)}
-                      className="w-full rounded-[6px] py-3 text-sm font-medium text-gray-500 transition-colors hover:bg-black/[0.03] hover:text-black dark:text-[#8f8f8f] dark:hover:bg-white/[0.05] dark:hover:text-white"
-                    >
-                      Maybe Later
+                      <i className="fa-solid fa-star text-amber-400"></i> Rate Experience
                     </button>
                   </div>
                 </div>
@@ -823,7 +826,7 @@ const TakeTest: React.FC = () => {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center ${isDark ? 'bg-[#050505] text-white' : 'bg-gray-50 text-gray-900'}`}>
         <p className="text-xl mb-4">This test has no questions.</p>
-        <button onClick={() => navigate('/')} className="text-black underline-offset-4 hover:underline dark:text-white">Go Back</button>
+        <button onClick={() => navigate('/jobs')} className="text-black underline-offset-4 hover:underline dark:text-white cursor-pointer">Browse Jobs</button>
       </div>
     );
   }
@@ -834,7 +837,7 @@ const TakeTest: React.FC = () => {
     return (
       <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-[#050505] text-white' : 'bg-gray-50 text-gray-900'}`}>
         <p>Error loading question.</p>
-        <button onClick={() => navigate('/')} className="ml-4 text-black underline-offset-4 hover:underline dark:text-white">Go Back</button>
+        <button onClick={() => navigate('/jobs')} className="ml-4 text-black underline-offset-4 hover:underline dark:text-white cursor-pointer">Browse Jobs</button>
       </div>
     );
   }
