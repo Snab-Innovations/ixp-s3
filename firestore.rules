@@ -81,6 +81,21 @@ service cloud.firestore {
       allow create, update, delete: if true;
     }
 
+    // --- Voice Interviews Collection Rules (Caller / Screening Interviews) ---
+    match /voiceInterviews/{voiceInterviewId} {
+      allow read, create, update, delete: if true;
+
+      // Attempts Subcollection Rules
+      match /attempts/{attemptId} {
+        allow read, create, update, delete: if true;
+      }
+    }
+
+    // --- Voice Interview Responses Collection Rules (Top-level attempts mirror) ---
+    match /voiceInterviewResponses/{responseId} {
+      allow read, create, update, delete: if true;
+    }
+
     // --- Collection Group Rules ---
     match /{path=**}/attempts/{attemptId} {
       allow read: if true;

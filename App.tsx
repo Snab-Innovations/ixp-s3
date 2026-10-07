@@ -35,6 +35,9 @@ import InterviewResponses from './pages/InterviewResponses';
 import InterviewOverview from './pages/InterviewOverview';
 import InterviewCandidates from './pages/InterviewCandidates';
 import InterviewVoiceInterview from './pages/InterviewVoiceInterview';
+import CandidateVoiceInterview from './pages/CandidateVoiceInterview';
+import RecruiterVoiceInterviews from './pages/RecruiterVoiceInterviews';
+import VoiceInterviewReport from './pages/VoiceInterviewReport';
 import ResumeDump, { ResumeDumpSkeleton } from './pages/ResumeDump';
 import {
   InterviewCandidatesSkeleton,
@@ -215,6 +218,18 @@ const App: React.FC = () => {
               </ThemeProvider>
             } />
 
+            {/* Candidate Voice Interview Route (Audio-Only Screening, No Layout) */}
+            <Route path="voice-interview/:voiceInterviewId" element={
+              <ThemeProvider>
+                <CandidateVoiceInterview />
+              </ThemeProvider>
+            } />
+            <Route path="voice-interview/start/:voiceInterviewId" element={
+              <ThemeProvider>
+                <CandidateVoiceInterview />
+              </ThemeProvider>
+            } />
+
             {/* Public Test Taking Routes (No Layout) */}
             <Route path="test/:testId" element={
               <ThemeProvider>
@@ -244,6 +259,18 @@ const App: React.FC = () => {
               </ThemeProvider>
             } />
 
+            {/* Public Voice Screening Report Route (Shareable, No Auth Required) */}
+            <Route path="voice-report/:responseId" element={
+              <ThemeProvider>
+                <VoiceInterviewReport />
+              </ThemeProvider>
+            } />
+            <Route path="voice-interview/report/:responseId" element={
+              <ThemeProvider>
+                <VoiceInterviewReport />
+              </ThemeProvider>
+            } />
+
             {/* Protected Routes (With Layout) */}
             <Route path="/*" element={
               <Layout>
@@ -253,6 +280,7 @@ const App: React.FC = () => {
                   <Route path="recruiter/all-jobs" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><RecruiterAllJobs /></ProtectedRoute>} />
                   <Route path="recruiter/hot-leads" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><HotLeads /></ProtectedRoute>} />
                   <Route path="recruiter/interviews" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><RecruiterInterviews /></ProtectedRoute>} />
+                  <Route path="recruiter/voice-interviews" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><RecruiterVoiceInterviews /></ProtectedRoute>} />
                   <Route path="recruiter/job/:jobId/edit" element={<ProtectedRoute role="recruiter"><EditJob /></ProtectedRoute>} />
                   <Route path="recruiter/invites" element={<ProtectedRoute role="recruiter" loadingFallback={<RecruiterInterviewsSkeleton />}><InvitedCandidates /></ProtectedRoute>} />
                   <Route path="recruiter/resume-dump" element={<ProtectedRoute role="recruiter" loadingFallback={<ResumeDumpSkeleton />}><ResumeDump /></ProtectedRoute>} />

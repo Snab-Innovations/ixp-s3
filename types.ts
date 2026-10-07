@@ -211,4 +211,93 @@ export interface InterviewState {
   terminated?: boolean;
   strictness?: 'Low' | 'Medium' | 'Hard';
 }
-  
+
+export interface VoiceInterviewQuestion {
+  id: string;
+  question: string;
+  category: 'relocation' | 'notice_period' | 'salary' | 'skills' | 'experience' | 'general';
+  expectedAnswerNotes?: string;
+  isCustom?: boolean;
+}
+
+export interface VoiceInterview {
+  id: string;
+  jobId?: string;
+  interviewId?: string;
+  title: string;
+  jobTitle?: string;
+  jobDescription?: string;
+  companyName?: string;
+  location?: string;
+  recruiterUID: string;
+  teamId?: string;
+  questions: VoiceInterviewQuestion[];
+  screeningSettings?: {
+    askRelocation?: boolean;
+    relocationLocation?: string;
+    askNoticePeriod?: boolean;
+    askSalary?: boolean;
+    allowCrossQuestioning?: boolean;
+    maxCrossQuestionsPerQuestion?: number;
+  };
+  status: 'active' | 'paused' | 'archived';
+  createdAt: any;
+  updatedAt?: any;
+}
+
+export interface VoiceInterviewTurn {
+  speaker: 'ai' | 'candidate';
+  text: string;
+  timestamp: string;
+  isCrossQuestion?: boolean;
+  intent?: 'answer' | 'repeat' | 'skip';
+  questionId?: string;
+}
+
+export interface VoiceInterviewResponse {
+  id: string;
+  voiceInterviewId: string;
+  jobId?: string;
+  recruiterUID: string;
+  candidateInfo: {
+    name: string;
+    email: string;
+    phone: string;
+    currentCity?: string;
+    resumeUrl?: string;
+    resumeFileName?: string;
+    resumeText?: string;
+  };
+  dialogueHistory: VoiceInterviewTurn[];
+  answersSummary: Array<{
+    question: string;
+    answer: string;
+    crossQuestions?: Array<{ question: string; answer: string }>;
+    score?: number;
+    notes?: string;
+  }>;
+  screeningReport: {
+    overallScore: number; // out of 10
+    relocationStatus: 'Ready to relocate' | 'Already local' | 'Not willing to relocate' | 'Negotiable' | 'Not applicable';
+    relocationDetails?: string; // specific relocation confirmation (e.g. to Nashik)
+    noticePeriod: string; // e.g. "Immediate", "15 days", "30 days"
+    noticePeriodDetails?: string;
+    salaryExpectation: string; // e.g. "Current ₹4.5 LPA, Expected ₹6 LPA"
+    salaryFit?: string;
+    skillsRating: number; // out of 10
+    skillsFeedback?: string; // in-depth technical analysis vs JD
+    communicationRating: number; // out of 10
+    summary: string;
+    strengths: string[];
+    concerns: string[];
+    recommendation: 'Shortlist' | 'Hold' | 'Reject';
+    recommendationReason?: string;
+  };
+  callDurationSeconds: number;
+  audioRecordingUrl?: string;
+  recordingStorageKey?: string;
+  candidateResumeUrl?: string;
+  candidateResumeFileName?: string;
+  status: 'Completed' | 'Terminated' | 'Shortlist' | 'Hold' | 'Reject';
+  submittedAt: any;
+}

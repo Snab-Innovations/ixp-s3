@@ -122,3 +122,52 @@ export const synthesizeWithPolly = async (
 
   return false;
 };
+
+/**
+ * Fetch raw audio Blob from AWS Polly for recording / Web Audio mixing
+ */
+export const fetchPollyAudioBlob = async (text: string, lang = 'en-IN'): Promise<Blob | null> => {
+  if (!text || !text.trim()) return null;
+
+  const cleanText = text
+    .replace(/<[^>]*>/g, " ")
+    .replace(/https?:\/\/\S+/gi, " link ")
+    .replace(/(\*\*|__|[*_])([^*_]+)\1/g, "$2")
+    .replace(/#{1,6}\s+/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/[-*•▪♦▶►]\s+/g, ". ")
+    .replace(/[#@$%^&*()_{}\[\]|\\/<>+=~`]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleanText) return null;
+
+  const isHindiText = /[\u0900-\u097F]/.test(cleanText);
+  const langLower = lang.toLowerCase();
+  const isHindiLang = langLower.startsWith("hi") || langLower.startsWith("mr") || isHindiText;
+  const languageCode = isHindiLang ? "hi-IN" : "en-IN";
+
+  try {
+    const response = await fetch("/api/tts-polly", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: cleanText,
+        lang: languageCode,
+        voiceId: "Aditi",
+        engine: "standard",
+        outputFormat: "mp3",
+      }),
+    });
+
+    if (response.ok) {
+      const blob = await response.blob();
+      if (blob && blob.size > 0) {
+        return blob;
+      }
+    }
+  } catch (err) {
+    console.warn("fetchPollyAudioBlob failed:", err);
+  }
+  return null;
+};
