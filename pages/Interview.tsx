@@ -311,20 +311,43 @@ const CandidateInfoForm: React.FC<{
 
         let extractedEmail = profile.email ? profile.email.toLowerCase().trim() : (email ? email.toLowerCase().trim() : '');
 
-        // 1. First, check if email is already present in database (resumeDumpCandidates / resumeDump)
+        // 1. First, check if candidate is already present in database (resumeDumpCandidates / resumeDump)
         let foundRecord: any = null;
         if (extractedEmail && extractedEmail.includes('@') && extractedEmail.includes('.')) {
           let snap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('email', '==', extractedEmail), limit(1))).catch(() => null);
           if (!snap || snap.empty) {
+            snap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('profile.email', '==', extractedEmail), limit(1))).catch(() => null);
+          }
+          if (!snap || snap.empty) {
             snap = await getDocs(query(collection(db, 'resumeDump'), where('email', '==', extractedEmail), limit(1))).catch(() => null);
           }
           if (snap && !snap.empty) {
-            foundRecord = snap.docs[0].data();
+            const rawData: any = snap.docs[0].data();
+            foundRecord = { ...(rawData.profile || {}), ...rawData };
             setFoundDumpCandidate(foundRecord);
           }
         }
 
-        // If candidate profile exists in database, autofill from saved database record!
+        // Also check by phone if email didn't match and phone is available:
+        if (!foundRecord && (profile.phone || phone)) {
+          const rawPhone = (profile.phone || phone || '').replace(/\D/g, '');
+          if (rawPhone.length >= 10) {
+            let snap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('phone', '==', profile.phone || phone), limit(1))).catch(() => null);
+            if (!snap || snap.empty) {
+              snap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('profile.phone', '==', profile.phone || phone), limit(1))).catch(() => null);
+            }
+            if (!snap || snap.empty) {
+              snap = await getDocs(query(collection(db, 'resumeDump'), where('phone', '==', profile.phone || phone), limit(1))).catch(() => null);
+            }
+            if (snap && !snap.empty) {
+              const rawData: any = snap.docs[0].data();
+              foundRecord = { ...(rawData.profile || {}), ...rawData };
+              setFoundDumpCandidate(foundRecord);
+            }
+          }
+        }
+
+        // If candidate profile exists in resume dump, autofill from saved database record!
         if (foundRecord) {
           if (foundRecord.name) setName(foundRecord.name);
           if (foundRecord.email) setEmail(foundRecord.email.toLowerCase());
@@ -365,32 +388,12 @@ const CandidateInfoForm: React.FC<{
 
           setAutofillNotice(`Found saved candidate profile in database! Details autofilled automatically.`);
         } else {
-          // 2. If new candidate, extract core present fields cleanly (DO NOT fill fake/extra fields)
-          if (profile.name && profile.name !== 'Unknown Candidate') setName(profile.name);
-          if (profile.email) setEmail(profile.email.toLowerCase());
-          if (profile.phone) setPhone(profile.phone);
-          if (profile.gender && profile.gender !== 'Unspecified') setGender(profile.gender);
-          if (profile.location) setCurrentCity(profile.location);
-          if (profile.education && profile.education.length > 0) {
-            const topEdu = profile.education[0];
-            const eduStr = topEdu.degree || topEdu.institution || '';
-            if (eduStr) setQualificationBasic(eduStr);
-          }
+          // 2. If new candidate: ONLY fetch skills from the resume, nothing else!
           if (profile.skills && profile.skills.length > 0) {
             setHighlightedSkillsForJob(profile.skills.slice(0, 10).join(', '));
           }
-          // Only set experience if explicitly present in resume
-          if (profile.totalExperienceYears !== undefined && profile.totalExperienceYears !== null) {
-            if (profile.totalExperienceYears === 0) {
-              setIsFresher(true);
-              setTotalExperienceYears('0');
-            } else {
-              setIsFresher(false);
-              setTotalExperienceYears(profile.totalExperienceYears.toString());
-            }
-          }
 
-          setAutofillNotice(`Resume parsed successfully! Auto-filled contact details and skills.`);
+          setAutofillNotice(`Resume uploaded! Skills auto-detected from resume. Please fill in your personal details below.`);
         }
       }
 

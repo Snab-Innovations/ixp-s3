@@ -906,16 +906,22 @@ export default function PublicJobSeekerUpload() {
       const rawEmailMatch = rawResumeText.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
       const cleanExtractedEmail = rawEmailMatch ? rawEmailMatch[1].trim().toLowerCase() : '';
 
-      // 3. If email is already present in database, SKIP ALL AI PARSING and load existing profile instantly!
+      // 3. If email is already present in database (resume dump), load existing profile!
       if (cleanExtractedEmail) {
         try {
-          const q = query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanExtractedEmail));
-          const snap = await getDocs(q);
+          let snap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('email', '==', cleanExtractedEmail), limit(1)));
+          if (snap.empty) {
+            snap = await getDocs(query(collection(db, 'resumeDumpCandidates'), where('profile.email', '==', cleanExtractedEmail), limit(1)));
+          }
+          if (snap.empty) {
+            snap = await getDocs(query(collection(db, 'resumeDump'), where('email', '==', cleanExtractedEmail), limit(1)));
+          }
           if (!snap.empty) {
-            const matchedCand: any = { id: snap.docs[0].id, ...snap.docs[0].data() };
+            const docData: any = snap.docs[0].data();
+            const matchedCand: any = { id: snap.docs[0].id, ...(docData.profile || {}), ...docData };
             setCandidateEmail(cleanExtractedEmail);
             handleLoadExistingProfile(matchedCand);
-            messageBox.showSuccess(`Welcome back, ${matchedCand.name || matchedCand.profile?.name || 'Job Seeker'}! We found your existing profile registered under ${cleanExtractedEmail}. Showing your best matched job openings.`);
+            messageBox.showSuccess(`Welcome back, ${matchedCand.name || 'Job Seeker'}! We found your existing profile in database. Showing your best matched job openings.`);
             setIsParsingResume(false);
             return;
           }
@@ -924,42 +930,22 @@ export default function PublicJobSeekerUpload() {
         }
       }
 
-      // 4. For new candidates, perform high-speed skill & profile parsing
+      // 4. For new candidates, ONLY fetch skills from resume (nothing else fetched from resume)
       const ingested = await fastParseResumeFileLocally(file, {}, extraBioText);
       setParsedProfileData(ingested);
 
       if (ingested.profile) {
-        if (ingested.profile.name && !candidateName.trim()) setCandidateName(ingested.profile.name);
-        if (cleanExtractedEmail && !candidateEmail.trim()) {
-          setCandidateEmail(cleanExtractedEmail);
-          handleCheckEmailExists(cleanExtractedEmail);
-        } else if (ingested.profile.email && !candidateEmail.trim()) {
-          const emailVal = ingested.profile.email.trim().toLowerCase();
-          setCandidateEmail(emailVal);
-          handleCheckEmailExists(emailVal);
-        }
-
-        if (ingested.profile.phone && !candidatePhone.trim()) setCandidatePhone(ingested.profile.phone);
-
-        if (ingested.profile.education && ingested.profile.education.length > 0) {
-          const degree = ingested.profile.education[0]?.degree;
-          if (degree && !candidateEducation.trim()) {
-            setCandidateEducation(degree);
-          }
-        }
-
-        // Note: Location, Experience, Industry Sectors, and Functional Departments are intentionally NOT autofilled so that candidate must fill/select them manually.
-
+        // Only fetch skills from the resume as requested
         if (Array.isArray(ingested.profile.skills) && ingested.profile.skills.length > 0) {
           setExtractedSkills(ingested.profile.skills);
-          messageBox.showSuccess(`Resume attached! Skills auto-detected. Please fill in your Location, Experience, Industry Sectors, and Departments below.`);
+          messageBox.showSuccess(`Resume attached! Skills auto-detected from resume. Please fill in your personal details below.`);
         } else {
-          messageBox.showSuccess("Resume attached. Please fill in your Location, Experience, Industry Sectors, and Departments below.");
+          messageBox.showSuccess("Resume attached. Please fill in your details below.");
         }
       }
     } catch (err: any) {
       console.error("Resume Local Parsing Error:", err);
-      messageBox.showInfo("Resume attached. Please fill in your mandatory Location, Experience, Industry Sectors, and Departments below.");
+      messageBox.showInfo("Resume attached. Please fill in your details below.");
     } finally {
       setIsParsingResume(false);
     }
