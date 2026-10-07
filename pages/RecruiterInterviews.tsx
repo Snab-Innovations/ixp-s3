@@ -558,41 +558,98 @@ const RecruiterInterviews: React.FC = () => {
     };
 
     setLoading(true);
-    const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
-    const interviewsQuery = teamId
-      ? query(collection(db, 'interviews'), where('teamId', '==', teamId))
-      : query(collection(db, 'interviews'), where('recruiterUID', '==', user.uid));
+    const primaryUid = userProfile?.parentRecruiterId || (userProfile as any)?.primaryRecruiterUID || userProfile?.teamId || user.uid;
+    const isAdmin = (userProfile?.role || '').toLowerCase() === 'admin';
 
-    const unsubscribe = onSnapshot(interviewsQuery, async (querySnapshot) => {
-      const interviewsData = querySnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as Interview))
+    const docsBySource: Record<string, any[]> = {};
+    const unsubs: (() => void)[] = [];
+
+    const updateInterviewsFromSources = async () => {
+      const combinedMap = new Map<string, Interview>();
+      Object.values(docsBySource).flat().forEach((doc) => {
+        combinedMap.set(doc.id, doc);
+      });
+
+      const interviewsData = Array.from(combinedMap.values())
         .filter(interview => (interview as any).isMock !== true)
         .sort((a, b) => {
           const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0;
           const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0;
           return timeB - timeA;
         });
+
       setInterviews(interviewsData);
-      
+      setLoading(false);
+
       const newSubmissionsMap: Record<string, any[]> = {};
       for (const interview of interviewsData) {
-         try {
-             const qs = await getDocs(collection(db, 'interviews', interview.id, 'attempts'));
-             newSubmissionsMap[interview.id] = qs.docs.map(d => ({ id: d.id, ...d.data() }));
-         } catch (e) {
-             console.error("Error fetching submissions for", interview.id, e);
-             newSubmissionsMap[interview.id] = [];
-         }
+        try {
+          const qs = await getDocs(collection(db, 'interviews', interview.id, 'attempts'));
+          newSubmissionsMap[interview.id] = qs.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch (e) {
+          console.error("Error fetching submissions for", interview.id, e);
+          newSubmissionsMap[interview.id] = [];
+        }
       }
       setSubmissionsMap(newSubmissionsMap);
-      setLoading(false);
-    }, (err) => {
+    };
+
+    if (isAdmin) {
+      const unsubAll = onSnapshot(query(collection(db, 'interviews')), (snap) => {
+        docsBySource['all'] = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interview));
+        updateInterviewsFromSources();
+      }, (err) => {
         console.error("Error fetching interviews:", err);
         setLoading(false);
-    });
+      });
+      unsubs.push(unsubAll);
+    } else {
+      if (primaryUid) {
+        // 1. Team interviews (teamId == primaryUid)
+        const unsubTeam = onSnapshot(query(collection(db, 'interviews'), where('teamId', '==', primaryUid)), (snap) => {
+          docsBySource['team'] = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interview));
+          updateInterviewsFromSources();
+        }, (err) => {
+          console.error("Error fetching team interviews:", err);
+          setLoading(false);
+        });
+        unsubs.push(unsubTeam);
 
-    return () => unsubscribe();
-  }, [user]);
+        // 2. Primary recruiter's direct interviews (recruiterUID == primaryUid)
+        const unsubPrimary = onSnapshot(query(collection(db, 'interviews'), where('recruiterUID', '==', primaryUid)), (snap) => {
+          docsBySource['primary'] = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interview));
+          updateInterviewsFromSources();
+        }, (err) => {
+          console.error("Error fetching primary interviews:", err);
+          setLoading(false);
+        });
+        unsubs.push(unsubPrimary);
+
+        // 3. Parent recruiter interviews (parentRecruiterId == primaryUid)
+        const unsubParent = onSnapshot(query(collection(db, 'interviews'), where('parentRecruiterId', '==', primaryUid)), (snap) => {
+          docsBySource['parent'] = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interview));
+          updateInterviewsFromSources();
+        }, () => {});
+        unsubs.push(unsubParent);
+      }
+
+      // 4. If sub-recruiter (user.uid !== primaryUid), also listen to interviews created directly by this sub-recruiter
+      if (user.uid && user.uid !== primaryUid) {
+        const unsubUser = onSnapshot(query(collection(db, 'interviews'), where('recruiterUID', '==', user.uid)), (snap) => {
+          docsBySource['user'] = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interview));
+          updateInterviewsFromSources();
+        }, (err) => {
+          console.error("Error fetching user interviews:", err);
+          setLoading(false);
+        });
+        unsubs.push(unsubUser);
+      }
+    }
+
+    return () => {
+      unsubs.forEach(unsub => unsub());
+    };
+  }, [user, userProfile]);
 
   const handleDelete = (interviewId: string) => {
     const interviewToDelete = interviews.find(i => i.id === interviewId);

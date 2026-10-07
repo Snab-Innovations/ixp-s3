@@ -85,44 +85,73 @@ const InterviewCandidates: React.FC = () => {
   useEffect(() => {
     if (!user) return;
     setLoadingResumeDump(true);
-    const q = query(collection(db, 'resumeDumpCandidates'), where('recruiterUID', '==', user.uid));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const list: ResumeDumpRecord[] = snapshot.docs.map(candidateDoc => {
-        const data = candidateDoc.data();
-        return {
-          id: candidateDoc.id,
-          recruiterUID: data.recruiterUID || user.uid,
-          name: data.name || '',
-          email: data.email || '',
-          phone: data.phone || '',
-          location: data.location || '',
-          currentTitle: data.currentTitle || '',
-          summary: data.summary || '',
-          totalExperienceYears: data.totalExperienceYears || 0,
-          skills: Array.isArray(data.skills) ? data.skills : [],
-          experience: Array.isArray(data.experience) ? data.experience : [],
-          education: Array.isArray(data.education) ? data.education : [],
-          certifications: Array.isArray(data.certifications) ? data.certifications : [],
-          languages: Array.isArray(data.languages) ? data.languages : [],
-          keywords: Array.isArray(data.keywords) ? data.keywords : [],
-          linkedinUrl: data.linkedinUrl || '',
-          portfolioUrl: data.portfolioUrl || '',
-          parsingMethod: data.parsingMethod || 'deterministic',
-          parserVersion: data.parserVersion || 1,
-          resumeUrl: data.resumeUrl || '',
-          resumeFileName: data.resumeFileName || '',
-          isHired: Boolean(data.isHired),
-          doNotSuggest: Boolean(data.doNotSuggest),
-        };
-      });
-      setResumeDumpCandidates(list);
+    const primaryUid = userProfile?.parentRecruiterId || (userProfile as any)?.primaryRecruiterUID || userProfile?.teamId || user.uid;
+
+    const dumpBySource: Record<string, ResumeDumpRecord[]> = {};
+    const unsubs: (() => void)[] = [];
+
+    const syncDump = () => {
+      const map = new Map<string, ResumeDumpRecord>();
+      Object.values(dumpBySource).flat().forEach((d) => map.set(d.id, d));
+      setResumeDumpCandidates(Array.from(map.values()));
       setLoadingResumeDump(false);
-    }, (err) => {
-      console.error("Failed to load resume dump candidates for suggestions:", err);
-      setLoadingResumeDump(false);
-    });
-    return () => unsub();
-  }, [user]);
+    };
+
+    const mapCandidateDoc = (candidateDoc: any): ResumeDumpRecord => {
+      const data = candidateDoc.data();
+      return {
+        id: candidateDoc.id,
+        recruiterUID: data.recruiterUID || user.uid,
+        name: data.name || '',
+        email: data.email || '',
+        phone: data.phone || '',
+        location: data.location || '',
+        currentTitle: data.currentTitle || '',
+        summary: data.summary || '',
+        totalExperienceYears: data.totalExperienceYears || 0,
+        skills: Array.isArray(data.skills) ? data.skills : [],
+        experience: Array.isArray(data.experience) ? data.experience : [],
+        education: Array.isArray(data.education) ? data.education : [],
+        certifications: Array.isArray(data.certifications) ? data.certifications : [],
+        languages: Array.isArray(data.languages) ? data.languages : [],
+        keywords: Array.isArray(data.keywords) ? data.keywords : [],
+        linkedinUrl: data.linkedinUrl || '',
+        portfolioUrl: data.portfolioUrl || '',
+        parsingMethod: data.parsingMethod || 'deterministic',
+        parserVersion: data.parserVersion || 1,
+        resumeUrl: data.resumeUrl || '',
+        resumeFileName: data.resumeFileName || '',
+        isHired: Boolean(data.isHired),
+        doNotSuggest: Boolean(data.doNotSuggest),
+      };
+    };
+
+    if (primaryUid) {
+      const u1 = onSnapshot(query(collection(db, 'resumeDumpCandidates'), where('teamId', '==', primaryUid)), (snap) => {
+        dumpBySource['team'] = snap.docs.map(mapCandidateDoc);
+        syncDump();
+      }, () => setLoadingResumeDump(false));
+      unsubs.push(u1);
+
+      const u2 = onSnapshot(query(collection(db, 'resumeDumpCandidates'), where('recruiterUID', '==', primaryUid)), (snap) => {
+        dumpBySource['primary'] = snap.docs.map(mapCandidateDoc);
+        syncDump();
+      }, () => setLoadingResumeDump(false));
+      unsubs.push(u2);
+    }
+
+    if (user.uid && user.uid !== primaryUid) {
+      const u3 = onSnapshot(query(collection(db, 'resumeDumpCandidates'), where('recruiterUID', '==', user.uid)), (snap) => {
+        dumpBySource['user'] = snap.docs.map(mapCandidateDoc);
+        syncDump();
+      }, () => setLoadingResumeDump(false));
+      unsubs.push(u3);
+    }
+
+    return () => {
+      unsubs.forEach((u) => u());
+    };
+  }, [user, userProfile]);
 
   const suggestedCandidatesForInterview = useMemo(() => {
     if (!interview) return [];

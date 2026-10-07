@@ -720,6 +720,8 @@ const RecruiterAllJobs: React.FC = () => {
   const userRole = userProfile?.role;
   const userTeamId = userProfile?.teamId;
   const userParentRecruiterId = userProfile?.parentRecruiterId;
+  const userPrimaryRecruiterUID = (userProfile as any)?.primaryRecruiterUID;
+  const primaryUid = userParentRecruiterId || userPrimaryRecruiterUID || userTeamId || userUid || '';
 
   useEffect(() => {
     if (!userUid) {
@@ -728,13 +730,18 @@ const RecruiterAllJobs: React.FC = () => {
     }
 
     setLoading(true);
-    const resolvedTeamId = userTeamId || userParentRecruiterId || userUid;
     const isAdmin = userRole === 'admin';
 
     let fetchedTeamJobs: any[] = [];
+    let fetchedPrimaryJobs: any[] = [];
     let fetchedUserJobs: any[] = [];
+    let fetchedParentJobs: any[] = [];
+
     let fetchedTeamInterviews: any[] = [];
+    let fetchedPrimaryInterviews: any[] = [];
     let fetchedUserInterviews: any[] = [];
+    let fetchedParentInterviews: any[] = [];
+
     let fetchedApiJobs: any[] = [];
     let hasReceivedFirestoreData = false;
 
@@ -743,12 +750,16 @@ const RecruiterAllJobs: React.FC = () => {
 
       const rawJobsMap = new Map<string, any>();
       fetchedTeamJobs.forEach((d) => rawJobsMap.set(d.id, d));
+      fetchedPrimaryJobs.forEach((d) => rawJobsMap.set(d.id, d));
       fetchedUserJobs.forEach((d) => rawJobsMap.set(d.id, d));
+      fetchedParentJobs.forEach((d) => rawJobsMap.set(d.id, d));
       const jobsList = Array.from(rawJobsMap.values());
 
       const rawInterviewsMap = new Map<string, any>();
       fetchedTeamInterviews.forEach((d) => rawInterviewsMap.set(d.id, d));
+      fetchedPrimaryInterviews.forEach((d) => rawInterviewsMap.set(d.id, d));
       fetchedUserInterviews.forEach((d) => rawInterviewsMap.set(d.id, d));
+      fetchedParentInterviews.forEach((d) => rawInterviewsMap.set(d.id, d));
       const interviewsList = Array.from(rawInterviewsMap.values());
 
       jobsList.forEach((j) => {
@@ -895,7 +906,7 @@ const RecruiterAllJobs: React.FC = () => {
       setLoading(false);
     };
 
-    fetchJobFetchedApiJobs(userUid || 'pbbMTYxPDaf7jhc9uPEZ34CcWfz2').then((apiJobs) => {
+    fetchJobFetchedApiJobs(primaryUid || userUid || 'pbbMTYxPDaf7jhc9uPEZ34CcWfz2').then((apiJobs) => {
       fetchedApiJobs = apiJobs;
       if (hasReceivedFirestoreData || apiJobs.length > 0) {
         mergeAndSetJobs();
@@ -904,73 +915,123 @@ const RecruiterAllJobs: React.FC = () => {
       console.warn("Failed to fetch jobs from JobFetched REST API:", err);
     });
 
-    const jobsQuery = isAdmin
-      ? query(collection(db, 'jobs'))
-      : (resolvedTeamId && resolvedTeamId !== userUid
-          ? query(collection(db, 'jobs'), where('teamId', '==', resolvedTeamId))
-          : null);
+    const unsubs: (() => void)[] = [];
 
-    const userJobsQuery = isAdmin
-      ? null
-      : query(collection(db, 'jobs'), where('recruiterUID', '==', userUid));
+    if (isAdmin) {
+      const unsubJobs = onSnapshot(query(collection(db, 'jobs')), (snap) => {
+        hasReceivedFirestoreData = true;
+        fetchedPrimaryJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        mergeAndSetJobs();
+      }, (err) => {
+        console.error("Error fetching jobs", err);
+        setLoading(false);
+      });
+      unsubs.push(unsubJobs);
 
-    const interviewsQuery = isAdmin
-      ? query(collection(db, 'interviews'))
-      : (resolvedTeamId && resolvedTeamId !== userUid
-          ? query(collection(db, 'interviews'), where('teamId', '==', resolvedTeamId))
-          : null);
+      const unsubInterviews = onSnapshot(query(collection(db, 'interviews')), (snap) => {
+        hasReceivedFirestoreData = true;
+        fetchedPrimaryInterviews = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((d: any) => d.isMock !== true);
+        mergeAndSetJobs();
+      }, (err) => {
+        console.error("Error fetching interviews", err);
+        setLoading(false);
+      });
+      unsubs.push(unsubInterviews);
+    } else {
+      if (primaryUid) {
+        // 1. Team jobs (teamId == primaryUid)
+        const unsubTeamJobs = onSnapshot(query(collection(db, 'jobs'), where('teamId', '==', primaryUid)), (snap) => {
+          hasReceivedFirestoreData = true;
+          fetchedTeamJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          mergeAndSetJobs();
+        }, (err) => {
+          console.error("Error fetching team jobs", err);
+        });
+        unsubs.push(unsubTeamJobs);
 
-    const userInterviewsQuery = isAdmin
-      ? null
-      : query(collection(db, 'interviews'), where('recruiterUID', '==', userUid));
+        // 2. Primary recruiter's direct jobs (recruiterUID == primaryUid)
+        const unsubPrimaryJobs = onSnapshot(query(collection(db, 'jobs'), where('recruiterUID', '==', primaryUid)), (snap) => {
+          hasReceivedFirestoreData = true;
+          fetchedPrimaryJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          mergeAndSetJobs();
+        }, (err) => {
+          console.error("Error fetching primary jobs", err);
+        });
+        unsubs.push(unsubPrimaryJobs);
 
-    const unsubJobs = jobsQuery ? onSnapshot(jobsQuery, (snap) => {
-      hasReceivedFirestoreData = true;
-      fetchedTeamJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      mergeAndSetJobs();
-    }, (err) => {
-      console.error("Error fetching jobs", err);
-      setLoading(false);
-    }) : null;
+        // 3. Parent recruiter jobs (parentRecruiterId == primaryUid)
+        const unsubParentJobs = onSnapshot(query(collection(db, 'jobs'), where('parentRecruiterId', '==', primaryUid)), (snap) => {
+          hasReceivedFirestoreData = true;
+          fetchedParentJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          mergeAndSetJobs();
+        }, () => {});
+        unsubs.push(unsubParentJobs);
 
-    const unsubUserJobs = userJobsQuery ? onSnapshot(userJobsQuery, (snap) => {
-      hasReceivedFirestoreData = true;
-      fetchedUserJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      mergeAndSetJobs();
-    }, (err) => {
-      console.error("Error fetching user jobs", err);
-      setLoading(false);
-    }) : null;
+        // 4. Team interviews (teamId == primaryUid)
+        const unsubTeamInterviews = onSnapshot(query(collection(db, 'interviews'), where('teamId', '==', primaryUid)), (snap) => {
+          hasReceivedFirestoreData = true;
+          fetchedTeamInterviews = snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((d: any) => d.isMock !== true);
+          mergeAndSetJobs();
+        }, (err) => {
+          console.error("Error fetching team interviews", err);
+        });
+        unsubs.push(unsubTeamInterviews);
 
-    const unsubInterviews = interviewsQuery ? onSnapshot(interviewsQuery, (snap) => {
-      hasReceivedFirestoreData = true;
-      fetchedTeamInterviews = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((d: any) => d.isMock !== true);
-      mergeAndSetJobs();
-    }, (err) => {
-      console.error("Error fetching interviews", err);
-      setLoading(false);
-    }) : null;
+        // 5. Primary recruiter's direct interviews (recruiterUID == primaryUid)
+        const unsubPrimaryInterviews = onSnapshot(query(collection(db, 'interviews'), where('recruiterUID', '==', primaryUid)), (snap) => {
+          hasReceivedFirestoreData = true;
+          fetchedPrimaryInterviews = snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((d: any) => d.isMock !== true);
+          mergeAndSetJobs();
+        }, (err) => {
+          console.error("Error fetching primary interviews", err);
+        });
+        unsubs.push(unsubPrimaryInterviews);
 
-    const unsubUserInterviews = userInterviewsQuery ? onSnapshot(userInterviewsQuery, (snap) => {
-      hasReceivedFirestoreData = true;
-      fetchedUserInterviews = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((d: any) => d.isMock !== true);
-      mergeAndSetJobs();
-    }, (err) => {
-      console.error("Error fetching user interviews", err);
-      setLoading(false);
-    }) : null;
+        // 6. Parent recruiter interviews (parentRecruiterId == primaryUid)
+        const unsubParentInterviews = onSnapshot(query(collection(db, 'interviews'), where('parentRecruiterId', '==', primaryUid)), (snap) => {
+          hasReceivedFirestoreData = true;
+          fetchedParentInterviews = snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((d: any) => d.isMock !== true);
+          mergeAndSetJobs();
+        }, () => {});
+        unsubs.push(unsubParentInterviews);
+      }
+
+      // If sub-recruiter (userUid !== primaryUid), also listen to jobs and interviews created by this sub-recruiter
+      if (userUid && userUid !== primaryUid) {
+        const unsubUserJobs = onSnapshot(query(collection(db, 'jobs'), where('recruiterUID', '==', userUid)), (snap) => {
+          hasReceivedFirestoreData = true;
+          fetchedUserJobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          mergeAndSetJobs();
+        }, (err) => {
+          console.error("Error fetching user jobs", err);
+        });
+        unsubs.push(unsubUserJobs);
+
+        const unsubUserInterviews = onSnapshot(query(collection(db, 'interviews'), where('recruiterUID', '==', userUid)), (snap) => {
+          hasReceivedFirestoreData = true;
+          fetchedUserInterviews = snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((d: any) => d.isMock !== true);
+          mergeAndSetJobs();
+        }, (err) => {
+          console.error("Error fetching user interviews", err);
+        });
+        unsubs.push(unsubUserInterviews);
+      }
+    }
 
     return () => {
-      if (unsubJobs) unsubJobs();
-      if (unsubUserJobs) unsubUserJobs();
-      if (unsubInterviews) unsubInterviews();
-      if (unsubUserInterviews) unsubUserInterviews();
+      unsubs.forEach((unsub) => unsub());
     };
-  }, [userUid, userRole, userTeamId, userParentRecruiterId]);
+  }, [userUid, userRole, userTeamId, userParentRecruiterId, userPrimaryRecruiterUID]);
 
   // Real-time tracking of candidate applications count per job
   const [appliedCountMap, setAppliedCountMap] = useState<Record<string, number>>({});

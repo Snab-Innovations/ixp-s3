@@ -253,90 +253,147 @@ const RecruiterDashboard: React.FC = () => {
     setLoadingTests(true);
 
     const userUid = user?.uid;
-    const resolvedTeamId = userProfile?.teamId || userProfile?.parentRecruiterId || userUid;
+    const primaryUid = userProfile?.parentRecruiterId || (userProfile as any)?.primaryRecruiterUID || userProfile?.teamId || userUid || '';
     const isAdmin = (userProfile?.role || '').toLowerCase() === 'admin';
 
-    fetchJobFetchedApiJobs(userUid || 'pbbMTYxPDaf7jhc9uPEZ34CcWfz2')
+    fetchJobFetchedApiJobs(primaryUid || userUid || 'pbbMTYxPDaf7jhc9uPEZ34CcWfz2')
       .then((jobs) => setApiJobs(jobs || []))
       .catch((err) => console.warn('Failed to fetch jobs from JobFetched API:', err));
 
-    const jobsQuery = isAdmin
-      ? query(collection(db, 'jobs'))
-      : (resolvedTeamId && resolvedTeamId !== userUid
-        ? query(collection(db, 'jobs'), where('teamId', '==', resolvedTeamId))
-        : query(collection(db, 'jobs'), where('recruiterUID', '==', userUid)));
+    const jobDocsBySource: Record<string, RecruiterJobRecord[]> = {};
+    const interviewDocsBySource: Record<string, RecruiterInterviewRecord[]> = {};
+    const testDocsBySource: Record<string, RecruiterTestRecord[]> = {};
+    const unsubs: (() => void)[] = [];
 
-    const interviewsQuery = isAdmin
-      ? query(collection(db, 'interviews'))
-      : (resolvedTeamId && resolvedTeamId !== userUid
-        ? query(collection(db, 'interviews'), where('teamId', '==', resolvedTeamId))
-        : query(collection(db, 'interviews'), where('recruiterUID', '==', userUid)));
+    const syncJobs = () => {
+      const map = new Map<string, RecruiterJobRecord>();
+      Object.values(jobDocsBySource).flat().forEach((d) => map.set(d.id, d));
+      setJobDocs(Array.from(map.values()));
+      setLoadingJobs(false);
+    };
 
-    const testsQuery = isAdmin
-      ? query(collection(db, 'tests'))
-      : (resolvedTeamId && resolvedTeamId !== userUid
-        ? query(collection(db, 'tests'), where('teamId', '==', resolvedTeamId))
-        : query(collection(db, 'tests'), where('recruiterUID', '==', userUid)));
+    const syncInterviews = () => {
+      const map = new Map<string, RecruiterInterviewRecord>();
+      Object.values(interviewDocsBySource).flat().forEach((d) => map.set(d.id, d));
+      const records = Array.from(map.values()).filter((record) => record.isMock !== true);
+      setInterviews(records);
+      setLoadingInterviews(false);
+    };
 
-    const unsubscribeJobs = onSnapshot(
-      jobsQuery,
-      (snapshot) => {
-        const records = snapshot.docs.map((snapshotDoc) => ({
-          id: snapshotDoc.id,
-          ...snapshotDoc.data(),
-        } as RecruiterJobRecord));
-        setJobDocs(records);
+    const syncTests = () => {
+      const map = new Map<string, RecruiterTestRecord>();
+      Object.values(testDocsBySource).flat().forEach((d) => map.set(d.id, d));
+      setTests(Array.from(map.values()));
+      setLoadingTests(false);
+    };
+
+    if (isAdmin) {
+      const unsubJobs = onSnapshot(query(collection(db, 'jobs')), (snap) => {
+        jobDocsBySource['all'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterJobRecord));
+        syncJobs();
+      }, (err) => {
+        console.error('Error fetching admin jobs:', err);
         setLoadingJobs(false);
-      },
-      (error) => {
-        console.error('Error fetching recruiter jobs:', error);
-        setJobDocs([]);
-        setLoadingJobs(false);
-      }
-    );
+      });
+      unsubs.push(unsubJobs);
 
-    const unsubscribeInterviews = onSnapshot(
-      interviewsQuery,
-      (snapshot) => {
-        const records = snapshot.docs
-          .map((snapshotDoc) => ({
-            id: snapshotDoc.id,
-            ...snapshotDoc.data(),
-          } as RecruiterInterviewRecord))
-          .filter((record) => record.isMock !== true);
-        setInterviews(records);
+      const unsubInterviews = onSnapshot(query(collection(db, 'interviews')), (snap) => {
+        interviewDocsBySource['all'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterInterviewRecord));
+        syncInterviews();
+      }, (err) => {
+        console.error('Error fetching admin interviews:', err);
         setLoadingInterviews(false);
-      },
-      (error) => {
-        console.error('Error fetching recruiter interviews:', error);
-        setInterviews([]);
-        setLoadingInterviews(false);
-      }
-    );
+      });
+      unsubs.push(unsubInterviews);
 
-    const unsubscribeTests = onSnapshot(
-      testsQuery,
-      (snapshot) => {
-        const records = snapshot.docs.map((snapshotDoc) => ({
-          id: snapshotDoc.id,
-          ...snapshotDoc.data(),
-        } as RecruiterTestRecord));
-        setTests(records);
+      const unsubTests = onSnapshot(query(collection(db, 'tests')), (snap) => {
+        testDocsBySource['all'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterTestRecord));
+        syncTests();
+      }, (err) => {
+        console.error('Error fetching admin tests:', err);
         setLoadingTests(false);
-      },
-      (error) => {
-        console.error('Error fetching recruiter tests:', error);
-        setTests([]);
-        setLoadingTests(false);
+      });
+      unsubs.push(unsubTests);
+    } else {
+      if (primaryUid) {
+        // Team queries
+        const unsubTeamJobs = onSnapshot(query(collection(db, 'jobs'), where('teamId', '==', primaryUid)), (snap) => {
+          jobDocsBySource['team'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterJobRecord));
+          syncJobs();
+        }, () => setLoadingJobs(false));
+        unsubs.push(unsubTeamJobs);
+
+        const unsubTeamInterviews = onSnapshot(query(collection(db, 'interviews'), where('teamId', '==', primaryUid)), (snap) => {
+          interviewDocsBySource['team'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterInterviewRecord));
+          syncInterviews();
+        }, () => setLoadingInterviews(false));
+        unsubs.push(unsubTeamInterviews);
+
+        const unsubTeamTests = onSnapshot(query(collection(db, 'tests'), where('teamId', '==', primaryUid)), (snap) => {
+          testDocsBySource['team'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterTestRecord));
+          syncTests();
+        }, () => setLoadingTests(false));
+        unsubs.push(unsubTeamTests);
+
+        // Primary recruiter queries (direct)
+        const unsubPrimaryJobs = onSnapshot(query(collection(db, 'jobs'), where('recruiterUID', '==', primaryUid)), (snap) => {
+          jobDocsBySource['primary'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterJobRecord));
+          syncJobs();
+        }, () => setLoadingJobs(false));
+        unsubs.push(unsubPrimaryJobs);
+
+        const unsubPrimaryInterviews = onSnapshot(query(collection(db, 'interviews'), where('recruiterUID', '==', primaryUid)), (snap) => {
+          interviewDocsBySource['primary'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterInterviewRecord));
+          syncInterviews();
+        }, () => setLoadingInterviews(false));
+        unsubs.push(unsubPrimaryInterviews);
+
+        const unsubPrimaryTests = onSnapshot(query(collection(db, 'tests'), where('recruiterUID', '==', primaryUid)), (snap) => {
+          testDocsBySource['primary'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterTestRecord));
+          syncTests();
+        }, () => setLoadingTests(false));
+        unsubs.push(unsubPrimaryTests);
+
+        // Parent recruiter queries
+        const unsubParentJobs = onSnapshot(query(collection(db, 'jobs'), where('parentRecruiterId', '==', primaryUid)), (snap) => {
+          jobDocsBySource['parent'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterJobRecord));
+          syncJobs();
+        }, () => {});
+        unsubs.push(unsubParentJobs);
+
+        const unsubParentInterviews = onSnapshot(query(collection(db, 'interviews'), where('parentRecruiterId', '==', primaryUid)), (snap) => {
+          interviewDocsBySource['parent'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterInterviewRecord));
+          syncInterviews();
+        }, () => {});
+        unsubs.push(unsubParentInterviews);
       }
-    );
+
+      // If sub-recruiter (userUid !== primaryUid)
+      if (userUid && userUid !== primaryUid) {
+        const unsubUserJobs = onSnapshot(query(collection(db, 'jobs'), where('recruiterUID', '==', userUid)), (snap) => {
+          jobDocsBySource['user'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterJobRecord));
+          syncJobs();
+        }, () => setLoadingJobs(false));
+        unsubs.push(unsubUserJobs);
+
+        const unsubUserInterviews = onSnapshot(query(collection(db, 'interviews'), where('recruiterUID', '==', userUid)), (snap) => {
+          interviewDocsBySource['user'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterInterviewRecord));
+          syncInterviews();
+        }, () => setLoadingInterviews(false));
+        unsubs.push(unsubUserInterviews);
+
+        const unsubUserTests = onSnapshot(query(collection(db, 'tests'), where('recruiterUID', '==', userUid)), (snap) => {
+          testDocsBySource['user'] = snap.docs.map(d => ({ id: d.id, ...d.data() } as RecruiterTestRecord));
+          syncTests();
+        }, () => setLoadingTests(false));
+        unsubs.push(unsubUserTests);
+      }
+    }
 
     return () => {
-      unsubscribeJobs();
-      unsubscribeInterviews();
-      unsubscribeTests();
+      unsubs.forEach((unsub) => unsub());
     };
-  }, [user]);
+  }, [user, userProfile]);
 
   useEffect(() => {
     if (!user) {

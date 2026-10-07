@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db, auth } from '../services/firebase';
+import { useAuth } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -75,6 +76,7 @@ const StatCell = ({ label, value, tone = 'text-white' }: { label: string; value:
 );
 
 const RecruiterTests: React.FC = () => {
+  const { userProfile } = useAuth();
   const [tests, setTests] = useState<any[]>([]);
   const [submissionsMap, setSubmissionsMap] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
@@ -94,18 +96,37 @@ const RecruiterTests: React.FC = () => {
 
   useEffect(() => {
     const fetchTests = async () => {
-      if (!auth.currentUser) {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
         setLoading(false);
         return;
       }
 
       try {
-        const q = query(
-          collection(db, 'tests'),
-          where('recruiterUID', '==', auth.currentUser.uid)
-        );
-        const snap = await getDocs(q);
-        const fetchedTests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const primaryUid = userProfile?.parentRecruiterId || (userProfile as any)?.primaryRecruiterUID || userProfile?.teamId || currentUser.uid;
+        const isAdmin = (userProfile?.role || '').toLowerCase() === 'admin';
+
+        const docMap = new Map<string, any>();
+        if (isAdmin) {
+          const snap = await getDocs(collection(db, 'tests'));
+          snap.docs.forEach(d => docMap.set(d.id, { id: d.id, ...d.data() }));
+        } else {
+          const promises = [];
+          if (primaryUid) {
+            promises.push(getDocs(query(collection(db, 'tests'), where('teamId', '==', primaryUid))));
+            promises.push(getDocs(query(collection(db, 'tests'), where('recruiterUID', '==', primaryUid))));
+            promises.push(getDocs(query(collection(db, 'tests'), where('parentRecruiterId', '==', primaryUid))));
+          }
+          if (currentUser.uid && currentUser.uid !== primaryUid) {
+            promises.push(getDocs(query(collection(db, 'tests'), where('recruiterUID', '==', currentUser.uid))));
+          }
+          const results = await Promise.all(promises);
+          results.forEach(snap => {
+            snap.docs.forEach(d => docMap.set(d.id, { id: d.id, ...d.data() }));
+          });
+        }
+
+        const fetchedTests = Array.from(docMap.values());
         fetchedTests.sort((a: any, b: any) => toMillis(b.createdAt) - toMillis(a.createdAt));
         setTests(fetchedTests);
 
@@ -132,7 +153,7 @@ const RecruiterTests: React.FC = () => {
     };
 
     fetchTests();
-  }, [showError]);
+  }, [showError, userProfile]);
 
   const handleDelete = async (id: string) => {
     showConfirm('Delete this assessment and remove it from your workspace?', async () => {

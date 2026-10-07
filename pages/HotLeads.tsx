@@ -149,7 +149,7 @@ export default function HotLeads() {
     if (!userUid) return;
     setLoading(true);
 
-    const resolvedTeamId = userTeamId || userParentRecruiterId || userUid;
+    const primaryUid = userParentRecruiterId || (userProfile as any)?.primaryRecruiterUID || userTeamId || userUid || '';
 
     let jobsList: any[] = [];
     let applicationsList: any[] = [];
@@ -329,13 +329,13 @@ export default function HotLeads() {
     };
 
     // A. Query Recruiter Jobs & Interviews
-    let interviewsList: any[] = [];
-    let directJobsList: any[] = [];
+    const directJobsBySource: Record<string, any[]> = {};
+    const interviewsBySource: Record<string, any[]> = {};
 
     const updateMergedJobs = () => {
       const mergedMap = new Map<string, any>();
-      directJobsList.forEach((j) => mergedMap.set(j.id, j));
-      interviewsList.forEach((i) => {
+      Object.values(directJobsBySource).flat().forEach((j) => mergedMap.set(j.id, j));
+      Object.values(interviewsBySource).flat().forEach((i) => {
         const existing = mergedMap.get(i.id);
         mergedMap.set(i.id, {
           ...existing,
@@ -351,40 +351,90 @@ export default function HotLeads() {
       mergeAllData();
     };
 
-    const jobsQ = isAdmin
-      ? query(collection(db, 'interviews'))
-      : resolvedTeamId && resolvedTeamId !== userUid
-      ? query(collection(db, 'interviews'), where('teamId', '==', resolvedTeamId))
-      : query(collection(db, 'interviews'), where('recruiterUID', '==', userUid));
+    const unsubsJobsList: (() => void)[] = [];
 
-    const directJobsQ = isAdmin
-      ? query(collection(db, 'jobs'))
-      : resolvedTeamId && resolvedTeamId !== userUid
-      ? query(collection(db, 'jobs'), where('teamId', '==', resolvedTeamId))
-      : query(collection(db, 'jobs'), where('recruiterUID', '==', userUid));
+    if (isAdmin) {
+      const unsubJobs = onSnapshot(
+        query(collection(db, 'interviews')),
+        (snap) => {
+          interviewsBySource['all'] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          updateMergedJobs();
+        },
+        (err) => {
+          console.error('Error fetching interviews in HotLeads:', err);
+          setLoading(false);
+        }
+      );
+      unsubsJobsList.push(unsubJobs);
 
-    const unsubJobs = onSnapshot(
-      jobsQ,
-      (snap) => {
-        interviewsList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        updateMergedJobs();
-      },
-      (err) => {
-        console.error('Error fetching interviews in HotLeads:', err);
-        setLoading(false);
+      const unsubDirectJobs = onSnapshot(
+        query(collection(db, 'jobs')),
+        (snap) => {
+          directJobsBySource['all'] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          updateMergedJobs();
+        },
+        (err) => {
+          console.error('Error fetching direct jobs in HotLeads:', err);
+        }
+      );
+      unsubsJobsList.push(unsubDirectJobs);
+    } else {
+      if (primaryUid) {
+        // Team queries
+        const uTeamInt = onSnapshot(query(collection(db, 'interviews'), where('teamId', '==', primaryUid)), (snap) => {
+          interviewsBySource['team'] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          updateMergedJobs();
+        }, () => setLoading(false));
+        unsubsJobsList.push(uTeamInt);
+
+        const uTeamJobs = onSnapshot(query(collection(db, 'jobs'), where('teamId', '==', primaryUid)), (snap) => {
+          directJobsBySource['team'] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          updateMergedJobs();
+        });
+        unsubsJobsList.push(uTeamJobs);
+
+        // Primary recruiter direct queries
+        const uPrimInt = onSnapshot(query(collection(db, 'interviews'), where('recruiterUID', '==', primaryUid)), (snap) => {
+          interviewsBySource['primary'] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          updateMergedJobs();
+        }, () => setLoading(false));
+        unsubsJobsList.push(uPrimInt);
+
+        const uPrimJobs = onSnapshot(query(collection(db, 'jobs'), where('recruiterUID', '==', primaryUid)), (snap) => {
+          directJobsBySource['primary'] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          updateMergedJobs();
+        });
+        unsubsJobsList.push(uPrimJobs);
+
+        // Parent recruiter queries
+        const uParentInt = onSnapshot(query(collection(db, 'interviews'), where('parentRecruiterId', '==', primaryUid)), (snap) => {
+          interviewsBySource['parent'] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          updateMergedJobs();
+        }, () => {});
+        unsubsJobsList.push(uParentInt);
+
+        const uParentJobs = onSnapshot(query(collection(db, 'jobs'), where('parentRecruiterId', '==', primaryUid)), (snap) => {
+          directJobsBySource['parent'] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          updateMergedJobs();
+        }, () => {});
+        unsubsJobsList.push(uParentJobs);
       }
-    );
 
-    const unsubDirectJobs = onSnapshot(
-      directJobsQ,
-      (snap) => {
-        directJobsList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        updateMergedJobs();
-      },
-      (err) => {
-        console.error('Error fetching direct jobs in HotLeads:', err);
+      // Sub-recruiter's own queries
+      if (userUid && userUid !== primaryUid) {
+        const uUserInt = onSnapshot(query(collection(db, 'interviews'), where('recruiterUID', '==', userUid)), (snap) => {
+          interviewsBySource['user'] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          updateMergedJobs();
+        }, () => setLoading(false));
+        unsubsJobsList.push(uUserInt);
+
+        const uUserJobs = onSnapshot(query(collection(db, 'jobs'), where('recruiterUID', '==', userUid)), (snap) => {
+          directJobsBySource['user'] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          updateMergedJobs();
+        });
+        unsubsJobsList.push(uUserJobs);
       }
-    );
+    }
 
     // B. Query Candidate Applications
     const appsQ = query(collection(db, 'candidateApplications'), orderBy('appliedAt', 'desc'));
@@ -413,12 +463,11 @@ export default function HotLeads() {
     );
 
     return () => {
-      unsubJobs();
-      unsubDirectJobs();
+      unsubsJobsList.forEach((u) => u());
       unsubApps();
       unsubResp();
     };
-  }, [userUid, userTeamId, userParentRecruiterId, isAdmin]);
+  }, [userUid, userTeamId, userParentRecruiterId, isAdmin, (userProfile as any)?.primaryRecruiterUID]);
 
   // ── Filtered Leads ──
   const filteredLeads = useMemo(() => {

@@ -328,14 +328,32 @@ const InvitedCandidates: React.FC = () => {
 
         const fetchData = async () => {
             try {
-                // 1. Fetch all interviews for this team
-                const teamId = userProfile?.teamId || userProfile?.parentRecruiterId || user.uid;
-                const q = teamId
-                    ? query(collection(db, 'interviews'), where('teamId', '==', teamId))
-                    : query(collection(db, 'interviews'), where('recruiterUID', '==', user.uid));
-                const snapshot = await getDocs(q);
-                const fetchedInterviews = snapshot.docs
-                    .map(d => ({id: d.id, ...d.data()} as Interview))
+                // 1. Fetch all interviews for this team and primary recruiter
+                const primaryUid = userProfile?.parentRecruiterId || (userProfile as any)?.primaryRecruiterUID || userProfile?.teamId || user.uid;
+                const isAdmin = (userProfile?.role || '').toLowerCase() === 'admin';
+
+                const docMap = new Map<string, any>();
+                if (isAdmin) {
+                    const snap = await getDocs(collection(db, 'interviews'));
+                    snap.docs.forEach(d => docMap.set(d.id, { id: d.id, ...d.data() }));
+                } else {
+                    const promises = [];
+                    if (primaryUid) {
+                        promises.push(getDocs(query(collection(db, 'interviews'), where('teamId', '==', primaryUid))));
+                        promises.push(getDocs(query(collection(db, 'interviews'), where('recruiterUID', '==', primaryUid))));
+                        promises.push(getDocs(query(collection(db, 'interviews'), where('parentRecruiterId', '==', primaryUid))));
+                    }
+                    if (user.uid && user.uid !== primaryUid) {
+                        promises.push(getDocs(query(collection(db, 'interviews'), where('recruiterUID', '==', user.uid))));
+                    }
+                    const results = await Promise.all(promises);
+                    results.forEach(snap => {
+                        snap.docs.forEach(d => docMap.set(d.id, { id: d.id, ...d.data() }));
+                    });
+                }
+
+                const fetchedInterviews = Array.from(docMap.values())
+                    .map(d => ({id: d.id, ...d} as Interview))
                     .filter(interview => interview.isMock !== true)
                     .sort((a, b) => {
                         const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0;
@@ -397,7 +415,7 @@ const InvitedCandidates: React.FC = () => {
             }
         };
         fetchData();
-    }, [user]);
+    }, [user, userProfile]);
 
     const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files;

@@ -306,60 +306,77 @@ const CreateInterview: React.FC = () => {
     }
 
     setLoadingResumeDumpCandidates(true);
-    const resumeDumpQuery = query(
-      collection(db, 'resumeDumpCandidates'),
-      where('recruiterUID', '==', user.uid)
-    );
+    const primaryUid = userProfile?.parentRecruiterId || (userProfile as any)?.primaryRecruiterUID || userProfile?.teamId || user.uid;
+    const dumpBySource: Record<string, any[]> = {};
+    const unsubs: (() => void)[] = [];
 
-    const unsubscribe = onSnapshot(
-      resumeDumpQuery,
-      (snapshot) => {
-        const mapped = snapshot.docs.map((candidateDoc) => {
-          const data = candidateDoc.data();
-          return {
-            id: candidateDoc.id,
-            recruiterUID: typeof data.recruiterUID === 'string' ? data.recruiterUID : user.uid,
-            name: typeof data.name === 'string' ? data.name : '',
-            email: typeof data.email === 'string' ? data.email : '',
-            phone: typeof data.phone === 'string' ? data.phone : '',
-            location: typeof data.location === 'string' ? data.location : '',
-            currentTitle: typeof data.currentTitle === 'string' ? data.currentTitle : '',
-            summary: typeof data.summary === 'string' ? data.summary : '',
-            totalExperienceYears: typeof data.totalExperienceYears === 'number' ? data.totalExperienceYears : 0,
-            skills: Array.isArray(data.skills) ? data.skills.filter((skill: unknown): skill is string => typeof skill === 'string' && skill.trim().length > 0) : [],
-            experience: Array.isArray(data.experience) ? data.experience : [],
-            education: Array.isArray(data.education) ? data.education : [],
-            certifications: Array.isArray(data.certifications) ? data.certifications : [],
-            languages: Array.isArray(data.languages) ? data.languages : [],
-            keywords: Array.isArray(data.keywords) ? data.keywords : [],
-            linkedinUrl: typeof data.linkedinUrl === 'string' ? data.linkedinUrl : '',
-            portfolioUrl: typeof data.portfolioUrl === 'string' ? data.portfolioUrl : '',
-            parsingMethod: data.parsingMethod === 'hybrid' ? 'hybrid' : 'deterministic',
-            parserVersion: typeof data.parserVersion === 'number' ? data.parserVersion : 1,
-            resumeUrl: typeof data.resumeUrl === 'string' ? data.resumeUrl : '',
-            resumeFileName: typeof data.resumeFileName === 'string' ? data.resumeFileName : '',
-            resumeText: typeof data.resumeText === 'string' ? data.resumeText : '',
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
-          };
-        });
-        setResumeDumpCandidates(dedupeCandidatesByIdentity(mapped, (candidate) => {
-          const stamp = candidate.updatedAt || candidate.createdAt;
-          if (stamp && typeof stamp === 'object' && 'toMillis' in stamp && typeof (stamp as { toMillis?: unknown }).toMillis === 'function') {
-            return (stamp as { toMillis: () => number }).toMillis();
-          }
-          return 0;
-        }));
-        setLoadingResumeDumpCandidates(false);
-      },
-      (error) => {
-        console.error('Failed to load resume dump candidates:', error);
-        setLoadingResumeDumpCandidates(false);
-      }
-    );
+    const mapDocs = () => {
+      const combined = new Map<string, any>();
+      Object.values(dumpBySource).flat().forEach(d => combined.set(d.id, d));
+      const list = Array.from(combined.values());
+      setResumeDumpCandidates(dedupeCandidatesByIdentity(list, (candidate) => {
+        const stamp = candidate.updatedAt || candidate.createdAt;
+        if (stamp && typeof stamp === 'object' && 'toMillis' in stamp && typeof (stamp as { toMillis?: unknown }).toMillis === 'function') {
+          return (stamp as { toMillis: () => number }).toMillis();
+        }
+        return 0;
+      }));
+      setLoadingResumeDumpCandidates(false);
+    };
 
-    return unsubscribe;
-  }, [user]);
+    const mapCandidateDoc = (candidateDoc: any) => {
+      const data = candidateDoc.data();
+      return {
+        id: candidateDoc.id,
+        recruiterUID: typeof data.recruiterUID === 'string' ? data.recruiterUID : user.uid,
+        name: typeof data.name === 'string' ? data.name : '',
+        email: typeof data.email === 'string' ? data.email : '',
+        phone: typeof data.phone === 'string' ? data.phone : '',
+        location: typeof data.location === 'string' ? data.location : '',
+        currentTitle: typeof data.currentTitle === 'string' ? data.currentTitle : '',
+        summary: typeof data.summary === 'string' ? data.summary : '',
+        totalExperienceYears: typeof data.totalExperienceYears === 'number' ? data.totalExperienceYears : 0,
+        skills: Array.isArray(data.skills) ? data.skills.filter((skill: unknown): skill is string => typeof skill === 'string' && skill.trim().length > 0) : [],
+        experience: Array.isArray(data.experience) ? data.experience : [],
+        education: Array.isArray(data.education) ? data.education : [],
+        certifications: Array.isArray(data.certifications) ? data.certifications : [],
+        languages: Array.isArray(data.languages) ? data.languages : [],
+        keywords: Array.isArray(data.keywords) ? data.keywords : [],
+        linkedinUrl: typeof data.linkedinUrl === 'string' ? data.linkedinUrl : '',
+        portfolioUrl: typeof data.portfolioUrl === 'string' ? data.portfolioUrl : '',
+        parsingMethod: data.parsingMethod === 'hybrid' ? 'hybrid' : 'deterministic',
+        parserVersion: typeof data.parserVersion === 'number' ? data.parserVersion : 1,
+        resumeUrl: typeof data.resumeUrl === 'string' ? data.resumeUrl : '',
+        resumeFileName: typeof data.resumeFileName === 'string' ? data.resumeFileName : '',
+        resumeText: typeof data.resumeText === 'string' ? data.resumeText : '',
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+      };
+    };
+
+    if (primaryUid) {
+      unsubs.push(onSnapshot(query(collection(db, 'resumeDumpCandidates'), where('teamId', '==', primaryUid)), (snap) => {
+        dumpBySource['team'] = snap.docs.map(mapCandidateDoc);
+        mapDocs();
+      }, () => setLoadingResumeDumpCandidates(false)));
+
+      unsubs.push(onSnapshot(query(collection(db, 'resumeDumpCandidates'), where('recruiterUID', '==', primaryUid)), (snap) => {
+        dumpBySource['primary'] = snap.docs.map(mapCandidateDoc);
+        mapDocs();
+      }, () => setLoadingResumeDumpCandidates(false)));
+    }
+
+    if (user.uid && user.uid !== primaryUid) {
+      unsubs.push(onSnapshot(query(collection(db, 'resumeDumpCandidates'), where('recruiterUID', '==', user.uid)), (snap) => {
+        dumpBySource['user'] = snap.docs.map(mapCandidateDoc);
+        mapDocs();
+      }, () => setLoadingResumeDumpCandidates(false)));
+    }
+
+    return () => {
+      unsubs.forEach((u) => u());
+    };
+  }, [user, userProfile]);
 
   useEffect(() => {
     if (!user) {
@@ -371,33 +388,53 @@ const CreateInterview: React.FC = () => {
 
     setLoadingShortlistedCandidates(true);
     setShortlistedCandidatesError(false);
-    const shortlistedCandidatesQuery = query(
-      collectionGroup(db, 'attempts'),
-      where('recruiterUID', '==', user.uid),
-      where('status', '==', 'Shortlist')
-    );
+    const primaryUid = userProfile?.parentRecruiterId || (userProfile as any)?.primaryRecruiterUID || userProfile?.teamId || user.uid;
+    const shortlistedBySource: Record<string, any[]> = {};
+    const unsubsShort: (() => void)[] = [];
 
-    const unsubscribe = onSnapshot(
-      shortlistedCandidatesQuery,
-      (snapshot) => {
-        const identityKeys = new Set<string>();
-        snapshot.docs.forEach((attemptDoc) => {
-          const candidateInfo = attemptDoc.data().candidateInfo;
-          getCandidateIdentityKeys(candidateInfo).forEach((key) => identityKeys.add(key));
-        });
-        setShortlistedCandidateIdentityKeys(identityKeys);
-        setLoadingShortlistedCandidates(false);
-      },
-      (error) => {
-        console.error('Failed to load permanently shortlisted candidates:', error);
-        setShortlistedCandidateIdentityKeys(new Set());
+    const syncShort = () => {
+      const identityKeys = new Set<string>();
+      Object.values(shortlistedBySource).flat().forEach((candidateInfo) => {
+        getCandidateIdentityKeys(candidateInfo).forEach((key) => identityKeys.add(key));
+      });
+      setShortlistedCandidateIdentityKeys(identityKeys);
+      setLoadingShortlistedCandidates(false);
+    };
+
+    if (primaryUid) {
+      unsubsShort.push(onSnapshot(query(
+        collectionGroup(db, 'attempts'),
+        where('recruiterUID', '==', primaryUid),
+        where('status', '==', 'Shortlist')
+      ), (snap) => {
+        shortlistedBySource['primary'] = snap.docs.map(d => d.data().candidateInfo);
+        syncShort();
+      }, (error) => {
+        console.error('Failed to load primary shortlisted candidates:', error);
         setShortlistedCandidatesError(true);
         setLoadingShortlistedCandidates(false);
-      }
-    );
+      }));
+    }
 
-    return unsubscribe;
-  }, [user]);
+    if (user.uid && user.uid !== primaryUid) {
+      unsubsShort.push(onSnapshot(query(
+        collectionGroup(db, 'attempts'),
+        where('recruiterUID', '==', user.uid),
+        where('status', '==', 'Shortlist')
+      ), (snap) => {
+        shortlistedBySource['user'] = snap.docs.map(d => d.data().candidateInfo);
+        syncShort();
+      }, (error) => {
+        console.error('Failed to load user shortlisted candidates:', error);
+        setShortlistedCandidatesError(true);
+        setLoadingShortlistedCandidates(false);
+      }));
+    }
+
+    return () => {
+      unsubsShort.forEach((u) => u());
+    };
+  }, [user, userProfile]);
 
   const requiredSkillSignals = useMemo(() => {
     const explicitSkills = splitCommaList(formData.skills);
