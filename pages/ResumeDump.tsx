@@ -16,7 +16,8 @@ import { isEducationMatching } from '../utils/educationMatcher';
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
 import { ALL_JOB_DOMAINS, ALL_JOB_SECTORS, ALL_JOB_DEPARTMENTS, resolveCandidateSectorsAndDepartments } from '../data/jobDomains';
 import { SKILL_OPTIONS } from './Profile';
-import { analyzeResumeText, ingestResumeFile, saveResumeDumpCandidate, detectCandidateGender } from '../services/resumeService';
+import { analyzeResumeText, ingestResumeFile, saveResumeDumpCandidate, detectCandidateGender, EMPLOYMENT_TYPE_OPTIONS, normalizeEmploymentTypes } from '../services/resumeService';
+import { EmploymentTypeMultiSelect } from '../components/EmploymentTypeMultiSelect';
 import { calculateJobMatchScore, JobMatchResult, CandidateMatchProfile } from '../services/jobMatchService';
 import { sendBulkWhatsAppInvites } from '../services/waSenderService';
 import { sendInterviewInvitations } from '../services/sesService';
@@ -84,6 +85,8 @@ interface ResumeDumpCandidate {
   isHired?: boolean;
   doNotSuggest?: boolean;
   employmentStatus?: string;
+  employmentType?: string;
+  employmentTypes?: string[];
   isWorking?: boolean;
   noticePeriod?: string;
   noticePeriodDays?: string;
@@ -506,11 +509,13 @@ const ResumeDump: React.FC = () => {
   const [uploadModalExpYears, setUploadModalExpYears] = useState('');
   const [uploadModalLocation, setUploadModalLocation] = useState('');
   const [uploadModalHighestEducation, setUploadModalHighestEducation] = useState('B.Tech / B.E. (Bachelor of Engineering / Technology)');
+  const [uploadModalEmploymentTypes, setUploadModalEmploymentTypes] = useState<string[]>(['Full-time — Work from Office / On-site']);
   const [searchTerm, setSearchTerm] = useState('');
 
   const [deletingCandidateId, setDeletingCandidateId] = useState<string | null>(null);
   const [isDraggingResume, setIsDraggingResume] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'available' | 'hired'>('all');
+  const [employmentTypeFilter, setEmploymentTypeFilter] = useState<string>('all');
   const [skillFilter, setSkillFilter] = useState<string>('all');
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [isSkillRecBoxOpen, setIsSkillRecBoxOpen] = useState<boolean>(false);
@@ -583,6 +588,8 @@ const ResumeDump: React.FC = () => {
     summary: '',
     additionalText: '',
     employmentStatus: 'Working',
+    employmentType: 'Full-time — Work from Office / On-site',
+    employmentTypes: ['Full-time — Work from Office / On-site'] as string[],
     noticePeriod: '',
     currentSalary: '',
     expectedSalary: '',
@@ -593,6 +600,9 @@ const ResumeDump: React.FC = () => {
 
   const handleOpenEditCandidateModal = (candidate: ResumeDumpCandidate) => {
     setEditingCandidate(candidate);
+    const parsedTypes = normalizeEmploymentTypes(candidate);
+    const initialTypes = parsedTypes.length > 0 ? parsedTypes : (candidate.employmentType ? [candidate.employmentType] : ['Full-time — Work from Office / On-site']);
+
     setEditingCandidateForm({
       name: candidate.name || '',
       email: candidate.email || '',
@@ -605,6 +615,8 @@ const ResumeDump: React.FC = () => {
       summary: candidate.summary || '',
       additionalText: candidate.additionalText || '',
       employmentStatus: candidate.employmentStatus || 'Working',
+      employmentType: initialTypes.join(', '),
+      employmentTypes: initialTypes,
       noticePeriod: candidate.noticePeriod || (candidate.noticePeriodDays ? `${candidate.noticePeriodDays} Days` : ''),
       currentSalary: candidate.currentSalary || '',
       expectedSalary: candidate.expectedSalary || '',
@@ -634,6 +646,10 @@ const ResumeDump: React.FC = () => {
           })
         : (editingCandidate.education || []);
 
+      const selectedTypes = editingCandidateForm.employmentTypes && editingCandidateForm.employmentTypes.length > 0
+        ? editingCandidateForm.employmentTypes
+        : [editingCandidateForm.employmentType].filter(Boolean);
+
       const updateData: any = {
         name: editingCandidateForm.name.trim(),
         email: editingCandidateForm.email.trim(),
@@ -646,6 +662,8 @@ const ResumeDump: React.FC = () => {
         summary: editingCandidateForm.summary.trim(),
         additionalText: editingCandidateForm.additionalText.trim(),
         employmentStatus: editingCandidateForm.employmentStatus,
+        employmentType: selectedTypes.join(', '),
+        employmentTypes: selectedTypes,
         noticePeriod: editingCandidateForm.noticePeriod.trim(),
         currentSalary: editingCandidateForm.currentSalary.trim(),
         expectedSalary: editingCandidateForm.expectedSalary.trim(),
@@ -898,6 +916,8 @@ const ResumeDump: React.FC = () => {
               ? data.departments
               : (Array.isArray(prof.departments) ? prof.departments : (data.department ? [data.department] : (prof.department ? [prof.department] : [])));
 
+            const parsedEmpTypes = normalizeEmploymentTypes({ ...prof, ...data });
+
             return {
               ...prof,
               ...data,
@@ -910,6 +930,8 @@ const ResumeDump: React.FC = () => {
               gender,
               totalExperienceYears,
               experienceYears: totalExperienceYears,
+              employmentTypes: parsedEmpTypes,
+              employmentType: parsedEmpTypes.join(', ') || data.employmentType || prof.employmentType || '',
               skills,
               education,
               domains,
@@ -1068,17 +1090,19 @@ const ResumeDump: React.FC = () => {
     if (educationSpecFilter !== 'all') count++;
     if (selectedEducation.length > 0) count++;
     if (sourceFilter !== 'all') count++;
+    if (employmentTypeFilter !== 'all') count++;
     if (dateFilter !== 'all') count++;
     if (strictGender) count++;
     if (strictLocation) count++;
     if (strictEducation) count++;
     if (strictExperience) count++;
     return count;
-  }, [selectedJobId, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, domainFilter, selectedDomains, matchScoreFilter, educationFilter, educationQualFilter, educationSpecFilter, selectedEducation, sourceFilter, dateFilter, searchTerm, strictGender, strictLocation, strictEducation, strictExperience]);
+  }, [selectedJobId, statusFilter, employmentTypeFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, domainFilter, selectedDomains, matchScoreFilter, educationFilter, educationQualFilter, educationSpecFilter, selectedEducation, sourceFilter, dateFilter, searchTerm, strictGender, strictLocation, strictEducation, strictExperience]);
 
   const handleClearAllFilters = () => {
     setSelectedJobId('all');
     setStatusFilter('all');
+    setEmploymentTypeFilter('all');
     setSkillFilter('all');
     setSelectedSkills([]);
     setTitleFilter('all');
@@ -1242,6 +1266,14 @@ const ResumeDump: React.FC = () => {
         if (sourceFilter === 'upload' && !candSource.includes('upload') && candSource !== 'resume_dump' && !candSource) return false;
         if (sourceFilter === 'interview' && !candSource.includes('interview')) return false;
         if (sourceFilter === 'manual' && candSource !== 'manual') return false;
+      }
+
+      // 4b. Employment Type Filter
+      if (employmentTypeFilter !== 'all') {
+        const candidateTypes = normalizeEmploymentTypes(candidate);
+        const hasOpen = candidateTypes.some(t => t.toLowerCase().includes('open to any arrangement'));
+        const matchesSelected = candidateTypes.some(t => t.toLowerCase().includes(employmentTypeFilter.toLowerCase()));
+        if (!hasOpen && !matchesSelected) return false;
       }
 
       // 5. Date Filter
@@ -1451,13 +1483,14 @@ const ResumeDump: React.FC = () => {
     }
 
     return result;
-  }, [candidatesWithScores, searchTerm, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, educationQualFilter, educationSpecFilter, selectedEducation, sourceFilter, dateFilter, selectedJobId, strictGender, strictLocation, strictEducation, strictExperience]);
+  }, [candidatesWithScores, searchTerm, statusFilter, employmentTypeFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, educationQualFilter, educationSpecFilter, selectedEducation, sourceFilter, dateFilter, selectedJobId, strictGender, strictLocation, strictEducation, strictExperience]);
 
   const isSearchOrFilterActive = useMemo(() => {
     return Boolean(
       selectedJobId !== 'all' ||
       searchTerm.trim() ||
       statusFilter !== 'all' ||
+      employmentTypeFilter !== 'all' ||
       skillFilter !== 'all' ||
       selectedSkills.length > 0 ||
       titleFilter !== 'all' ||
@@ -1468,7 +1501,7 @@ const ResumeDump: React.FC = () => {
       sourceFilter !== 'all' ||
       dateFilter !== 'all'
     );
-  }, [selectedJobId, searchTerm, statusFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, sourceFilter, dateFilter]);
+  }, [selectedJobId, searchTerm, statusFilter, employmentTypeFilter, skillFilter, selectedSkills, titleFilter, expFilter, locationFilter, matchScoreFilter, educationFilter, sourceFilter, dateFilter]);
 
 
   const totalPages = isSearchOrFilterActive
@@ -1538,6 +1571,8 @@ const ResumeDump: React.FC = () => {
 
         ingested.profile.location = uploadModalLocation.trim();
         ingested.profile.totalExperienceYears = parsedExpNum;
+        ingested.profile.employmentTypes = uploadModalEmploymentTypes;
+        ingested.profile.employmentType = uploadModalEmploymentTypes.join(', ');
         if (uploadModalHighestEducation.trim()) {
           const selectedDegree = uploadModalHighestEducation.trim();
           const existingEdu = ingested.profile.education || [];
@@ -1604,6 +1639,7 @@ const ResumeDump: React.FC = () => {
     setUploadModalExpYears('');
     setUploadModalLocation('');
     setUploadModalHighestEducation('B.Tech / B.E. (Bachelor of Engineering / Technology)');
+    setUploadModalEmploymentTypes(['Full-time — Work from Office / On-site']);
     setIsUploadModalOpen(false);
 
   };
@@ -2620,6 +2656,23 @@ const ResumeDump: React.FC = () => {
               </select>
             </div>
 
+            {/* Employment Type Filter */}
+            <div className="flex items-center gap-1 shrink-0">
+              <Briefcase size={13} className="text-gray-500 dark:text-[#8f8f8f] shrink-0" />
+              <select
+                value={employmentTypeFilter}
+                onChange={(e) => setEmploymentTypeFilter(e.target.value)}
+                className="geist-caption h-8 rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] px-2.5 text-xs text-slate-800 dark:text-white outline-none focus:border-black dark:focus:border-white/30 cursor-pointer max-w-[190px]"
+              >
+                <option value="all">Employment: All</option>
+                {EMPLOYMENT_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Freshness / Added Date Filter */}
             <div className="flex items-center gap-1 shrink-0">
               <Clock size={13} className="text-gray-500 dark:text-[#8f8f8f] shrink-0" />
@@ -2824,6 +2877,31 @@ const ResumeDump: React.FC = () => {
                       {candidate.location && (
                         <div className="geist-small mt-0.5 text-[10px] text-gray-500 dark:text-[#6b7280]">📍 {candidate.location}</div>
                       )}
+                      {(() => {
+                        const empTypes = normalizeEmploymentTypes(candidate);
+                        if (empTypes.length === 0) return null;
+                        return (
+                          <div className="mt-1 flex flex-wrap gap-1 max-w-[280px]">
+                            {empTypes.slice(0, 2).map((type, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/40 truncate max-w-[220px]"
+                                title={type}
+                              >
+                                💼 {type}
+                              </span>
+                            ))}
+                            {empTypes.length > 2 && (
+                              <span
+                                className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-gray-100 dark:bg-white/[0.08] text-gray-700 dark:text-gray-300"
+                                title={empTypes.slice(2).join(', ')}
+                              >
+                                +{empTypes.length - 2} more
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     {selectedJobId !== 'all' && (
@@ -3193,6 +3271,23 @@ const ResumeDump: React.FC = () => {
                     <span className="font-semibold text-slate-800 dark:text-[#d4d4d4]">
                       {skillsPanelCandidate.noticePeriod || (skillsPanelCandidate.noticePeriodDays ? `${skillsPanelCandidate.noticePeriodDays} Days` : 'N/A')}
                     </span>
+                  </div>
+                  <div className="col-span-1 sm:col-span-2">
+                    <span className="text-[10px] uppercase font-bold text-gray-500 dark:text-[#6b7280] block mb-1">Employment Type Preferences</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {normalizeEmploymentTypes(skillsPanelCandidate).length > 0 ? (
+                        normalizeEmploymentTypes(skillsPanelCandidate).map((t, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/40"
+                          >
+                            💼 {t}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-gray-500 dark:text-[#6b7280]">Not specified</span>
+                      )}
+                    </div>
                   </div>
                   {skillsPanelCandidate.reasonForJobChange && (
                     <div className="col-span-3">
@@ -3942,8 +4037,8 @@ const ResumeDump: React.FC = () => {
                   )}
                 </div>
 
-                {/* Location, Experience & Education Mandatory Inputs */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Location, Experience, Education & Employment Type Mandatory Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div>
                     <label className="geist-label block uppercase text-gray-600 dark:text-[#9ca3af] mb-1.5 font-medium">
                       Location / City <span className="text-slate-900 dark:text-[#ededed] font-semibold">*</span>
@@ -3980,6 +4075,17 @@ const ResumeDump: React.FC = () => {
                       value={uploadModalHighestEducation}
                       onChange={setUploadModalHighestEducation}
                       placeholder="Type or select education (e.g. B.Tech Civil, Diploma, B.Com)..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="geist-label block uppercase text-gray-600 dark:text-[#9ca3af] mb-1.5 font-medium">
+                      Employment Type <span className="text-slate-900 dark:text-[#ededed] font-semibold">*</span>
+                    </label>
+                    <EmploymentTypeMultiSelect
+                      values={uploadModalEmploymentTypes}
+                      onChange={setUploadModalEmploymentTypes}
+                      variant="dropdown"
                     />
                   </div>
                 </div>
@@ -4245,9 +4351,9 @@ const ResumeDump: React.FC = () => {
                     />
                   </div>
 
-                  {/* Salary, Working Status & Notice Period */}
+                  {/* Salary, Working Status, Employment Type & Notice Period */}
                   <div className="grid grid-cols-2 gap-3 pt-1">
-                    <div>
+                    <div className="col-span-2 sm:col-span-1">
                       <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Working Status</label>
                       <select
                         value={editingCandidateForm.employmentStatus}
@@ -4258,6 +4364,15 @@ const ResumeDump: React.FC = () => {
                         <option value="Not Working">Not Working (Unemployed)</option>
                         <option value="Serving Notice">Serving Notice Period</option>
                       </select>
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Employment Type Preferences</label>
+                      <EmploymentTypeMultiSelect
+                        values={editingCandidateForm.employmentTypes && editingCandidateForm.employmentTypes.length > 0 ? editingCandidateForm.employmentTypes : (editingCandidateForm.employmentType ? [editingCandidateForm.employmentType] : [])}
+                        onChange={(newTypes) => setEditingCandidateForm(prev => ({ ...prev, employmentTypes: newTypes, employmentType: newTypes.join(', ') }))}
+                        variant="dropdown"
+                      />
                     </div>
 
                     <div>

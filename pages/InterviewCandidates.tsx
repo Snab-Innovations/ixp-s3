@@ -10,7 +10,8 @@ import { useMessageBox } from '../components/MessageBox';
 import { sendInterviewInvitations } from '../services/brevoService';
 import { sendWhatsAppMessage, sendBulkWhatsAppInvites, sendInterviewWhatsAppInvite, buildWhatsAppInviteText } from '../services/waSenderService';
 import { evaluateResumeMatch } from '../services/api';
-import { formatExtractedPhone, ingestResumeFile, saveResumeDumpCandidate, scoreCandidateForRole, extractSkillSignals, ResumeDumpRecord } from '../services/resumeService';
+import { formatExtractedPhone, ingestResumeFile, saveResumeDumpCandidate, scoreCandidateForRole, extractSkillSignals, ResumeDumpRecord, EMPLOYMENT_TYPE_OPTIONS, normalizeEmploymentTypes } from '../services/resumeService';
+import { EmploymentTypeMultiSelect } from '../components/EmploymentTypeMultiSelect';
 import { parseCandidateDocument } from '../services/candidateFileParser';
 import { InterviewCandidatesSkeleton } from '../components/ui/interview-loading-skeleton';
 import { logTeamActivity } from '../services/auditService';
@@ -47,6 +48,7 @@ const InterviewCandidates: React.FC = () => {
   const [singleUploadLocation, setSingleUploadLocation] = useState('');
   const [singleUploadExp, setSingleUploadExp] = useState('');
   const [singleUploadEducation, setSingleUploadEducation] = useState('B.Tech / B.E. (Bachelor of Engineering / Technology)');
+  const [singleUploadEmploymentTypes, setSingleUploadEmploymentTypes] = useState<string[]>(['Full-time — Work from Office / On-site']);
   const [singleUploadNotes, setSingleUploadNotes] = useState('');
   const [analyzingSingleResume, setAnalyzingSingleResume] = useState(false);
 
@@ -431,6 +433,8 @@ const InterviewCandidates: React.FC = () => {
           location: singleUploadLocation.trim() || ingested.profile.location,
           totalExperienceYears: singleUploadExp.trim() ? (parseFloat(singleUploadExp) || ingested.profile.totalExperienceYears) : ingested.profile.totalExperienceYears,
           education: singleUploadEducation ? [{ degree: singleUploadEducation, institution: '', year: '' }] : ingested.profile.education,
+          employmentTypes: singleUploadEmploymentTypes,
+          employmentType: singleUploadEmploymentTypes.join(', '),
           summary: singleUploadNotes.trim() ? `${ingested.profile.summary || ''}\nRecruiter Notes: ${singleUploadNotes.trim()}`.trim() : ingested.profile.summary,
           parsingMethod: 'deterministic',
           parserVersion: 1,
@@ -486,6 +490,7 @@ const InterviewCandidates: React.FC = () => {
       setSingleResumeFile(null);
       setSingleUploadLocation('');
       setSingleUploadExp('');
+      setSingleUploadEmploymentTypes(['Full-time — Work from Office / On-site']);
       setSingleUploadNotes('');
     } catch (error) {
       console.error('Single resume upload error:', error);
@@ -1144,7 +1149,7 @@ const InterviewCandidates: React.FC = () => {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
               {/* File Select */}
               <div className="space-y-1">
                 <label className="geist-label uppercase text-[#6b7280] text-[10px] block">Select Candidate Resume File</label>
@@ -1192,6 +1197,16 @@ const InterviewCandidates: React.FC = () => {
                   value={singleUploadEducation}
                   onChange={(val) => setSingleUploadEducation(val)}
                   className="geist-caption h-9 w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] px-3 text-white outline-none transition-colors placeholder:text-[#6b7280] focus:border-white/[0.28]"
+                />
+              </div>
+
+              {/* Employment Type */}
+              <div className="space-y-1">
+                <label className="geist-label uppercase text-[#6b7280] text-[10px] block">Employment Type *</label>
+                <EmploymentTypeMultiSelect
+                  values={singleUploadEmploymentTypes}
+                  onChange={setSingleUploadEmploymentTypes}
+                  variant="dropdown"
                 />
               </div>
             </div>

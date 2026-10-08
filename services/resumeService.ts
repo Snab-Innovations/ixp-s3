@@ -73,9 +73,32 @@ export interface ParsedResumeProfile {
   noticePeriodVal?: string;
   noticePeriodUnit?: string;
   reasonForJobChange?: string;
+  employmentType?: string;
+  employmentTypes?: string[];
   parsingMethod: 'deterministic' | 'hybrid';
   parserVersion: number;
 }
+
+export const EMPLOYMENT_TYPE_OPTIONS = [
+  'Full-time — Work from Office / On-site',
+  'Full-time — Work from Home / Remote',
+  'Part-time — Work from Office / On-site',
+  'Part-time — Work from Home / Remote',
+  'Hybrid — A mix of Office and Remote Work',
+  'Open to Any Arrangement',
+] as const;
+
+export type EmploymentTypeOption = typeof EMPLOYMENT_TYPE_OPTIONS[number];
+
+export const normalizeEmploymentTypes = (cand: any): string[] => {
+  if (Array.isArray(cand?.employmentTypes) && cand.employmentTypes.length > 0) {
+    return cand.employmentTypes;
+  }
+  if (typeof cand?.employmentType === 'string' && cand.employmentType.trim()) {
+    return cand.employmentType.split(',').map((s: string) => s.trim()).filter(Boolean);
+  }
+  return [];
+};
 
 export interface ResumeDumpRecord extends ParsedResumeProfile {
   id: string;
@@ -634,8 +657,8 @@ export const analyzeResumeText = async (
         role: existingRecord.role || existingRecord.currentTitle || fallback.currentTitle,
         currentCompanyName: existingRecord.currentCompanyName || existingRecord.company || '',
         company: existingRecord.company || existingRecord.currentCompanyName || '',
-        summary: existingRecord.summary || existingRecord.professionalSummary || fallback.summary,
-        totalExperienceYears: existingRecord.totalExperienceYears ?? existingRecord.experienceYears ?? fallback.totalExperienceYears,
+        summary: existingRecord.summary || (existingRecord as any).professionalSummary || fallback.summary,
+        totalExperienceYears: Number(existingRecord.totalExperienceYears ?? existingRecord.experienceYears ?? fallback.totalExperienceYears) || 0,
         experienceYears: existingRecord.experienceYears ?? existingRecord.totalExperienceYears ?? fallback.totalExperienceYears,
         experienceMonths: existingRecord.experienceMonths ?? 0,
         isFresher: existingRecord.isFresher ?? (existingRecord.totalExperienceYears === 0),
@@ -657,6 +680,8 @@ export const analyzeResumeText = async (
         noticePeriodVal: existingRecord.noticePeriodVal || '',
         noticePeriodUnit: existingRecord.noticePeriodUnit || '',
         reasonForJobChange: existingRecord.reasonForJobChange || '',
+        employmentType: existingRecord.employmentType || '',
+        employmentTypes: normalizeEmploymentTypes(existingRecord),
         parsingMethod: 'deterministic',
         parserVersion: PARSER_VERSION,
       };

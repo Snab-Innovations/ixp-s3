@@ -9,7 +9,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMessageBox } from '../components/MessageBox';
 import { sendInterviewInvitations } from '../services/brevoService';
 import { parseCandidateDocument, parseBulkCandidateTextInput } from '../services/candidateFileParser';
-import { ingestResumeFile, saveResumeDumpCandidate, checkMandatoryCriteriaMatch } from '../services/resumeService';
+import { ingestResumeFile, saveResumeDumpCandidate, checkMandatoryCriteriaMatch, EMPLOYMENT_TYPE_OPTIONS, normalizeEmploymentTypes } from '../services/resumeService';
+import { EmploymentTypeMultiSelect } from '../components/EmploymentTypeMultiSelect';
 import { sendInterviewWhatsAppInvite, formatPhoneForWhatsApp, buildWhatsAppInviteText, openWhatsAppWebInvite, sendBulkWhatsAppInvites } from '../services/waSenderService';
 import EditJobModal from './EditJob';
 import { normalizeJobData, fetchJobFetchedApiJobs, isJobStatusActive } from '../services/jobResolutionService';
@@ -306,6 +307,7 @@ const RecruiterAllJobs: React.FC = () => {
   const [currentSingleExp, setCurrentSingleExp] = useState('');
   const [currentSingleLocation, setCurrentSingleLocation] = useState('');
   const [currentSingleEducation, setCurrentSingleEducation] = useState('B.Tech / B.E. (Bachelor of Engineering / Technology)');
+  const [currentSingleEmploymentTypes, setCurrentSingleEmploymentTypes] = useState<string[]>(['Full-time — Work from Office / On-site']);
 
   // AI Candidate Suggestions State
   const [dumpCandidates, setDumpCandidates] = useState<any[]>([]);
@@ -1501,6 +1503,8 @@ const RecruiterAllJobs: React.FC = () => {
       // Mandatory overrides for location and experience
       profile.location = currentSingleLocation.trim();
       profile.totalExperienceYears = parsedExpNum;
+      profile.employmentTypes = currentSingleEmploymentTypes;
+      profile.employmentType = currentSingleEmploymentTypes.join(', ');
       if (currentSingleEducation.trim()) {
         const selectedDegree = currentSingleEducation.trim();
         const existingEdu = profile.education || [];
@@ -1564,6 +1568,7 @@ const RecruiterAllJobs: React.FC = () => {
       setResumeExtraText('');
       setCurrentSingleExp('');
       setCurrentSingleLocation('');
+      setCurrentSingleEmploymentTypes(['Full-time — Work from Office / On-site']);
     } catch (err: any) {
       console.error("Error analyzing candidate resume:", err);
       messageBox.showError(`AI extraction failed: ${err.message || 'Failed to analyze candidate resume.'}`);
@@ -2244,7 +2249,7 @@ const RecruiterAllJobs: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                       <div>
                         <label className="geist-label uppercase text-[#6b7280] block mb-1">
                           Location / City <span className="text-white font-semibold">*</span>
@@ -2282,6 +2287,17 @@ const RecruiterAllJobs: React.FC = () => {
                           onChange={setCurrentSingleEducation}
                           placeholder="Type or select education..."
                           className="geist-caption w-full rounded-[6px] border border-white/[0.11] bg-white/[0.03] p-2.5 text-white outline-none focus:border-white/[0.28] placeholder:text-[#6b7280]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="geist-label uppercase text-[#6b7280] block mb-1">
+                          Employment Type <span className="text-white font-semibold">*</span>
+                        </label>
+                        <EmploymentTypeMultiSelect
+                          values={currentSingleEmploymentTypes}
+                          onChange={setCurrentSingleEmploymentTypes}
+                          variant="dropdown"
                         />
                       </div>
                     </div>

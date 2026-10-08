@@ -6,11 +6,12 @@ import {
   ExternalLink, Eye, ShieldCheck, SlidersHorizontal, RotateCcw, Edit3, ChevronDown, ChevronUp, Ban, Sun, Moon,
   Layers, Menu, Save
 } from 'lucide-react';
-import { collection, query, where, getDocs, onSnapshot, doc, updateDoc, arrayUnion, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, limit } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { LocationCityInput } from '../components/LocationCityInput';
 import { EducationInput } from '../components/EducationInput';
-import { parseResumeFileLocally, fastParseResumeFileLocally, readResumeText, saveResumeDumpCandidate } from '../services/resumeService';
+import { parseResumeFileLocally, fastParseResumeFileLocally, readResumeText, saveResumeDumpCandidate, EMPLOYMENT_TYPE_OPTIONS, normalizeEmploymentTypes } from '../services/resumeService';
+import { EmploymentTypeMultiSelect } from '../components/EmploymentTypeMultiSelect';
 import { uploadToCloudinary } from '../services/api';
 import { ALL_EDUCATION_DEGREES } from '../data/allEducationDegrees';
 import { MAHARASHTRA_CITIES } from '../data/maharashtraCities';
@@ -147,6 +148,8 @@ export default function PublicJobSeekerUpload() {
   };
   const [candidateEducation, setCandidateEducation] = useState('');
   const [candidateEmploymentStatus, setCandidateEmploymentStatus] = useState('Working');
+  const [candidateEmploymentTypes, setCandidateEmploymentTypes] = useState<string[]>(['Full-time — Work from Office / On-site']);
+  const candidateEmploymentType = candidateEmploymentTypes.join(', ');
   const [candidateNoticePeriodVal, setCandidateNoticePeriodVal] = useState('30');
   const [candidateNoticePeriodUnit, setCandidateNoticePeriodUnit] = useState<'Days' | 'Months'>('Days');
 
@@ -469,6 +472,8 @@ export default function PublicJobSeekerUpload() {
     if (expNum !== undefined) setCandidateExp(String(expNum));
     if (educationStr) setCandidateEducation(educationStr);
     if (employmentStatus) setCandidateEmploymentStatus(employmentStatus);
+    const parsedEmp = normalizeEmploymentTypes({ ...prof, ...candData });
+    if (parsedEmp.length > 0) setCandidateEmploymentTypes(parsedEmp);
     if (Array.isArray(skills) && skills.length > 0) setExtractedSkills(skills);
     if (candData.currentSalaryVal) setCandidateCurrentSalaryVal(candData.currentSalaryVal);
     if (candData.expectedSalaryVal) setCandidateExpectedSalaryVal(candData.expectedSalaryVal);
@@ -796,6 +801,8 @@ export default function PublicJobSeekerUpload() {
         ],
         skills: submittedCandidateData.skills || extractedSkills || [],
         employmentStatus: submittedCandidateData.employmentStatus || 'Working',
+        employmentType: candidateEmploymentType,
+        employmentTypes: candidateEmploymentTypes,
         noticePeriod: submittedCandidateData.noticePeriod || '30 Days',
         currentSalary: submittedCandidateData.currentSalary || 'As per industry',
         expectedSalary: submittedCandidateData.expectedSalary || 'As per industry',
@@ -1178,6 +1185,8 @@ export default function PublicJobSeekerUpload() {
       finalProfile.expectedSalaryVal = candidateExpectedSalaryVal.trim();
       finalProfile.expectedSalaryPeriod = candidateExpectedSalaryPeriod;
       finalProfile.expectedSalaryType = candidateExpectedSalaryType;
+      finalProfile.employmentType = candidateEmploymentType;
+      finalProfile.employmentTypes = candidateEmploymentTypes;
 
       const selectedDegree = candidateEducation.trim();
       const existingEdu = finalProfile.education || [];
@@ -1226,6 +1235,8 @@ export default function PublicJobSeekerUpload() {
         education: selectedDegree,
         highestEducation: selectedDegree,
         employmentStatus: formattedStatus,
+        employmentType: candidateEmploymentType,
+        employmentTypes: candidateEmploymentTypes,
         noticePeriod: `${candidateNoticePeriodVal.trim()} ${candidateNoticePeriodUnit}`,
         currentSalary: formattedCurrentSalary,
         expectedSalary: formattedExpectedSalary,
@@ -1257,6 +1268,7 @@ export default function PublicJobSeekerUpload() {
     setCandidateExp('');
     setCandidateEducation('');
     setCandidateEmploymentStatus('Working');
+    setCandidateEmploymentTypes(['Full-time — Work from Office / On-site']);
     setCandidateNoticePeriodVal('30');
     setCandidateNoticePeriodUnit('Days');
     setCandidateCurrentSalaryVal('');
@@ -1932,6 +1944,18 @@ export default function PublicJobSeekerUpload() {
                       <option value="Not Working">Not Working (Unemployed)</option>
                       <option value="Serving Notice">Serving Notice Period</option>
                     </select>
+                  </div>
+
+                  {/* 1b. Employment Type */}
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Employment Type Preferences <span className="text-red-500">*</span>
+                    </label>
+                    <EmploymentTypeMultiSelect
+                      values={candidateEmploymentTypes}
+                      onChange={setCandidateEmploymentTypes}
+                      variant="dropdown"
+                    />
                   </div>
 
                   {/* 2. Notice Period */}
