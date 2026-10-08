@@ -1946,18 +1946,6 @@ export default function PublicJobSeekerUpload() {
                     </select>
                   </div>
 
-                  {/* 1b. Employment Type */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
-                      Employment Type Preferences <span className="text-red-500">*</span>
-                    </label>
-                    <EmploymentTypeMultiSelect
-                      values={candidateEmploymentTypes}
-                      onChange={setCandidateEmploymentTypes}
-                      variant="dropdown"
-                    />
-                  </div>
-
                   {/* 2. Notice Period */}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider mb-1.5 flex items-center justify-between">
@@ -2088,6 +2076,18 @@ export default function PublicJobSeekerUpload() {
                         </select>
                       </div>
                     </div>
+                  </div>
+
+                  {/* 5. Employment Type Preferences */}
+                  <div className="pt-0.5">
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
+                      Employment Type Preferences <span className="text-red-500">*</span>
+                    </label>
+                    <EmploymentTypeMultiSelect
+                      values={candidateEmploymentTypes}
+                      onChange={setCandidateEmploymentTypes}
+                      variant="dropdown"
+                    />
                   </div>
                 </div>
               </div>

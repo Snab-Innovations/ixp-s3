@@ -4366,15 +4366,6 @@ const ResumeDump: React.FC = () => {
                       </select>
                     </div>
 
-                    <div className="col-span-2">
-                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Employment Type Preferences</label>
-                      <EmploymentTypeMultiSelect
-                        values={editingCandidateForm.employmentTypes && editingCandidateForm.employmentTypes.length > 0 ? editingCandidateForm.employmentTypes : (editingCandidateForm.employmentType ? [editingCandidateForm.employmentType] : [])}
-                        onChange={(newTypes) => setEditingCandidateForm(prev => ({ ...prev, employmentTypes: newTypes, employmentType: newTypes.join(', ') }))}
-                        variant="dropdown"
-                      />
-                    </div>
-
                     <div>
                       <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Notice Period</label>
                       <input
@@ -4405,6 +4396,15 @@ const ResumeDump: React.FC = () => {
                         onChange={(e) => setEditingCandidateForm(prev => ({ ...prev, expectedSalary: e.target.value }))}
                         placeholder="e.g. 6.5 LPA or 50,000 / month"
                         className="w-full rounded-[6px] border border-gray-300 dark:border-white/[0.11] bg-white dark:bg-[#111] p-2 text-slate-900 dark:text-white outline-none text-xs"
+                      />
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="block text-slate-700 dark:text-[#a1a1aa] mb-1 font-medium">Employment Type Preferences *</label>
+                      <EmploymentTypeMultiSelect
+                        values={editingCandidateForm.employmentTypes && editingCandidateForm.employmentTypes.length > 0 ? editingCandidateForm.employmentTypes : (editingCandidateForm.employmentType ? [editingCandidateForm.employmentType] : [])}
+                        onChange={(newTypes) => setEditingCandidateForm(prev => ({ ...prev, employmentTypes: newTypes, employmentType: newTypes.join(', ') }))}
+                        variant="dropdown"
                       />
                     </div>
                   </div>
